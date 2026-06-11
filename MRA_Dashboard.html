@@ -69,6 +69,24 @@
   .rb{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
     font-size:11px; font-weight:700; padding:3px 11px; border-radius:7px; cursor:pointer; letter-spacing:.5px}
   .rb.active{background:var(--blue); border-color:var(--blue); color:#fff}
+  .expandbtn{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
+    font-size:11px; font-weight:700; padding:4px 11px; border-radius:7px; cursor:pointer;
+    letter-spacing:.5px; margin-left:8px}
+  .expandbtn:hover{border-color:var(--blue); color:#93c5fd}
+  /* Full-screen Gantt overlay */
+  .gfs-overlay{position:fixed; inset:0; background:var(--bg); z-index:150; display:none; flex-direction:column; padding:14px 22px 20px}
+  .gfs-overlay.show{display:flex}
+  .gfs-head{display:flex; align-items:center; gap:14px; padding-bottom:11px; border-bottom:1px solid var(--line)}
+  .gfs-head h3{font-size:18px; font-weight:800}
+  .gfs-warn{font-size:12.5px; font-weight:700}
+  .gfs-close{margin-left:auto; background:var(--panel); border:1px solid var(--line); color:var(--muted);
+    width:36px; height:36px; border-radius:8px; font-size:18px; cursor:pointer; line-height:1}
+  .gfs-close:hover{color:var(--txt); border-color:var(--red)}
+  .gfs-body{flex:1 1 auto; overflow:auto; padding-top:14px}
+  .gfs-body .gantt{font-size:12.5px}
+  .gfs-body .g-gutter{width:240px; flex:0 0 240px}
+  .gfs-body .g-track{min-height:30px}
+  .g-bar.conflict{box-shadow:0 0 0 2px var(--red), 0 0 11px rgba(239,68,68,.55)}
 
   /* ---------- Bay board ---------- */
   .bays{display:grid; grid-template-columns:repeat(5,1fr); gap:12px}
@@ -249,7 +267,7 @@
     </div>
 
     <div class="panel">
-      <h2>Next 2 Weeks — Floor Schedule <span class="count" id="floorGanttCount"></span></h2>
+      <h2>Next 2 Weeks — Floor Schedule <span class="count" id="floorGanttCount"></span><button class="expandbtn" onclick="openGantt('floor')" title="Full-screen detailed view">⛶ Expand</button></h2>
       <div class="gantt" id="floorGantt"></div>
       <div class="legend">
         <span class="lg-a">Active</span><span class="lg-s">Scheduled</span>
@@ -291,6 +309,7 @@
           <div class="rb" data-m="6" onclick="setRange(6)">6 mo</div>
           <div class="rb" data-m="all" onclick="setRange('all')">All</div>
         </div>
+        <button class="expandbtn" onclick="openGantt('projects')" title="Full-screen detailed view">⛶ Expand</button>
       </h2>
       <div class="gantt" id="projGantt"></div>
       <div class="legend">
@@ -325,6 +344,20 @@
         </div>
       </h2>
       <div class="teamgrid" id="team"></div>
+    </div>
+  </div>
+
+  <!-- ===================== FULL-SCREEN GANTT ===================== -->
+  <div class="gfs-overlay" id="ganttFS" onclick="closeGantt(event)">
+    <div class="gfs-head">
+      <h3 id="gfsTitle"></h3>
+      <div class="rangebtns" id="gfsRange"></div>
+      <div class="gfs-warn" id="gfsWarn"></div>
+      <button class="gfs-close" onclick="closeGantt()" title="Close (Esc)">✕</button>
+    </div>
+    <div class="gfs-body">
+      <div class="gantt" id="gfsGantt"></div>
+      <div class="legend" id="gfsLegend" style="margin-top:12px"></div>
     </div>
   </div>
 
@@ -395,6 +428,9 @@ let VIEW = 'floor';
 try{ VIEW = localStorage.getItem('mra_view')||'floor'; RANGE = JSON.parse(localStorage.getItem('mra_range'))||3; }catch(e){ RANGE=3; }
 let TEAMFILTER='all';
 try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
+let GFS=null;              // full-screen gantt: 'floor' | 'projects' | null
+let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
+const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 
 /* ---------- helpers ---------- */
 function esc(s){return (s==null?"":""+s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
@@ -410,7 +446,10 @@ function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&25
 function openHelp(){ document.getElementById('helpModal').classList.add('show'); }
 function closeHelp(e){ if(!e || e.target.id==='helpModal' || e.target.classList.contains('modal-close'))
   document.getElementById('helpModal').classList.remove('show'); }
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.getElementById('helpModal').classList.remove('show'); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
+  document.getElementById('helpModal').classList.remove('show');
+  document.getElementById('ganttFS').classList.remove('show'); GFS=null;
+} });
 
 const expandedJobs=new Set(), expandedBays=new Set();
 function toggleJob(row){ expandedJobs.has(row)?expandedJobs.delete(row):expandedJobs.add(row); renderAll(); }
@@ -474,7 +513,7 @@ function renderGantt(el, rows, win){
     let bar;
     if(g){
       const pctTxt = (r.pct!=null && g.width>9) ? `<span class="g-pct">${r.pct}%</span>` : '';
-      bar=`<div class="g-bar" style="left:${g.left}%;width:${g.width}%;background:${hexA(r.color,.28)};border-color:${r.color}">`
+      bar=`<div class="g-bar${r.conflict?' conflict':''}" style="left:${g.left}%;width:${g.width}%;background:${hexA(r.color,.28)};border-color:${r.color}">`
         + (r.pct!=null?`<div class="g-fill" style="width:${r.pct}%;background:${r.color}"></div>`:'')
         + `<span class="g-barlabel">${esc(r.barLabel||'')}</span>${pctTxt}</div>`;
     } else bar=`<div class="g-out">— outside range —</div>`;
@@ -780,10 +819,81 @@ function setRange(m){
   if(window.MRA_DATA) renderProjects(window.MRA_DATA);
 }
 
+/* ---------- Full-screen Gantt + conflict detection ---------- */
+function isoOverlap(a,b){ return a.startISO<=b.completionISO && b.startISO<=a.completionISO; }
+function findBayConflicts(jobs){
+  // Two trailers booked in the SAME inside spot (Bays 3-5) with overlapping dates.
+  const inShop=jobs.filter(j=>SHOP_BAYS.includes(j.bay) && (j.status||'').toLowerCase()!=='shipped' && j.startISO && j.completionISO);
+  const rows=new Set(), pairs=[], byBay={};
+  inShop.forEach(j=>{ (byBay[j.bay]=byBay[j.bay]||[]).push(j); });
+  Object.values(byBay).forEach(list=>{
+    for(let i=0;i<list.length;i++) for(let k=i+1;k<list.length;k++){
+      if(isoOverlap(list[i],list[k])){ rows.add(list[i].row); rows.add(list[k].row);
+        pairs.push({bay:list[i].bay, a:list[i], b:list[k]}); }
+    }
+  });
+  return {rows,pairs};
+}
+function openGantt(which){ GFS=which; document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); }
+function closeGantt(e){ if(!e || e.target.id==='ganttFS' || e.target.classList.contains('gfs-close')){
+  document.getElementById('ganttFS').classList.remove('show'); GFS=null; } }
+function setGfsFloorDays(d){ GFS_FLOOR_DAYS=d; renderGanttFS(); }
+function renderGanttFS(){
+  const D=window.MRA_DATA; if(!D||!GFS) return;
+  const today=D.todayISO;
+  const titleEl=document.getElementById('gfsTitle'), warnEl=document.getElementById('gfsWarn');
+  const cont=document.getElementById('gfsGantt'), legEl=document.getElementById('gfsLegend'), rangeEl=document.getElementById('gfsRange');
+  warnEl.textContent='';
+
+  if(GFS==='floor'){
+    titleEl.textContent='Floor Schedule — Detailed';
+    rangeEl.innerHTML=[14,28,56].map(d=>`<div class="rb${d===GFS_FLOOR_DAYS?' active':''}" onclick="setGfsFloorDays(${d})">${d/7} wk</div>`).join('');
+    const win=buildWindow(startOfWeek(todayMid()), GFS_FLOOR_DAYS);
+    const stColor={active:'#22c55e',scheduled:'#3b82f6',onhold:'#64748b',overdue:'#ef4444',open:'#64748b',done:'#475569'};
+    const order=D.physicalBays, jobs=(D.jobs||[]);
+    const {rows:conflictRows,pairs}=findBayConflicts(jobs);
+    const bayJobs=jobs.filter(j=>(j.category==='bay'||j.category==='pipeline') && (j.status||'').toLowerCase()!=='shipped' && j.startISO && j.completionISO);
+    const rows=bayJobs.map(j=>({j,c:classify(j,today)}))
+      .filter(x=>barGeom(x.j.startISO,x.j.completionISO,win))
+      .sort((a,b)=>{const ai=order.indexOf(a.j.bay),bi=order.indexOf(b.j.bay);
+        return (ai<0?99:ai)-(bi<0?99:bi) || (a.j.startISO||'').localeCompare(b.j.startISO||'');})
+      .map(x=>{const con=conflictRows.has(x.j.row);
+        return {label:(con?'⚠ ':'')+x.j.project, sub:x.j.bay+' · '+(x.j.jobNum||'—')+(con?' · CONFLICT':''),
+          startISO:x.j.startISO, endISO:x.j.completionISO, color:stColor[x.c.state]||'#64748b',
+          barLabel:x.j.jobNum||'', milestones:[], conflict:con};});
+    renderGantt(cont, rows, win);
+    legEl.innerHTML=`<span class="lg-a">Active</span><span class="lg-s">Scheduled</span><span class="lg-h">On hold</span>`
+      +`<span class="lg-d">Past due</span><span style="color:var(--red)">▦ conflict (same inside spot)</span><span style="color:var(--red)">▏today</span>`;
+    if(pairs.length){ warnEl.style.color='#fca5a5';
+      warnEl.textContent='⚠ '+pairs.length+' bay conflict'+(pairs.length>1?'s':'')+' — 2 trailers booked in the same inside spot (Bays 3-5)'; }
+    else { warnEl.style.color='#86efac'; warnEl.textContent='✓ No inside-spot conflicts (Bays 3-5)'; }
+  } else {
+    titleEl.textContent='Project Schedules — Detailed';
+    rangeEl.innerHTML=[['1 mo',1],['3 mo',3],['6 mo',6],['All','all']].map(([lbl,v])=>
+      `<div class="rb${(v==='all'?'all':+v)===RANGE?' active':''}" onclick="setRange(${v==='all'?"'all'":v});renderGanttFS()">${lbl}</div>`).join('');
+    const projects=(D.projects||[]).slice(); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
+    const t=parseISO(today), mStart=new Date(t.getFullYear(),t.getMonth(),1);
+    let days;
+    if(RANGE==='all'){ let maxFin=mStart.getTime();
+      projects.forEach(p=>{const f=parseISO(p.finishISO); if(f&&f.getTime()>maxFin)maxFin=f.getTime();});
+      days=Math.max(31,Math.ceil((maxFin-mStart.getTime())/DAY)+20); }
+    else days=Math.round(RANGE*30.4);
+    const win=buildWindow(mStart,days);
+    const rows=projects.filter(p=>p.startISO&&p.finishISO)
+      .map(p=>({label:p.name, sub:(p.pm||'—')+' · '+p.taskCount+' tasks', startISO:p.startISO, endISO:p.finishISO,
+        color:p._color, pct:p.pct, barLabel:'', milestones:p.milestones}))
+      .filter(r=>barGeom(r.startISO,r.endISO,win))
+      .sort((a,b)=>(a.startISO||'').localeCompare(b.startISO||''));
+    renderGantt(cont, rows, win);
+    legEl.innerHTML=`<span style="color:var(--amber)">◆ milestone gate</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">solid = % complete</span>`;
+  }
+}
+
 function renderAll(){
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
   renderFloor(D); renderProjects(D);
+  if(GFS) renderGanttFS();
   setView(VIEW);
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===RANGE));
   document.getElementById('refreshInfo').textContent="data as of "+(D.generatedText||"—");
