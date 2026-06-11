@@ -9,15 +9,14 @@ When running as Claude Code on the web (an ephemeral cloud container), the
 user's local/OneDrive‑synced path is **not** accessible:
 
 - Local (user's machine, NOT reachable from web sessions):
-  `C:\Users\rmiller\TGCS\MRA Site Project - Documents\MRA Claude Code\01 claude bot`
-  (the user sometimes refers to this as `01.1 RL Claude Bot`)
+  `C:\Users\rmiller\TGCS\MRA Site Project - Documents\MRA Claude Code\01.1 RL Claude Bot`
 
 Instead, reach the same files through the **Microsoft 365 MCP** connection:
 
-- SharePoint folder: **MRA Claude Code / 01 claude bot**
-  `https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared Documents/MRA Claude Code/01 claude bot`
-- `read_resource` URI for the folder:
-  `file:///b!vl1e4q2FdkShRDOfvSZR1M0xeaP9rW9KoRIXfk51DQyZ1vl6LeUVQ61wNNrTNu0w/01IUZ65BXUKHIFYARM6RFL45G4DKQOE5BA`
+- SharePoint folder: **MRA Claude Code / 01.1 RL Claude Bot** (authoritative)
+  `https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared Documents/MRA Claude Code/01.1 RL Claude Bot`
+- A near-duplicate sibling **`01 claude bot`** exists with the same files — the
+  `01.1 RL Claude Bot` copy above is the one to use.
 
 Folder contents:
 
@@ -28,16 +27,30 @@ Folder contents:
 | `dashboard/` | Working copy of the dashboard files (`MRA_Dashboard.html`, `data.js`, etc.) |
 | `.claude/` | Claude config for the local working folder |
 
+Known `file:///{driveId}/{itemId}` URIs (driveId
+`b!vl1e4q2FdkShRDOfvSZR1M0xeaP9rW9KoRIXfk51DQyZ1vl6LeUVQ61wNNrTNu0w`):
+
+| File | itemId |
+|---|---|
+| `MRA_Shop_Board_v6_9_7.xlsx` | `01IUZ65BULECQM4AT7VNGIF3BPQ2F3PDCE` |
+| `MRA_Shop_Board_v6_9_7_BACKUP.xlsx` | `01IUZ65BV6S2VXJERTUNAICO745NKX5XCZ` |
+| `dashboard/MRA_Dashboard.html` | `01IUZ65BWGU4EPP4XKR5DKNTZUO2OZHYN7` |
+| `dashboard/data.js` | `01IUZ65BWO2DH7YTDNKBEZER7F5F5UOBWB` |
+
 ### How to access via the Microsoft 365 MCP
 
-1. If item IDs have changed, re-locate the folder:
-   `sharepoint_folder_search` with `name: "MRA Site Project"` (or `"01 claude bot"`)
-   and pick the result whose `webUrl` ends in `/MRA Claude Code/01 claude bot`.
-2. List/read folder contents with `read_resource` using the folder URI above.
-3. Read individual files with `read_resource` using their `file:///{driveId}/{itemId}` URIs.
+1. To re-locate the folder/files (item IDs change if files are moved/recreated),
+   use **`sharepoint_search`** (document search), e.g. `query: "MRA Dashboard"`,
+   and pick results whose `webUrl` contains `/MRA Claude Code/01.1 RL Claude Bot/`.
+   Note: `sharepoint_folder_search` is unreliable here — it often misses this
+   folder. Prefer document search.
+2. Read individual files with `read_resource` using their `file:///{driveId}/{itemId}` URIs.
 
-> Note: SharePoint item IDs can change if files are moved/recreated. The `webUrl`
-> and the `sharepoint_folder_search` lookup are the durable way to find them.
+> **MIME limitation:** the connector only returns allowed types. `.xlsx`, `.html`,
+> `.json`, `.csv`, `.md`, images, and PDFs read fine, but **`.js` files (like
+> `data.js`) are rejected** (`application/x-javascript` not allowed). To inspect
+> the current data, read the source workbook (`.xlsx`) or use the `generatedAt`
+> field surfaced in `sharepoint_search` results.
 
 ## This repository
 
