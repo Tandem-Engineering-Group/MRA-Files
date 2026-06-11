@@ -11,13 +11,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = generate a local-upload token (AzCopy)'
+        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = AzCopy token; cleanup = delete temp preview.html blob'
         type: choice
         options:
           - preview
           - live
           - data
           - sas
+          - cleanup
         default: preview
 
 jobs:
@@ -93,6 +94,44 @@ jobs:
               --overwrite \
               --auth-mode key \
               --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Full logo (with tagline, light caption) for the footer.
+      - name: Upload logo-full-dark.png
+        if: ${{ hashFiles('logo-full-dark.png') != '' }}
+        uses: azure/CLI@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'logo-full-dark.png' \
+              --file logo-full-dark.png \
+              --content-type 'image/png' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Cleanup — delete the temporary preview.html blob from the live site.
+      - name: Delete preview.html
+        if: ${{ inputs.mode == 'cleanup' }}
+        uses: azure/CLI@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az storage blob delete \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'preview.html' \
+              --auth-mode key \
+              --only-show-errors
+            echo "Deleted preview.html from the live site."
         env:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
