@@ -7,7 +7,16 @@ on:
       - 'MRA_Dashboard.html'
       - 'data.js'
       - 'index.html'
-  workflow_dispatch:   # allows manual trigger from GitHub UI
+      - 'preview.html'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preview = upload preview.html only (live board untouched); live = upload index/MRA_Dashboard/data.js'
+        type: choice
+        options:
+          - preview
+          - live
+        default: preview
 
 jobs:
   deploy:
@@ -15,7 +24,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Upload files to Azure blob storage
+      # Always safe: preview.html is a standalone file, separate from the live board.
+      - name: Upload preview.html
+        if: ${{ hashFiles('preview.html') != '' }}
+        uses: azure/CLI@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'preview.html' \
+              --file preview.html \
+              --content-type 'text/html' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Live board files — only on a push to main, or an explicit mode=live dispatch.
+      - name: Upload live board files
+        if: ${{ github.event_name == 'push' || inputs.mode == 'live' }}
         uses: azure/CLI@v2
         with:
           azcliversion: latest
