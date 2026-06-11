@@ -1,0 +1,64 @@
+name: Deploy to Azure Static Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'MRA_Dashboard.html'
+      - 'data.js'
+      - 'index.html'
+  workflow_dispatch:   # allows manual trigger from GitHub UI
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload files to Azure blob storage
+        uses: azure/CLI@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'index.html' \
+              --file index.html \
+              --content-type 'text/html' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'MRA_Dashboard.html' \
+              --file MRA_Dashboard.html \
+              --content-type 'text/html' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'data.js' \
+              --file data.js \
+              --content-type 'application/javascript' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      - name: Verify live URL
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://mrashopdash.z13.web.core.windows.net/")
+          echo "Live site HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "WARNING: site returned $STATUS — check the Azure portal"
+          else
+            echo "✓ Site is live"
+          fi
