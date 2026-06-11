@@ -115,6 +115,25 @@
   .salcard li{font-size:11px; color:#e7cba2; margin-bottom:4px; line-height:1.32}
   @media(max-width:1100px){ .saltasks{grid-template-columns:1fr} }
 
+  /* Team capacity panel */
+  .teamgrid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+  .teamcard{background:var(--panel2); border:1px solid var(--line); border-radius:10px;
+    padding:11px 13px; border-left:3px solid var(--violet)}
+  .teamcard .th{display:flex; align-items:center; gap:8px}
+  .teamcard .tn{font-size:13px; font-weight:700; line-height:1.2}
+  .teamcard .tc{margin-left:auto; background:var(--panel); color:var(--txt);
+    font-size:12px; font-weight:700; padding:1px 9px; border-radius:20px}
+  .teamcard .tmeta{margin-top:5px; display:flex; gap:6px; flex-wrap:wrap}
+  .teamcard .tlist{margin-top:9px}
+  .trow{display:flex; align-items:flex-start; gap:8px; padding:5px 0;
+    border-bottom:1px dashed rgba(255,255,255,.07)}
+  .trow:last-child{border-bottom:none}
+  .trow .tlead{font-size:11.5px; line-height:1.3}
+  .trow .tsub{color:var(--muted); font-size:10px; margin-top:1px}
+  .trow .tright{margin-left:auto; white-space:nowrap}
+  @media(max-width:1500px){ .teamgrid{grid-template-columns:repeat(3,1fr)} }
+  @media(max-width:1100px){ .teamgrid{grid-template-columns:1fr} }
+
   /* ---------- Lists ---------- */
   .row{display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--line)}
   .row:last-child{border-bottom:none}
@@ -292,6 +311,13 @@
         <div id="progress"></div>
       </div>
     </div>
+
+    <div class="panel">
+      <h2>👥 Team Capacity — Open Tasks <span class="count" id="teamCount"></span>
+        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">one card per person · most-loaded first · due-date color-coded</span>
+      </h2>
+      <div class="teamgrid" id="team"></div>
+    </div>
   </div>
 
   <!-- ===================== HELP MODAL ===================== -->
@@ -332,7 +358,14 @@
       </div>
 
       <div class="hsec">
-        <h4>⑥ It's always live</h4>
+        <h4>⑥ Team capacity</h4>
+        <p>The <span class="k">👥 Team Capacity</span> panel (Projects tab) groups every open <b>Project Task</b> by the person it's
+        <i>assigned</i> to, sorted with the most-loaded people first. Each task shows a due-date chip
+        (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due within 7 days) so you can read everyone's workload at a glance.</p>
+      </div>
+
+      <div class="hsec">
+        <h4>⑦ It's always live</h4>
         <div class="tip">The board refreshes itself about once a minute. <b>To change anything, edit the workbook in Excel</b> —
         the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for long-term projects. Save, and the dashboard updates on its own.</div>
       </div>
@@ -661,6 +694,51 @@ function renderProjects(D){
     `<div class="pmbar" style="margin-top:5px;height:8px"><div class="seg" style="width:${p.pct}%;background:${p._color}"></div></div>`+
     `</div><div class="right"><span class="badge grey">${p.pct}%</span></div></div>`).join("")||`<div class="empty">No active projects</div>`;
   document.getElementById('progCount').textContent=prog.length;
+
+  renderTeam(D);
+}
+
+/* ---------- Team capacity (open Project-Tasks grouped by assignee) ---------- */
+function renderTeam(D){
+  const today=D.todayISO, tasks=(D.teamTasks||[]);
+  const el=document.getElementById('team');
+  // split multi-assignee cells ("A / B", "A, B", "A & B", "A and B") into people
+  const map={};
+  tasks.forEach(t=>{
+    const names=(t.assignee||"").split(/\s*[\/,&]\s*|\s+and\s+/i).map(s=>s.trim()).filter(Boolean);
+    (names.length?names:["Unassigned"]).forEach(nm=>{ (map[nm]=map[nm]||[]).push(t); });
+  });
+  const people=Object.entries(map).map(([nm,list])=>{
+    list.sort((a,b)=>(a.dueISO||"9999").localeCompare(b.dueISO||"9999"));
+    let overdue=0,soon=0;
+    list.forEach(t=>{ if(t.dueISO){ const d=daysBetween(t.dueISO,today);
+      if(d<0) overdue++; else if(d<=7) soon++; } });
+    return {nm,list,overdue,soon,tot:list.length};
+  }).sort((a,b)=>b.overdue-a.overdue || b.tot-a.tot);
+
+  if(!people.length){
+    el.innerHTML=`<div class="empty">No assigned project tasks yet — run the updated Export-Data.ps1 to populate this.</div>`;
+    document.getElementById('teamCount').textContent="0 people"; return;
+  }
+  el.innerHTML=people.map(p=>{
+    const meta=[ p.overdue?`<span class="badge red">${p.overdue} overdue</span>`:'',
+                 p.soon?`<span class="badge amber">${p.soon} due soon</span>`:'' ]
+               .filter(Boolean).join(' ') || `<span class="badge green">on track</span>`;
+    const lines=p.list.map(t=>{
+      let badge;
+      if(t.dueISO){ const d=daysBetween(t.dueISO,today);
+        badge=d<0?`<span class="badge red">${Math.abs(d)}d</span>`
+            :d<=7?`<span class="badge amber">${d}d</span>`
+            :`<span class="badge grey">${fmtMD(t.dueISO)}</span>`;
+      } else badge=`<span class="badge grey">—</span>`;
+      return `<div class="trow"><div class="tlead">${esc(t.task||"(task)")}`+
+        `<div class="tsub">${esc(t.project)}</div></div><div class="tright">${badge}</div></div>`;
+    }).join("");
+    return `<div class="teamcard"><div class="th"><span class="tn">${esc(p.nm)}</span>`+
+      `<span class="tc">${p.tot}</span></div><div class="tmeta">${meta}</div>`+
+      `<div class="tlist">${lines}</div></div>`;
+  }).join("");
+  document.getElementById('teamCount').textContent=people.length+" people · "+tasks.length+" open tasks";
 }
 
 /* ---------- view switching ---------- */
