@@ -10,7 +10,7 @@
     --txt:#e8edf3; --muted:#8b9bb0; --faint:#5d6b7e;
     --green:#22c55e; --blue:#3b82f6; --grey:#64748b; --red:#ef4444;
     --amber:#f59e0b; --violet:#a78bfa; --teal:#2dd4bf;
-    --brand:#e11d2a;  /* MRA red accent — change to your brand color */
+    --brand:#e2531e;  /* MRA brand orange (from logo) — adjustable */
   }
   *{box-sizing:border-box; margin:0; padding:0}
   html,body{background:var(--bg); color:var(--txt);
@@ -103,7 +103,7 @@
   .cap-cell{position:absolute; top:3px; bottom:3px; border-radius:3px; display:flex; align-items:center;
     justify-content:center; font-size:10.5px; font-weight:800; color:#08131f}
   /* bar detail popover */
-  .barpop{position:fixed; z-index:200; max-width:320px; background:var(--panel); border:1px solid var(--line);
+  .barpop{position:fixed; z-index:200; max-width:340px; max-height:72vh; overflow:auto; background:var(--panel); border:1px solid var(--line);
     border-radius:10px; padding:11px 14px; box-shadow:0 10px 34px rgba(0,0,0,.55); display:none}
   .barpop.show{display:block}
   .barpop h4{font-size:13.5px; font-weight:800; margin-bottom:2px}
@@ -183,8 +183,23 @@
   /* Fleetio pizazz */
   #fleetioKpis .kpi.over{box-shadow:0 0 18px rgba(239,68,68,.22)}
   #fleetioKpis .kpi.tasks{box-shadow:0 0 18px rgba(245,158,11,.15)}
-  #fleetioView .teamcard{transition:transform .09s ease}
+  #fleetioView .teamcard{transition:transform .09s ease; cursor:pointer}
   #fleetioView .teamcard:hover{transform:translateY(-2px)}
+  /* hero KPIs */
+  #fleetioKpis .kpi{padding:16px 18px 14px}
+  #fleetioKpis .kpi .n{font-size:46px}
+  #fleetioKpis .kpi .ksub{font-size:11px; color:var(--muted); margin-top:5px; font-weight:600}
+  /* mini charts */
+  .donutwrap{display:flex; align-items:center; gap:20px}
+  .donut{width:128px; height:128px; border-radius:50%; position:relative; flex:0 0 128px}
+  .donut::after{content:''; position:absolute; inset:19px; border-radius:50%; background:var(--panel)}
+  .donut .dc{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1}
+  .donut .dc .dn{font-size:30px; font-weight:800; line-height:1}
+  .donut .dc .dl{font-size:9px; color:var(--muted); letter-spacing:1.5px; margin-top:3px}
+  .donutleg{font-size:12.5px; flex:1 1 auto}
+  .donutleg div{display:flex; align-items:center; gap:8px; padding:4px 0}
+  .donutleg .sw{width:12px; height:12px; border-radius:3px; display:inline-block; flex:0 0 12px}
+  .donutleg b{margin-left:auto; font-variant-numeric:tabular-nums}
 
   /* ---------- Lists ---------- */
   .row{display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--line)}
@@ -388,6 +403,16 @@
     <div class="kpis" id="fleetioKpis"></div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="panel">
+        <h2>📊 Service Backlog</h2>
+        <div id="fSvcChart"></div>
+      </div>
+      <div class="panel">
+        <h2>🏷️ Open Issues by Type <span class="count" id="fLabelCount"></span></h2>
+        <div id="fIssueChart"></div>
+      </div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="panel">
         <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span></h2>
         <div id="fIssues"></div>
       </div>
@@ -427,64 +452,7 @@
   <div class="modal-overlay" id="helpModal" onclick="closeHelp(event)">
     <div class="modal">
       <button class="modal-close" onclick="closeHelp()" title="Close">×</button>
-      <h3>How to use the <span class="mra">MRA</span> Shop Floor dashboard</h3>
-      <div class="msub">Everything here builds itself from the Excel workbook — you never edit the dashboard by hand.</div>
-
-      <div class="hsec">
-        <h4>① The two tabs up top</h4>
-        <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status, the next 2 weeks, Sal's tasks, flagged jobs, pipeline and staff on leave.
-        <span class="k">PROJECTS</span> = the long-term programs (months out) with milestone gates, % complete, PM load and team capacity.</p>
-      </div>
-
-      <div class="hsec">
-        <h4>② ✏️ Edit Schedule button</h4>
-        <p>The <span class="k">✏️ Edit Schedule</span> button (top of the header) opens the source workbook in Excel so you can make changes.
-        Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p>
-      </div>
-
-      <div class="hsec">
-        <h4>③ Bay Status — see a trailer's tasks</h4>
-        <p>On the <b>Bay Status</b> board, click a <span class="k">"N tasks ▸"</span> button to drop down that trailer's
-        open task list. Click <span class="k">"+N more in this bay"</span> to reveal other jobs parked in that bay.</p>
-      </div>
-
-      <div class="hsec">
-        <h4>④ 🔧 Sal — Open Tasks by Trailer</h4>
-        <p>This panel pulls every open "Sal" task out and groups it by trailer, so his queue lives in one place.</p>
-      </div>
-
-      <div class="hsec">
-        <h4>⑤ 👥 Team Capacity (Projects tab)</h4>
-        <p>Groups every open <b>Project Task</b> by the person it's <i>assigned</i> to, most-loaded first, with a due-date chip
-        (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). Use the
-        <span class="k">Everyone / People only</span> toggle to hide crews & vendors and show just individuals — your choice is remembered.</p>
-      </div>
-
-      <div class="hsec">
-        <h4>⑥ ⛶ Expand — full-screen Gantts</h4>
-        <p>Both Gantts have an <span class="k">⛶ Expand</span> button for a big, detailed view (<b>Esc</b> or ✕ to close):</p>
-        <p style="margin-top:6px"><b>Projects:</b> switch detail with <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>,
-        or click a project name (<span class="k">▾</span>) to expand just that one to its milestone gates. Click any bar for a
-        <b>detail popover</b> (PM, %, dates, and the full milestone-gate list). Zoom with <span class="k">1 / 3 / 6 mo / All</span>.</p>
-        <p style="margin-top:6px"><b>Floor:</b> the <span class="k">Inside spots used (of 6)</span> strip shows weekly use of Bays 3–5
-        (<span style="color:var(--green)">green</span> → <span style="color:var(--amber)">amber when full</span> → <span style="color:var(--red)">red if over</span>).
-        Two trailers booked in the <b>same inside spot</b> get <span style="color:var(--red)">red-ringed ⚠ conflict</span> bars with a warning up top. Click a bar for details; zoom with <span class="k">2 / 4 / 8 wk</span>.</p>
-      </div>
-
-      <div class="hsec">
-        <h4>⑦ Colors & Gantt markers</h4>
-        <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp;
-        <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
-        On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone gate, solid fill = <b>% complete</b>, a faded bar = completed,
-        the <span style="color:#93c5fd">blue band</span> = this week, and the <span style="color:var(--red)">red line</span> = today.</p>
-      </div>
-
-      <div class="hsec">
-        <h4>⑧ How it stays live</h4>
-        <div class="tip">Edit the workbook (<b>Input</b> = shop floor, <b>Project Tasks</b> = projects) and <b>save</b>.
-        The board pushes itself up <b>every 15 minutes</b> during the day — or run <b>Refresh Now / dashboard.bat</b> for an instant update.
-        The page re-checks for new data every 30 seconds on its own. <b>Never edit the dashboard or data.js by hand</b> — only the workbook.</div>
-      </div>
+      <div id="helpBody"></div>
     </div>
   </div>
 
@@ -521,7 +489,51 @@ function daysBetween(aIso,bIso){ return Math.round((parseISO(aIso)-parseISO(bIso
 function startOfWeek(d){ const x=new Date(d); const wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); x.setHours(0,0,0,0); return x; }
 function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
 
-function openHelp(){ document.getElementById('helpModal').classList.add('show'); }
+const GENERAL_HELP = `
+  <h3>How to use the <span class="mra">MRA</span> Shop Floor dashboard</h3>
+  <div class="msub">Everything here builds itself from the Excel workbook — you never edit the dashboard by hand.</div>
+  <div class="hsec"><h4>① The tabs up top</h4>
+    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status, the next 2 weeks, Sal's tasks, flagged jobs, pipeline and staff on leave.
+    <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, PM load and team capacity.
+    <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.</p></div>
+  <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
+    <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
+  <div class="hsec"><h4>③ Bay Status — see a trailer's tasks</h4>
+    <p>Click a <span class="k">"N tasks ▸"</span> button to drop down that trailer's open tasks. Click <span class="k">"+N more in this bay"</span> to reveal other jobs in that bay. (No pill = no open tasks yet.)</p></div>
+  <div class="hsec"><h4>④ 🔧 Sal — Open Tasks by Trailer</h4>
+    <p>Pulls every open "Sal" task out and groups it by trailer, so his queue lives in one place.</p></div>
+  <div class="hsec"><h4>⑤ 👥 Team Capacity (Projects tab)</h4>
+    <p>Groups every open <b>Project Task</b> by the person it's <i>assigned</i> to, most-loaded first, with a due-date chip
+    (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
+    <span class="k">Everyone / People only</span> toggle hides crews & vendors — your choice is remembered.</p></div>
+  <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
+    <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a bar for a detail popover. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p></div>
+  <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
+    <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp; <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
+    On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone, solid fill = % complete, faded = completed, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:var(--red)">red line</span> = today.</p></div>
+  <div class="hsec"><h4>⑧ How it stays live</h4>
+    <div class="tip">Edit the workbook (<b>Input</b> = shop floor, <b>Project Tasks</b> = projects) and <b>save</b>. It pushes up <b>every 15 minutes</b> during the day — or run <b>dashboard.bat</b> for an instant update. <b>Never edit the dashboard or data.js by hand</b> — only the workbook.</div></div>
+`;
+const FLEETIO_HELP = `
+  <h3>The <span class="mra">FLEETIO</span> tab — fleet maintenance</h3>
+  <div class="msub">Pulled live from Fleetio every ~15 minutes. Focused on what's open and what's coming due.</div>
+  <div class="hsec"><h4>① The top numbers</h4>
+    <p>Open Issues, Issues Overdue, Open Work Orders, Service Due Soon (next 21 days) and Service Overdue — straight from Fleetio. The little sub-line gives quick context (e.g., % overdue).</p></div>
+  <div class="hsec"><h4>② 📊 At-a-glance charts</h4>
+    <p><b>Service Backlog</b> donut = overdue (red) vs due-soon (amber). <b>Open Issues by Type</b> = your Fleetio issue labels, ranked.</p></div>
+  <div class="hsec"><h4>③ Open Issues & Work Orders</h4>
+    <p>Live open issues and active/pending work orders, each showing the <b>trailer + job #</b>, with overdue/priority chips and how long they've been open.</p></div>
+  <div class="hsec"><h4>④ 🚛 By Trailer — click to drill in</h4>
+    <p>One card per trailer (matched to the shop by <b>J#</b>), color-coded by urgency: <span style="color:var(--red)">red</span> = service overdue, <span style="color:var(--amber)">amber</span> = open issues, <span style="color:var(--blue)">blue</span> = work orders, <span style="color:var(--green)">green</span> = clear. Worst-first. <b>Click a card</b> to see that trailer's exact issues, work orders and service items.</p></div>
+  <div class="hsec"><h4>⑤ 🔧 Service — Due & Overdue</h4>
+    <p>Every service reminder that's overdue or due soon, overdue first, with the trailer and the due date. <span style="color:#fca5a5">Red</span> = overdue, <span style="color:var(--amber)">amber</span> = due soon.</p></div>
+  <div class="hsec"><h4>⑥ ↗ Open in Fleetio</h4>
+    <div class="tip">The <b>↗ Open in Fleetio</b> button (top right) jumps to the full Fleetio app for anything deeper — editing issues, work orders, costs, history, etc. This tab is the quick read; Fleetio is the system of record.</div></div>
+`;
+function openHelp(){
+  document.getElementById('helpBody').innerHTML = (VIEW==='fleetio') ? FLEETIO_HELP : GENERAL_HELP;
+  document.getElementById('helpModal').classList.add('show');
+}
 function closeHelp(e){ if(!e || e.target.id==='helpModal' || e.target.classList.contains('modal-close'))
   document.getElementById('helpModal').classList.remove('show'); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
@@ -913,6 +925,17 @@ function fleetState(dueISO,today){
   const d=daysBetween(dueISO,today);
   return {overdue:d<0, soon:d>=0&&d<=21, days:d};
 }
+function trailerPop(t){
+  let h=`<h4>${esc(t.jobNum||t.name)}</h4>`;
+  if(t.name && t.name!==t.jobNum) h+=`<div class="pp-sub">${esc(t.name)}</div>`;
+  if(t._i && t._i.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">OPEN ISSUES (${t._i.length})</div>`
+    + t._i.slice(0,12).map(i=>`<div>• ${esc(i.summary||('Issue '+i.num))}${i.overdue?' <span class="badge red">overdue</span>':''}</div>`).join('') + `</div>`; }
+  if(t._w && t._w.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">WORK ORDERS (${t._w.length})</div>`
+    + t._w.slice(0,12).map(w=>`<div>• ${esc(w.summary||('WO '+w.num))}${w.status?' <span class="badge '+(/pend/i.test(w.status)?'amber':'blue')+'">'+esc(w.status)+'</span>':''}</div>`).join('') + `</div>`; }
+  if(t._s && t._s.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">SERVICE (${t._s.length})</div>`
+    + t._s.slice(0,12).map(s=>`<div>• ${esc(s.service||'Service')} ${s.c&&s.c.overdue?'<span class="badge red">overdue</span>':(s.c&&s.c.soon?'<span class="badge amber">due soon</span>':(s.dueISO?'<span class="badge grey">'+fmtMD(s.dueISO)+'</span>':''))}</div>`).join('') + `</div>`; }
+  return h;
+}
 function renderFleetio(D){
   const F=D.fleetio, today=D.todayISO;
   const issues=(F&&F.issues)||[], wos=(F&&F.workOrders)||[], svc=(F&&F.service)||[];
@@ -922,8 +945,8 @@ function renderFleetio(D){
     const empty=`<div class="empty">No Fleetio data yet — once the Fleetio export feeds <b>data.js</b> this fills in automatically. Use "↗ Open in Fleetio" above in the meantime.</div>`;
     document.getElementById('fleetioKpis').innerHTML='';
     ['fService','fIssues','fWorkOrders'].forEach(id=>document.getElementById(id).innerHTML=empty);
-    document.getElementById('fByTrailer').innerHTML='';
-    ['fSvcCount','fIssueCount','fWoCount','fTrailerCount'].forEach(id=>document.getElementById(id).textContent='');
+    ['fByTrailer','fSvcChart','fIssueChart'].forEach(id=>document.getElementById(id).innerHTML='');
+    ['fSvcCount','fIssueCount','fWoCount','fTrailerCount','fLabelCount'].forEach(id=>document.getElementById(id).textContent='');
     return;
   }
 
@@ -933,14 +956,29 @@ function renderFleetio(D){
   const issOver=issues.filter(i=>i.overdue).length;
 
   const kpis=[
-    {n:issues.length, l:'OPEN ISSUES', c:'tasks'},
-    {n:issOver, l:'ISSUES OVERDUE', c:'over'},
-    {n:wos.length, l:'OPEN WORK ORDERS', c:'sched'},
-    {n:svcSoon, l:'SERVICE DUE SOON', c:'pipe'},
-    {n:svcOver, l:'SERVICE OVERDUE', c:'over'},
+    {n:issues.length, l:'OPEN ISSUES', c:'tasks', sub:(issOver?issOver+' overdue':'all current')},
+    {n:issOver, l:'ISSUES OVERDUE', c:'over', sub:(issues.length?Math.round(issOver*100/issues.length)+'% of open':'')},
+    {n:wos.length, l:'OPEN WORK ORDERS', c:'sched', sub:''},
+    {n:svcSoon, l:'SERVICE DUE SOON', c:'pipe', sub:'next 21 days'},
+    {n:svcOver, l:'SERVICE OVERDUE', c:'over', sub:((svcOver+svcSoon)?Math.round(svcOver*100/(svcOver+svcSoon))+'% of due':'')},
   ];
   document.getElementById('fleetioKpis').innerHTML=kpis.map(k=>
-    `<div class="kpi ${k.c}"><div class="n">${k.n}</div><div class="l">${k.l}</div></div>`).join('');
+    `<div class="kpi ${k.c}"><div class="n">${k.n}</div><div class="l">${k.l}</div>${k.sub?`<div class="ksub">${k.sub}</div>`:''}</div>`).join('');
+
+  // mini charts: service backlog donut + open issues by label
+  const svcTot=svcOver+svcSoon, op=svcTot?(svcOver/svcTot*100):0;
+  document.getElementById('fSvcChart').innerHTML = svcTot ?
+      `<div class="donutwrap"><div class="donut" style="background:conic-gradient(var(--red) 0 ${op}%, var(--amber) ${op}% 100%)"><div class="dc"><div class="dn">${svcTot}</div><div class="dl">DUE</div></div></div>`
+    + `<div class="donutleg"><div><span class="sw" style="background:var(--red)"></span> Overdue <b>${svcOver}</b></div>`
+    + `<div><span class="sw" style="background:var(--amber)"></span> Due soon <b>${svcSoon}</b></div></div></div>`
+    : `<div class="empty">No service due</div>`;
+  const lc={};
+  issues.forEach(i=>{ const labs=(i.priority||'').split(',').map(s=>s.trim()).filter(Boolean); if(!labs.length) labs.push('(no label)'); labs.forEach(l=>{ lc[l]=(lc[l]||0)+1; }); });
+  const larr=Object.keys(lc).map(l=>({l,n:lc[l]})).sort((a,b)=>b.n-a.n).slice(0,7);
+  const lmax=Math.max(1,...larr.map(x=>x.n));
+  document.getElementById('fIssueChart').innerHTML = larr.length ? larr.map(x=>
+    `<div class="pmrow"><div class="nm" title="${esc(x.l)}">${esc(x.l)}</div><div class="pmbar"><div class="seg" style="width:${x.n/lmax*100}%;background:var(--brand)"></div></div><div class="v">${x.n}</div></div>`).join('') : `<div class="empty">—</div>`;
+  document.getElementById('fLabelCount').textContent = larr.length+' types';
 
   const svcSorted=svcC.slice().sort((a,b)=>(b.c.overdue?1:0)-(a.c.overdue?1:0) || (a.dueISO||'9999').localeCompare(b.dueISO||'9999'));
   document.getElementById('fService').innerHTML = svcSorted.length ? svcSorted.map(s=>{
@@ -976,14 +1014,15 @@ function renderFleetio(D){
 
   const tmap={};
   function bucket(item){ const key=item.jobNum||item.asset||'Unassigned';
-    if(!tmap[key]) tmap[key]={name:item.asset||key, jobNum:item.jobNum||'', iss:0, wo:0, svc:0, svcOver:0}; return tmap[key]; }
-  issues.forEach(i=>{ bucket(i).iss++; });
-  wos.forEach(w=>{ bucket(w).wo++; });
-  svcC.forEach(s=>{ const t=bucket(s); t.svc++; if(s.c.overdue) t.svcOver++; });
+    if(!tmap[key]) tmap[key]={name:item.asset||key, jobNum:item.jobNum||'', iss:0, wo:0, svc:0, svcOver:0, _i:[], _w:[], _s:[]}; return tmap[key]; }
+  issues.forEach(i=>{ const t=bucket(i); t.iss++; t._i.push(i); });
+  wos.forEach(w=>{ const t=bucket(w); t.wo++; t._w.push(w); });
+  svcC.forEach(s=>{ const t=bucket(s); t.svc++; if(s.c.overdue) t.svcOver++; t._s.push(s); });
   const trailers=Object.values(tmap).sort((a,b)=>(b.svcOver-a.svcOver) || (b.iss+b.wo+b.svc)-(a.iss+a.wo+a.svc));
-  document.getElementById('fByTrailer').innerHTML = trailers.length ? trailers.map(t=>{
+  document.getElementById('fByTrailer').innerHTML = trailers.length ? trailers.map((t,idx)=>{
     const edge = t.svcOver?'#ef4444' : (t.iss?'#f59e0b' : (t.wo?'#3b82f6' : '#22c55e'));
-    return `<div class="teamcard" style="border-left-color:${edge}"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}</span>`+
+    const key='ft'+idx; BARPOP[key]=trailerPop(t);
+    return `<div class="teamcard" style="border-left-color:${edge}" onclick="showBarPop(event,'${key}')"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}</span>`+
     `<span class="tc">${t.iss+t.wo+t.svc}</span></div><div class="tmeta">`+
       (t.iss?`<span class="badge amber">${t.iss} issue${t.iss>1?'s':''}</span>`:'')+
       (t.wo?`<span class="badge blue">${t.wo} WO</span>`:'')+
