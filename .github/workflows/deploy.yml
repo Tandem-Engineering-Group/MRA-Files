@@ -11,12 +11,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only (push the repo''s data.js to Azure)'
+        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = generate a local-upload token (AzCopy)'
         type: choice
         options:
           - preview
           - live
           - data
+          - sas
         default: preview
 
 jobs:
@@ -24,6 +25,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Generate a long-lived, write-scoped SAS for AzCopy on a no-admin PC.
+      # Writes the full upload target URL to an artifact (masked in logs).
+      - name: Generate AzCopy upload token
+        if: ${{ inputs.mode == 'sas' }}
+        uses: azure/CLI@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            EXPIRY=$(date -u -d "+730 days" '+%Y-%m-%dT%H:%MZ')
+            SAS=$(az storage container generate-sas \
+              --account-name mrashopdash \
+              --account-key "$AZURE_STORAGE_KEY" \
+              --name '$web' \
+              --permissions rcwl \
+              --expiry "$EXPIRY" \
+              -o tsv)
+            echo "::add-mask::$SAS"
+            mkdir -p out
+            printf 'https://mrashopdash.blob.core.windows.net/$web/data.js?%s' "$SAS" > out/azure-target.txt
+            echo "Generated azure-target.txt (token valid until $EXPIRY). Value is masked in logs."
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      - name: Upload token artifact
+        if: ${{ inputs.mode == 'sas' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-target
+          path: out/azure-target.txt
+          retention-days: 1
 
       # Always safe: preview.html is a standalone file, separate from the live board.
       - name: Upload preview.html
