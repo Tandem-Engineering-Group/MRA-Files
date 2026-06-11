@@ -318,8 +318,11 @@
     </div>
 
     <div class="panel">
-      <h2>👥 Team Capacity — Open Tasks <span class="count" id="teamCount"></span>
-        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">one card per person · most-loaded first · due-date color-coded</span>
+      <h2>👥 Team Capacity — Open Tasks <span class="count" id="teamCount" style="margin-left:8px"></span>
+        <div class="rangebtns" id="teamFilterBtns">
+          <div class="rb active" data-tf="all" onclick="setTeamFilter('all')">Everyone</div>
+          <div class="rb" data-tf="people" onclick="setTeamFilter('people')">People only</div>
+        </div>
       </h2>
       <div class="teamgrid" id="team"></div>
     </div>
@@ -390,6 +393,8 @@ const PALETTE = ['#3b82f6','#22c55e','#f59e0b','#a78bfa','#2dd4bf','#ef4444',
 let RANGE = 'all';           // projects gantt range (months or 'all')
 let VIEW = 'floor';
 try{ VIEW = localStorage.getItem('mra_view')||'floor'; RANGE = JSON.parse(localStorage.getItem('mra_range'))||3; }catch(e){ RANGE=3; }
+let TEAMFILTER='all';
+try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
 
 /* ---------- helpers ---------- */
 function esc(s){return (s==null?"":""+s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
@@ -704,14 +709,30 @@ function renderProjects(D){
 }
 
 /* ---------- Team capacity (open Project-Tasks grouped by assignee) ---------- */
+function isCrewLabel(name){
+  const n=(name||'').trim().toLowerCase();
+  if(!n) return true;
+  if(n.startsWith('mra')) return true;
+  return ['client','vendor','all','logistics','fleet','design','implement','tbd','n/a','various','team',
+          'eng','av','ops','qa','tech','procurement','electrical','engineering',
+          'art guild','art guild av','master wraps','w2 graphics','trumpf'].includes(n);
+}
+function setTeamFilter(f){
+  TEAMFILTER=f; try{localStorage.setItem('mra_teamfilter',f);}catch(e){}
+  if(window.MRA_DATA) renderTeam(window.MRA_DATA);
+}
 function renderTeam(D){
   const today=D.todayISO, tasks=(D.teamTasks||[]);
   const el=document.getElementById('team');
+  document.querySelectorAll('#teamFilterBtns .rb').forEach(b=>b.classList.toggle('active', b.dataset.tf===TEAMFILTER));
   // split multi-assignee cells ("A / B", "A, B", "A & B", "A and B") into people
   const map={};
   tasks.forEach(t=>{
     const names=(t.assignee||"").split(/\s*[\/,&]\s*|\s+and\s+/i).map(s=>s.trim()).filter(Boolean);
-    (names.length?names:["Unassigned"]).forEach(nm=>{ (map[nm]=map[nm]||[]).push(t); });
+    (names.length?names:["Unassigned"]).forEach(nm=>{
+      if(TEAMFILTER==='people' && isCrewLabel(nm)) return;   // hide crews/vendors/placeholders
+      (map[nm]=map[nm]||[]).push(t);
+    });
   });
   const people=Object.entries(map).map(([nm,list])=>{
     list.sort((a,b)=>(a.dueISO||"9999").localeCompare(b.dueISO||"9999"));
@@ -743,7 +764,7 @@ function renderTeam(D){
       `<span class="tc">${p.tot}</span></div><div class="tmeta">${meta}</div>`+
       `<div class="tlist">${lines}</div></div>`;
   }).join("");
-  document.getElementById('teamCount').textContent=people.length+" people · "+tasks.length+" open tasks";
+  document.getElementById('teamCount').textContent=people.length+(TEAMFILTER==='people'?" people":" entries")+" · "+tasks.length+" open tasks";
 }
 
 /* ---------- view switching ---------- */
