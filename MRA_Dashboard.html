@@ -87,6 +87,31 @@
   .gfs-body .g-gutter{width:240px; flex:0 0 240px}
   .gfs-body .g-track{min-height:30px}
   .g-bar.conflict{box-shadow:0 0 0 2px var(--red), 0 0 11px rgba(239,68,68,.55)}
+  .g-weekend{position:absolute; top:0; bottom:0; background:rgba(255,255,255,.035); z-index:0}
+  .g-curweek{position:absolute; top:0; bottom:0; background:rgba(59,130,246,.10);
+    border-left:1px dashed rgba(59,130,246,.45); border-right:1px dashed rgba(59,130,246,.45); z-index:0}
+  .g-bar.done{opacity:.42}
+  .g-row.g-subrow .g-gutter{padding-left:24px}
+  .g-row.g-subrow .g-lbl{font-weight:500; color:var(--muted); font-size:11px}
+  .g-row.clickable{cursor:pointer}
+  .g-row.clickable:hover{background:rgba(255,255,255,.035)}
+  /* capacity strip (floor full-screen) */
+  .capstrip{display:flex; align-items:stretch; margin-bottom:8px}
+  .capstrip .cap-gutter{width:240px; flex:0 0 240px; padding:0 10px 0 2px; font-size:11px;
+    color:var(--muted); font-weight:700; display:flex; align-items:center}
+  .capstrip .cap-track{position:relative; flex:1 1 auto; height:26px; border-left:1px solid var(--line)}
+  .cap-cell{position:absolute; top:3px; bottom:3px; border-radius:3px; display:flex; align-items:center;
+    justify-content:center; font-size:10.5px; font-weight:800; color:#08131f}
+  /* bar detail popover */
+  .barpop{position:fixed; z-index:200; max-width:320px; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:11px 14px; box-shadow:0 10px 34px rgba(0,0,0,.55); display:none}
+  .barpop.show{display:block}
+  .barpop h4{font-size:13.5px; font-weight:800; margin-bottom:2px}
+  .barpop .pp-sub{color:var(--muted); font-size:11px; margin-bottom:8px}
+  .barpop .pp-row{display:flex; gap:8px; padding:2px 0; font-size:12px}
+  .barpop .pp-row .k{color:var(--muted); min-width:60px}
+  .barpop .pp-ms{margin-top:7px; border-top:1px solid var(--line); padding-top:7px}
+  .barpop .pp-ms div{font-size:11px; padding:2px 0; color:#e7cba2; line-height:1.3}
 
   /* ---------- Bay board ---------- */
   .bays{display:grid; grid-template-columns:repeat(5,1fr); gap:12px}
@@ -351,15 +376,18 @@
   <div class="gfs-overlay" id="ganttFS" onclick="closeGantt(event)">
     <div class="gfs-head">
       <h3 id="gfsTitle"></h3>
-      <div class="rangebtns" id="gfsRange"></div>
+      <div class="rangebtns" id="gfsLevel"></div>
+      <div class="rangebtns" id="gfsRange" style="margin-left:12px"></div>
       <div class="gfs-warn" id="gfsWarn"></div>
       <button class="gfs-close" onclick="closeGantt()" title="Close (Esc)">✕</button>
     </div>
     <div class="gfs-body">
+      <div id="gfsCap"></div>
       <div class="gantt" id="gfsGantt"></div>
       <div class="legend" id="gfsLegend" style="margin-top:12px"></div>
     </div>
   </div>
+  <div class="barpop" id="barPop"></div>
 
   <!-- ===================== HELP MODAL ===================== -->
   <div class="modal-overlay" id="helpModal" onclick="closeHelp(event)">
@@ -431,6 +459,9 @@ try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
 let GFS=null;              // full-screen gantt: 'floor' | 'projects' | null
 let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
+const expandedProjects=new Set();   // project names currently expanded to milestone rows
+const BARPOP={}, GFS_PKEY={};       // popover content + key->project-name map
+function localISO(ms){ const d=new Date(ms); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 /* ---------- helpers ---------- */
 function esc(s){return (s==null?"":""+s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
@@ -448,8 +479,10 @@ function closeHelp(e){ if(!e || e.target.id==='helpModal' || e.target.classList.
   document.getElementById('helpModal').classList.remove('show'); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   document.getElementById('helpModal').classList.remove('show');
-  document.getElementById('ganttFS').classList.remove('show'); GFS=null;
+  document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop();
 } });
+document.addEventListener('click',e=>{ const p=document.getElementById('barPop');
+  if(p && p.classList.contains('show') && !p.contains(e.target) && !(e.target.closest && e.target.closest('.g-bar'))) closeBarPop(); });
 
 const expandedJobs=new Set(), expandedBays=new Set();
 function toggleJob(row){ expandedJobs.has(row)?expandedJobs.delete(row):expandedJobs.add(row); renderAll(); }
@@ -488,8 +521,23 @@ function buildWindow(startDate, days){
     while(d.getTime()<=endMs){ ticks.push({pos:(d.getTime()-startMs)/(days*DAY)*100,
       label:d.toLocaleString('en',{month:'short'})}); d=new Date(d.getFullYear(),d.getMonth()+1,1); }
   }
+  // weekend bands (only when the window is short enough for them to read)
+  const weekends=[];
+  if(days<=70){
+    let d=new Date(startMs); d.setHours(0,0,0,0);
+    while(d.getDay()!==6) d=new Date(d.getTime()+DAY);   // first Saturday
+    for(; d.getTime()<endMs; d=new Date(d.getTime()+7*DAY)){
+      const s=Math.max(startMs,d.getTime()), e=Math.min(endMs,d.getTime()+2*DAY);
+      if(e>s) weekends.push({pos:(s-startMs)/(days*DAY)*100, width:(e-s)/(days*DAY)*100});
+    }
+  }
+  // current-week band
+  const cwStart=startOfWeek(todayMid()).getTime(), cwEnd=cwStart+7*DAY;
+  let curWeek=null;
+  { const s=Math.max(startMs,cwStart), e=Math.min(endMs,cwEnd);
+    if(e>s) curWeek={pos:(s-startMs)/(days*DAY)*100, width:(e-s)/(days*DAY)*100}; }
   const tMs=todayMid().getTime();
-  return {startMs,endMs,days,ticks,todayPos:(tMs-startMs)/(days*DAY)*100};
+  return {startMs,endMs,days,ticks,weekends,curWeek,todayPos:(tMs-startMs)/(days*DAY)*100};
 }
 function barGeom(sIso,eIso,win){
   const s=parseISO(sIso), e=parseISO(eIso); if(!s||!e) return null;
@@ -503,23 +551,29 @@ function msPos(iso,win){ const d=parseISO(iso); if(!d) return null;
   const p=(d.getTime()-win.startMs)/(win.days*DAY)*100; return (p>=0&&p<=100)?p:null; }
 
 function renderGantt(el, rows, win){
-  const grid = win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
+  const bands = (win.weekends||[]).map(w=>`<div class="g-weekend" style="left:${w.pos}%;width:${w.width}%"></div>`).join('')
+    + (win.curWeek?`<div class="g-curweek" style="left:${win.curWeek.pos}%;width:${win.curWeek.width}%"></div>`:'');
+  const grid = bands + win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
     + (win.todayPos>=0&&win.todayPos<=100?`<div class="g-today" style="left:${win.todayPos}%"></div>`:'');
   let html = `<div class="g-axisrow"><div class="g-gutter"></div><div class="g-track">`
     + win.ticks.map(t=>`<div class="g-tick" style="left:${t.pos}%">${t.label}</div>`).join('') + `</div></div>`;
   if(!rows.length){ html += `<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">no items in this range</div></div></div>`; }
   rows.forEach(r=>{
     const g=barGeom(r.startISO,r.endISO,win);
-    let bar;
-    if(g){
+    let bar='';
+    if(r.noBar){ bar=''; }
+    else if(g){
       const pctTxt = (r.pct!=null && g.width>9) ? `<span class="g-pct">${r.pct}%</span>` : '';
-      bar=`<div class="g-bar${r.conflict?' conflict':''}" style="left:${g.left}%;width:${g.width}%;background:${hexA(r.color,.28)};border-color:${r.color}">`
+      const onclk = r.popKey ? ` onclick="showBarPop(event,'${r.popKey}')"` : '';
+      const styleAttr = `${r.popKey?'cursor:pointer;':''}left:${g.left}%;width:${g.width}%;background:${hexA(r.color,.28)};border-color:${r.color}`;
+      bar=`<div class="g-bar${r.conflict?' conflict':''}${r.done?' done':''}"${onclk} style="${styleAttr}">`
         + (r.pct!=null?`<div class="g-fill" style="width:${r.pct}%;background:${r.color}"></div>`:'')
         + `<span class="g-barlabel">${esc(r.barLabel||'')}</span>${pctTxt}</div>`;
     } else bar=`<div class="g-out">— outside range —</div>`;
     const ms=(r.milestones||[]).map(m=>{const p=msPos(m.dateISO,win);
       return p==null?'':`<div class="g-ms" style="left:${p}%" title="${esc(m.name)} · ${fmtMDY(m.dateISO)}"></div>`;}).join('');
-    html+=`<div class="g-row"><div class="g-gutter"><div class="g-lbl">${esc(r.label)}</div>`
+    const rowClick = r.onclick ? ` onclick="${r.onclick}"` : '';
+    html+=`<div class="g-row${r.cls?' '+r.cls:''}"${rowClick}><div class="g-gutter"><div class="g-lbl">${esc(r.label)}</div>`
       +`<div class="g-sub">${esc(r.sub||'')}</div></div>`
       +`<div class="g-track">${grid}${bar}${ms}</div></div>`;
   });
@@ -836,14 +890,53 @@ function findBayConflicts(jobs){
 }
 function openGantt(which){ GFS=which; document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); }
 function closeGantt(e){ if(!e || e.target.id==='ganttFS' || e.target.classList.contains('gfs-close')){
-  document.getElementById('ganttFS').classList.remove('show'); GFS=null; } }
+  document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop(); } }
 function setGfsFloorDays(d){ GFS_FLOOR_DAYS=d; renderGanttFS(); }
+function setGfsLevel(lv){
+  const D=window.MRA_DATA; if(!D) return;
+  expandedProjects.clear();
+  if(lv>=2) (D.projects||[]).forEach(p=>{ if((p.milestones||[]).length) expandedProjects.add(p.name); });
+  renderGanttFS();
+}
+function toggleGfsProject(key){ const name=GFS_PKEY[key]; if(!name) return;
+  if(expandedProjects.has(name)) expandedProjects.delete(name); else expandedProjects.add(name);
+  renderGanttFS(); }
+function showBarPop(e,key){ e.stopPropagation();
+  const pop=document.getElementById('barPop'); if(!pop||!BARPOP[key]) return;
+  pop.innerHTML=BARPOP[key]; pop.classList.add('show');
+  const pw=Math.min(320, window.innerWidth-20);
+  let x=e.clientX+12, y=e.clientY+12;
+  if(x+pw>window.innerWidth-10) x=Math.max(10, window.innerWidth-pw-10);
+  if(y+240>window.innerHeight-10) y=Math.max(10, e.clientY-240);
+  pop.style.left=x+'px'; pop.style.top=y+'px'; }
+function closeBarPop(){ const p=document.getElementById('barPop'); if(p) p.classList.remove('show'); }
+function floorPop(j,c){
+  const due=c.overdue?` <span class="badge red">${Math.abs(c.daysLeft)}d past due</span>`:c.dueSoon?` <span class="badge amber">due ${c.daysLeft}d</span>`:'';
+  return `<h4>${esc(j.project)}</h4><div class="pp-sub">${esc(j.client||'')}</div>`
+    +`<div class="pp-row"><span class="k">Bay</span><span>${esc(j.bay)}</span></div>`
+    +`<div class="pp-row"><span class="k">Job #</span><span>${esc(j.jobNum||'—')}</span></div>`
+    +(j.pm?`<div class="pp-row"><span class="k">PM</span><span>${esc(j.pm)}</span></div>`:'')
+    +`<div class="pp-row"><span class="k">Dates</span><span>${fmtMDY(j.startISO)} → ${fmtMDY(j.completionISO)}</span></div>`
+    +`<div class="pp-row"><span class="k">Status</span><span>${esc(j.status||'—')}${due}</span></div>`
+    +(j.openCount?`<div class="pp-row"><span class="k">Open</span><span>${j.openCount} task${j.openCount>1?'s':''}</span></div>`:'');
+}
+function projPop(p){
+  let h=`<h4>${esc(p.name)}</h4><div class="pp-sub">${esc(p.pm||'—')} · ${p.pct}% complete</div>`
+    +`<div class="pp-row"><span class="k">Dates</span><span>${fmtMDY(p.startISO)} → ${fmtMDY(p.finishISO)}</span></div>`
+    +`<div class="pp-row"><span class="k">Tasks</span><span>${p.doneCount}/${p.taskCount} done</span></div>`;
+  const ms=(p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||''));
+  if(ms.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">MILESTONE GATES</div>`
+    + ms.map(m=>`<div>◆ ${esc(m.name)} — ${fmtMDY(m.dateISO)}</div>`).join('') + `</div>`; }
+  return h;
+}
 function renderGanttFS(){
   const D=window.MRA_DATA; if(!D||!GFS) return;
   const today=D.todayISO;
   const titleEl=document.getElementById('gfsTitle'), warnEl=document.getElementById('gfsWarn');
-  const cont=document.getElementById('gfsGantt'), legEl=document.getElementById('gfsLegend'), rangeEl=document.getElementById('gfsRange');
-  warnEl.textContent='';
+  const cont=document.getElementById('gfsGantt'), legEl=document.getElementById('gfsLegend');
+  const rangeEl=document.getElementById('gfsRange'), levelEl=document.getElementById('gfsLevel'), capEl=document.getElementById('gfsCap');
+  warnEl.textContent=''; levelEl.innerHTML=''; capEl.innerHTML='';
+  Object.keys(BARPOP).forEach(k=>delete BARPOP[k]); Object.keys(GFS_PKEY).forEach(k=>delete GFS_PKEY[k]);
 
   if(GFS==='floor'){
     titleEl.textContent='Floor Schedule — Detailed';
@@ -852,23 +945,38 @@ function renderGanttFS(){
     const stColor={active:'#22c55e',scheduled:'#3b82f6',onhold:'#64748b',overdue:'#ef4444',open:'#64748b',done:'#475569'};
     const order=D.physicalBays, jobs=(D.jobs||[]);
     const {rows:conflictRows,pairs}=findBayConflicts(jobs);
+    // capacity heat strip — weekly use of the 6 inside spots (Bays 3-5)
+    const inShop=jobs.filter(j=>SHOP_BAYS.includes(j.bay) && (j.status||'').toLowerCase()!=='shipped' && j.startISO && j.completionISO);
+    let cap='<div class="capstrip"><div class="cap-gutter">Inside spots used (of 6)</div><div class="cap-track">';
+    for(let w=0; w<GFS_FLOOR_DAYS; w+=7){
+      const wsISO=localISO(win.startMs+w*DAY), weISO=localISO(win.startMs+(w+6)*DAY);
+      const n=inShop.filter(j=> j.startISO<=weISO && wsISO<=j.completionISO).length;
+      const col = n>6?'#ef4444' : n>=5?'#f59e0b' : n>=1?'#22c55e' : '#243042';
+      cap+=`<div class="cap-cell" style="left:${w/GFS_FLOOR_DAYS*100}%;width:${7/GFS_FLOOR_DAYS*100}%;background:${col}" title="${n} of 6 inside spots used">${n}</div>`;
+    }
+    capEl.innerHTML=cap+'</div></div>';
+
     const bayJobs=jobs.filter(j=>(j.category==='bay'||j.category==='pipeline') && (j.status||'').toLowerCase()!=='shipped' && j.startISO && j.completionISO);
     const rows=bayJobs.map(j=>({j,c:classify(j,today)}))
       .filter(x=>barGeom(x.j.startISO,x.j.completionISO,win))
       .sort((a,b)=>{const ai=order.indexOf(a.j.bay),bi=order.indexOf(b.j.bay);
         return (ai<0?99:ai)-(bi<0?99:bi) || (a.j.startISO||'').localeCompare(b.j.startISO||'');})
-      .map(x=>{const con=conflictRows.has(x.j.row);
+      .map(x=>{const con=conflictRows.has(x.j.row), key='f'+x.j.row; BARPOP[key]=floorPop(x.j,x.c);
         return {label:(con?'⚠ ':'')+x.j.project, sub:x.j.bay+' · '+(x.j.jobNum||'—')+(con?' · CONFLICT':''),
           startISO:x.j.startISO, endISO:x.j.completionISO, color:stColor[x.c.state]||'#64748b',
-          barLabel:x.j.jobNum||'', milestones:[], conflict:con};});
+          barLabel:x.j.jobNum||'', milestones:[], conflict:con, popKey:key};});
     renderGantt(cont, rows, win);
     legEl.innerHTML=`<span class="lg-a">Active</span><span class="lg-s">Scheduled</span><span class="lg-h">On hold</span>`
-      +`<span class="lg-d">Past due</span><span style="color:var(--red)">▦ conflict (same inside spot)</span><span style="color:var(--red)">▏today</span>`;
-    if(pairs.length){ warnEl.style.color='#fca5a5';
-      warnEl.textContent='⚠ '+pairs.length+' bay conflict'+(pairs.length>1?'s':'')+' — 2 trailers booked in the same inside spot (Bays 3-5)'; }
-    else { warnEl.style.color='#86efac'; warnEl.textContent='✓ No inside-spot conflicts (Bays 3-5)'; }
+      +`<span class="lg-d">Past due</span><span style="color:var(--red)">▦ conflict</span>`
+      +`<span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">click a bar for details</span>`;
+    warnEl.style.color = pairs.length?'#fca5a5':'#86efac';
+    warnEl.textContent = pairs.length? '⚠ '+pairs.length+' bay conflict'+(pairs.length>1?'s':'')+' (same inside spot, Bays 3-5)' : '✓ No inside-spot conflicts';
   } else {
     titleEl.textContent='Project Schedules — Detailed';
+    const withMs=(D.projects||[]).filter(p=>(p.milestones||[]).length);
+    const allExp=withMs.length>0 && withMs.every(p=>expandedProjects.has(p.name));
+    levelEl.innerHTML=`<div class="rb${expandedProjects.size===0?' active':''}" onclick="setGfsLevel(1)" title="Projects only">1 · Projects</div>`
+      +`<div class="rb${allExp?' active':''}" onclick="setGfsLevel(2)" title="Projects + milestone gates">2 · + Milestones</div>`;
     rangeEl.innerHTML=[['1 mo',1],['3 mo',3],['6 mo',6],['All','all']].map(([lbl,v])=>
       `<div class="rb${(v==='all'?'all':+v)===RANGE?' active':''}" onclick="setRange(${v==='all'?"'all'":v});renderGanttFS()">${lbl}</div>`).join('');
     const projects=(D.projects||[]).slice(); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
@@ -879,13 +987,22 @@ function renderGanttFS(){
       days=Math.max(31,Math.ceil((maxFin-mStart.getTime())/DAY)+20); }
     else days=Math.round(RANGE*30.4);
     const win=buildWindow(mStart,days);
-    const rows=projects.filter(p=>p.startISO&&p.finishISO)
-      .map(p=>({label:p.name, sub:(p.pm||'—')+' · '+p.taskCount+' tasks', startISO:p.startISO, endISO:p.finishISO,
-        color:p._color, pct:p.pct, barLabel:'', milestones:p.milestones}))
-      .filter(r=>barGeom(r.startISO,r.endISO,win))
+    const dated=projects.filter(p=>p.startISO&&p.finishISO && barGeom(p.startISO,p.finishISO,win))
       .sort((a,b)=>(a.startISO||'').localeCompare(b.startISO||''));
+    const rows=[];
+    dated.forEach((p,i)=>{
+      const hasMs=(p.milestones||[]).length>0, exp=expandedProjects.has(p.name), done=projStatus(p,today)==='done';
+      const key='p'+i; GFS_PKEY[key]=p.name; BARPOP[key]=projPop(p);
+      rows.push({label:(hasMs?(exp?'▾ ':'▸ '):'   ')+p.name,
+        sub:(p.pm||'—')+' · '+p.taskCount+' tasks'+(hasMs?' · '+p.milestones.length+' gates':''),
+        startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct, barLabel:'',
+        milestones:p.milestones, done, popKey:key, cls:hasMs?'clickable':'', onclick:hasMs?`toggleGfsProject('${key}')`:''});
+      if(exp) (p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')).forEach(m=>{
+        rows.push({label:'◆ '+m.name, sub:fmtMDY(m.dateISO), startISO:null, endISO:null, color:p._color, milestones:[m], noBar:true, cls:'g-subrow'}); });
+    });
     renderGantt(cont, rows, win);
-    legEl.innerHTML=`<span style="color:var(--amber)">◆ milestone gate</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">solid = % complete</span>`;
+    legEl.innerHTML=`<span style="color:var(--amber)">◆ milestone gate</span><span style="color:#93c5fd">▎this week</span>`
+      +`<span style="color:var(--red)">▏today</span><span style="color:var(--muted)">faded = complete · solid = % · click a project name to expand</span>`;
   }
 }
 
