@@ -246,7 +246,13 @@ Write-Output "Wrote $($jobs.Count) jobs and $($projects.Count) projects to data.
 
 # --- Push to Azure Static Site -----------------------------------------------
 $AzureStorageAccount = 'mrashopdash'
+# Locate az: prefer the known install path, otherwise fall back to whatever
+# 'az' is on PATH (handles installs under Program Files (x86) or elsewhere).
 $azExe = 'C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
+if (-not (Test-Path $azExe)) {
+    $azCmd = Get-Command az -ErrorAction SilentlyContinue
+    if ($azCmd) { $azExe = $azCmd.Source }
+}
 if (Test-Path $azExe) {
     $env:AZURE_CORE_NO_COLOR = 'true'
     $saved = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
