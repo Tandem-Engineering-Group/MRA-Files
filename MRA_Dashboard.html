@@ -922,7 +922,8 @@ function renderFleetio(D){
     return;
   }
 
-  const svcC=svc.map(s=>Object.assign({},s,{c:fleetState(s.dueISO,today)}));
+  const svcC=svc.map(s=>{ const fs=fleetState(s.dueISO,today);
+    return Object.assign({},s,{c:{overdue:(s.status?s.status==='overdue':fs.overdue), soon:(s.status?s.status==='due_soon':fs.soon), days:fs.days}}); });
   const svcOver=svcC.filter(s=>s.c.overdue).length, svcSoon=svcC.filter(s=>s.c.soon).length;
   const issOver=issues.filter(i=>i.overdue).length;
 
@@ -936,11 +937,11 @@ function renderFleetio(D){
   document.getElementById('fleetioKpis').innerHTML=kpis.map(k=>
     `<div class="kpi ${k.c}"><div class="n">${k.n}</div><div class="l">${k.l}</div></div>`).join('');
 
-  const svcSorted=svcC.filter(s=>s.dueISO).sort((a,b)=>(a.dueISO||'9999').localeCompare(b.dueISO||'9999'));
+  const svcSorted=svcC.slice().sort((a,b)=>(b.c.overdue?1:0)-(a.c.overdue?1:0) || (a.dueISO||'9999').localeCompare(b.dueISO||'9999'));
   document.getElementById('fService').innerHTML = svcSorted.length ? svcSorted.map(s=>{
-    const b = s.c.overdue?`<span class="badge red">${Math.abs(s.c.days)}d overdue</span>`
-            : s.c.soon?`<span class="badge amber">due ${s.c.days}d</span>`
-            : `<span class="badge grey">${fmtMD(s.dueISO)}</span>`;
+    const b = s.c.overdue?`<span class="badge red">${s.c.days!=null?Math.abs(s.c.days)+'d overdue':'overdue'}</span>`
+            : s.c.soon?`<span class="badge amber">${(s.c.days!=null&&s.c.days>=0)?'due '+s.c.days+'d':'due soon'}</span>`
+            : (s.dueISO?`<span class="badge grey">${fmtMD(s.dueISO)}</span>`:`<span class="badge grey">${esc(s.meterDue?('@ '+s.meterDue):'—')}</span>`);
     return `<div class="row"><div><div class="lead">${esc(s.service||'Service')}</div>`+
       `<div class="meta">${esc(s.asset||'')}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
   }).join('') : `<div class="empty">No service reminders due</div>`;
