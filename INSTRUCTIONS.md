@@ -6,6 +6,19 @@ once — this document lets you replicate or maintain it.
 
 ---
 
+## Source Excel Workbook (SharePoint)
+
+The master Excel workbook that feeds all dashboard data lives here:
+
+**SharePoint folder:**
+https://snptechnical.sharepoint.com/:f:/s/MRASiteProject/IgDljzzC7acvR7yqKsUC4FBbAbmdhWDh_Ggr1F2xCLRrQnk?e=nhH32y
+
+The specific file is `MRA_Shop_Board_v6_9_7.xlsx` inside that folder.
+`Export-Data.ps1` reads this workbook locally (it must be synced via OneDrive/SharePoint
+to `C:\006 RM Deploy\MRA_Shop_Board_v6_9_7.xlsx`) and converts it to `data.js`.
+
+---
+
 ## What these files are
 
 | File | What it is |
