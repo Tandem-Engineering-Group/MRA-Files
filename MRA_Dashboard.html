@@ -271,6 +271,7 @@
     <div class="tabs">
       <div class="tab active" data-view="floor" onclick="setView('floor')">FLOOR</div>
       <div class="tab" data-view="projects" onclick="setView('projects')">PROJECTS</div>
+      <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
     </div>
     <a class="editbtn" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
@@ -369,6 +370,34 @@
         </div>
       </h2>
       <div class="teamgrid" id="team"></div>
+    </div>
+  </div>
+
+  <!-- ===================== FLEETIO VIEW ===================== -->
+  <div id="fleetioView" class="hidden">
+    <div style="display:flex; align-items:center; gap:12px; margin:16px 0 6px; flex-wrap:wrap">
+      <div style="font-size:13px; color:var(--muted); font-weight:600; letter-spacing:.3px">Fleet maintenance — live from Fleetio</div>
+      <span class="count" id="fleetioAsOf"></span>
+      <a class="editbtn" href="https://secure.fleetio.com/8cf2193b5d/dashboard" target="_blank" rel="noopener" style="margin-left:auto" title="Open the full Fleetio app">↗ Open in Fleetio</a>
+    </div>
+    <div class="kpis" id="fleetioKpis"></div>
+    <div class="panel">
+      <h2>🔧 Service — Due &amp; Overdue <span class="count" id="fSvcCount"></span></h2>
+      <div id="fService"></div>
+    </div>
+    <div class="grid">
+      <div class="panel">
+        <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span></h2>
+        <div id="fIssues"></div>
+      </div>
+      <div class="panel">
+        <h2>📋 Open Work Orders <span class="count" id="fWoCount"></span></h2>
+        <div id="fWorkOrders"></div>
+      </div>
+      <div class="panel">
+        <h2>🚛 By Trailer <span class="count" id="fTrailerCount"></span></h2>
+        <div class="teamgrid" id="fByTrailer"></div>
+      </div>
     </div>
   </div>
 
@@ -873,12 +902,98 @@ function renderTeam(D){
   document.getElementById('teamCount').textContent=people.length+(TEAMFILTER==='people'?" people":" entries")+" · "+tasks.length+" open tasks";
 }
 
+/* ---------- FLEETIO view (fleet maintenance from Fleetio) ---------- */
+function fleetState(dueISO,today){
+  if(!dueISO) return {overdue:false,soon:false,days:null};
+  const d=daysBetween(dueISO,today);
+  return {overdue:d<0, soon:d>=0&&d<=21, days:d};
+}
+function renderFleetio(D){
+  const F=D.fleetio, today=D.todayISO;
+  const issues=(F&&F.issues)||[], wos=(F&&F.workOrders)||[], svc=(F&&F.service)||[];
+  document.getElementById('fleetioAsOf').textContent = (F&&F.generatedText) ? ('as of '+F.generatedText) : 'feed not connected yet';
+
+  if(!F || (!issues.length && !wos.length && !svc.length)){
+    const empty=`<div class="empty">No Fleetio data yet — once the Fleetio export feeds <b>data.js</b> this fills in automatically. Use "↗ Open in Fleetio" above in the meantime.</div>`;
+    document.getElementById('fleetioKpis').innerHTML='';
+    ['fService','fIssues','fWorkOrders'].forEach(id=>document.getElementById(id).innerHTML=empty);
+    document.getElementById('fByTrailer').innerHTML='';
+    ['fSvcCount','fIssueCount','fWoCount','fTrailerCount'].forEach(id=>document.getElementById(id).textContent='');
+    return;
+  }
+
+  const svcC=svc.map(s=>Object.assign({},s,{c:fleetState(s.dueISO,today)}));
+  const svcOver=svcC.filter(s=>s.c.overdue).length, svcSoon=svcC.filter(s=>s.c.soon).length;
+  const issOver=issues.filter(i=>i.overdue).length;
+
+  const kpis=[
+    {n:issues.length, l:'OPEN ISSUES', c:'tasks'},
+    {n:issOver, l:'ISSUES OVERDUE', c:'over'},
+    {n:wos.length, l:'OPEN WORK ORDERS', c:'sched'},
+    {n:svcSoon, l:'SERVICE DUE SOON', c:'pipe'},
+    {n:svcOver, l:'SERVICE OVERDUE', c:'over'},
+  ];
+  document.getElementById('fleetioKpis').innerHTML=kpis.map(k=>
+    `<div class="kpi ${k.c}"><div class="n">${k.n}</div><div class="l">${k.l}</div></div>`).join('');
+
+  const svcSorted=svcC.filter(s=>s.dueISO).sort((a,b)=>(a.dueISO||'9999').localeCompare(b.dueISO||'9999'));
+  document.getElementById('fService').innerHTML = svcSorted.length ? svcSorted.map(s=>{
+    const b = s.c.overdue?`<span class="badge red">${Math.abs(s.c.days)}d overdue</span>`
+            : s.c.soon?`<span class="badge amber">due ${s.c.days}d</span>`
+            : `<span class="badge grey">${fmtMD(s.dueISO)}</span>`;
+    return `<div class="row"><div><div class="lead">${esc(s.service||'Service')}</div>`+
+      `<div class="meta">${esc(s.asset||'')}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
+  }).join('') : `<div class="empty">No service reminders due</div>`;
+  document.getElementById('fSvcCount').textContent=svcSorted.length;
+
+  const prRank={high:0,emergency:0,medium:1,low:2};
+  const issSorted=issues.slice().sort((a,b)=>(b.overdue?1:0)-(a.overdue?1:0)
+    || ((prRank[(a.priority||'').toLowerCase()]??3)-(prRank[(b.priority||'').toLowerCase()]??3))
+    || ((b.ageDays||0)-(a.ageDays||0)));
+  document.getElementById('fIssues').innerHTML = issSorted.length ? issSorted.slice(0,40).map(i=>{
+    const age = i.openedISO ? Math.max(0,daysBetween(today,i.openedISO)) : (i.ageDays!=null?i.ageDays:null);
+    const b = i.overdue?`<span class="badge red">overdue</span>` : (age!=null?`<span class="badge grey">${age}d open</span>`:'');
+    const pr = i.priority?`<span class="badge ${/(high|emerg)/i.test(i.priority)?'red':/med/i.test(i.priority)?'amber':'grey'}">${esc(i.priority)}</span>`:'';
+    return `<div class="row"><div><div class="lead">${esc(i.summary||('Issue '+(i.num||'')))}</div>`+
+      `<div class="meta">${esc(i.asset||'')}${i.jobNum?' · '+esc(i.jobNum):''}</div></div><div class="right">${pr} ${b}</div></div>`;
+  }).join('') : `<div class="empty">No open issues 🎉</div>`;
+  document.getElementById('fIssueCount').textContent=issues.length;
+
+  document.getElementById('fWorkOrders').innerHTML = wos.length ? wos.slice(0,40).map(w=>{
+    const age = w.openedISO ? Math.max(0,daysBetween(today,w.openedISO)) : null;
+    const st = w.status?`<span class="badge ${/pend/i.test(w.status)?'amber':'blue'}">${esc(w.status)}</span>`:'';
+    return `<div class="row"><div><div class="lead">${esc(w.summary||('WO '+(w.num||'')))}</div>`+
+      `<div class="meta">${esc(w.asset||'')}${w.jobNum?' · '+esc(w.jobNum):''}</div></div>`+
+      `<div class="right">${st}${age!=null?` <span class="badge grey">${age}d</span>`:''}</div></div>`;
+  }).join('') : `<div class="empty">No open work orders</div>`;
+  document.getElementById('fWoCount').textContent=wos.length;
+
+  const tmap={};
+  function bucket(item){ const key=item.jobNum||item.asset||'Unassigned';
+    if(!tmap[key]) tmap[key]={name:item.asset||key, jobNum:item.jobNum||'', iss:0, wo:0, svc:0, svcOver:0}; return tmap[key]; }
+  issues.forEach(i=>{ bucket(i).iss++; });
+  wos.forEach(w=>{ bucket(w).wo++; });
+  svcC.forEach(s=>{ const t=bucket(s); t.svc++; if(s.c.overdue) t.svcOver++; });
+  const trailers=Object.values(tmap).sort((a,b)=>(b.iss+b.wo+b.svc)-(a.iss+a.wo+a.svc));
+  document.getElementById('fByTrailer').innerHTML = trailers.length ? trailers.map(t=>
+    `<div class="teamcard"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}</span>`+
+    `<span class="tc">${t.iss+t.wo+t.svc}</span></div><div class="tmeta">`+
+      (t.iss?`<span class="badge amber">${t.iss} issue${t.iss>1?'s':''}</span>`:'')+
+      (t.wo?`<span class="badge blue">${t.wo} WO</span>`:'')+
+      (t.svcOver?`<span class="badge red">${t.svcOver} svc overdue</span>`:(t.svc?`<span class="badge grey">${t.svc} svc due</span>`:''))+
+    `</div>`+
+    ((t.jobNum&&t.name&&t.name!==t.jobNum)?`<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.3">${esc(t.name)}</div>`:'')+
+    `</div>`).join('') : `<div class="empty">—</div>`;
+  document.getElementById('fTrailerCount').textContent=trailers.length+' trailers';
+}
+
 /* ---------- view switching ---------- */
 function setView(v){
   VIEW=v; try{localStorage.setItem('mra_view',v);}catch(e){}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
   document.getElementById('floorView').classList.toggle('hidden',v!=='floor');
   document.getElementById('projectsView').classList.toggle('hidden',v!=='projects');
+  document.getElementById('fleetioView').classList.toggle('hidden',v!=='fleetio');
 }
 function setRange(m){
   RANGE=m; try{localStorage.setItem('mra_range',JSON.stringify(m));}catch(e){}
@@ -1022,7 +1137,7 @@ function renderGanttFS(){
 function renderAll(){
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
-  renderFloor(D); renderProjects(D);
+  renderFloor(D); renderProjects(D); renderFleetio(D);
   if(GFS) renderGanttFS();
   setView(VIEW);
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===RANGE));
