@@ -11,11 +11,12 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'preview = upload preview.html only (live board untouched); live = upload index.html + MRA_Dashboard.html (data.js stays owned by the local Export-Data.ps1)'
+        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only (push the repo''s data.js to Azure)'
         type: choice
         options:
           - preview
           - live
+          - data
         default: preview
 
 jobs:
@@ -37,6 +38,27 @@ jobs:
               --name 'preview.html' \
               --file preview.html \
               --content-type 'text/html' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # data.js only — for when the local Export-Data.ps1 can't push to Azure itself.
+      # Uploads the repo's current data.js (replace it first, then dispatch mode=data).
+      - name: Upload data.js
+        if: ${{ inputs.mode == 'data' }}
+        uses: azure/CLI@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'data.js' \
+              --file data.js \
+              --content-type 'application/javascript' \
               --overwrite \
               --auth-mode key \
               --only-show-errors
