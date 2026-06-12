@@ -66,3 +66,24 @@ This repo (`tandem-engineering-group/mra-files`) holds the deployable dashboard:
 
 Live site: `https://mrashopdash.z13.web.core.windows.net/`
 See `INSTRUCTIONS.md` for the complete Azure deployment runbook.
+
+## Pending / requested (not yet built — remind Rich)
+
+- **Replace-by-project import** (deferred 2026-06-11, Rich said "hold for now but
+  keep reminding me"). Today `Import-Intake.ps1` is **append-only** — re-uploading
+  an edited intake template ADDS duplicate rows. Requested behavior: when a file
+  comes in for *Project X*, clear X's existing `Project Tasks` rows first, then
+  write the file's rows (so edit-offline → re-upload → schedule updates). Rule to
+  convey: the template must contain that project's **complete** task list each time
+  (it replaces, doesn't merge). Implementation sketch: from the master XML, collect
+  the row numbers for each incoming project name; in COM, append the new rows, then
+  `EntireRow.Delete` the old rows (descending). Remember this Excel's COM only
+  accepts **strings** on `.Value` (dates → OADate serial string + `m/d/yyyy` format).
+- **Publish the Projects-tab download button**: the "⬇ Download Intake Template"
+  link + `MRA_Project_Intake_Template.xlsx` go live only after a deploy with
+  `mode = live`.
+- **Beefed-up template**: Rich is enhancing the intake template; when he sends it,
+  make it the hosted standard (update `build_template.py`), keep sheet `Enter Here`
+  + columns A–L, and auto-fill the Project name down every row.
+- **Task-level Gantt bars** (level 3): draw each Project Task as its own bar when a
+  project is expanded — do after the project data is cleaned up.
