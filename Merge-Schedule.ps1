@@ -94,6 +94,11 @@ $PLAN = @(
  @{t='ABB DX - Electrical Swap';    key='ABB DX - Electrical Swap';    job='J1014'; bay=''; pm='N/A'; s=''; f=''}
 )
 
+# ---- save everything below to a Desktop log (so it's easy to read / paste) --
+$Transcript = Join-Path ([Environment]::GetFolderPath('Desktop')) ('merge-' + $(if($Apply){'APPLIED'}else{'preview'}) + '.txt')
+Start-Transcript -Path $Transcript -Force | Out-Null
+try {
+
 # ---- read current Input rows ------------------------------------------------
 $z = Open-Zip $Master
 try {
@@ -203,4 +208,10 @@ finally {
     if($null -ne $xl){ try{$xl.Quit()}catch{} }
     foreach($o in @($mwb,$xl)){ if($null -ne $o){ try{[void][Runtime.InteropServices.Marshal]::ReleaseComObject($o)}catch{} } }
     [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+}
+
+}  # end outer try
+finally {
+    try { Stop-Transcript | Out-Null } catch {}
+    Write-Host "`n(Full output saved to: $Transcript  - open it and paste it to me.)"
 }
