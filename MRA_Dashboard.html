@@ -231,6 +231,8 @@
   .row .lead{font-size:12.5px; font-weight:600; line-height:1.25}
   .row .meta{font-size:11px; color:var(--muted); margin-top:2px}
   .row .det{font-size:11px; color:var(--muted); margin-top:3px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
+  .row.ret-soon{background:rgba(245,158,11,.10); border-radius:6px}
+  .editbtn.hot{border-color:var(--red); color:#fca5a5; background:rgba(239,68,68,.12)}
   .row .right{margin-left:auto; text-align:right; white-space:nowrap}
   .badge{font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px}
   .badge.red{background:#3a1414; color:#fca5a5}
@@ -332,6 +334,7 @@
       <div class="linksmenu-pop" id="linksPop"></div>
     </div>
     <a class="editbtn" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
+    <a class="editbtn hot" id="returnsBadge" onclick="goReturns();return false" style="display:none;cursor:pointer" title="Assets returning to MRA within 2 weeks">🔁 <b id="returnsBadgeN">0</b> back ≤2wk</a>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
     <div class="clockbox">
       <div class="time" id="clock">--:--</div>
@@ -379,6 +382,13 @@
         <h2>Staff on Leave <span class="count" id="leaveCount"></span></h2>
         <div id="leave"></div>
       </div>
+    </div>
+
+    <div class="panel" id="fp-returns">
+      <h2>🔁 Coming Back to MRA <span class="count" id="returnsCount"></span>
+        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">from the logistics calendars · highlighted = within 2 weeks</span>
+      </h2>
+      <div id="returnsList"></div>
     </div>
   </div>
 
@@ -875,6 +885,29 @@ function renderSal(D){
   document.getElementById('salCount').textContent = total+" open"+(SHOWSALCLOSED?(" · "+totalDone+" done"):"")+" · "+sal.length+" trailers";
   const sb=document.getElementById('btnSalClosed'); if(sb){ sb.classList.toggle('on',SHOWSALCLOSED); sb.textContent=SHOWSALCLOSED?'✓ Closed shown':'Show closed'; }
 }
+
+/* ---------- Coming Back to MRA (from logistics calendars) ---------- */
+function renderReturns(D){
+  const all=((D&&D.mraReturns)||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||''));
+  const today=D.todayISO; const du=r=>daysBetween(r.dateISO,today);
+  const soon=all.filter(r=>{const d=du(r);return d>=0&&d<=14;});
+  const show=all.filter(r=>{const d=du(r);return d>=0&&d<=60;});
+  const later=all.length-show.length;
+  const el=document.getElementById('returnsList');
+  if(el){
+    el.innerHTML = show.length ? (show.map(r=>{
+      const d=du(r); const cls=d<=14?' ret-soon':'';
+      const b=d<=14?`<span class="badge ${d<=3?'red':'amber'}">${d<=0?'today':d+'d'}</span>`:`<span class="badge grey">${d}d</span>`;
+      return `<div class="row${cls}"><div><div class="lead">${esc(r.text)}</div>`+
+        `<div class="meta">${esc(r.job||'')} · ${fmtMDY(r.dateISO)}</div></div><div class="right">${b}</div></div>`;
+    }).join('') + (later>0?`<div class="more">+${later} more beyond 60 days</div>`:''))
+      : `<div class="empty">Nothing scheduled back to MRA in the next 60 days</div>`;
+  }
+  const cnt=document.getElementById('returnsCount'); if(cnt) cnt.textContent = soon.length?(soon.length+' within 2 weeks'):(show.length+' upcoming');
+  const bg=document.getElementById('returnsBadge'), bn=document.getElementById('returnsBadgeN');
+  if(bg&&bn){ if(soon.length){ bn.textContent=soon.length; bg.style.display=''; } else { bg.style.display='none'; } }
+}
+function goReturns(){ setView('floor'); const el=document.getElementById('fp-returns'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
 
 /* ---------- PROJECTS view ---------- */
 function projStatus(p, today){
@@ -1423,7 +1456,7 @@ function renderGanttFS(){
 function renderAll(){
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
-  renderFloor(D); renderProjects(D); renderFleetio(D);
+  renderFloor(D); renderProjects(D); renderFleetio(D); renderReturns(D);
   if(GFS) renderGanttFS();
   setView(VIEW);
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===RANGE));
