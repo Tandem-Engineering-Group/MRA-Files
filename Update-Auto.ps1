@@ -6,6 +6,15 @@
 Set-Location -Path $PSScriptRoot
 "=== Run started $(Get-Date) ===" | Out-File "$PSScriptRoot\auto-log.txt"
 
+# 1) Pull in any completed intake files dropped in "Intake Inbox" (best-effort;
+#    never blocks the export/push - it bails if the master is open or Excel fails).
+try {
+    & "$PSScriptRoot\Import-Intake.ps1" *>> "$PSScriptRoot\auto-log.txt"
+} catch {
+    "Import-Intake error: $($_.Exception.Message)" | Out-File "$PSScriptRoot\auto-log.txt" -Append
+}
+
+# 2) Rebuild data.js from the workbook.
 try {
     & "$PSScriptRoot\Export-Data.ps1" *>> "$PSScriptRoot\auto-log.txt"
 } catch {

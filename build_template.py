@@ -93,9 +93,17 @@ for col in "ABCDEFGHIJKL":
 ws.column_dimensions["D"].width = 40
 ws.auto_filter.ref = "A1:L1"
 
+# Pre-format Start/Finish as real dates so typed values parse correctly
+# (the dashboard only reads dates from genuine date cells, not text).
+for row in range(2, 301):
+    ws[f"E{row}"].number_format = "m/d/yyyy"
+    ws[f"F{row}"].number_format = "m/d/yyyy"
+
 tip = ("Tip: pick your Project (A), then fill Task, Start/Finish dates and "
        "Assigned for each phase. Add rows as needed; delete phases you don't "
-       "use. Save and send back — it gets imported into the master schedule.")
+       "use. When done, save this file and drop it in the team 'Intake Inbox' "
+       "folder (ask your PM for the link) — it imports into the schedule "
+       "automatically. Use real dates in Start/Finish (e.g. 6/15/26).")
 ws["N2"] = tip
 ws["N2"].font = Font(italic=True)
 ws.freeze_panes = "A2"
