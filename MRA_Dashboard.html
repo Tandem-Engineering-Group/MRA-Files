@@ -303,6 +303,13 @@
   .modal-close{position:absolute; top:12px; right:16px; font-size:24px; color:var(--muted);
     cursor:pointer; line-height:1; background:none; border:none}
   .modal-close:hover{color:var(--txt)}
+  .linksmenu{position:relative; display:inline-block}
+  .linksmenu-pop{position:absolute; top:calc(100% + 6px); right:0; min-width:230px; background:var(--panel);
+    border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.5); padding:6px; display:none; z-index:120}
+  .linksmenu-pop.show{display:block}
+  .linksmenu-pop a{display:block; padding:8px 11px; border-radius:7px; color:var(--txt); text-decoration:none; font-size:12.5px; white-space:nowrap}
+  .linksmenu-pop a:hover{background:var(--panel2); color:#93c5fd}
+  .linksmenu-pop .empty{padding:8px 11px; font-style:italic}
 
   @media(max-width:1500px){ .kpis{grid-template-columns:repeat(4,1fr)} }
   @media(max-width:1100px){ .grid{grid-template-columns:1fr} .g-gutter{width:130px;flex-basis:130px} }
@@ -319,6 +326,10 @@
       <div class="tab active" data-view="floor" onclick="setView('floor')">FLOOR</div>
       <div class="tab" data-view="projects" onclick="setView('projects')">PROJECTS</div>
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
+    </div>
+    <div class="linksmenu">
+      <button class="editbtn" id="linksBtn" onclick="toggleLinks(event)" title="Frequently used links">🔗 Links ▾</button>
+      <div class="linksmenu-pop" id="linksPop"></div>
     </div>
     <a class="editbtn" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
@@ -609,6 +620,20 @@ function toggleJob(row){ expandedJobs.has(row)?expandedJobs.delete(row):expanded
 function toggleBay(bay){ expandedBays.has(bay)?expandedBays.delete(bay):expandedBays.add(bay); renderAll(); }
 function toggleClosed(){ SHOWCLOSED=!SHOWCLOSED; renderAll(); }
 function toggleSalClosed(){ SHOWSALCLOSED=!SHOWSALCLOSED; renderAll(); }
+
+/* ---------- Header quick links (add more by appending to QUICK_LINKS) ---------- */
+const QUICK_LINKS=[
+  {label:"Account Assignments 2026", url:"https://gomra-my.sharepoint.com/:x:/p/vickis/IQCSJF_gad4mQ6O6_ET7eBghARdwr1LvcJpN75KbLI7D03I?e=54ynnT"},
+];
+function renderLinks(){
+  const pop=document.getElementById('linksPop'); if(!pop) return;
+  pop.innerHTML = QUICK_LINKS.length
+    ? QUICK_LINKS.map(l=>`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')
+    : `<div class="empty">No links yet</div>`;
+}
+function toggleLinks(e){ if(e) e.stopPropagation(); const pop=document.getElementById('linksPop'); if(pop) pop.classList.toggle('show'); }
+function closeLinks(){ const pop=document.getElementById('linksPop'); if(pop) pop.classList.remove('show'); }
+document.addEventListener('click',e=>{ if(!(e.target.closest && e.target.closest('.linksmenu'))) closeLinks(); });
 function isSal(line){ return /\bsal\b/i.test(line||""); }
 function cleanTask(line, stripSal){
   let s=(line||"").replace(/^\s*\d+\s*[\.\)]\s*/,"").replace(/^[-–]\s*/,"");
@@ -1422,6 +1447,7 @@ async function refresh(){
 // First paint comes from a fresh (cache-busted) fetch, so a browser reload never
 // flashes the stale cached data.js. Only fall back to the inline <script src>
 // copy if the fetch can't run (e.g. opened directly as a file://).
+renderLinks();
 refresh().then(ok=>{ if(!ok) renderAll(); });
 tick(); setInterval(tick,1000);
 setInterval(refresh, REFRESH_SECONDS*1000);
