@@ -189,6 +189,19 @@
   #fleetioKpis .kpi{padding:16px 18px 14px}
   #fleetioKpis .kpi .n{font-size:46px}
   #fleetioKpis .kpi .ksub{font-size:11px; color:var(--muted); margin-top:5px; font-weight:600}
+  /* clickable KPI tiles + jump-to highlight + filter note */
+  #fleetioKpis .kpi{cursor:pointer; transition:transform .08s ease, box-shadow .15s ease}
+  #fleetioKpis .kpi:hover{transform:translateY(-2px)}
+  #fleetioKpis .kpi.fon{outline:2px solid var(--brand); outline-offset:-2px}
+  #fleetioKpis .kpi .kgo{font-size:10px; color:var(--muted); margin-top:6px; font-weight:600; opacity:.7}
+  .panel.hl{box-shadow:0 0 0 2px var(--brand); transition:box-shadow .3s}
+  .ffnote{font-size:12px; color:var(--muted); margin:0 0 8px}
+  .ffnote a{color:var(--blue); cursor:pointer; text-decoration:underline}
+  .ftools{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:2px 0 12px}
+  .ftools input,.ftools select{background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:8px; padding:7px 10px; font-size:12.5px; font-family:inherit}
+  .ftools input{min-width:200px}
+  .ftools input::placeholder{color:var(--muted)}
   /* mini charts */
   .donutwrap{display:flex; align-items:center; gap:20px}
   .donut{width:128px; height:128px; border-radius:50%; position:relative; flex:0 0 128px}
@@ -420,20 +433,28 @@
       </div>
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
-      <div class="panel">
+      <div class="panel" id="fp-issues">
         <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span></h2>
         <div id="fIssues"></div>
       </div>
-      <div class="panel">
+      <div class="panel" id="fp-wos">
         <h2>📋 Open Work Orders <span class="count" id="fWoCount"></span></h2>
         <div id="fWorkOrders"></div>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel" id="fp-trailers">
       <h2>🚛 By Trailer <span class="count" id="fTrailerCount"></span></h2>
+      <div class="ftools">
+        <input id="fTrailerSearch" type="search" placeholder="Find a trailer — type a J# or name…" oninput="renderTrailerCards()" />
+        <select id="fTrailerSort" onchange="renderTrailerCards()" title="Sort trailers">
+          <option value="urgent">Sort: Most urgent</option>
+          <option value="items">Sort: Most open items</option>
+          <option value="name">Sort: Trailer / J#</option>
+        </select>
+      </div>
       <div class="teamgrid" id="fByTrailer"></div>
     </div>
-    <div class="panel">
+    <div class="panel" id="fp-svc">
       <h2>🔧 Service — Due &amp; Overdue <span class="count" id="fSvcCount"></span></h2>
       <div id="fService"></div>
     </div>
@@ -959,6 +980,7 @@ function trailerPop(t){
     + t._s.slice(0,12).map(s=>`<div>• ${esc(s.service||'Service')} ${s.c&&s.c.overdue?'<span class="badge red">overdue</span>':(s.c&&s.c.soon?'<span class="badge amber">due soon</span>':(s.dueISO?'<span class="badge grey">'+fmtMD(s.dueISO)+'</span>':''))}</div>`).join('') + `</div>`; }
   return h;
 }
+let FFILTER=null, FTRAILERS=[];
 function renderFleetio(D){
   const F=D.fleetio, today=D.todayISO;
   const issues=(F&&F.issues)||[], wos=(F&&F.workOrders)||[], svc=(F&&F.service)||[];
@@ -979,14 +1001,14 @@ function renderFleetio(D){
   const issOver=issues.filter(i=>i.overdue).length;
 
   const kpis=[
-    {n:issues.length, l:'OPEN ISSUES', c:'tasks', sub:(issOver?issOver+' overdue':'all current')},
-    {n:issOver, l:'ISSUES OVERDUE', c:'over', sub:(issues.length?Math.round(issOver*100/issues.length)+'% of open':'')},
-    {n:wos.length, l:'OPEN WORK ORDERS', c:'sched', sub:''},
-    {n:svcSoon, l:'SERVICE DUE SOON', c:'pipe', sub:'next 21 days'},
-    {n:svcOver, l:'SERVICE OVERDUE', c:'over', sub:((svcOver+svcSoon)?Math.round(svcOver*100/(svcOver+svcSoon))+'% of due':'')},
+    {n:issues.length, l:'OPEN ISSUES', c:'tasks', sub:(issOver?issOver+' overdue':'all current'), k:'iss_all'},
+    {n:issOver, l:'ISSUES OVERDUE', c:'over', sub:(issues.length?Math.round(issOver*100/issues.length)+'% of open':''), k:'iss_over'},
+    {n:wos.length, l:'OPEN WORK ORDERS', c:'sched', sub:'', k:'wo_all'},
+    {n:svcSoon, l:'SERVICE DUE SOON', c:'pipe', sub:'next 21 days', k:'svc_soon'},
+    {n:svcOver, l:'SERVICE OVERDUE', c:'over', sub:((svcOver+svcSoon)?Math.round(svcOver*100/(svcOver+svcSoon))+'% of due':''), k:'svc_over'},
   ];
   document.getElementById('fleetioKpis').innerHTML=kpis.map(k=>
-    `<div class="kpi ${k.c}"><div class="n">${k.n}</div><div class="l">${k.l}</div>${k.sub?`<div class="ksub">${k.sub}</div>`:''}</div>`).join('');
+    `<div class="kpi ${k.c}${FFILTER===k.k?' fon':''}" onclick="setFleetFilter('${k.k}')" title="Click to jump to these"><div class="n">${k.n}</div><div class="l">${k.l}</div>${k.sub?`<div class="ksub">${k.sub}</div>`:''}<div class="kgo">tap to view ▾</div></div>`).join('');
 
   // mini charts: service backlog donut + open issues by label
   const svcTot=svcOver+svcSoon, op=svcTot?(svcOver/svcTot*100):0;
@@ -1004,26 +1026,34 @@ function renderFleetio(D){
   document.getElementById('fLabelCount').textContent = larr.length+' types';
 
   const svcSorted=svcC.slice().sort((a,b)=>(b.c.overdue?1:0)-(a.c.overdue?1:0) || (a.dueISO||'9999').localeCompare(b.dueISO||'9999'));
-  document.getElementById('fService').innerHTML = svcSorted.length ? svcSorted.map(s=>{
+  let svcShow=svcSorted;
+  if(FFILTER==='svc_over') svcShow=svcSorted.filter(s=>s.c.overdue);
+  else if(FFILTER==='svc_soon') svcShow=svcSorted.filter(s=>s.c.soon);
+  const svcNote = (FFILTER==='svc_over') ? `<div class="ffnote">Showing <b>overdue</b> only · <a onclick="clearFleetFilter()">show all ${svcSorted.length}</a></div>`
+                : (FFILTER==='svc_soon') ? `<div class="ffnote">Showing <b>due soon</b> only · <a onclick="clearFleetFilter()">show all ${svcSorted.length}</a></div>` : '';
+  document.getElementById('fService').innerHTML = svcNote + (svcShow.length ? svcShow.map(s=>{
     const b = s.c.overdue?`<span class="badge red">${s.c.days!=null?Math.abs(s.c.days)+'d overdue':'overdue'}</span>`
             : s.c.soon?`<span class="badge amber">${(s.c.days!=null&&s.c.days>=0)?'due '+s.c.days+'d':'due soon'}</span>`
             : (s.dueISO?`<span class="badge grey">${fmtMD(s.dueISO)}</span>`:`<span class="badge grey">${esc(s.meterDue?('@ '+s.meterDue):'—')}</span>`);
     return `<div class="row"><div><div class="lead">${esc(s.service||'Service')}</div>`+
       `<div class="meta">${esc(s.asset||'')}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
-  }).join('') : `<div class="empty">No service reminders due</div>`;
+  }).join('') : `<div class="empty">No service ${FFILTER==='svc_over'?'overdue':FFILTER==='svc_soon'?'due soon':'reminders due'}</div>`);
   document.getElementById('fSvcCount').textContent=svcSorted.length;
 
   const prRank={high:0,emergency:0,medium:1,low:2};
   const issSorted=issues.slice().sort((a,b)=>(b.overdue?1:0)-(a.overdue?1:0)
     || ((prRank[(a.priority||'').toLowerCase()]??3)-(prRank[(b.priority||'').toLowerCase()]??3))
     || ((b.ageDays||0)-(a.ageDays||0)));
-  document.getElementById('fIssues').innerHTML = issSorted.length ? issSorted.slice(0,40).map(i=>{
+  let issShow=issSorted;
+  if(FFILTER==='iss_over') issShow=issSorted.filter(i=>i.overdue);
+  const issNote = (FFILTER==='iss_over') ? `<div class="ffnote">Showing <b>overdue</b> only · <a onclick="clearFleetFilter()">show all ${issSorted.length}</a></div>` : '';
+  document.getElementById('fIssues').innerHTML = issNote + (issShow.length ? issShow.slice(0,40).map(i=>{
     const age = i.openedISO ? Math.max(0,daysBetween(today,i.openedISO)) : (i.ageDays!=null?i.ageDays:null);
     const b = i.overdue?`<span class="badge red">overdue</span>` : (age!=null?`<span class="badge grey">${age}d open</span>`:'');
     const pr = i.priority?`<span class="badge ${/(high|emerg)/i.test(i.priority)?'red':/med/i.test(i.priority)?'amber':'grey'}">${esc(i.priority)}</span>`:'';
     return `<div class="row"><div><div class="lead">${esc(i.summary||('Issue '+(i.num||'')))}</div>`+
       `<div class="meta">${esc(i.asset||'')}${i.jobNum?' · '+esc(i.jobNum):''}</div></div><div class="right">${pr} ${b}</div></div>`;
-  }).join('') : `<div class="empty">No open issues 🎉</div>`;
+  }).join('') : `<div class="empty">No ${FFILTER==='iss_over'?'overdue':'open'} issues 🎉</div>`);
   document.getElementById('fIssueCount').textContent=issues.length;
 
   document.getElementById('fWorkOrders').innerHTML = wos.length ? wos.slice(0,40).map(w=>{
@@ -1041,8 +1071,21 @@ function renderFleetio(D){
   issues.forEach(i=>{ const t=bucket(i); t.iss++; t._i.push(i); });
   wos.forEach(w=>{ const t=bucket(w); t.wo++; t._w.push(w); });
   svcC.forEach(s=>{ const t=bucket(s); t.svc++; if(s.c.overdue) t.svcOver++; t._s.push(s); });
-  const trailers=Object.values(tmap).sort((a,b)=>(b.svcOver-a.svcOver) || (b.iss+b.wo+b.svc)-(a.iss+a.wo+a.svc));
-  document.getElementById('fByTrailer').innerHTML = trailers.length ? trailers.map((t,idx)=>{
+  FTRAILERS=Object.values(tmap);
+  renderTrailerCards();
+}
+
+// Renders the By-Trailer cards from FTRAILERS, honoring the search box + sort.
+function renderTrailerCards(){
+  const grid=document.getElementById('fByTrailer'); if(!grid) return;
+  const se=document.getElementById('fTrailerSearch'); const q=(se?se.value:'').trim().toLowerCase();
+  const so=document.getElementById('fTrailerSort'); const sort=so?so.value:'urgent';
+  let arr=FTRAILERS.slice();
+  if(q) arr=arr.filter(t=> (((t.jobNum||'')+' '+(t.name||'')).toLowerCase().indexOf(q)>=0) );
+  if(sort==='name') arr.sort((a,b)=>String(a.jobNum||a.name||'').localeCompare(String(b.jobNum||b.name||''),undefined,{numeric:true}));
+  else if(sort==='items') arr.sort((a,b)=>(b.iss+b.wo+b.svc)-(a.iss+a.wo+a.svc));
+  else arr.sort((a,b)=>(b.svcOver-a.svcOver) || (b.iss+b.wo+b.svc)-(a.iss+a.wo+a.svc));
+  grid.innerHTML = arr.length ? arr.map((t,idx)=>{
     const edge = t.svcOver?'#ef4444' : (t.iss?'#f59e0b' : (t.wo?'#3b82f6' : '#22c55e'));
     const key='ft'+idx; BARPOP[key]=trailerPop(t);
     return `<div class="teamcard" style="border-left-color:${edge}" onclick="showBarPop(event,'${key}')"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}</span>`+
@@ -1052,9 +1095,20 @@ function renderFleetio(D){
       (t.svcOver?`<span class="badge red">${t.svcOver} svc overdue</span>`:(t.svc?`<span class="badge grey">${t.svc} svc due</span>`:''))+
     `</div>`+
     ((t.jobNum&&t.name&&t.name!==t.jobNum)?`<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.3">${esc(t.name)}</div>`:'')+
-    `</div>`; }).join('') : `<div class="empty">—</div>`;
-  document.getElementById('fTrailerCount').textContent=trailers.length+' trailers';
+    `</div>`; }).join('') : `<div class="empty">${q?('No trailers match “'+esc(q)+'”'):'—'}</div>`;
+  document.getElementById('fTrailerCount').textContent = q ? (arr.length+' of '+FTRAILERS.length) : (FTRAILERS.length+' trailers');
 }
+
+// Clickable KPI tiles: jump to the relevant list (and filter it for the overdue/soon tiles).
+function setFleetFilter(key){
+  const fk=['iss_over','svc_soon','svc_over'];
+  FFILTER = (fk.indexOf(key)>=0) ? (FFILTER===key?null:key) : null;
+  renderFleetio(window.MRA_DATA);
+  const map={iss_all:'fp-issues', iss_over:'fp-issues', wo_all:'fp-wos', svc_soon:'fp-svc', svc_over:'fp-svc'};
+  const el=document.getElementById(map[key]);
+  if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); el.classList.add('hl'); setTimeout(()=>el.classList.remove('hl'),1600); }
+}
+function clearFleetFilter(){ FFILTER=null; renderFleetio(window.MRA_DATA); }
 
 /* ---------- view switching ---------- */
 function setView(v){
