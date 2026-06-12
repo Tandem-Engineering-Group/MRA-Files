@@ -299,6 +299,30 @@ if (Test-Path $FleetioTokenFile) {
         }
         function Get-FleetJob($name) { if ($name -and ([string]$name -match '\bJ\d+[A-Za-z]?\b')) { return $matches[0] } else { return '' } }
         function FleetD10($s) { if ($s) { return ([string]$s).Substring(0,10) } else { return $null } }
+        # Pull the assignee name(s) off an issue/work order, whatever field Fleetio uses.
+        function Get-FleetAssignees($obj) {
+            $out = New-Object System.Collections.ArrayList
+            foreach ($prop in @('assigned_contacts','watcher_contacts','contacts','assignees')) {
+                $val = $obj.$prop
+                if ($val) {
+                    foreach ($c in @($val)) {
+                        $nm = ''
+                        if     ($c -is [string]) { $nm = $c }
+                        elseif ($c.name)         { $nm = [string]$c.name }
+                        elseif ($c.full_name)    { $nm = [string]$c.full_name }
+                        elseif ($c.first_name -or $c.last_name) { $nm = (('{0} {1}' -f [string]$c.first_name, [string]$c.last_name)).Trim() }
+                        elseif ($c.contact_name) { $nm = [string]$c.contact_name }
+                        $nm = ([string]$nm).Trim()
+                        if ($nm -ne '' -and -not $out.Contains($nm)) { [void]$out.Add($nm) }
+                    }
+                }
+            }
+            foreach ($prop in @('assigned_contact','contact')) {
+                $c = $obj.$prop
+                if ($c -and $c.name) { $nm = [string]$c.name; if (-not $out.Contains($nm)) { [void]$out.Add($nm) } }
+            }
+            return ,@($out)
+        }
 
         $fIssues = New-Object System.Collections.ArrayList
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
@@ -308,6 +332,7 @@ if (Test-Path $FleetioTokenFile) {
                 num = (([string]$i.number) -replace '^#',''); summary = $(if ($i.summary) { $i.summary } else { $i.name })
                 asset = $i.vehicle_name; jobNum = (Get-FleetJob $i.vehicle_name)
                 priority = $pr; openedISO = (FleetD10 $i.reported_at); overdue = [bool]$i.overdue
+                assignees = (Get-FleetAssignees $i)
             })
         }
         $fWos = New-Object System.Collections.ArrayList
@@ -319,6 +344,7 @@ if (Test-Path $FleetioTokenFile) {
             [void]$fWos.Add([PSCustomObject]@{
                 num = (([string]$w.number) -replace '^#',''); summary = $sum; asset = $w.vehicle_name
                 jobNum = (Get-FleetJob $w.vehicle_name); status = $w.work_order_status_name; openedISO = (FleetD10 $op)
+                assignees = (Get-FleetAssignees $w)
             })
         }
         $fSvc = New-Object System.Collections.ArrayList
@@ -334,7 +360,8 @@ if (Test-Path $FleetioTokenFile) {
             generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt')
             issues = @($fIssues); workOrders = @($fWos); service = @($fSvc)
         }
-        Write-Output "  -> Fleetio: $($fIssues.Count) issues, $($fWos.Count) work orders, $($fSvc.Count) service due/overdue"
+        $issAssigned = (@($fIssues | Where-Object { @($_.assignees).Count -gt 0 })).Count
+        Write-Output "  -> Fleetio: $($fIssues.Count) issues ($issAssigned with assignees), $($fWos.Count) work orders, $($fSvc.Count) service due/overdue"
     } catch {
         Write-Output "  -> Fleetio fetch failed: $($_.Exception.Message)"
     }
