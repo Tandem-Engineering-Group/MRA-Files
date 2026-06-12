@@ -236,12 +236,15 @@ try {
                 if ($null -eq $val -or "$val" -eq '') { continue }
                 $phase = "write row $row col $c"
                 $cell = $dst.Cells.Item($row, $c)
+                # This Excel's COM binder only accepts strings on .Value, so write
+                # everything as text and let Excel coerce it (same as typing).
                 if ($val -is [datetime]) {
-                    # COM can't take a DateTime directly - write the serial + a date format.
-                    $cell.Value2 = $val.ToOADate()
+                    # Write the date serial as a string -> Excel makes it a number,
+                    # then a date format displays it as a date. (Dashboard reads the serial.)
+                    $cell.Value = $val.ToOADate().ToString([Globalization.CultureInfo]::InvariantCulture)
                     $cell.NumberFormat = 'm/d/yyyy'
                 } else {
-                    $cell.Value2 = $val
+                    $cell.Value = "$val"
                 }
             }
         }
