@@ -476,6 +476,10 @@ function Get-MraStatus($dir, $today, $nsMain, $nsRel, $nsPkg) {
     $nArr = (@($sorted | Where-Object { $_.type -eq 'arriving' })).Count
     $nAt  = (@($sorted | Where-Object { $_.type -eq 'at' })).Count
     Write-Output "  -> MRA logistics: scanned $nFiles calendars, $nArr arriving back, $nAt at MRA now."
+    foreach ($r in $sorted) {
+        if ($r.type -eq 'arriving') { Write-Output "       arriving $($r.arrivingISO): $($r.job)" }
+        else                        { Write-Output "       at MRA since $($r.sinceISO): $($r.job)" }
+    }
     return ,$sorted
 }
 
