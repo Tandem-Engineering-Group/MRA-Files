@@ -1212,11 +1212,14 @@ async function refresh(){
     const txt=await r.text();
     window.MRA_DATA=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1));
     renderAll();
-  }catch(e){ /* file:// or server down — keep showing current data */ }
+    return true;
+  }catch(e){ return false; /* file:// or server down — keep showing current data */ }
 }
 
-renderAll();
-refresh();   // immediately re-pull data.js (cache-busted) so a browser reload never shows a stale cached copy
+// First paint comes from a fresh (cache-busted) fetch, so a browser reload never
+// flashes the stale cached data.js. Only fall back to the inline <script src>
+// copy if the fetch can't run (e.g. opened directly as a file://).
+refresh().then(ok=>{ if(!ok) renderAll(); });
 tick(); setInterval(tick,1000);
 setInterval(refresh, REFRESH_SECONDS*1000);
 </script>
