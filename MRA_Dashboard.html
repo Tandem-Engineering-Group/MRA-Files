@@ -56,6 +56,10 @@
   .kpi.tasks::before{background:var(--amber)}   .kpi.tasks .n{color:var(--amber)}
   .kpi.over::before{background:var(--red)}       .kpi.over .n{color:var(--red)}
   .kpi.proj::before{background:var(--brand)}     .kpi.proj .n{color:#fb7185}
+  .kpi.pop{cursor:pointer; transition:transform .08s ease, box-shadow .15s ease}
+  .kpi.pop:hover{transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  .kpi .ksub{font-size:11px; color:var(--muted); margin-top:5px; font-weight:600}
+  .kpi .kgo{font-size:10px; color:var(--muted); margin-top:6px; font-weight:600; opacity:.7}
 
   /* ---------- Panels / layout ---------- */
   .grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; align-items:start}
@@ -115,7 +119,8 @@
   .barpop .pp-ms .pp-det{font-size:10.5px; color:var(--muted); padding:0 0 4px 12px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 
   /* ---------- Bay board ---------- */
-  .bays{display:grid; grid-template-columns:repeat(5,1fr); gap:12px}
+  .bays{display:flex; gap:12px; align-items:flex-start; overflow-x:auto}
+  .baycol{flex:1 1 0; min-width:150px; display:flex; flex-direction:column; gap:12px}
   .bay{background:var(--panel2); border:1px solid var(--line); border-radius:12px;
     overflow:hidden; border-top:4px solid var(--grey)}
   .bay.s-active{border-top-color:var(--green)}
@@ -295,8 +300,8 @@
     cursor:pointer; line-height:1; background:none; border:none}
   .modal-close:hover{color:var(--txt)}
 
-  @media(max-width:1500px){ .kpis{grid-template-columns:repeat(4,1fr)} .bays{grid-template-columns:repeat(4,1fr)} }
-  @media(max-width:1100px){ .grid{grid-template-columns:1fr} .bays{grid-template-columns:repeat(2,1fr)} .g-gutter{width:130px;flex-basis:130px} }
+  @media(max-width:1500px){ .kpis{grid-template-columns:repeat(4,1fr)} }
+  @media(max-width:1100px){ .grid{grid-template-columns:1fr} .g-gutter{width:130px;flex-basis:130px} }
 </style>
 </head>
 <body>
@@ -480,7 +485,7 @@
       <div class="legend" id="gfsLegend" style="margin-top:12px"></div>
     </div>
   </div>
-  <div class="barpop" id="barPop"></div>
+  <div class="barpop" id="barPop" onmouseenter="popHold()" onmouseleave="popHoverOut()"></div>
 
   <!-- ===================== HELP MODAL ===================== -->
   <div class="modal-overlay" id="helpModal" onclick="closeHelp(event)">
@@ -512,7 +517,7 @@ let GFS=null;              // full-screen gantt: 'floor' | 'projects' | null
 let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
-const BARPOP={}, GFS_PKEY={};       // popover content + key->project-name map
+const BARPOP={}, KPIPOP={}, GFS_PKEY={};       // popover content (click bars / hover tiles) + key->project-name map
 function localISO(ms){ const d=new Date(ms); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 /* ---------- helpers ---------- */
@@ -700,14 +705,22 @@ function renderFloor(D){
   const flagged=bayJobs.concat(pipeJobs).map(j=>({j,c:classify(j,today)}))
     .filter(x=>x.c.overdue||x.c.dueSoon||(x.j.openCount>=4));
 
+  const byStatus=s=>jobs.filter(j=>(j.status||"").toLowerCase()===s);
+  const openJobs=bayJobs.concat(pipeJobs).filter(j=>j.openCount>0).sort((a,b)=>(b.openCount||0)-(a.openCount||0));
+  const overdueJobs=flagged.filter(x=>x.c.overdue).map(x=>x.j);
   const kpis=[
-    {n:cnt("active"),l:"ACTIVE",c:"active"},{n:cnt("scheduled"),l:"SCHEDULED",c:"sched"},
-    {n:cnt("on hold"),l:"ON HOLD",c:"hold"},{n:cnt("shipped"),l:"SHIPPED",c:"ship"},
-    {n:pipeJobs.length,l:"NEXT UP",c:"pipe"},{n:totalOpen,l:"OPEN TASKS",c:"tasks"},
-    {n:flagged.filter(x=>x.c.overdue).length,l:"PAST DUE",c:"over"},
+    {n:cnt("active"),l:"ACTIVE",c:"active",list:byStatus("active")},
+    {n:cnt("scheduled"),l:"SCHEDULED",c:"sched",list:byStatus("scheduled")},
+    {n:cnt("on hold"),l:"ON HOLD",c:"hold",list:byStatus("on hold")},
+    {n:cnt("shipped"),l:"SHIPPED",c:"ship",list:byStatus("shipped")},
+    {n:pipeJobs.length,l:"NEXT UP",c:"pipe",list:pipeJobs},
+    {n:totalOpen,l:"OPEN TASKS",c:"tasks",list:openJobs,tasks:true},
+    {n:flagged.filter(x=>x.c.overdue).length,l:"PAST DUE",c:"over",list:overdueJobs},
   ];
-  document.getElementById('kpis').innerHTML=kpis.map(k=>
-    `<div class="kpi ${k.c}"><div class="n">${k.n}</div><div class="l">${k.l}</div></div>`).join("");
+  document.getElementById('kpis').innerHTML=kpis.map((k,idx)=>{
+    const key='fk'+idx; KPIPOP[key]=jobsPop(k.l, k.list, k.tasks);
+    return `<div class="kpi pop ${k.c}" onmouseenter="popHoverIn(event,'${key}')" onmouseleave="popHoverOut()" title="Hover for the list"><div class="n">${k.n}</div><div class="l">${k.l}</div><div class="kgo">hover for detail</div></div>`;
+  }).join("");
 
   // 2-week floor gantt: non-shipped bay + pipeline jobs overlapping the window
   const win=buildWindow(startOfWeek(todayMid()),14);
@@ -731,7 +744,7 @@ function renderFloor(D){
     if(!byBay[j.bay]) byBay[j.bay]=[]; byBay[j.bay].push(j); });
   const rank=j=>{const s=(j.status||"").toLowerCase();
     return s==="active"?0:s==="scheduled"?1:s==="on hold"?2:s==="tbd"?3:4;};
-  let bayHtml="";
+  const bayCards=[];
   order.forEach(bay=>{
     const list=(byBay[bay]||[]).slice().sort((a,b)=>rank(a)-rank(b));
     let cls="s-open",stTxt="Open",stCls="open";
@@ -761,9 +774,12 @@ function renderFloor(D){
         (bayOpen?"▴ show less":`+${list.length-2} more in this bay ▾`)+`</div>`;
       body=jobsHtml+moreHtml;
     }
-    bayHtml+=`<div class="bay ${cls}"><div class="bay-head"><div class="name">${esc(bay)}</div>`+
-      `<div class="st ${stCls}">${stTxt}</div></div><div class="bay-body">${body}</div></div>`;
+    bayCards.push(`<div class="bay ${cls}"><div class="bay-head"><div class="name">${esc(bay)}</div>`+
+      `<div class="st ${stCls}">${stTxt}</div></div><div class="bay-body">${body}</div></div>`);
   });
+  // pair each physical bay into a column — Front card on top of Back card
+  let bayHtml="";
+  for(let i=0;i<bayCards.length;i+=2) bayHtml+=`<div class="baycol">`+bayCards[i]+(bayCards[i+1]||'')+`</div>`;
   document.getElementById('bays').innerHTML=bayHtml;
   document.getElementById('bayCount').textContent=order.length+" bays";
 
@@ -1014,8 +1030,15 @@ function renderFleetio(D){
     {n:svcSoon, l:'SERVICE DUE SOON', c:'pipe', sub:'next 21 days', k:'svc_soon'},
     {n:svcOver, l:'SERVICE OVERDUE', c:'over', sub:((svcOver+svcSoon)?Math.round(svcOver*100/(svcOver+svcSoon))+'% of due':''), k:'svc_over'},
   ];
-  document.getElementById('fleetioKpis').innerHTML=kpis.map(k=>
-    `<div class="kpi ${k.c}${FFILTER===k.k?' fon':''}" onclick="setFleetFilter('${k.k}')" title="Click to jump to these"><div class="n">${k.n}</div><div class="l">${k.l}</div>${k.sub?`<div class="ksub">${k.sub}</div>`:''}<div class="kgo">tap to view ▾</div></div>`).join('');
+  document.getElementById('fleetioKpis').innerHTML=kpis.map((k,idx)=>{
+    const key='flk'+idx;
+    KPIPOP[key] = k.k==='svc_soon' ? flItemsPop('Service due soon', svcC.filter(s=>s.c.soon), 'svc')
+               : k.k==='svc_over' ? flItemsPop('Service overdue', svcC.filter(s=>s.c.overdue), 'svc')
+               : k.k==='wo_all'   ? flItemsPop('Open work orders', wos, 'wo')
+               : k.k==='iss_over' ? flItemsPop('Overdue issues', issues.filter(i=>i.overdue), 'iss')
+               :                    flItemsPop('Open issues', issues, 'iss');
+    return `<div class="kpi pop ${k.c}${FFILTER===k.k?' fon':''}" onclick="setFleetFilter('${k.k}')" onmouseenter="popHoverIn(event,'${key}')" onmouseleave="popHoverOut()" title="Hover for the list · click to filter below"><div class="n">${k.n}</div><div class="l">${k.l}</div>${k.sub?`<div class="ksub">${k.sub}</div>`:''}<div class="kgo">hover for detail</div></div>`;
+  }).join('');
 
   // "Assigned to" dropdown — people pulled from issue/WO assignees in the feed
   const aset={}; [].concat(issues,wos).forEach(x=>fAsg(x).forEach(n=>{ if(n) aset[n]=(aset[n]||0)+1; }));
@@ -1196,14 +1219,46 @@ function setGfsLevel(lv){
 function toggleGfsProject(key){ const name=GFS_PKEY[key]; if(!name) return;
   if(expandedProjects.has(name)) expandedProjects.delete(name); else expandedProjects.add(name);
   renderGanttFS(); }
-function showBarPop(e,key){ e.stopPropagation();
-  const pop=document.getElementById('barPop'); if(!pop||!BARPOP[key]) return;
-  pop.innerHTML=BARPOP[key]; pop.classList.add('show');
-  const pw=Math.min(320, window.innerWidth-20);
+function positionPop(e){ const pop=document.getElementById('barPop');
+  const pw=Math.min(340, window.innerWidth-20);
   let x=e.clientX+12, y=e.clientY+12;
   if(x+pw>window.innerWidth-10) x=Math.max(10, window.innerWidth-pw-10);
   if(y+240>window.innerHeight-10) y=Math.max(10, e.clientY-240);
   pop.style.left=x+'px'; pop.style.top=y+'px'; }
+function showBarPop(e,key){ e.stopPropagation();
+  const pop=document.getElementById('barPop'); if(!pop||!BARPOP[key]) return;
+  pop.innerHTML=BARPOP[key]; pop.classList.add('show'); positionPop(e); }
+let popTimer=null;
+function popHold(){ clearTimeout(popTimer); }
+function popHoverIn(e,key){ clearTimeout(popTimer);
+  const pop=document.getElementById('barPop'); if(!pop||!KPIPOP[key]) return;
+  pop.innerHTML=KPIPOP[key]; pop.classList.add('show'); positionPop(e); }
+function popHoverOut(){ clearTimeout(popTimer); popTimer=setTimeout(closeBarPop,160); }
+// detail popover for a shop-floor KPI tile — lists the jobs behind the number
+function jobsPop(title, list, tasks){
+  let h=`<h4>${esc(title)}</h4>`;
+  if(!list||!list.length){ h+=`<div class="pp-sub">none</div>`; return h; }
+  h+=`<div class="pp-sub">${list.length} total</div><div class="pp-ms">`;
+  h+= list.slice(0,20).map(j=>{
+    const tag = (tasks&&j.openCount)?` <span class="badge amber">${j.openCount} open</span>`:'';
+    return `<div>• ${esc(j.project||'—')} <span style="color:var(--muted)">— ${esc(j.bay||'')}${j.jobNum?' · '+esc(j.jobNum):''}</span>${tag}</div>`;
+  }).join('');
+  if(list.length>20) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-20} more…</div>`;
+  return h+`</div>`;
+}
+// detail popover for a Fleetio KPI tile — issues / work orders / service
+function flItemsPop(title, list, kind){
+  let h=`<h4>${esc(title)}</h4>`;
+  if(!list||!list.length){ h+=`<div class="pp-sub">none 🎉</div>`; return h; }
+  h+=`<div class="pp-sub">${list.length} total</div><div class="pp-ms">`;
+  h+= list.slice(0,20).map(x=>{
+    const lab = kind==='svc' ? (x.service||'Service') : (x.summary || (kind==='wo'?'WO '+(x.num||''):'Issue '+(x.num||'')));
+    const meta = x.asset ? ` <span style="color:var(--muted)">— ${esc(x.asset)}${x.jobNum?' · '+esc(x.jobNum):''}</span>` : '';
+    return `<div>• ${esc(lab)}${meta}</div>`;
+  }).join('');
+  if(list.length>20) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-20} more…</div>`;
+  return h+`</div>`;
+}
 function closeBarPop(){ const p=document.getElementById('barPop'); if(p) p.classList.remove('show'); }
 function floorPop(j,c){
   const due=c.overdue?` <span class="badge red">${Math.abs(c.daysLeft)}d past due</span>`:c.dueSoon?` <span class="badge amber">due ${c.daysLeft}d</span>`:'';
