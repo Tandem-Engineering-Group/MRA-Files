@@ -303,6 +303,15 @@
   .modal-close{position:absolute; top:12px; right:16px; font-size:24px; color:var(--muted);
     cursor:pointer; line-height:1; background:none; border:none}
   .modal-close:hover{color:var(--txt)}
+  /* Equipment / Job# board */
+  .eqbar{display:flex; align-items:center; gap:12px; margin:2px 0 16px; flex-wrap:wrap}
+  .eqsearch{flex:1; min-width:240px; max-width:440px; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:10px; padding:11px 15px; font-size:13.5px; font-family:inherit}
+  .eqsearch::placeholder{color:var(--muted)}
+  .eqgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(235px,1fr)); gap:12px}
+  .eqcard{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:13px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; transition:transform .08s ease, border-color .15s ease}
+  .eqcard:hover{transform:translateY(-2px); border-color:var(--brand)}
+  .eqcard .nm{font-size:13.5px; font-weight:700; line-height:1.25}
+  .eqcard .jb{font-size:12px; font-weight:800; color:#fff; background:var(--brand); border-radius:999px; padding:5px 12px; white-space:nowrap; letter-spacing:.3px}
   .linksmenu{position:relative; display:inline-block}
   .linksmenu-pop{position:absolute; top:calc(100% + 6px); right:0; min-width:230px; background:var(--panel);
     border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.5); padding:6px; display:none; z-index:120}
@@ -326,6 +335,7 @@
       <div class="tab active" data-view="floor" onclick="setView('floor')">FLOOR</div>
       <div class="tab" data-view="projects" onclick="setView('projects')">PROJECTS</div>
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
+      <div class="tab" data-view="equipment" onclick="setView('equipment')">EQUIPMENT</div>
     </div>
     <div class="linksmenu">
       <button class="editbtn" id="linksBtn" onclick="toggleLinks(event)" title="Frequently used links">🔗 Links ▾</button>
@@ -483,6 +493,17 @@
     <div class="panel" id="fp-svc">
       <h2>🔧 Service — Due &amp; Overdue <span class="count" id="fSvcCount"></span></h2>
       <div id="fService"></div>
+    </div>
+  </div>
+
+  <!-- ===================== EQUIPMENT VIEW ===================== -->
+  <div id="equipmentView" class="hidden">
+    <div class="panel">
+      <h2>Equipment — Job #s <span class="count" id="eqCount"></span></h2>
+      <div class="eqbar">
+        <input id="eqSearch" class="eqsearch" type="search" placeholder="Find equipment or J#…" oninput="renderEquipment()" />
+      </div>
+      <div class="eqgrid" id="eqGrid"></div>
     </div>
   </div>
 
@@ -1285,12 +1306,24 @@ function setAssignFilter(v){ FASSIGN=v||''; renderFleetio(window.MRA_DATA); }
 function setReportFilter(v){ FREPORT=v||''; renderFleetio(window.MRA_DATA); }
 
 /* ---------- view switching ---------- */
+/* ---------- Equipment / Job# board (static, from the Job Board dropdown) ---------- */
+const JOB_BOARD=[{n:"ABB",j:"J1407"},{n:"Aga Kahn Foundation",j:"J1537"},{n:"Age of Union",j:"J1500"},{n:"Amazon",j:"J1513"},{n:"Arizona 250",j:"J1554"},{n:"ASICS",j:"J1408"},{n:"AWS",j:"J1217"},{n:"Baltimore Aircoil",j:"J1555"},{n:"Barton Malow",j:"J1506"},{n:"Beckman-Coulter-East",j:"J1396"},{n:"Beckman-Coulter-West",j:"J1396"},{n:"Bell Helicopters",j:"J1440"},{n:"BioMerieux",j:"J1461"},{n:"Booz Allen - US Army",j:"J1527"},{n:"Boston Scientific 40ft",j:"J1491"},{n:"Boston Scientific DX",j:"J1507"},{n:"Boston Scientific SE",j:"J1496"},{n:"BPIR Rodeo",j:"J1468"},{n:"Brain Tumor Foundation",j:"J1481"},{n:"Catholic Charities USA",j:"J1538"},{n:"Climate Action Campaign",j:"J1560"},{n:"County of Essex",j:"J1467"},{n:"Czarnowski (GA)",j:"J1544"},{n:"D&G - Canada",j:"J1536"},{n:"D&G - USA Midwest",j:"J1535"},{n:"Duracell",j:"J1383"},{n:"Ferguson BizBox",j:"J1557"},{n:"FM Global",j:"J1410"},{n:"Fortinet III",j:"J1476"},{n:"GRAIL",j:"J1470"},{n:"Hershey",j:"J1373"},{n:"Hillrom/Baxter",j:"J1445"},{n:"Hyperfine",j:"J1453"},{n:"Jewish Federation",j:"J1526"},{n:"Knightscope",j:"J1447"},{n:"LexCare Hearoes",j:"J1546"},{n:"Medtronic",j:"J1553"},{n:"Meijer",j:"J1143"},{n:"Mkt/Grinder",j:"J1511"},{n:"Moon Surgical",j:"J1509"},{n:"MOTT",j:"J1428"},{n:"MRA Internal",j:"J1014"},{n:"NHL United by Hockey",j:"J1495"},{n:"NYBC Pod #1",j:"J1517"},{n:"NYBC Pod #2",j:"J1531"},{n:"NYBC Pod #3",j:"J1532"},{n:"NYBC Pod #4",j:"J1533"},{n:"Oakland Schools",j:"J1420"},{n:"Oasis Live '25 - The Department",j:"J1539"},{n:"Omnicell",j:"J1446"},{n:"On Running",j:"J1559"},{n:"P&G - Tide",j:"J1521"},{n:"PGA of Americas",j:"J1519"},{n:"Promaster Retro-Fit",j:"J1775"},{n:"PSE&G / Impact XM",j:"J1508"},{n:"QuidelOrtho",j:"J1384"},{n:"Saskatchewan Health Authority",j:"J1545"},{n:"Schaeffler",j:"J1497"},{n:"SENO Medical",j:"J1454"},{n:"SENO Medical - Box Truck",j:"J1541"},{n:"Siemens Big Betty",j:"J1381"},{n:"Siemens Demo Pool",j:"J1209"},{n:"Siemens DI",j:"J1524"},{n:"Siemens DX #3005",j:"J1110W"},{n:"Siemens DX #92",j:"J1110E"},{n:"Siemens Global Warehousing",j:"J1391"},{n:"Siemens Mammo III",j:"J1480"},{n:"Siemens Mammo Mandy",j:"J1424"},{n:"SMC Corporation",j:"J1542"},{n:"Sobeys/Safeway",j:"J1400"},{n:"STI Pod - #1052",j:"J1561"},{n:"Stryker",j:"J1412"},{n:"SWC California",j:"J1486"},{n:"SWC Florida 1",j:"J1514"},{n:"SWC Florida 2",j:"J1515"},{n:"SWC Hawaii",j:"J1512"},{n:"SWC Illinois",j:"J1422"},{n:"SWC NY1",j:"J1487"},{n:"SWC NY2",j:"J1488"},{n:"Tim McGraw",j:"J1421"},{n:"Tissot US MotoGP",j:"J1529"},{n:"TravisMathew",j:"J1387"},{n:"Warhammer",j:"J1434"},{n:"Washtenaw Community College",j:"J1543"},{n:"Weill Cornell Imaging",j:"J1540"},{n:"WFCU",j:"J1479"},{n:"Windsor Champ",j:"J1519"},{n:"Winnipeg Regional Health Authority",j:"J1547"}];
+function renderEquipment(){
+  const grid=document.getElementById('eqGrid'); if(!grid) return;
+  const se=document.getElementById('eqSearch'); const q=(se?se.value:'').trim().toLowerCase();
+  const list = q ? JOB_BOARD.filter(e=>(e.n+' '+e.j).toLowerCase().indexOf(q)>=0) : JOB_BOARD;
+  grid.innerHTML = list.length
+    ? list.map(e=>`<div class="eqcard"><span class="nm">${esc(e.n)}</span><span class="jb">${esc(e.j)}</span></div>`).join('')
+    : `<div class="empty">No equipment matches “${esc(q)}”</div>`;
+  const c=document.getElementById('eqCount'); if(c) c.textContent = q ? (list.length+' of '+JOB_BOARD.length) : (JOB_BOARD.length+' jobs');
+}
 function setView(v){
   VIEW=v; try{localStorage.setItem('mra_view',v);}catch(e){}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
   document.getElementById('floorView').classList.toggle('hidden',v!=='floor');
   document.getElementById('projectsView').classList.toggle('hidden',v!=='projects');
   document.getElementById('fleetioView').classList.toggle('hidden',v!=='fleetio');
+  document.getElementById('equipmentView').classList.toggle('hidden',v!=='equipment');
 }
 function setRange(m){
   RANGE=m; try{localStorage.setItem('mra_range',JSON.stringify(m));}catch(e){}
@@ -1494,6 +1527,7 @@ async function refresh(){
 // flashes the stale cached data.js. Only fall back to the inline <script src>
 // copy if the fetch can't run (e.g. opened directly as a file://).
 renderLinks();
+renderEquipment();
 refresh().then(ok=>{ if(!ok) renderAll(); });
 tick(); setInterval(tick,1000);
 setInterval(refresh, REFRESH_SECONDS*1000);
