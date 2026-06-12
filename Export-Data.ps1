@@ -92,6 +92,49 @@ function Get-RowCells($row) {
     return $cells
 }
 
+# Process one Project-Tasks-style row (cols A..L) into the project map + team
+# tasks. Used for BOTH the master 'Project Tasks' sheet and 'Enter Here' rows
+# from intake files dropped in the Intake Inbox (identical column layout).
+function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
+    $name = ([string](Resolve-Cell $pc['A'] $shared)).Trim()
+    if ($name -eq '') { return }
+
+    $pStatus   = ([string](Resolve-Cell $pc['I'] $shared)).Trim()
+    $pPM       = ([string](Resolve-Cell $pc['J'] $shared)).Trim()
+    $pMile     = ([string](Resolve-Cell $pc['K'] $shared)).Trim()
+    $pTask     = ([string](Resolve-Cell $pc['D'] $shared)).Trim()
+    $pAssigned = ([string](Resolve-Cell $pc['H'] $shared)).Trim()
+    $psd = Get-CellDate $pc['E']
+    $pfd = Get-CellDate $pc['F']
+
+    if (-not $pmap.Contains($name)) {
+        $pmap[$name] = [PSCustomObject]@{
+            name = $name; pm = ''; minStart = $null; maxFinish = $null
+            taskCount = 0; doneCount = 0
+            milestones = (New-Object System.Collections.ArrayList)
+        }
+    }
+    $o = $pmap[$name]
+    $o.taskCount++
+    if ($pStatus -eq 'Completed') { $o.doneCount++ }
+    if ($pPM -ne '' -and $o.pm -eq '') { $o.pm = $pPM }
+    if ($psd -and ($null -eq $o.minStart -or $psd -lt $o.minStart)) { $o.minStart = $psd }
+    if ($pfd -and ($null -eq $o.maxFinish -or $pfd -gt $o.maxFinish)) { $o.maxFinish = $pfd }
+    if ($pMile -eq 'Yes') {
+        $md = if ($pfd) { $pfd } elseif ($psd) { $psd } else { $null }
+        if ($md) { [void]$o.milestones.Add([PSCustomObject]@{
+            name = $pTask; dateISO = $md.ToString('yyyy-MM-dd') }) }
+    }
+    if ($pAssigned -ne '' -and $pStatus -ne 'Completed') {
+        $dueISO = if ($pfd) { $pfd.ToString('yyyy-MM-dd') }
+                  elseif ($psd) { $psd.ToString('yyyy-MM-dd') } else { $null }
+        [void]$teamTasks.Add([PSCustomObject]@{
+            assignee = $pAssigned; project = $name; task = $pTask
+            dueISO = $dueISO; status = $pStatus
+        })
+    }
+}
+
 # --- Copy workbook to temp (avoids any file lock) and open as zip ------------
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("mra_" + [System.IO.Path]::GetFileName($Workbook))
 try { [System.IO.File]::Copy($Workbook, $tmp, $true) }
@@ -162,65 +205,66 @@ try {
     # ===== Project Tasks sheet -> long-term project portfolio ===============
     # Columns: A=Project B=Phase C=Type D=Task E=Start F=Finish G=Duration
     #          H=Assigned I=Status J=PM K=Milestone L=Comments
+    $pmap = [ordered]@{}
     $projXml = Get-SheetXml $zip $wbXml $relsXml 'Project Tasks' $nsMain $nsRel $nsPkg
     if ($projXml) {
-        $pmap = [ordered]@{}
         foreach ($row in $projXml.worksheet.sheetData.row) {
             if ([int]$row.r -lt 2) { continue }
-            $pc = Get-RowCells $row
-            $name = ([string](Resolve-Cell $pc['A'] $shared)).Trim()
-            if ($name -eq '') { continue }
+            Add-TaskRow (Get-RowCells $row) $shared $pmap $teamTasks
+        }
+    }
 
-            $pStatus = ([string](Resolve-Cell $pc['I'] $shared)).Trim()
-            $pPM     = ([string](Resolve-Cell $pc['J'] $shared)).Trim()
-            $pMile   = ([string](Resolve-Cell $pc['K'] $shared)).Trim()
-            $pTask   = ([string](Resolve-Cell $pc['D'] $shared)).Trim()
-            $pAssigned = ([string](Resolve-Cell $pc['H'] $shared)).Trim()
-            $psd = Get-CellDate $pc['E']
-            $pfd = Get-CellDate $pc['F']
-
-            if (-not $pmap.Contains($name)) {
-                $pmap[$name] = [PSCustomObject]@{
-                    name = $name; pm = ''; minStart = $null; maxFinish = $null
-                    taskCount = 0; doneCount = 0
-                    milestones = (New-Object System.Collections.ArrayList)
+    # ===== Intake Inbox -> merge dropped project files (no Excel needed) =====
+    # Team members drop a filled intake file (sheet 'Enter Here', cols A..L) in
+    # the Intake Inbox; we read it straight from XML and fold it in, same as a
+    # master row. Re-dropping a same-named file replaces it (overwrites on disk).
+    $InboxDir = Join-Path (Split-Path -Parent $ScriptDir) 'Intake Inbox'
+    if (Test-Path $InboxDir) {
+        $intakeFiles = @(Get-ChildItem -Path $InboxDir -File -Filter *.xlsx -ErrorAction SilentlyContinue |
+                         Where-Object { $_.Name -notlike '~$*' })
+        $merged = 0
+        foreach ($f in $intakeFiles) {
+            try {
+                $itmp = Join-Path ([System.IO.Path]::GetTempPath()) ("mra_ix_" + $f.Name)
+                try { [System.IO.File]::Copy($f.FullName, $itmp, $true) } catch { $itmp = $f.FullName }
+                $izip = [System.IO.Compression.ZipFile]::OpenRead($itmp)
+                try {
+                    $ishared = New-Object System.Collections.ArrayList
+                    $iss = Read-Entry $izip 'xl/sharedStrings.xml'
+                    if ($iss) { [xml]$ix = $iss; foreach ($si in $ix.sst.si) { [void]$ishared.Add([string]$si.InnerText) } }
+                    [xml]$iwb  = Read-Entry $izip 'xl/workbook.xml'
+                    [xml]$irel = Read-Entry $izip 'xl/_rels/workbook.xml.rels'
+                    $isx = Get-SheetXml $izip $iwb $irel 'Enter Here' $nsMain $nsRel $nsPkg
+                    if ($isx) {
+                        foreach ($row in $isx.worksheet.sheetData.row) {
+                            if ([int]$row.r -lt 2) { continue }
+                            Add-TaskRow (Get-RowCells $row) $ishared $pmap $teamTasks
+                        }
+                        $merged++
+                    }
+                } finally {
+                    $izip.Dispose()
+                    if ($itmp -ne $f.FullName) { Remove-Item $itmp -Force -ErrorAction SilentlyContinue }
                 }
+            } catch {
+                Write-Output "  -> intake merge skipped '$($f.Name)': $($_.Exception.Message)"
             }
-            $o = $pmap[$name]
-            $o.taskCount++
-            if ($pStatus -eq 'Completed') { $o.doneCount++ }
-            if ($pPM -ne '' -and $o.pm -eq '') { $o.pm = $pPM }
-            if ($psd -and ($null -eq $o.minStart -or $psd -lt $o.minStart)) { $o.minStart = $psd }
-            if ($pfd -and ($null -eq $o.maxFinish -or $pfd -gt $o.maxFinish)) { $o.maxFinish = $pfd }
-            if ($pMile -eq 'Yes') {
-                $md = if ($pfd) { $pfd } elseif ($psd) { $psd } else { $null }
-                if ($md) { [void]$o.milestones.Add([PSCustomObject]@{
-                    name = $pTask; dateISO = $md.ToString('yyyy-MM-dd') }) }
-            }
+        }
+        if ($merged -gt 0) { Write-Output "  -> Merged $merged intake file(s) from Intake Inbox" }
+    }
 
-            # Per-person open task -> Team Capacity panel (assignee in col H)
-            if ($pAssigned -ne '' -and $pStatus -ne 'Completed') {
-                $dueISO = if ($pfd) { $pfd.ToString('yyyy-MM-dd') }
-                          elseif ($psd) { $psd.ToString('yyyy-MM-dd') } else { $null }
-                [void]$teamTasks.Add([PSCustomObject]@{
-                    assignee = $pAssigned; project = $name; task = $pTask
-                    dueISO = $dueISO; status = $pStatus
-                })
-            }
-        }
-        foreach ($o in $pmap.Values) {
-            $pct = if ($o.taskCount -gt 0) { [math]::Round($o.doneCount * 100.0 / $o.taskCount) } else { 0 }
-            [void]$projects.Add([PSCustomObject]@{
-                name      = $o.name
-                pm        = $o.pm
-                startISO  = if ($o.minStart)  { $o.minStart.ToString('yyyy-MM-dd') }  else { $null }
-                finishISO = if ($o.maxFinish) { $o.maxFinish.ToString('yyyy-MM-dd') } else { $null }
-                taskCount = $o.taskCount
-                doneCount = $o.doneCount
-                pct       = $pct
-                milestones = @($o.milestones)
-            })
-        }
+    foreach ($o in $pmap.Values) {
+        $pct = if ($o.taskCount -gt 0) { [math]::Round($o.doneCount * 100.0 / $o.taskCount) } else { 0 }
+        [void]$projects.Add([PSCustomObject]@{
+            name      = $o.name
+            pm        = $o.pm
+            startISO  = if ($o.minStart)  { $o.minStart.ToString('yyyy-MM-dd') }  else { $null }
+            finishISO = if ($o.maxFinish) { $o.maxFinish.ToString('yyyy-MM-dd') } else { $null }
+            taskCount = $o.taskCount
+            doneCount = $o.doneCount
+            pct       = $pct
+            milestones = @($o.milestones)
+        })
     }
 } finally {
     $zip.Dispose()
