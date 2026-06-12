@@ -13,6 +13,8 @@
 #
 #  Notes:
 #   * Most cycles there's nothing to do, so Excel is NOT launched (lightweight).
+#   * Each dropped file is auto-unblocked so Excel won't open it in Protected
+#     View (the usual cause of HRESULT 0x800A03EC on downloaded/emailed files).
 #   * If the master is open/locked, the run is skipped and files wait for next.
 #   * This step needs Excel installed and a logged-in desktop session. If that
 #     ever fails, it logs and exits without blocking the export/push.
@@ -35,6 +37,17 @@ function Log($m) {
     "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $m" | Out-File $Log -Append -Encoding utf8
 }
 
+# Last data row of a sheet, using the max of two key columns (more reliable
+# than UsedRange, which formatting can inflate).
+function Get-LastRow($ws, [int[]]$cols) {
+    $m = 1
+    foreach ($c in $cols) {
+        $r = $ws.Cells.Item($ws.Rows.Count, $c).End($xlUp).Row
+        if ($r -gt $m) { $m = $r }
+    }
+    return $m
+}
+
 # Ensure the folders exist (first run creates them).
 foreach ($d in @($Inbox, $Archive, $Rejected)) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
@@ -50,12 +63,14 @@ Log "Found $($files.Count) intake file(s) to import."
 $xl = $null; $mwb = $null; $closedMaster = $false
 try {
     $xl = New-Object -ComObject Excel.Application
-    $xl.Visible         = $false
-    $xl.DisplayAlerts   = $false
-    $xl.AskToUpdateLinks = $false
-    $xl.EnableEvents    = $false
-    $xl.ScreenUpdating  = $false
+    $xl.Visible          = $false
+    $xl.DisplayAlerts    = $false
+    $xl.AskToUpdateLinks  = $false
+    $xl.EnableEvents     = $false
+    $xl.ScreenUpdating   = $false
+    try { $xl.AutomationSecurity = 1 } catch {}   # msoAutomationSecurityLow
 
+    try { Unblock-File -Path $Master -ErrorAction SilentlyContinue } catch {}
     $mwb = $xl.Workbooks.Open($Master)
     if ($mwb.ReadOnly) {
         Log "Master is open/locked (opened read-only) - skipping, will retry next cycle."
@@ -70,16 +85,16 @@ try {
         $mwb.Close($false); $mwb = $null; $closedMaster = $true
         return
     }
-
-    # Is Project Tasks an Excel Table? If so, append through it (keeps formatting/dropdowns).
-    $tbl = $null
-    if ($dst.ListObjects.Count -ge 1) { $tbl = $dst.ListObjects.Item(1) }
+    try { if ($dst.ProtectContents) { $dst.Unprotect() } }
+    catch { Log "NOTE: '$DstSheet' is protected and couldn't be unprotected - writes may fail." }
 
     $total = 0
     foreach ($f in $files) {
         $swb = $null
         try {
+            try { Unblock-File -Path $f.FullName -ErrorAction SilentlyContinue } catch {}
             $swb = $xl.Workbooks.Open($f.FullName, 0, $true)   # UpdateLinks=0, ReadOnly=true
+
             $src = $null
             foreach ($s in $swb.Worksheets) { if ($s.Name -eq $SrcSheet) { $src = $s; break } }
             if ($null -eq $src) {
@@ -89,27 +104,33 @@ try {
                 continue
             }
 
-            $used    = $src.UsedRange
-            $lastRow = $used.Row + $used.Rows.Count - 1
-            $added   = 0
-            for ($r = 2; $r -le $lastRow; $r++) {
-                $proj = ([string]$src.Cells.Item($r, 1).Value2).Trim()
-                $task = ([string]$src.Cells.Item($r, 4).Value2).Trim()
-                if ($proj -eq '' -and $task -eq '') { continue }   # blank row
-
-                if ($null -ne $tbl) {
-                    $rng = $tbl.ListRows.Add().Range
-                    for ($c = 1; $c -le $NCOLS; $c++) {
-                        $rng.Cells.Item(1, $c).Value = $src.Cells.Item($r, $c).Value
-                    }
-                } else {
-                    $dr = $dst.Cells.Item($dst.Rows.Count, 1).End($xlUp).Row + 1
-                    for ($c = 1; $c -le $NCOLS; $c++) {
-                        $dst.Cells.Item($dr, $c).Value = $src.Cells.Item($r, $c).Value
-                    }
+            # Read the A:L data block in one shot (.Value keeps real dates).
+            $lastRow = Get-LastRow $src @(1, 4)        # Project (A) or Task (D)
+            $added = 0
+            if ($lastRow -ge 2) {
+                $block = $src.Range($src.Cells.Item(2, 1), $src.Cells.Item($lastRow, $NCOLS)).Value
+                $keep = New-Object System.Collections.Generic.List[object]
+                for ($i = 1; $i -le ($lastRow - 1); $i++) {
+                    $p = "$($block[$i, 1])".Trim()
+                    $t = "$($block[$i, 4])".Trim()
+                    if ($p -eq '' -and $t -eq '') { continue }   # blank row
+                    $line = New-Object 'object[]' $NCOLS
+                    for ($c = 1; $c -le $NCOLS; $c++) { $line[$c - 1] = $block[$i, $c] }
+                    $keep.Add($line)
                 }
-                $added++
+                $added = $keep.Count
+                if ($added -gt 0) {
+                    $out = New-Object 'object[,]' $added, $NCOLS
+                    for ($i = 0; $i -lt $added; $i++) {
+                        for ($c = 0; $c -lt $NCOLS; $c++) { $out[$i, $c] = $keep[$i][$c] }
+                    }
+                    $startRow = (Get-LastRow $dst @(1)) + 1
+                    $tr = $dst.Range($dst.Cells.Item($startRow, 1),
+                                     $dst.Cells.Item($startRow + $added - 1, $NCOLS))
+                    $tr.Value = $out
+                }
             }
+
             $swb.Close($false); $swb = $null
             $total += $added
 
