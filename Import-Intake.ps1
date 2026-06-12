@@ -233,9 +233,15 @@ try {
             $row++
             for ($c = 1; $c -le $NCOLS; $c++) {
                 $val = $line[$c - 1]
-                if ($null -ne $val -and "$val" -ne '') {
-                    $phase = "write row $row col $c"
-                    $dst.Cells.Item($row, $c).Value = $val
+                if ($null -eq $val -or "$val" -eq '') { continue }
+                $phase = "write row $row col $c"
+                $cell = $dst.Cells.Item($row, $c)
+                if ($val -is [datetime]) {
+                    # COM can't take a DateTime directly - write the serial + a date format.
+                    $cell.Value2 = $val.ToOADate()
+                    $cell.NumberFormat = 'm/d/yyyy'
+                } else {
+                    $cell.Value2 = $val
                 }
             }
         }
