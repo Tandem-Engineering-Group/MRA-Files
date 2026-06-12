@@ -77,6 +77,7 @@
     font-size:11px; font-weight:700; padding:4px 11px; border-radius:7px; cursor:pointer;
     letter-spacing:.5px; margin-left:8px}
   .expandbtn:hover{border-color:var(--blue); color:#93c5fd}
+  .expandbtn.on{border-color:var(--green); color:#86efac; background:rgba(34,197,94,.12)}
   /* Full-screen Gantt overlay */
   .gfs-overlay{position:fixed; inset:0; background:var(--bg); z-index:150; display:none; flex-direction:column; padding:14px 22px 20px}
   .gfs-overlay.show{display:flex}
@@ -155,6 +156,8 @@
     border-bottom:1px dashed rgba(255,255,255,.07)}
   .taskline:last-child{border-bottom:none}
   .taskline.sal{color:#fcd9a8}
+  .taskline.done{text-decoration:line-through; opacity:.5; color:var(--muted)}
+  .tasklist.closed{border-left-color:#475569; margin-top:3px}
   .morebtn{cursor:pointer; color:#7aa2d6; user-select:none}
   .morebtn:hover{text-decoration:underline}
 
@@ -166,6 +169,7 @@
   .salcard .sb{font-size:10px; color:var(--muted); margin-top:1px}
   .salcard ol{margin:8px 0 0 18px; padding:0}
   .salcard li{font-size:11px; color:#e7cba2; margin-bottom:4px; line-height:1.32}
+  .salcard li.done{text-decoration:line-through; opacity:.5; color:var(--muted)}
   @media(max-width:1100px){ .saltasks{grid-template-columns:1fr} }
 
   /* Team capacity panel */
@@ -331,6 +335,7 @@
     <div class="panel">
       <h2>Bay Status <span class="count" id="bayCount"></span>
         <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">click a task count to see the tasks</span>
+        <button class="expandbtn" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
       </h2>
       <div class="bays" id="bays"></div>
     </div>
@@ -346,7 +351,7 @@
     </div>
 
     <div class="panel">
-      <h2>🔧 Sal — Open Tasks by Trailer <span class="count" id="salCount"></span></h2>
+      <h2>🔧 Sal — Open Tasks by Trailer <span class="count" id="salCount"></span><button class="expandbtn" id="btnSalClosed" onclick="toggleSalClosed()" title="Show Sal's completed tasks too">Show closed</button></h2>
       <div class="saltasks" id="salTasks"></div>
     </div>
 
@@ -599,8 +604,11 @@ document.addEventListener('click',e=>{ const p=document.getElementById('barPop')
   if(p && p.classList.contains('show') && !p.contains(e.target) && !(e.target.closest && e.target.closest('.g-bar'))) closeBarPop(); });
 
 const expandedJobs=new Set(), expandedBays=new Set();
+let SHOWCLOSED=false, SHOWSALCLOSED=false;
 function toggleJob(row){ expandedJobs.has(row)?expandedJobs.delete(row):expandedJobs.add(row); renderAll(); }
 function toggleBay(bay){ expandedBays.has(bay)?expandedBays.delete(bay):expandedBays.add(bay); renderAll(); }
+function toggleClosed(){ SHOWCLOSED=!SHOWCLOSED; renderAll(); }
+function toggleSalClosed(){ SHOWSALCLOSED=!SHOWSALCLOSED; renderAll(); }
 function isSal(line){ return /\bsal\b/i.test(line||""); }
 function cleanTask(line, stripSal){
   let s=(line||"").replace(/^\s*\d+\s*[\.\)]\s*/,"").replace(/^[-–]\s*/,"");
@@ -766,6 +774,8 @@ function renderFloor(D){
         let tl="";
         if(jOpen && (j.openTasks||[]).length)
           tl=`<div class="tasklist">`+j.openTasks.map(tk=>`<div class="taskline${isSal(tk)?" sal":""}">${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
+        if(SHOWCLOSED && (j.doneTasks||[]).length)
+          tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
         const jc=c.state==="done"?" done":"";
         return `<div class="job${jc}"><div class="pj">${esc(j.project)}</div>`+
           `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;}).join("");
@@ -782,6 +792,7 @@ function renderFloor(D){
   for(let i=0;i<bayCards.length;i+=2) bayHtml+=`<div class="baycol">`+bayCards[i]+(bayCards[i+1]||'')+`</div>`;
   document.getElementById('bays').innerHTML=bayHtml;
   document.getElementById('bayCount').textContent=order.length+" bays";
+  const bc=document.getElementById('btnClosed'); if(bc){ bc.classList.toggle('on',SHOWCLOSED); bc.textContent=SHOWCLOSED?'✓ Closed shown':'Show closed'; }
 
   // Flagged
   flagged.sort((a,b)=>{const av=a.c.overdue?0:(a.c.dueSoon?1:2),bv=b.c.overdue?0:(b.c.dueSoon?1:2);
@@ -821,18 +832,20 @@ function renderSal(D){
   const order=D.physicalBays;
   const sal=[];
   (D.jobs||[]).filter(j=>j.category!=="leave" && (j.status||"").toLowerCase()!=="shipped").forEach(j=>{
-    const lines=(j.openTasks||[]).filter(isSal).map(t=>cleanTask(t,true)).filter(x=>x);
-    if(lines.length) sal.push({bay:j.bay, project:j.project, jobNum:j.jobNum, lines});
+    const open=(j.openTasks||[]).filter(isSal).map(t=>cleanTask(t,true)).filter(x=>x);
+    const done=SHOWSALCLOSED?(j.doneTasks||[]).filter(isSal).map(t=>cleanTask(t,true)).filter(x=>x):[];
+    if(open.length||done.length) sal.push({bay:j.bay, project:j.project, jobNum:j.jobNum, open, done});
   });
   sal.sort((a,b)=>{const ai=order.indexOf(a.bay),bi=order.indexOf(b.bay);
     return (ai<0?99:ai)-(bi<0?99:bi) || a.project.localeCompare(b.project);});
-  const total=sal.reduce((s,x)=>s+x.lines.length,0);
+  const total=sal.reduce((s,x)=>s+x.open.length,0), totalDone=sal.reduce((s,x)=>s+x.done.length,0);
   document.getElementById('salTasks').innerHTML = sal.length ? sal.map(s=>
     `<div class="salcard"><div class="sh">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?" · "+esc(s.jobNum):""}</div>`+
-    `<ol>${s.lines.map(l=>`<li>${esc(l)}</li>`).join("")}</ol></div>`).join("")
-    : `<div class="empty">No open Sal tasks 🎉</div>`;
-  document.getElementById('salCount').textContent = total+" tasks · "+sal.length+" trailers";
+    `<ol>${s.open.map(l=>`<li>${esc(l)}</li>`).join("")}${s.done.map(l=>`<li class="done">${esc(l)}</li>`).join("")}</ol></div>`).join("")
+    : `<div class="empty">No ${SHOWSALCLOSED?"":"open "}Sal tasks 🎉</div>`;
+  document.getElementById('salCount').textContent = total+" open"+(SHOWSALCLOSED?(" · "+totalDone+" done"):"")+" · "+sal.length+" trailers";
+  const sb=document.getElementById('btnSalClosed'); if(sb){ sb.classList.toggle('on',SHOWSALCLOSED); sb.textContent=SHOWSALCLOSED?'✓ Closed shown':'Show closed'; }
 }
 
 /* ---------- PROJECTS view ---------- */
@@ -840,6 +853,22 @@ function projStatus(p, today){
   if(p.pct>=100) return "done";
   if(p.startISO && p.startISO>today) return "upcoming";
   return "active";
+}
+function projListPop(title, list){
+  let h=`<h4>${esc(title)}</h4>`;
+  if(!list||!list.length){ h+=`<div class="pp-sub">none</div>`; return h; }
+  h+=`<div class="pp-sub">${list.length} total</div><div class="pp-ms">`;
+  h+= list.slice(0,24).map(p=>`<div>• ${esc(p.name||'—')} <span style="color:var(--muted)">— ${esc(p.pm||'—')}${p.pct!=null?' · '+p.pct+'%':''}</span></div>`).join('');
+  if(list.length>24) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-24} more…</div>`;
+  return h+`</div>`;
+}
+function msListPop(title, list){
+  let h=`<h4>${esc(title)}</h4>`;
+  if(!list||!list.length){ h+=`<div class="pp-sub">none</div>`; return h; }
+  h+=`<div class="pp-sub">${list.length} upcoming</div><div class="pp-ms">`;
+  h+= list.slice(0,24).map(m=>`<div>◆ ${esc(m.name||'—')} <span style="color:var(--muted)">— ${esc(m.proj||'')} · ${fmtMDY(m.dateISO)}</span></div>`).join('');
+  if(list.length>24) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-24} more…</div>`;
+  return h+`</div>`;
 }
 function renderProjects(D){
   const today=D.todayISO, projects=(D.projects||[]).slice();
@@ -862,8 +891,15 @@ function renderProjects(D){
     {n:done.length,l:"COMPLETED",c:"ship"},
     {n:upMs.length,l:"MILESTONES / 60D",c:"tasks"},
   ];
-  document.getElementById('projKpis').innerHTML=pk.map(k=>
-    `<div class="kpi ${k.c}"><div class="n">${k.n}</div><div class="l">${k.l}</div></div>`).join("");
+  document.getElementById('projKpis').innerHTML=pk.map((k,idx)=>{
+    const key='pk'+idx;
+    KPIPOP[key] = k.l==='MILESTONES / 60D' ? msListPop('Milestones · next 60 days', upMs)
+               : k.l==='IN PROGRESS' ? projListPop('In progress', active)
+               : k.l==='UPCOMING' ? projListPop('Upcoming', upcoming)
+               : k.l==='COMPLETED' ? projListPop('Completed', done)
+               :                     projListPop('All projects', projects);
+    return `<div class="kpi pop ${k.c}" onmouseenter="popHoverIn(event,'${key}')" onmouseleave="popHoverOut()" title="Hover for the list"><div class="n">${k.n}</div><div class="l">${k.l}</div><div class="kgo">hover for detail</div></div>`;
+  }).join("");
 
   // Gantt window from RANGE
   const mStart=new Date(t.getFullYear(),t.getMonth(),1);

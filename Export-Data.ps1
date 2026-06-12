@@ -51,19 +51,24 @@ function Get-CellDate($c) {
 
 function Parse-Tasks($text) {
     $open = New-Object System.Collections.ArrayList
+    $done = New-Object System.Collections.ArrayList
     $doneCount = 0; $salOpen = 0
     if ($null -ne $text -and $text.Trim() -ne '') {
         foreach ($lnRaw in ($text -split "`r?`n")) {
             $ln = $lnRaw.Trim()
             if ($ln -eq '') { continue }
-            if ($ln -match '^[xX]\s') { $doneCount++ }
+            if ($ln -match '^[xX]\s') {
+                $doneCount++
+                $dt = ($ln -replace '^[xX]\s+','').Trim()
+                if ($dt -ne '') { [void]$done.Add($dt) }
+            }
             elseif ($ln -match '^\d+\s*[\.\)\-]') {
                 [void]$open.Add($ln)
                 if ($ln -match '(?i)\bsal\b') { $salOpen++ }
             }
         }
     }
-    return @{ open = @($open); openCount = $open.Count; doneCount = $doneCount; salOpen = $salOpen }
+    return @{ open = @($open); openCount = $open.Count; doneCount = $doneCount; salOpen = $salOpen; done = @($done) }
 }
 
 # Resolve a worksheet's XML by its display name (returns [xml] or $null)
@@ -198,7 +203,7 @@ try {
             row = $rowNum; bay = $bay; project = $proj; client = $client; jobNum = $job
             status = $status; pm = $pm; startISO = $startISO; completionISO = $compISO
             startText = $startTxt; completionText = $compTxt; category = $category
-            openTasks = $t.open; openCount = $t.openCount; doneCount = $t.doneCount; salOpen = $t.salOpen
+            openTasks = $t.open; openCount = $t.openCount; doneCount = $t.doneCount; salOpen = $t.salOpen; doneTasks = $t.done
         })
     }
 
