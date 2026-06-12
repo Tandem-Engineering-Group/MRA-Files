@@ -383,15 +383,17 @@ if (Test-Path $FleetioTokenFile) {
     }
 }
 
-# --- Logistics calendars -> "Coming Back to MRA" returns --------------------
-# Scans this year's logistics-calendar workbooks (synced locally under OneDrive)
-# for any cell mentioning "MRA" / "Madison Heights"; the date is the cell
-# directly ABOVE it (the calendars store real dates in the day cells). Returns
-# upcoming (today onward), de-duped, tagged with the job from the filename.
-function Get-MraReturns($dir, $today, $nsMain, $nsRel, $nsPkg) {
+# --- Logistics calendars -> "At MRA now + next move" ------------------------
+# For each of this year's logistics calendars (OneDrive-synced), build a clean
+# timeline by reading each month from ITS OWN tab (the tabs disagree, so the
+# union is noisy). The date for a cell is the date cell directly ABOVE it. If
+# the trailer's current location (latest event on/before today) is MRA / Madison
+# Heights, report it as parked at MRA with its arrival date and next move.
+function Get-MraAtBase($dir, $today, $nsMain, $nsRel, $nsPkg) {
     $out = New-Object System.Collections.ArrayList
-    if (-not (Test-Path $dir)) { Write-Output "  -> MRA returns: folder not found ($dir)"; return @() }
+    if (-not (Test-Path $dir)) { Write-Output "  -> MRA at-base: folder not found ($dir)"; return @() }
     $monthTabs = @('JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC')
+    $isMra = { param($t) $t -match '(?i)\bMRA\b|madison heights' }
     $files = @(Get-ChildItem -Path $dir -File -Filter *.xlsx -ErrorAction SilentlyContinue |
                Where-Object { $_.Name -notlike '~$*' -and $_.Name -notmatch '(?i)blank' })
     $nFiles = 0
@@ -408,10 +410,11 @@ function Get-MraReturns($dir, $today, $nsMain, $nsRel, $nsPkg) {
             if ($ssTxt) { [xml]$ss = $ssTxt; foreach ($si in $ss.sst.si) { [void]$shared.Add([string]$si.InnerText) } }
             [xml]$wbXml   = Read-Entry $zip 'xl/workbook.xml'
             [xml]$relsXml = Read-Entry $zip 'xl/_rels/workbook.xml.rels'
-            $seen = @{}
-            foreach ($mt in $monthTabs) {
-                $sx = Get-SheetXml $zip $wbXml $relsXml $mt $nsMain $nsRel $nsPkg
+            $tl = @{}   # DateTime -> location text  (clean, per-month-authoritative)
+            for ($i = 0; $i -lt 12; $i++) {
+                $sx = Get-SheetXml $zip $wbXml $relsXml $monthTabs[$i] $nsMain $nsRel $nsPkg
                 if (-not $sx) { continue }
+                $monthNum = $i + 1
                 $map = @{}
                 foreach ($row in $sx.worksheet.sheetData.row) {
                     foreach ($c in $row.c) { if ($c.r) { $map[[string]$c.r] = $c } }
@@ -419,36 +422,50 @@ function Get-MraReturns($dir, $today, $nsMain, $nsRel, $nsPkg) {
                 foreach ($ref in @($map.Keys)) {
                     $c = $map[$ref]
                     if ($c.t -notin @('s','inlineStr','str')) { continue }
-                    $txt = [string](Resolve-Cell $c $shared)
-                    if ($txt -eq '' -or $txt -notmatch '(?i)\bMRA\b|madison heights') { continue }
+                    $txt = (([string](Resolve-Cell $c $shared)) -replace '\s+', ' ').Trim()
+                    if ($txt -eq '') { continue }
+                    if ($txt -match '(?i)^\s*[\d,]+\s*miles?\b' -or $txt -match '(?i)load-?(out|in) window' -or
+                        $txt -eq 'Notes:' -or $txt -match '(?i)^\s*\d{1,2}(:\d\d)?\s*(am|pm)?\s*-\s*\d') { continue }
                     $mm = [regex]::Match($ref, '^([A-Z]+)(\d+)$'); if (-not $mm.Success) { continue }
                     $rn = [int]$mm.Groups[2].Value; if ($rn -le 1) { continue }
-                    $above = $map[($mm.Groups[1].Value + ($rn - 1))]
-                    $d = Get-CellDate $above
-                    if (-not $d -or $d.Date -lt $today.Date) { continue }
-                    $clean = ($txt -replace '\s+', ' ').Trim()
-                    $key = $d.ToString('yyyy-MM-dd') + '|' + $clean.ToLower()
-                    if ($seen.ContainsKey($key)) { continue }
-                    $seen[$key] = $true
-                    [void]$out.Add([PSCustomObject]@{ dateISO = $d.ToString('yyyy-MM-dd'); text = $clean; job = $job })
+                    $d = Get-CellDate $map[($mm.Groups[1].Value + ($rn - 1))]
+                    if (-not $d -or $d.Year -ne $today.Year -or $d.Month -ne $monthNum) { continue }
+                    if (-not $tl.ContainsKey($d) -or $txt.Length -gt $tl[$d].Length) { $tl[$d] = $txt }
+                }
+            }
+            if ($tl.Count -gt 0) {
+                $dates = @($tl.Keys | Sort-Object)
+                $cur = $null
+                foreach ($d in $dates) { if ($d.Date -le $today.Date) { $cur = $d } }
+                if ($cur -and (& $isMra $tl[$cur])) {
+                    $idx = [array]::IndexOf($dates, $cur); $arr = $cur
+                    while ($idx - 1 -ge 0 -and (& $isMra $tl[$dates[$idx-1]])) { $idx--; $arr = $dates[$idx] }
+                    $nxt = $null
+                    foreach ($d in $dates) { if ($d.Date -gt $today.Date) { $nxt = $d; break } }
+                    [void]$out.Add([PSCustomObject]@{
+                        job      = $job
+                        sinceISO = $arr.ToString('yyyy-MM-dd')
+                        nextISO  = $(if ($nxt) { $nxt.ToString('yyyy-MM-dd') } else { $null })
+                        nextText = $(if ($nxt) { $tl[$nxt] } else { '' })
+                    })
                 }
             }
             $nFiles++
         } catch {
-            Write-Output "  -> MRA returns: skip '$($f.Name)': $($_.Exception.Message)"
+            Write-Output "  -> MRA at-base: skip '$($f.Name)': $($_.Exception.Message)"
         } finally {
             if ($zip) { $zip.Dispose() }
             if ($usedTmp -and (Test-Path $tmp)) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
         }
     }
-    $sorted = @($out | Sort-Object dateISO, job)
-    Write-Output "  -> MRA returns: scanned $nFiles calendars, $($sorted.Count) upcoming return(s)."
+    $sorted = @($out | Sort-Object @{e={if ($_.nextISO) { $_.nextISO } else { '9999-99-99' }}}, job)
+    Write-Output "  -> MRA at-base: scanned $nFiles calendars, $($sorted.Count) trailer(s) at MRA now."
     return ,$sorted
 }
 
 $CalendarsDir = Join-Path $env:USERPROFILE ("OneDrive - MRA\MRA Files's files - nobackup\{0} Logistics Calendars" -f $now.Year)
-$mraReturns = @()
-try { $mraReturns = Get-MraReturns $CalendarsDir $now $nsMain $nsRel $nsPkg } catch { Write-Output "  -> MRA returns failed: $($_.Exception.Message)" }
+$mraAtBase = @()
+try { $mraAtBase = Get-MraAtBase $CalendarsDir $now $nsMain $nsRel $nsPkg } catch { Write-Output "  -> MRA at-base failed: $($_.Exception.Message)" }
 
 $payload = [PSCustomObject]@{
     generatedAt   = $now.ToString('yyyy-MM-ddTHH:mm:ss')
@@ -459,7 +476,7 @@ $payload = [PSCustomObject]@{
     projects      = @($projects)
     teamTasks     = @($teamTasks)
     fleetio       = $fleetio
-    mraReturns    = @($mraReturns)
+    mraAtBase     = @($mraAtBase)
 }
 $json = $payload | ConvertTo-Json -Depth 8
 $content = "// Auto-generated by Export-Data.ps1 - do not edit by hand`r`nwindow.MRA_DATA = $json;"

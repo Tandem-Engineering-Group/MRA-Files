@@ -334,7 +334,7 @@
       <div class="linksmenu-pop" id="linksPop"></div>
     </div>
     <a class="editbtn" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
-    <a class="editbtn hot" id="returnsBadge" onclick="goReturns();return false" style="display:none;cursor:pointer" title="Assets returning to MRA within 2 weeks">🔁 <b id="returnsBadgeN">0</b> back ≤2wk</a>
+    <a class="editbtn" id="returnsBadge" onclick="goReturns();return false" style="display:none;cursor:pointer" title="Trailers currently parked at MRA (from the logistics calendars)">🏠 <b id="returnsBadgeN">0</b> at MRA</a>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
     <div class="clockbox">
       <div class="time" id="clock">--:--</div>
@@ -385,8 +385,8 @@
     </div>
 
     <div class="panel" id="fp-returns">
-      <h2>🔁 Coming Back to MRA <span class="count" id="returnsCount"></span>
-        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">from the logistics calendars · highlighted = within 2 weeks</span>
+      <h2>🏠 Trailers at MRA <span class="count" id="returnsCount"></span>
+        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">from the logistics calendars · arrived → next move · highlighted = leaving within 2 weeks</span>
       </h2>
       <div id="returnsList"></div>
     </div>
@@ -888,24 +888,28 @@ function renderSal(D){
 
 /* ---------- Coming Back to MRA (from logistics calendars) ---------- */
 function renderReturns(D){
-  const all=((D&&D.mraReturns)||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||''));
-  const today=D.todayISO; const du=r=>daysBetween(r.dateISO,today);
-  const soon=all.filter(r=>{const d=du(r);return d>=0&&d<=14;});
-  const show=all.filter(r=>{const d=du(r);return d>=0&&d<=60;});
-  const later=all.length-show.length;
-  const el=document.getElementById('returnsList');
+  const all=((D&&D.mraAtBase)||[]).slice();
+  const today=D.todayISO;
+  all.sort((a,b)=>((a.nextISO||'9999-99-99')).localeCompare(b.nextISO||'9999-99-99'));
+  const el=document.getElementById('returnsList'); let soon=0;
   if(el){
-    el.innerHTML = show.length ? (show.map(r=>{
-      const d=du(r); const cls=d<=14?' ret-soon':'';
-      const b=d<=14?`<span class="badge ${d<=3?'red':'amber'}">${d<=0?'today':d+'d'}</span>`:`<span class="badge grey">${d}d</span>`;
-      return `<div class="row${cls}"><div><div class="lead">${esc(r.text)}</div>`+
-        `<div class="meta">${esc(r.job||'')} · ${fmtMDY(r.dateISO)}</div></div><div class="right">${b}</div></div>`;
-    }).join('') + (later>0?`<div class="more">+${later} more beyond 60 days</div>`:''))
-      : `<div class="empty">Nothing scheduled back to MRA in the next 60 days</div>`;
+    el.innerHTML = all.length ? all.map(r=>{
+      const since = r.sinceISO? ('since '+fmtMDY(r.sinceISO)) : '';
+      const nx = (r.nextText||'').length>46 ? (r.nextText.slice(0,46)+'…') : (r.nextText||'');
+      let cls='', badge='', tail='';
+      if(r.nextISO){
+        const d=daysBetween(r.nextISO,today);
+        if(d>=0&&d<=14){ cls=' ret-soon'; soon++; }
+        badge = d<0 ? '<span class="badge grey">&mdash;</span>' : `<span class="badge ${d<=3?'red':d<=14?'amber':'grey'}">${d<=0?'today':d+'d'}</span>`;
+        tail = ` · → ${esc(nx)} <b>${fmtMD(r.nextISO)}</b>`;
+      } else { badge='<span class="badge grey">parked</span>'; tail=' · no departure scheduled'; }
+      return `<div class="row${cls}"><div><div class="lead">${esc(r.job)}</div>`+
+        `<div class="meta">🏠 At MRA ${since}${tail}</div></div><div class="right">${badge}</div></div>`;
+    }).join('') : `<div class="empty">No trailers currently parked at MRA</div>`;
   }
-  const cnt=document.getElementById('returnsCount'); if(cnt) cnt.textContent = soon.length?(soon.length+' within 2 weeks'):(show.length+' upcoming');
+  const cnt=document.getElementById('returnsCount'); if(cnt) cnt.textContent = all.length? (all.length+' at MRA'+(soon?(' · '+soon+' leaving ≤2wk'):'')) : '';
   const bg=document.getElementById('returnsBadge'), bn=document.getElementById('returnsBadgeN');
-  if(bg&&bn){ if(soon.length){ bn.textContent=soon.length; bg.style.display=''; } else { bg.style.display='none'; } }
+  if(bg&&bn){ if(all.length){ bn.textContent=all.length; bg.style.display=''; bg.classList.toggle('hot', soon>0); } else { bg.style.display='none'; } }
 }
 function goReturns(){ setView('floor'); const el=document.getElementById('fp-returns'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
 
