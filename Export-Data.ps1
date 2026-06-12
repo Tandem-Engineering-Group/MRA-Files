@@ -383,13 +383,14 @@ if (Test-Path $FleetioTokenFile) {
     }
 }
 
-# --- Logistics calendars -> "At MRA now + next move" ------------------------
+# --- Logistics calendars -> MRA trailer logistics ---------------------------
 # For each of this year's logistics calendars (OneDrive-synced), build a clean
 # timeline by reading each month from ITS OWN tab (the tabs disagree, so the
-# union is noisy). The date for a cell is the date cell directly ABOVE it. If
-# the trailer's current location (latest event on/before today) is MRA / Madison
-# Heights, report it as parked at MRA with its arrival date and next move.
-function Get-MraAtBase($dir, $today, $nsMain, $nsRel, $nsPkg) {
+# union is noisy). The date for a cell is the date cell directly ABOVE it.
+#   * OUT now + a future MRA/Madison Heights date  -> "arriving" (KEY for bay
+#     planning) - reported with that arrival date and where it is now.
+#   * AT MRA now  -> "at" - reported with arrival date + next move out.
+function Get-MraStatus($dir, $today, $nsMain, $nsRel, $nsPkg) {
     $out = New-Object System.Collections.ArrayList
     if (-not (Test-Path $dir)) { Write-Output "  -> MRA at-base: folder not found ($dir)"; return @() }
     $monthTabs = @('JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC')
@@ -400,6 +401,7 @@ function Get-MraAtBase($dir, $today, $nsMain, $nsRel, $nsPkg) {
     foreach ($f in $files) {
         $job = $f.BaseName
         if ($f.BaseName -match '^\s*\d{4}\s+(.*?)\s+Logistics\s+Calendar') { $job = $matches[1].Trim() }
+        if ([string]::IsNullOrWhiteSpace($job)) { $job = $f.BaseName }   # never blank
         $tmp = Join-Path ([IO.Path]::GetTempPath()) ('mra_cal_' + $f.Name)
         $zip = $null; $usedTmp = $false
         try {
@@ -438,16 +440,28 @@ function Get-MraAtBase($dir, $today, $nsMain, $nsRel, $nsPkg) {
                 $cur = $null
                 foreach ($d in $dates) { if ($d.Date -le $today.Date) { $cur = $d } }
                 if ($cur -and (& $isMra $tl[$cur])) {
+                    # parked at MRA now -> arrival run start + next departure
                     $idx = [array]::IndexOf($dates, $cur); $arr = $cur
                     while ($idx - 1 -ge 0 -and (& $isMra $tl[$dates[$idx-1]])) { $idx--; $arr = $dates[$idx] }
                     $nxt = $null
                     foreach ($d in $dates) { if ($d.Date -gt $today.Date) { $nxt = $d; break } }
                     [void]$out.Add([PSCustomObject]@{
-                        job      = $job
+                        job = $job; type = 'at'
                         sinceISO = $arr.ToString('yyyy-MM-dd')
                         nextISO  = $(if ($nxt) { $nxt.ToString('yyyy-MM-dd') } else { $null })
                         nextText = $(if ($nxt) { $tl[$nxt] } else { '' })
                     })
+                } else {
+                    # currently out -> soonest FUTURE arrival back at MRA (bay planning)
+                    $arrive = $null
+                    foreach ($d in $dates) { if ($d.Date -gt $today.Date -and (& $isMra $tl[$d])) { $arrive = $d; break } }
+                    if ($arrive) {
+                        [void]$out.Add([PSCustomObject]@{
+                            job = $job; type = 'arriving'
+                            arrivingISO = $arrive.ToString('yyyy-MM-dd')
+                            curText = $(if ($cur) { $tl[$cur] } else { '' })
+                        })
+                    }
                 }
             }
             $nFiles++
@@ -458,14 +472,16 @@ function Get-MraAtBase($dir, $today, $nsMain, $nsRel, $nsPkg) {
             if ($usedTmp -and (Test-Path $tmp)) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
         }
     }
-    $sorted = @($out | Sort-Object @{e={if ($_.nextISO) { $_.nextISO } else { '9999-99-99' }}}, job)
-    Write-Output "  -> MRA at-base: scanned $nFiles calendars, $($sorted.Count) trailer(s) at MRA now."
+    $sorted = @($out | Sort-Object @{e={ if ($_.arrivingISO) { $_.arrivingISO } elseif ($_.nextISO) { $_.nextISO } else { '9999-99-99' } }}, job)
+    $nArr = (@($sorted | Where-Object { $_.type -eq 'arriving' })).Count
+    $nAt  = (@($sorted | Where-Object { $_.type -eq 'at' })).Count
+    Write-Output "  -> MRA logistics: scanned $nFiles calendars, $nArr arriving back, $nAt at MRA now."
     return ,$sorted
 }
 
 $CalendarsDir = Join-Path $env:USERPROFILE ("OneDrive - MRA\MRA Files's files - nobackup\{0} Logistics Calendars" -f $now.Year)
-$mraAtBase = @()
-try { $mraAtBase = Get-MraAtBase $CalendarsDir $now $nsMain $nsRel $nsPkg } catch { Write-Output "  -> MRA at-base failed: $($_.Exception.Message)" }
+$mraStatus = @()
+try { $mraStatus = Get-MraStatus $CalendarsDir $now $nsMain $nsRel $nsPkg } catch { Write-Output "  -> MRA logistics failed: $($_.Exception.Message)" }
 
 $payload = [PSCustomObject]@{
     generatedAt   = $now.ToString('yyyy-MM-ddTHH:mm:ss')
@@ -476,7 +492,7 @@ $payload = [PSCustomObject]@{
     projects      = @($projects)
     teamTasks     = @($teamTasks)
     fleetio       = $fleetio
-    mraAtBase     = @($mraAtBase)
+    mraStatus     = @($mraStatus)
 }
 $json = $payload | ConvertTo-Json -Depth 8
 $content = "// Auto-generated by Export-Data.ps1 - do not edit by hand`r`nwindow.MRA_DATA = $json;"

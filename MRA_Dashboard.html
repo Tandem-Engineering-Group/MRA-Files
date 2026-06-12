@@ -232,6 +232,7 @@
   .row .meta{font-size:11px; color:var(--muted); margin-top:2px}
   .row .det{font-size:11px; color:var(--muted); margin-top:3px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
   .row.ret-soon{background:rgba(245,158,11,.10); border-radius:6px}
+  .rsec{font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.6px; text-transform:uppercase; padding:5px 0; border-bottom:1px solid var(--line); margin-bottom:4px}
   .editbtn.hot{border-color:var(--red); color:#fca5a5; background:rgba(239,68,68,.12)}
   .row .right{margin-left:auto; text-align:right; white-space:nowrap}
   .badge{font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px}
@@ -334,7 +335,7 @@
       <div class="linksmenu-pop" id="linksPop"></div>
     </div>
     <a class="editbtn" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
-    <a class="editbtn" id="returnsBadge" onclick="goReturns();return false" style="display:none;cursor:pointer" title="Trailers currently parked at MRA (from the logistics calendars)">🏠 <b id="returnsBadgeN">0</b> at MRA</a>
+    <a class="editbtn" id="returnsBadge" onclick="goReturns();return false" style="display:none;cursor:pointer" title="MRA arrivals & on-site trailers (from the logistics calendars)"></a>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
     <div class="clockbox">
       <div class="time" id="clock">--:--</div>
@@ -385,8 +386,8 @@
     </div>
 
     <div class="panel" id="fp-returns">
-      <h2>🏠 Trailers at MRA <span class="count" id="returnsCount"></span>
-        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">from the logistics calendars · arrived → next move · highlighted = leaving within 2 weeks</span>
+      <h2>🚛 MRA Trailer Logistics <span class="count" id="returnsCount"></span>
+        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">from the logistics calendars · arriving back (plan the bay) + currently on-site · highlighted = within 2 weeks</span>
       </h2>
       <div id="returnsList"></div>
     </div>
@@ -888,28 +889,44 @@ function renderSal(D){
 
 /* ---------- Coming Back to MRA (from logistics calendars) ---------- */
 function renderReturns(D){
-  const all=((D&&D.mraAtBase)||[]).slice();
+  const items=((D&&D.mraStatus)||[]);
   const today=D.todayISO;
-  all.sort((a,b)=>((a.nextISO||'9999-99-99')).localeCompare(b.nextISO||'9999-99-99'));
-  const el=document.getElementById('returnsList'); let soon=0;
+  const jobName=x=>esc(x.job||'(unnamed calendar)');
+  const arr=items.filter(x=>x.type==='arriving'&&x.arrivingISO)
+                 .map(x=>Object.assign({},x,{d:daysBetween(x.arrivingISO,today)}))
+                 .filter(x=>x.d>=0&&x.d<=90).sort((a,b)=>a.d-b.d);
+  const at =items.filter(x=>x.type==='at').slice()
+                 .sort((a,b)=>((a.nextISO||'9999-99-99')).localeCompare(b.nextISO||'9999-99-99'));
+  const soon=arr.filter(x=>x.d<=14).length;
+  const el=document.getElementById('returnsList');
   if(el){
-    el.innerHTML = all.length ? all.map(r=>{
-      const since = r.sinceISO? ('since '+fmtMDY(r.sinceISO)) : '';
-      const nx = (r.nextText||'').length>46 ? (r.nextText.slice(0,46)+'…') : (r.nextText||'');
-      let cls='', badge='', tail='';
-      if(r.nextISO){
-        const d=daysBetween(r.nextISO,today);
-        if(d>=0&&d<=14){ cls=' ret-soon'; soon++; }
-        badge = d<0 ? '<span class="badge grey">&mdash;</span>' : `<span class="badge ${d<=3?'red':d<=14?'amber':'grey'}">${d<=0?'today':d+'d'}</span>`;
-        tail = ` · → ${esc(nx)} <b>${fmtMD(r.nextISO)}</b>`;
-      } else { badge='<span class="badge grey">parked</span>'; tail=' · no departure scheduled'; }
-      return `<div class="row${cls}"><div><div class="lead">${esc(r.job)}</div>`+
-        `<div class="meta">🏠 At MRA ${since}${tail}</div></div><div class="right">${badge}</div></div>`;
-    }).join('') : `<div class="empty">No trailers currently parked at MRA</div>`;
+    let h=`<div class="rsec">↩️ Arriving back to MRA <span class="count">${arr.length?(arr.length+(soon?(' · '+soon+' within 2 weeks'):'')):'none in 90 days'}</span></div>`;
+    h+= arr.length ? arr.map(x=>{
+      const cls=x.d<=14?' ret-soon':'';
+      const b=`<span class="badge ${x.d<=3?'red':x.d<=14?'amber':'grey'}">${x.d<=0?'today':'in '+x.d+'d'}</span>`;
+      const cur=x.curText?(' · now: '+esc(x.curText.length>40?x.curText.slice(0,40)+'…':x.curText)):'';
+      return `<div class="row${cls}"><div><div class="lead">${jobName(x)}</div>`+
+        `<div class="meta">arrives <b>${fmtMDY(x.arrivingISO)}</b>${cur}</div></div><div class="right">${b}</div></div>`;
+    }).join('') : `<div class="empty">No trailers arriving in the next 90 days</div>`;
+    h+=`<div class="rsec" style="margin-top:14px">🏠 Currently at MRA <span class="count">${at.length||'none'}</span></div>`;
+    h+= at.length ? at.map(r=>{
+      const since=r.sinceISO?('since '+fmtMDY(r.sinceISO)):'';
+      const nx=(r.nextText||'').length>44?(r.nextText.slice(0,44)+'…'):(r.nextText||'');
+      let badge,tail;
+      if(r.nextISO){ const d=daysBetween(r.nextISO,today); badge=d<0?'<span class="badge grey">&mdash;</span>':`<span class="badge ${d<=3?'red':d<=14?'amber':'grey'}">${d<=0?'today':d+'d'}</span>`; tail=` · → ${esc(nx)} <b>${fmtMD(r.nextISO)}</b>`; }
+      else { badge='<span class="badge grey">parked</span>'; tail=' · no departure scheduled'; }
+      return `<div class="row"><div><div class="lead">${jobName(r)}</div><div class="meta">🏠 ${since}${tail}</div></div><div class="right">${badge}</div></div>`;
+    }).join('') : `<div class="empty">No trailers parked at MRA right now</div>`;
+    el.innerHTML=h;
   }
-  const cnt=document.getElementById('returnsCount'); if(cnt) cnt.textContent = all.length? (all.length+' at MRA'+(soon?(' · '+soon+' leaving ≤2wk'):'')) : '';
-  const bg=document.getElementById('returnsBadge'), bn=document.getElementById('returnsBadgeN');
-  if(bg&&bn){ if(all.length){ bn.textContent=all.length; bg.style.display=''; bg.classList.toggle('hot', soon>0); } else { bg.style.display='none'; } }
+  const cnt=document.getElementById('returnsCount'); if(cnt) cnt.textContent = (soon?(soon+' arriving ≤2wk'):(arr.length+' arriving · '+at.length+' here'));
+  const bg=document.getElementById('returnsBadge');
+  if(bg){
+    if(soon){ bg.innerHTML=`↩️ <b>${soon}</b> arriving ≤2wk`; bg.style.display=''; bg.classList.add('hot'); }
+    else if(arr.length){ bg.innerHTML=`↩️ <b>${arr.length}</b> arriving`; bg.style.display=''; bg.classList.remove('hot'); }
+    else if(at.length){ bg.innerHTML=`🏠 <b>${at.length}</b> at MRA`; bg.style.display=''; bg.classList.remove('hot'); }
+    else { bg.style.display='none'; }
+  }
 }
 function goReturns(){ setView('floor'); const el=document.getElementById('fp-returns'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
 
