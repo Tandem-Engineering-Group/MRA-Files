@@ -423,6 +423,7 @@
       <div style="font-size:13px; color:var(--muted); font-weight:600; letter-spacing:.3px">Fleet maintenance — live from Fleetio</div>
       <span class="count" id="fleetioAsOf"></span>
       <select id="fAssignFilter" class="fassign" onchange="setAssignFilter(this.value)" style="margin-left:auto" title="Show only tasks assigned to a person"><option value="">Assigned to: anyone</option></select>
+      <select id="fReportFilter" class="fassign" onchange="setReportFilter(this.value)" title="Show only tasks reported by a person"><option value="">Reported by: anyone</option></select>
       <a class="editbtn" href="https://secure.fleetio.com/8cf2193b5d/dashboard" target="_blank" rel="noopener" title="Open the full Fleetio app">↗ Open in Fleetio</a>
     </div>
     <div class="kpis" id="fleetioKpis"></div>
@@ -985,7 +986,7 @@ function trailerPop(t){
     + t._s.slice(0,12).map(s=>`<div>• ${esc(s.service||'Service')} ${s.c&&s.c.overdue?'<span class="badge red">overdue</span>':(s.c&&s.c.soon?'<span class="badge amber">due soon</span>':(s.dueISO?'<span class="badge grey">'+fmtMD(s.dueISO)+'</span>':''))}</div>`).join('') + `</div>`; }
   return h;
 }
-let FFILTER=null, FTRAILERS=[], FASSIGN='';
+let FFILTER=null, FTRAILERS=[], FASSIGN='', FREPORT='';
 function fAsg(x){ var a=x&&x.assignees; return Array.isArray(a)?a:(a?[a]:[]); }   // tolerate single vs array
 function renderFleetio(D){
   const F=D.fleetio, today=D.todayISO;
@@ -1026,7 +1027,18 @@ function renderFleetio(D){
     asel.value = FASSIGN;
     asel.style.display = anames.length ? '' : 'none';      // hide until the feed carries assignees
   }
-  const aNote = FASSIGN ? `<div class="ffnote">Assigned to <b>${esc(FASSIGN)}</b> · <a onclick="setAssignFilter('')">show everyone</a></div>` : '';
+  // "Reported by" dropdown — the person who opened each issue / issued each WO
+  const rset={}; [].concat(issues,wos).forEach(x=>{ if(x.reporter) rset[x.reporter]=(rset[x.reporter]||0)+1; });
+  const rnames=Object.keys(rset).sort((a,b)=>a.localeCompare(b));
+  const rsel=document.getElementById('fReportFilter');
+  if(rsel){
+    if(FREPORT && rnames.indexOf(FREPORT)<0) FREPORT='';
+    rsel.innerHTML = `<option value="">Reported by: anyone</option>`+rnames.map(n=>`<option value="${esc(n)}">${esc(n)} (${rset[n]})</option>`).join('');
+    rsel.value = FREPORT;
+    rsel.style.display = rnames.length ? '' : 'none';
+  }
+  const aNote = (FASSIGN?`<div class="ffnote">Assigned to <b>${esc(FASSIGN)}</b> · <a onclick="setAssignFilter('')">clear</a></div>`:'')
+              + (FREPORT?`<div class="ffnote">Reported by <b>${esc(FREPORT)}</b> · <a onclick="setReportFilter('')">clear</a></div>`:'');
 
   // mini charts: service backlog donut + open issues by label
   const svcTot=svcOver+svcSoon, op=svcTot?(svcOver/svcTot*100):0;
@@ -1065,30 +1077,34 @@ function renderFleetio(D){
   let issShow=issSorted;
   if(FFILTER==='iss_over') issShow=issShow.filter(i=>i.overdue);
   if(FASSIGN) issShow=issShow.filter(i=>fAsg(i).indexOf(FASSIGN)>=0);
+  if(FREPORT) issShow=issShow.filter(i=>i.reporter===FREPORT);
   const issNote = (FFILTER==='iss_over') ? `<div class="ffnote">Showing <b>overdue</b> only · <a onclick="clearFleetFilter()">show all ${issSorted.length}</a></div>` : '';
-  const issEmpty = FASSIGN ? ('No open issues for '+esc(FASSIGN)) : (FFILTER==='iss_over'?'No overdue issues':'No open issues 🎉');
+  const issEmpty = (FASSIGN||FREPORT) ? 'No matching issues' : (FFILTER==='iss_over'?'No overdue issues':'No open issues 🎉');
   document.getElementById('fIssues').innerHTML = aNote + issNote + (issShow.length ? issShow.slice(0,40).map(i=>{
     const age = i.openedISO ? Math.max(0,daysBetween(today,i.openedISO)) : (i.ageDays!=null?i.ageDays:null);
     const b = i.overdue?`<span class="badge red">overdue</span>` : (age!=null?`<span class="badge grey">${age}d open</span>`:'');
     const pr = i.priority?`<span class="badge ${/(high|emerg)/i.test(i.priority)?'red':/med/i.test(i.priority)?'amber':'grey'}">${esc(i.priority)}</span>`:'';
     const wa=fAsg(i); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
+    const rby = i.reporter?` · ✍ ${esc(i.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${esc(i.summary||('Issue '+(i.num||'')))}</div>`+
-      `<div class="meta">${esc(i.asset||'')}${i.jobNum?' · '+esc(i.jobNum):''}${who}</div>`+
+      `<div class="meta">${esc(i.asset||'')}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
       `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${pr} ${b}</div></div>`;
   }).join('') : `<div class="empty">${issEmpty}</div>`);
   document.getElementById('fIssueCount').textContent=issues.length;
 
   let woShow=wos.slice();
   if(FASSIGN) woShow=woShow.filter(w=>fAsg(w).indexOf(FASSIGN)>=0);
+  if(FREPORT) woShow=woShow.filter(w=>w.reporter===FREPORT);
   document.getElementById('fWorkOrders').innerHTML = aNote + (woShow.length ? woShow.slice(0,40).map(w=>{
     const age = w.openedISO ? Math.max(0,daysBetween(today,w.openedISO)) : null;
     const st = w.status?`<span class="badge ${/pend/i.test(w.status)?'amber':'blue'}">${esc(w.status)}</span>`:'';
     const wa=fAsg(w); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
+    const rby = w.reporter?` · ✍ ${esc(w.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${esc(w.summary||('WO '+(w.num||'')))}</div>`+
-      `<div class="meta">${esc(w.asset||'')}${w.jobNum?' · '+esc(w.jobNum):''}${who}</div>`+
+      `<div class="meta">${esc(w.asset||'')}${w.jobNum?' · '+esc(w.jobNum):''}${who}${rby}</div>`+
       `${w.detail?`<div class="det" title="${escA(w.detail)}">${esc(w.detail)}</div>`:''}</div>`+
       `<div class="right">${st}${age!=null?` <span class="badge grey">${age}d</span>`:''}</div></div>`;
-  }).join('') : `<div class="empty">No ${FASSIGN?('work orders for '+esc(FASSIGN)):'open work orders'}</div>`);
+  }).join('') : `<div class="empty">No ${(FASSIGN||FREPORT)?'matching work orders':'open work orders'}</div>`);
   document.getElementById('fWoCount').textContent=wos.length;
 
   const tmap={};
@@ -1136,6 +1152,7 @@ function setFleetFilter(key){
 }
 function clearFleetFilter(){ FFILTER=null; renderFleetio(window.MRA_DATA); }
 function setAssignFilter(v){ FASSIGN=v||''; renderFleetio(window.MRA_DATA); }
+function setReportFilter(v){ FREPORT=v||''; renderFleetio(window.MRA_DATA); }
 
 /* ---------- view switching ---------- */
 function setView(v){

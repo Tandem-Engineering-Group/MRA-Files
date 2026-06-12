@@ -323,6 +323,12 @@ if (Test-Path $FleetioTokenFile) {
             }
             return ,@($out)
         }
+        # The person who opened the issue / issued the WO ("Reported By").
+        function Get-FleetReporter($obj) {
+            foreach ($p in @('reported_by_name','issued_by_name','created_by_name')) { if ($obj.$p) { return ([string]$obj.$p).Trim() } }
+            foreach ($p in @('reported_by','issued_by','created_by')) { $c = $obj.$p; if ($c -and $c.name) { return ([string]$c.name).Trim() } }
+            return ''
+        }
 
         $fIssues = New-Object System.Collections.ArrayList
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
@@ -334,7 +340,7 @@ if (Test-Path $FleetioTokenFile) {
                 num = (([string]$i.number) -replace '^#',''); summary = $(if ($i.summary) { $i.summary } else { $i.name })
                 asset = $i.vehicle_name; jobNum = (Get-FleetJob $i.vehicle_name)
                 priority = $pr; openedISO = (FleetD10 $i.reported_at); overdue = [bool]$i.overdue
-                detail = $det; assignees = (Get-FleetAssignees $i)
+                detail = $det; reporter = (Get-FleetReporter $i); assignees = (Get-FleetAssignees $i)
             })
         }
         $fWos = New-Object System.Collections.ArrayList
@@ -349,7 +355,7 @@ if (Test-Path $FleetioTokenFile) {
             [void]$fWos.Add([PSCustomObject]@{
                 num = (([string]$w.number) -replace '^#',''); summary = $sum; asset = $w.vehicle_name
                 jobNum = (Get-FleetJob $w.vehicle_name); status = $w.work_order_status_name; openedISO = (FleetD10 $op)
-                detail = $woDet; assignees = (Get-FleetAssignees $w)
+                detail = $woDet; reporter = (Get-FleetReporter $w); assignees = (Get-FleetAssignees $w)
             })
         }
         $fSvc = New-Object System.Collections.ArrayList
