@@ -91,10 +91,14 @@ try {
     $total = 0
     foreach ($f in $files) {
         $swb = $null
+        $phase = 'start'
         try {
+            $phase = 'unblock'
             try { Unblock-File -Path $f.FullName -ErrorAction SilentlyContinue } catch {}
+            $phase = 'open source'
             $swb = $xl.Workbooks.Open($f.FullName, 0, $true)   # UpdateLinks=0, ReadOnly=true
 
+            $phase = 'find Enter Here'
             $src = $null
             foreach ($s in $swb.Worksheets) { if ($s.Name -eq $SrcSheet) { $src = $s; break } }
             if ($null -eq $src) {
@@ -105,10 +109,13 @@ try {
             }
 
             # Read the A:L data block in one shot (.Value keeps real dates).
+            $phase = 'find last row (source)'
             $lastRow = Get-LastRow $src @(1, 4)        # Project (A) or Task (D)
             $added = 0
             if ($lastRow -ge 2) {
+                $phase = 'read block'
                 $block = $src.Range($src.Cells.Item(2, 1), $src.Cells.Item($lastRow, $NCOLS)).Value
+                $phase = 'build rows'
                 $keep = New-Object System.Collections.Generic.List[object]
                 for ($i = 1; $i -le ($lastRow - 1); $i++) {
                     $p = "$($block[$i, 1])".Trim()
@@ -120,17 +127,21 @@ try {
                 }
                 $added = $keep.Count
                 if ($added -gt 0) {
+                    $phase = 'build out-array'
                     $out = New-Object 'object[,]' $added, $NCOLS
                     for ($i = 0; $i -lt $added; $i++) {
                         for ($c = 0; $c -lt $NCOLS; $c++) { $out[$i, $c] = $keep[$i][$c] }
                     }
+                    $phase = 'find last row (master)'
                     $startRow = (Get-LastRow $dst @(1)) + 1
+                    $phase = "write $added rows at master row $startRow"
                     $tr = $dst.Range($dst.Cells.Item($startRow, 1),
                                      $dst.Cells.Item($startRow + $added - 1, $NCOLS))
                     $tr.Value = $out
                 }
             }
 
+            $phase = 'archive'
             $swb.Close($false); $swb = $null
             $total += $added
 
@@ -139,7 +150,8 @@ try {
             Log "Imported $added row(s) from '$($f.Name)' -> archived."
         }
         catch {
-            Log "ERROR on '$($f.Name)': $($_.Exception.Message)  (left in inbox for retry)"
+            Log ("ERROR on '$($f.Name)' [phase: $phase, line $($_.InvocationInfo.ScriptLineNumber)]: " +
+                 "$($_.Exception.Message)  (left in inbox for retry)")
             if ($null -ne $swb) { try { $swb.Close($false) } catch {} ; $swb = $null }
         }
     }
