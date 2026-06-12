@@ -328,23 +328,28 @@ if (Test-Path $FleetioTokenFile) {
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
             $pr = ''
             if ($i.labels) { try { $pr = (@($i.labels | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { $_.name } }) -join ', ') } catch {} }
+            $det = ''
+            if ($i.description) { $det = ([string]$i.description).Trim(); if ($det.Length -gt 600) { $det = $det.Substring(0,600) + '…' } }
             [void]$fIssues.Add([PSCustomObject]@{
                 num = (([string]$i.number) -replace '^#',''); summary = $(if ($i.summary) { $i.summary } else { $i.name })
                 asset = $i.vehicle_name; jobNum = (Get-FleetJob $i.vehicle_name)
                 priority = $pr; openedISO = (FleetD10 $i.reported_at); overdue = [bool]$i.overdue
-                assignees = (Get-FleetAssignees $i)
+                detail = $det; assignees = (Get-FleetAssignees $i)
             })
         }
         $fWos = New-Object System.Collections.ArrayList
         foreach ($w in (Get-FleetioAll 'work_orders?q%5Bstate_eq%5D=active' $fhead)) {
+            $woLines = ''
+            if ($w.work_order_line_items) { $woLines = (@($w.work_order_line_items | ForEach-Object { $_.item_name }) | Where-Object { $_ }) -join ', ' }
             $sum = $w.description
-            if (-not $sum -and $w.work_order_line_items) { $sum = (@($w.work_order_line_items | ForEach-Object { $_.item_name }) | Where-Object { $_ }) -join ', ' }
+            if (-not $sum) { $sum = $woLines }
             if (-not $sum) { $sum = "Work Order $($w.number)" }
+            $woDet = $(if ($woLines -and $woLines -ne $sum) { $woLines } else { '' })
             $op = $w.issued_at; if (-not $op) { $op = $w.scheduled_at }; if (-not $op) { $op = $w.created_at }
             [void]$fWos.Add([PSCustomObject]@{
                 num = (([string]$w.number) -replace '^#',''); summary = $sum; asset = $w.vehicle_name
                 jobNum = (Get-FleetJob $w.vehicle_name); status = $w.work_order_status_name; openedISO = (FleetD10 $op)
-                assignees = (Get-FleetAssignees $w)
+                detail = $woDet; assignees = (Get-FleetAssignees $w)
             })
         }
         $fSvc = New-Object System.Collections.ArrayList

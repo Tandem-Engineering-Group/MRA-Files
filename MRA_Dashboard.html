@@ -112,6 +112,7 @@
   .barpop .pp-row .k{color:var(--muted); min-width:60px}
   .barpop .pp-ms{margin-top:7px; border-top:1px solid var(--line); padding-top:7px}
   .barpop .pp-ms div{font-size:11px; padding:2px 0; color:#e7cba2; line-height:1.3}
+  .barpop .pp-ms .pp-det{font-size:10.5px; color:var(--muted); padding:0 0 4px 12px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 
   /* ---------- Bay board ---------- */
   .bays{display:grid; grid-template-columns:repeat(5,1fr); gap:12px}
@@ -220,6 +221,7 @@
   .row:last-child{border-bottom:none}
   .row .lead{font-size:12.5px; font-weight:600; line-height:1.25}
   .row .meta{font-size:11px; color:var(--muted); margin-top:2px}
+  .row .det{font-size:11px; color:var(--muted); margin-top:3px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
   .row .right{margin-left:auto; text-align:right; white-space:nowrap}
   .badge{font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px}
   .badge.red{background:#3a1414; color:#fca5a5}
@@ -514,6 +516,7 @@ function localISO(ms){ const d=new Date(ms); return d.getFullYear()+'-'+String(d
 
 /* ---------- helpers ---------- */
 function esc(s){return (s==null?"":""+s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function escA(s){return esc(s).replace(/"/g,'&quot;');}   // attribute-safe (for title="…")
 function parseISO(s){ if(!s) return null; const p=s.split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
 function todayMid(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
 function fmtMD(iso){ if(!iso) return "TBD"; const d=parseISO(iso); return (d.getMonth()+1)+"/"+d.getDate(); }
@@ -975,9 +978,9 @@ function trailerPop(t){
   let h=`<h4>${esc(t.jobNum||t.name)}</h4>`;
   if(t.name && t.name!==t.jobNum) h+=`<div class="pp-sub">${esc(t.name)}</div>`;
   if(t._i && t._i.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">OPEN ISSUES (${t._i.length})</div>`
-    + t._i.slice(0,12).map(i=>`<div>• ${esc(i.summary||('Issue '+i.num))}${i.overdue?' <span class="badge red">overdue</span>':''}</div>`).join('') + `</div>`; }
+    + t._i.slice(0,12).map(i=>`<div>• ${esc(i.summary||('Issue '+i.num))}${i.overdue?' <span class="badge red">overdue</span>':''}</div>${i.detail?`<div class="pp-det">${esc(i.detail)}</div>`:''}`).join('') + `</div>`; }
   if(t._w && t._w.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">WORK ORDERS (${t._w.length})</div>`
-    + t._w.slice(0,12).map(w=>`<div>• ${esc(w.summary||('WO '+w.num))}${w.status?' <span class="badge '+(/pend/i.test(w.status)?'amber':'blue')+'">'+esc(w.status)+'</span>':''}</div>`).join('') + `</div>`; }
+    + t._w.slice(0,12).map(w=>`<div>• ${esc(w.summary||('WO '+w.num))}${w.status?' <span class="badge '+(/pend/i.test(w.status)?'amber':'blue')+'">'+esc(w.status)+'</span>':''}</div>${w.detail?`<div class="pp-det">${esc(w.detail)}</div>`:''}`).join('') + `</div>`; }
   if(t._s && t._s.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">SERVICE (${t._s.length})</div>`
     + t._s.slice(0,12).map(s=>`<div>• ${esc(s.service||'Service')} ${s.c&&s.c.overdue?'<span class="badge red">overdue</span>':(s.c&&s.c.soon?'<span class="badge amber">due soon</span>':(s.dueISO?'<span class="badge grey">'+fmtMD(s.dueISO)+'</span>':''))}</div>`).join('') + `</div>`; }
   return h;
@@ -1070,7 +1073,8 @@ function renderFleetio(D){
     const pr = i.priority?`<span class="badge ${/(high|emerg)/i.test(i.priority)?'red':/med/i.test(i.priority)?'amber':'grey'}">${esc(i.priority)}</span>`:'';
     const wa=fAsg(i); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     return `<div class="row"><div><div class="lead">${esc(i.summary||('Issue '+(i.num||'')))}</div>`+
-      `<div class="meta">${esc(i.asset||'')}${i.jobNum?' · '+esc(i.jobNum):''}${who}</div></div><div class="right">${pr} ${b}</div></div>`;
+      `<div class="meta">${esc(i.asset||'')}${i.jobNum?' · '+esc(i.jobNum):''}${who}</div>`+
+      `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${pr} ${b}</div></div>`;
   }).join('') : `<div class="empty">${issEmpty}</div>`);
   document.getElementById('fIssueCount').textContent=issues.length;
 
@@ -1081,7 +1085,8 @@ function renderFleetio(D){
     const st = w.status?`<span class="badge ${/pend/i.test(w.status)?'amber':'blue'}">${esc(w.status)}</span>`:'';
     const wa=fAsg(w); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     return `<div class="row"><div><div class="lead">${esc(w.summary||('WO '+(w.num||'')))}</div>`+
-      `<div class="meta">${esc(w.asset||'')}${w.jobNum?' · '+esc(w.jobNum):''}${who}</div></div>`+
+      `<div class="meta">${esc(w.asset||'')}${w.jobNum?' · '+esc(w.jobNum):''}${who}</div>`+
+      `${w.detail?`<div class="det" title="${escA(w.detail)}">${esc(w.detail)}</div>`:''}</div>`+
       `<div class="right">${st}${age!=null?` <span class="badge grey">${age}d</span>`:''}</div></div>`;
   }).join('') : `<div class="empty">No ${FASSIGN?('work orders for '+esc(FASSIGN)):'open work orders'}</div>`);
   document.getElementById('fWoCount').textContent=wos.length;
