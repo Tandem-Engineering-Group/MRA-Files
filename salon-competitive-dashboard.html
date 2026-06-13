@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salons by JC — Rochester Hills Competitive Intelligence</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0a10;
+  --panel: #13131f;
+  --panel2: #1a1a2a;
+  --line: #252535;
+  --txt: #eaeaf2;
+  --muted: #8888aa;
+  --faint: #444460;
+  --gold: #c9a050;
+  --gold2: #e8c070;
+  --green: #3ecf8e;
+  --red: #f06060;
+  --blue: #5b9cf6;
+  --purple: #a78bfa;
+  --amber: #f59e0b;
+  --teal: #2dd4bf;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+body { padding: 20px 28px 48px; }
+
+/* ── Header ── */
+.header {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 22px;
+}
+.brand-name {
+  font-size: 26px; font-weight: 800; letter-spacing: .6px;
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.brand-sub { font-size: 12px; color: var(--muted); margin-top: 4px; letter-spacing: 1.2px; font-weight: 600; }
+.badge {
+  background: linear-gradient(135deg, rgba(201,160,80,.18), rgba(232,192,112,.10));
+  border: 1px solid rgba(201,160,80,.4);
+  color: var(--gold2); padding: 5px 14px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+.header-meta { margin-left: auto; text-align: right; }
+.header-meta .loc { font-size: 13px; color: var(--muted); }
+.header-meta .date { font-size: 11px; color: var(--faint); margin-top: 3px; }
+
+/* ── Section titles ── */
+.section-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.8px;
+  color: var(--gold); text-transform: uppercase; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.section-title::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* ── KPI Row ── */
+.kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
+.kpi {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px 18px; position: relative; overflow: hidden;
+  transition: border-color .2s;
+}
+.kpi:hover { border-color: rgba(201,160,80,.35); }
+.kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.kpi.gold::before { background: var(--gold); }
+.kpi.green::before { background: var(--green); }
+.kpi.blue::before { background: var(--blue); }
+.kpi.purple::before { background: var(--purple); }
+.kpi.teal::before { background: var(--teal); }
+.kpi .n { font-size: 32px; font-weight: 800; line-height: 1; }
+.kpi.gold .n { color: var(--gold); }
+.kpi.green .n { color: var(--green); }
+.kpi.blue .n { color: var(--blue); }
+.kpi.purple .n { color: var(--purple); }
+.kpi.teal .n { color: var(--teal); }
+.kpi .label { font-size: 10.5px; color: var(--muted); margin-top: 8px; letter-spacing: 1px; font-weight: 600; text-transform: uppercase; }
+.kpi .note { font-size: 10px; color: var(--faint); margin-top: 4px; }
+
+/* ── Two-col layout ── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 20px 22px;
+}
+.panel.full { grid-column: 1 / -1; }
+
+/* ── Chart containers ── */
+.chart-wrap { position: relative; }
+.chart-wrap canvas { max-width: 100%; }
+
+/* ── Amenity Matrix ── */
+.matrix-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.matrix-table th {
+  padding: 8px 10px; text-align: center; font-size: 10px; font-weight: 700;
+  color: var(--muted); letter-spacing: .8px; border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.matrix-table th.feature-col { text-align: left; }
+.matrix-table td {
+  padding: 7px 10px; text-align: center; border-bottom: 1px solid rgba(37,37,53,.8);
+  font-size: 12px;
+}
+.matrix-table td.feature-col { text-align: left; color: var(--txt); font-size: 12px; font-weight: 500; }
+.matrix-table tr:last-child td { border-bottom: none; }
+.matrix-table tr:hover td { background: rgba(255,255,255,.025); }
+.matrix-table tr.our-row td { background: rgba(201,160,80,.07); }
+.matrix-table tr.our-row td.feature-col { color: var(--gold2); font-weight: 700; }
+.check { color: var(--green); font-size: 15px; }
+.cross { color: var(--faint); font-size: 14px; }
+.partial { color: var(--amber); font-size: 12px; font-weight: 700; }
+.col-our { color: var(--gold); font-weight: 800; font-size: 11px; letter-spacing: .5px; }
+.col-comp { color: var(--muted); font-size: 10.5px; }
+.cat-header td {
+  background: rgba(37,37,53,.6) !important; color: var(--faint);
+  font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 5px 10px; border-bottom: none;
+}
+
+/* ── Competitor cards ── */
+.comp-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.comp-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px 18px; transition: border-color .2s;
+}
+.comp-card:hover { border-color: var(--faint); }
+.comp-card.highlight { border-color: rgba(201,160,80,.45); background: rgba(201,160,80,.04); }
+.comp-card .comp-name { font-size: 14px; font-weight: 800; margin-bottom: 2px; }
+.comp-card.highlight .comp-name { color: var(--gold2); }
+.comp-card .comp-addr { font-size: 10px; color: var(--faint); margin-bottom: 10px; }
+.comp-card .comp-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 9.5px;
+  font-weight: 700; letter-spacing: .6px; margin-bottom: 10px; text-transform: uppercase;
+}
+.tag-premium { background: rgba(201,160,80,.18); color: var(--gold); }
+.tag-national { background: rgba(91,156,246,.18); color: var(--blue); }
+.tag-local { background: rgba(62,207,142,.18); color: var(--green); }
+.comp-card .price-range { font-size: 13px; font-weight: 700; color: var(--txt); margin-bottom: 4px; }
+.comp-card .price-label { font-size: 10px; color: var(--muted); margin-bottom: 10px; }
+.comp-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px;
+  border-radius: 6px; font-size: 10px; background: var(--panel2); color: var(--muted);
+  margin: 2px; border: 1px solid var(--line);
+}
+.comp-chip.yes { color: var(--green); border-color: rgba(62,207,142,.2); background: rgba(62,207,142,.06); }
+.comp-chip.yes::before { content: "✓ "; }
+.comp-chip.no { color: var(--faint); border-color: var(--line); }
+.comp-chip.no::before { content: "✗ "; }
+.comp-chip.gold { color: var(--gold); border-color: rgba(201,160,80,.3); background: rgba(201,160,80,.08); font-weight: 700; }
+.comp-chip.gold::before { content: "★ "; }
+.comp-suite-count { font-size: 22px; font-weight: 800; color: var(--blue); }
+.comp-suite-label { font-size: 9.5px; color: var(--muted); letter-spacing: .8px; text-transform: uppercase; }
+
+/* ── Differentiators ── */
+.diff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+.diff-card {
+  background: var(--panel); border: 1px solid rgba(201,160,80,.25);
+  border-radius: 14px; padding: 18px 20px;
+}
+.diff-icon { font-size: 26px; margin-bottom: 10px; }
+.diff-title { font-size: 14px; font-weight: 800; color: var(--gold2); margin-bottom: 6px; }
+.diff-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.diff-badge {
+  display: inline-block; margin-top: 8px; padding: 2px 8px; border-radius: 6px;
+  font-size: 9.5px; font-weight: 700; background: rgba(201,160,80,.15); color: var(--gold);
+  letter-spacing: .5px;
+}
+
+/* ── Tab switcher ── */
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tab {
+  background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
+  padding: 7px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  cursor: pointer; letter-spacing: .4px; transition: all .15s;
+}
+.tab.active { background: var(--gold); border-color: var(--gold); color: #0a0a10; }
+.tab:hover:not(.active) { border-color: var(--faint); color: var(--txt); }
+
+/* ── Source note ── */
+.sources {
+  margin-top: 28px; padding: 14px 18px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px;
+  font-size: 10.5px; color: var(--faint); line-height: 1.7;
+}
+.sources strong { color: var(--muted); }
+
+/* ── Responsive ── */
+@media (max-width: 1100px) {
+  .kpi-row { grid-template-columns: repeat(3, 1fr); }
+  .comp-cards { grid-template-columns: repeat(2, 1fr); }
+  .diff-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 720px) {
+  body { padding: 14px 14px 40px; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .grid-2 { grid-template-columns: 1fr; }
+  .comp-cards { grid-template-columns: 1fr; }
+  .diff-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div>
+    <div class="brand-name">Salons by JC — Rochester Hills</div>
+    <div class="brand-sub">3848 S. Rochester Rd &nbsp;|&nbsp; Rochester Hills, MI 48307</div>
+  </div>
+  <div class="badge">Premium Tier</div>
+  <div class="header-meta">
+    <div class="loc">Oakland County Competitive Intelligence</div>
+    <div class="date">Data compiled June 2026 &nbsp;·&nbsp; 5 direct competitors analyzed &nbsp;·&nbsp; Phenix Salon Suites not in area (nearest: 30+ mi)</div>
+  </div>
+</div>
+
+<!-- ── KPI Row ── -->
+<div class="kpi-row">
+  <div class="kpi gold">
+    <div class="n">38</div>
+    <div class="label">Private Suites</div>
+    <div class="note">Most of any single location nearby</div>
+  </div>
+  <div class="kpi green">
+    <div class="n">$300+</div>
+    <div class="label">Starting Weekly Rate</div>
+    <div class="note">Premium positioning confirmed</div>
+  </div>
+  <div class="kpi blue">
+    <div class="n">5</div>
+    <div class="label">Competitors in &lt;2 mi</div>
+    <div class="note">Sola, MY SALON (×2), beautiLofts, Roch. SS</div>
+  </div>
+  <div class="kpi purple">
+    <div class="n">1 of 1</div>
+    <div class="label">Full-Time Concierge</div>
+    <div class="note">Only location in area offering this</div>
+  </div>
+  <div class="kpi teal">
+    <div class="n">100%</div>
+    <div class="label">Amenity Advantage</div>
+    <div class="note">Highest score in 6-factor comparison</div>
+  </div>
+</div>
+
+<!-- ── Pricing + Radar ── -->
+<div class="section-title">Pricing &amp; Competitive Positioning</div>
+<div class="grid-2">
+  <div class="panel">
+    <div style="font-size:13px;font-weight:700;color:var(--txt);margin-bottom:4px;">Weekly Rate Ranges</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Confirmed and estimated weekly rental prices per suite. <em style="color:var(--faint)">† = estimated from market data.</em></div>
+    <div class="chart-wrap" style="height:260px;">
+      <canvas id="priceChart"></canvas>
+    </div>
+  </div>
+  <div class="panel">
+    <div style="font-size:13px;font-weight:700;color:var(--txt);margin-bottom:4px;">Competitive Positioning Radar</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Scored across 6 dimensions (0–10 scale). Higher = stronger.</div>
+    <div class="chart-wrap" style="height:260px;">
+      <canvas id="radarChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ── Amenity Matrix ── -->
+<div class="section-title">Amenity Comparison</div>
+<div class="panel" style="margin-bottom:24px; overflow-x:auto;">
+  <table class="matrix-table">
+    <thead>
+      <tr>
+        <th class="feature-col" style="width:30%">Feature / Amenity</th>
+        <th class="col-our">Salons by JC<br><span style="font-size:9px;font-weight:500">Our Location</span></th>
+        <th class="col-comp">Sola<br><span style="font-size:9px">S. Adams Rd</span></th>
+        <th class="col-comp">MY SALON Suite<br><span style="font-size:9px">N &amp; S locations</span></th>
+        <th class="col-comp">beautiLofts<br><span style="font-size:9px">S. Rochester Rd</span></th>
+        <th class="col-comp">Rochester<br><span style="font-size:9px">Salon Suites</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="cat-header"><td colspan="6">Service &amp; Staffing</td></tr>
+      <tr class="our-row">
+        <td class="feature-col">Full-Time Concierge Manager</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Client Welcome &amp; Lobby Service</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Integrated Booking Software (Vagaro)</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr class="cat-header"><td colspan="6">Suite &amp; Facilities</td></tr>
+      <tr class="our-row">
+        <td class="feature-col">Free Washer &amp; Dryer Access</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Fully Furnished Suite</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Shampoo Bowl Included</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Premium Luxury Finishes</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Floor-to-Ceiling Private Walls</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="partial">~</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr class="cat-header"><td colspan="6">Included in Rent</td></tr>
+      <tr>
+        <td class="feature-col">WiFi Included</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Utilities Included</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="partial">~</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">24/7 Secure Access</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="partial">~</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr class="cat-header"><td colspan="6">Brand &amp; Business Support</td></tr>
+      <tr>
+        <td class="feature-col">National Brand Recognition</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">150+ Locations Nationwide</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Business Mentorship / Classes</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+      <tr>
+        <td class="feature-col">Wholesale Product Access</td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="check">✓</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <div style="margin-top:10px;font-size:10px;color:var(--faint)">
+    <span style="color:var(--green)">✓</span> Confirmed &nbsp;|&nbsp;
+    <span style="color:var(--faint)">✗</span> Not offered / Not confirmed &nbsp;|&nbsp;
+    <span style="color:var(--amber);font-weight:700">~</span> Partial or unconfirmed
+  </div>
+</div>
+
+<!-- ── Competitor Profiles ── -->
+<div class="section-title">Competitor Profiles</div>
+<div class="comp-cards">
+
+  <div class="comp-card highlight">
+    <div class="comp-name">Salons by JC</div>
+    <div class="comp-addr">3848 S. Rochester Rd · (248) 404-0065</div>
+    <span class="comp-tag tag-premium">Our Location</span>
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:4px;">
+      <div>
+        <div class="comp-suite-count">38</div>
+        <div class="comp-suite-label">Suites</div>
+      </div>
+      <div>
+        <div class="price-range">$300–$600/wk</div>
+        <div class="price-label">Confirmed start · premium range</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;flex-wrap:wrap;">
+      <span class="comp-chip gold">Full-Time Concierge</span>
+      <span class="comp-chip gold">Free Washer/Dryer</span>
+      <span class="comp-chip yes">Premium Finishes</span>
+      <span class="comp-chip yes">Shampoo Bowl</span>
+      <span class="comp-chip yes">Vagaro Booking</span>
+      <span class="comp-chip yes">24/7 Access</span>
+    </div>
+  </div>
+
+  <div class="comp-card">
+    <div class="comp-name">Sola Salon Studios</div>
+    <div class="comp-addr">2626 S. Adams Rd · Rochester Hills + Troy location</div>
+    <span class="comp-tag tag-national">National Chain</span>
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:4px;">
+      <div>
+        <div class="comp-suite-count">~31</div>
+        <div class="comp-suite-label">Studios (RH)</div>
+      </div>
+      <div>
+        <div class="price-range">$250–$400/wk †</div>
+        <div class="price-label">Est. Oakland County market rate</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;flex-wrap:wrap;">
+      <span class="comp-chip no">No Concierge</span>
+      <span class="comp-chip no">No Laundry</span>
+      <span class="comp-chip yes">Premium Build-out</span>
+      <span class="comp-chip yes">Shampoo Bowl</span>
+      <span class="comp-chip yes">Utilities Incl.</span>
+      <span class="comp-chip yes">24/7 Access</span>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:var(--faint)">Move-in special: 2 free weeks + free custom paint · Also has Troy location (1897 E Big Beaver Rd, ~35 studios)</div>
+  </div>
+
+  <div class="comp-card">
+    <div class="comp-name">MY SALON Suite</div>
+    <div class="comp-addr">1320 &amp; 2627 S. Rochester Rd · (×2 locations)</div>
+    <span class="comp-tag tag-national">National Chain</span>
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:4px;">
+      <div>
+        <div class="comp-suite-count">2×</div>
+        <div class="comp-suite-label">Locations</div>
+      </div>
+      <div>
+        <div class="price-range">$180–$400/wk †</div>
+        <div class="price-label">Estimated · not disclosed publicly</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;flex-wrap:wrap;">
+      <span class="comp-chip no">No Concierge</span>
+      <span class="comp-chip yes">On-Site Laundry</span>
+      <span class="comp-chip yes">Fully Furnished</span>
+      <span class="comp-chip yes">Double-Door Entry</span>
+      <span class="comp-chip yes">24/7 Access</span>
+      <span class="comp-chip yes">Wholesale Access</span>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:var(--faint)">Tagline: "On my own, never alone"</div>
+  </div>
+
+  <div class="comp-card">
+    <div class="comp-name">beautiLofts</div>
+    <div class="comp-addr">906 S. Rochester Rd · (586) 864-0497</div>
+    <span class="comp-tag tag-local">Local / Regional</span>
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:4px;">
+      <div>
+        <div class="comp-suite-count">18</div>
+        <div class="comp-suite-label">Lofts</div>
+      </div>
+      <div>
+        <div class="price-range">$175–$320/wk †</div>
+        <div class="price-label">Estimated · not disclosed publicly</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;flex-wrap:wrap;">
+      <span class="comp-chip no">No Concierge</span>
+      <span class="comp-chip yes">Laundry Incl.</span>
+      <span class="comp-chip yes">Utilities Incl.</span>
+      <span class="comp-chip yes">Locally Owned</span>
+      <span class="comp-chip yes">Business Classes</span>
+      <span class="comp-chip no">No National Brand</span>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:var(--faint)">Current promo: Up to 8 wks free + $250 cash bonus</div>
+  </div>
+
+</div>
+
+<!-- 2nd row of competitors -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;">
+  <div class="comp-card">
+    <div class="comp-name">Rochester Salon Suites</div>
+    <div class="comp-addr">260 E. Auburn Rd · (248) 990-8008</div>
+    <span class="comp-tag tag-local">Independent Local</span>
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:4px;">
+      <div>
+        <div class="price-range">$230–$410/wk</div>
+        <div class="price-label">Confirmed published pricing (4 tiers)</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">
+      Studio $230 · Med. Studio $265 · Med. Window $365 · Large Window $410 · Move-in: $99 + 2 wks free
+    </div>
+    <div style="display:flex;flex-wrap:wrap;">
+      <span class="comp-chip no">No Concierge</span>
+      <span class="comp-chip yes">On-Site Laundry</span>
+      <span class="comp-chip yes">Beverage Bar</span>
+      <span class="comp-chip yes">Business Classes</span>
+      <span class="comp-chip yes">Utilities Incl.</span>
+      <span class="comp-chip yes">24/7 Access</span>
+    </div>
+  </div>
+
+  <div class="comp-card" style="background: linear-gradient(135deg, rgba(201,160,80,.04), rgba(91,156,246,.04));">
+    <div class="comp-name" style="color:var(--gold2)">Market Summary</div>
+    <div class="comp-addr">Rochester Hills / Oakland County · June 2026</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.8;">
+      <div><span style="color:var(--gold)">●</span> &nbsp;Detroit metro weekly range: <strong style="color:var(--txt)">$150 – $500/wk</strong></div>
+      <div><span style="color:var(--green)">●</span> &nbsp;Premium tier benchmark: <strong style="color:var(--txt)">$300+/wk</strong></div>
+      <div><span style="color:var(--blue)">●</span> &nbsp;Salon suites within 2 mi of SBJC: <strong style="color:var(--txt)">5 competitors</strong></div>
+      <div><span style="color:var(--purple)">●</span> &nbsp;National chains in area: <strong style="color:var(--txt)">Sola + MY SALON Suite</strong></div>
+      <div><span style="color:var(--teal)">●</span> &nbsp;Only location with on-site concierge: <strong style="color:var(--txt)">Salons by JC</strong></div>
+      <div><span style="color:var(--amber)">●</span> &nbsp;Most suites at one location: <strong style="color:var(--txt)">Salons by JC (38)</strong></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Key Differentiators ── -->
+<div class="section-title">Your Competitive Advantages</div>
+<div class="diff-grid">
+  <div class="diff-card">
+    <div class="diff-icon">👔</div>
+    <div class="diff-title">Full-Time Concierge Manager</div>
+    <div class="diff-desc">No other salon suite operator in Rochester Hills offers a dedicated, on-site concierge. Clients are greeted, directed, and assisted — creating a hospitality experience that commands premium pricing and retention.</div>
+    <span class="diff-badge">Exclusive in Rochester Hills</span>
+  </div>
+  <div class="diff-card">
+    <div class="diff-icon">✨</div>
+    <div class="diff-title">Premium Finishes &amp; Build-Out</div>
+    <div class="diff-desc">Higher-end cabinetry, fixtures, lighting, and overall suite design versus competitors like Rochester Salon Suites or beautiLofts. Comparable to Sola on build quality but superior on service layer.</div>
+    <span class="diff-badge">Tier Above Median</span>
+  </div>
+  <div class="diff-card">
+    <div class="diff-icon">🫧</div>
+    <div class="diff-title">Free Washer &amp; Dryer</div>
+    <div class="diff-desc">Sola Salon Studios — the largest national competitor nearby — does not offer laundry. This is a meaningful practical differentiator for stylists who need to clean capes, towels, and linens daily on-site.</div>
+    <span class="diff-badge">Sola Does Not Offer This</span>
+  </div>
+  <div class="diff-card">
+    <div class="diff-icon">📱</div>
+    <div class="diff-title">Vagaro Booking Integration</div>
+    <div class="diff-desc">Exclusive partnership with the #1 salon booking software. Suite owners get built-in online scheduling, POS, and client management — reducing their tech overhead from day one.</div>
+    <span class="diff-badge">No Setup Required</span>
+  </div>
+  <div class="diff-card">
+    <div class="diff-icon">🏢</div>
+    <div class="diff-title">Largest Single Location</div>
+    <div class="diff-desc">38 suites creates critical mass: more diversity of services under one roof, stronger client cross-referral, and a more vibrant community feel compared to beautiLofts (18 lofts) or other smaller locations.</div>
+    <span class="diff-badge">38 vs. next closest at ~31</span>
+  </div>
+  <div class="diff-card">
+    <div class="diff-icon">🌐</div>
+    <div class="diff-title">National Brand + Local Premium</div>
+    <div class="diff-desc">150+ locations nationwide gives tenants brand trust and referral reach, while the Rochester Hills location delivers a boutique concierge experience. Best of both worlds vs. purely local operators.</div>
+    <span class="diff-badge">150+ Locations Nationwide</span>
+  </div>
+</div>
+
+<!-- ── Sources ── -->
+<div class="sources">
+  <strong>Data Sources &amp; Confidence Notes:</strong><br>
+  Salons by JC pricing ($300+/wk) confirmed via salonsbyjc.com/location/rochester-hills. Rochester Salon Suites pricing ($230–$410/wk) confirmed via rochestersalonsuites.com.
+  Sola pricing estimated from national franchise data and suitefinder.net (range $215–$380/wk for Midwest markets). MY SALON Suite and beautiLofts pricing are estimated from Detroit metro market benchmarks — neither discloses rates publicly.
+  Suite counts: Salons by JC = 38 (user confirmed); Sola ~31 (studio count per location page); beautiLofts = 18 (location page confirmed); MY SALON Suite count not disclosed (2 Rochester Hills locations).
+  All competitor addresses verified June 2026. &nbsp;|&nbsp; <em>† = estimated figure based on market data. Contact competitors directly for exact current rates.</em><br><br>
+  Sources: salonsbyjc.com &nbsp;·&nbsp; solasalonstudios.com &nbsp;·&nbsp; mysalonsuite.com &nbsp;·&nbsp; beautilofts.com &nbsp;·&nbsp; rochestersalonsuites.com &nbsp;·&nbsp; suitefinder.net &nbsp;·&nbsp; salonrenter.com
+</div>
+
+<script>
+// ── Pricing Range Chart (floating bars) ──
+const priceCtx = document.getElementById('priceChart').getContext('2d');
+const competitors = [
+  'Salons by JC ★',
+  'Rochester Salon Suites',
+  'Sola Salon Studios †',
+  'MY SALON Suite †',
+  'beautiLofts †',
+];
+const priceRanges = [
+  [300, 600],
+  [230, 410],
+  [215, 380],
+  [180, 400],
+  [175, 320],
+];
+const barColors = [
+  'rgba(201,160,80,0.85)',
+  'rgba(91,156,246,0.75)',
+  'rgba(62,207,142,0.7)',
+  'rgba(167,139,250,0.7)',
+  'rgba(45,212,191,0.7)',
+];
+const borderColors = [
+  'rgba(232,192,112,1)',
+  'rgba(120,170,255,1)',
+  'rgba(80,220,140,1)',
+  'rgba(190,160,255,1)',
+  'rgba(70,230,210,1)',
+];
+
+new Chart(priceCtx, {
+  type: 'bar',
+  data: {
+    labels: competitors,
+    datasets: [{
+      label: 'Weekly Rate Range ($)',
+      data: priceRanges,
+      backgroundColor: barColors,
+      borderColor: borderColors,
+      borderWidth: 1.5,
+      borderRadius: 5,
+      borderSkipped: false,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const [lo, hi] = ctx.raw;
+            return ` $${lo}–$${hi}/week`;
+          }
+        },
+        backgroundColor: '#1a1a2a',
+        borderColor: '#2a2a40',
+        borderWidth: 1,
+        titleColor: '#e8e8f0',
+        bodyColor: '#aaaacc',
+      }
+    },
+    scales: {
+      x: {
+        min: 0,
+        max: 700,
+        ticks: {
+          color: '#666688',
+          font: { size: 10 },
+          callback: v => `$${v}`
+        },
+        grid: { color: 'rgba(42,42,64,0.8)' },
+        border: { color: 'rgba(42,42,64,0.8)' }
+      },
+      y: {
+        ticks: {
+          color: ctx => ctx.tick.label.includes('★') ? '#c9a050' : '#8888aa',
+          font: { size: 11, weight: ctx => ctx.tick.label.includes('★') ? '700' : '400' },
+        },
+        grid: { display: false },
+        border: { display: false }
+      }
+    }
+  }
+});
+
+// ── Radar Chart ──
+const radarCtx = document.getElementById('radarChart').getContext('2d');
+new Chart(radarCtx, {
+  type: 'radar',
+  data: {
+    labels: [
+      'Price Premium',
+      'Amenity Quality',
+      'Concierge / Service',
+      'Finishes & Decor',
+      'Brand Support',
+      'Client Experience'
+    ],
+    datasets: [
+      {
+        label: 'Salons by JC',
+        data: [9, 10, 10, 10, 9, 10],
+        backgroundColor: 'rgba(201,160,80,0.18)',
+        borderColor: 'rgba(201,160,80,0.9)',
+        pointBackgroundColor: 'rgba(201,160,80,1)',
+        pointRadius: 4,
+        borderWidth: 2,
+      },
+      {
+        label: 'Sola Salon Studios',
+        data: [6, 7, 2, 8, 9, 6],
+        backgroundColor: 'rgba(62,207,142,0.08)',
+        borderColor: 'rgba(62,207,142,0.55)',
+        pointBackgroundColor: 'rgba(62,207,142,0.8)',
+        pointRadius: 3,
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+      },
+      {
+        label: 'MY SALON Suite',
+        data: [5, 7, 2, 7, 8, 6],
+        backgroundColor: 'rgba(167,139,250,0.06)',
+        borderColor: 'rgba(167,139,250,0.45)',
+        pointBackgroundColor: 'rgba(167,139,250,0.8)',
+        pointRadius: 3,
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+      },
+      {
+        label: 'beautiLofts / Roch. SS',
+        data: [4, 7, 2, 6, 5, 6],
+        backgroundColor: 'rgba(45,212,191,0.05)',
+        borderColor: 'rgba(45,212,191,0.4)',
+        pointBackgroundColor: 'rgba(45,212,191,0.8)',
+        pointRadius: 3,
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          color: '#8888aa',
+          font: { size: 10 },
+          boxWidth: 12,
+          padding: 12,
+        }
+      },
+      tooltip: {
+        backgroundColor: '#1a1a2a',
+        borderColor: '#2a2a40',
+        borderWidth: 1,
+        titleColor: '#e8e8f0',
+        bodyColor: '#aaaacc',
+      }
+    },
+    scales: {
+      r: {
+        min: 0,
+        max: 10,
+        ticks: {
+          stepSize: 2,
+          color: '#444460',
+          font: { size: 9 },
+          backdropColor: 'transparent',
+        },
+        grid: { color: 'rgba(42,42,64,0.9)' },
+        angleLines: { color: 'rgba(42,42,64,0.9)' },
+        pointLabels: {
+          color: '#8888aa',
+          font: { size: 10 }
+        }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
