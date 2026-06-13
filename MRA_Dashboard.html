@@ -418,7 +418,8 @@
 
     <div style="display:flex; align-items:center; gap:10px; margin:2px 0 14px; flex-wrap:wrap">
       <div style="font-size:13px; color:var(--muted)">📋 Starting a project or adding tasks? Download the template, fill it offline, then drop it in the <b>Intake Inbox</b> folder — it shows here within ~15 min.</div>
-      <a class="editbtn" href="MRA_Project_Intake_Template.xlsx" download style="margin-left:auto" title="Download the blank project intake template (.xlsx)">⬇ Download Intake Template</a>
+      <button class="editbtn" onclick="openHardDate()" style="margin-left:auto" title="Open a sample Hard-Date Schedule — print or save as PDF for the customer">📄 Sample Hard-Date Schedule</button>
+      <a class="editbtn" href="MRA_Project_Intake_Template.xlsx" download title="Download the blank project intake template (.xlsx)">⬇ Download Intake Template</a>
       <button class="helpbtn" style="width:24px;height:24px;font-size:13px" onclick="openHelp('help-intake')" title="How adding a project works">?</button>
     </div>
 
@@ -1383,6 +1384,51 @@ function renderFleet(){
   ).join('') : `<tr><td colspan="9" style="padding:16px;color:var(--faint);font-style:italic">No matching units</td></tr>`;
   const expN=FLEET.filter(a=>['dot','reg','ins','ift'].some(k=>a[k]==='exp')).length;
   const c=document.getElementById('fleetCount'); if(c) c.textContent=`${list.length} of ${FLEET.length} units · ${expN} with an expired item`;
+}
+
+
+/* ---------- Hard-Date Schedule (customer PDF) — sample for now ---------- */
+const HARD_DATE_SAMPLE = {"project": "Trumpf / Art Guild", "issue": "June 8, 2026", "job": "J1554", "pm": "Al Karloff", "attn": "Sean Payton / Kevin R. Sweeney", "launch": "Tour Launch \u2014 Las Vegas \u00b7 Oct 21, 2026", "rows": [["Project Start", "MRA", "\u2014", "Complete"], ["Award Program Contract / PO363699", "Client", "\u2014", "Complete"], ["Hard-Date Schedule Delivered to Art Guild", "MRA", "Mon, Jun 8, 2026", "Complete"], ["Starlink Dish Ordered (Long-Lead)", "MRA", "Mon, Jun 15, 2026", ""], ["Design Lock \u2014 Final Approval of Conceptual Renderings / Design Direction", "Client", "Fri, Jun 19, 2026", ""], ["Budget Reviewed & Approved", "Client", "Fri, Jun 19, 2026", ""], ["LED Wall Tile + Cabinet Specs to MRA", "Client", "Fri, Jun 19, 2026", ""], ["Laser Unit Spec File to MRA", "Client", "Fri, Jun 19, 2026", ""], ["Press Brake GO/NO-GO Decision (TruBend 7036)", "Client", "Fri, Jun 26, 2026", ""], ["Interior Graphics Template to Client", "MRA", "Fri, Jun 26, 2026", ""], ["Exterior Graphics Template to Client", "MRA", "Fri, Jun 26, 2026", ""], ["Final Material Specs, Colors & Finishes to MRA", "Client", "Fri, Jul 10, 2026", ""], ["Tech SOW Sign-off", "Client", "Fri, Jul 10, 2026", ""], ["Final Client Interior Graphics to MRA", "Art Guild", "Fri, Jul 17, 2026", ""], ["Final Client Exterior Graphics to MRA", "Art Guild", "Fri, Jul 17, 2026", ""], ["Buy-Out Document Approvals (If Required)", "Client", "Fri, Jul 17, 2026", ""], ["Graphic Swatch Sample Approval", "Client", "Fri, Jul 24, 2026", ""], ["Receive Client-Provided Equipment (Press Brake, ~12,125 lbs)", "Trumpf", "Wed, Aug 5, 2026", ""], ["Receive Rolling Static Laser Unit", "Trumpf", "Wed, Aug 5, 2026", ""], ["Press Brake Installed & Secured (TruBend 7036)", "MRA", "Aug 17\u201321, 2026", ""], ["LED Wall + Touchscreen Operational", "MRA", "Aug 17\u201321, 2026", ""], ["Art Guild AV Technicians Onsite at MRA", "Art Guild", "Aug 24 \u2013 Sep 4, 2026", ""], ["Technology Integration & Testing", "MRA", "Aug 24 \u2013 Sep 4, 2026", ""], ["Fabrication Complete", "MRA", "Mon, Aug 31, 2026", ""], ["Punch List Closed", "MRA", "Fri, Sep 4, 2026", ""], ["Quality Standards, Pack, Driver Training & Manual", "MRA", "Aug 31 \u2013 Sep 10, 2026", ""], ["Client Walkthrough and Final Acceptance", "Client", "TBD (Virtual?)", ""], ["Depart for Art Guild (NJ) Handover", "MRA", "Fri, Sep 11, 2026", ""], ["Art Guild Build-Out Complete (Furniture + Office Ceiling)", "Art Guild", "Fri, Oct 9, 2026", ""], ["Transport to Las Vegas", "Art Guild", "Mon, Oct 12, 2026", ""], ["Tour Launch \u2014 Las Vegas", "Art Guild", "Wed, Oct 21, 2026", ""]]};
+function ownCls(o){ return o==='MRA'?'own-mra':(o==='Client'?'own-client':'own-vendor'); }
+function buildScheduleHTML(S){
+  const logo = location.origin + '/logo-full-dark.png';
+  const done = S.rows.filter(r=>r[3]==='Complete').length;
+  const rows = S.rows.map(r=>{
+    const st = r[3]==='Complete' ? '<span class="st-done">&#10003; Complete</span>' : '<span class="st-none">&mdash;</span>';
+    return `<tr><td class="deliv">${esc(r[0])}</td><td><span class="own ${ownCls(r[1])}">${esc(r[1])}</span></td><td class="due">${esc(r[2])}</td><td>${st}</td></tr>`;
+  }).join('');
+  const css = `@page{size:letter portrait;margin:.5in}*{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#23272e;background:#edeef0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .printbar{background:#23272e;color:#fff;padding:11px 18px;font-size:13px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .printbar button{background:#e04826;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer;font-size:13px}.printbar .tip{color:#aeb6c2}
+  .sheet{background:#fff;max-width:7.6in;margin:20px auto;padding:.45in .5in .4in;box-shadow:0 3px 20px rgba(0,0,0,.18)}
+  .lh{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;border-bottom:3px solid #e04826;padding-bottom:14px}.lh img{height:66px;width:auto;display:block}.lh .addr{text-align:right;font-size:10.5px;color:#666;line-height:1.55}
+  .title{margin-top:18px;font-size:21px;font-weight:800;letter-spacing:3px;color:#e04826}.proj{font-size:15px;font-weight:700;margin-top:3px}.proj .ln{color:#888;font-weight:500;font-size:12.5px}
+  .meta{margin:15px 0 4px;display:grid;grid-template-columns:1fr 1fr;gap:5px 28px;font-size:12px}.meta div{display:flex;gap:8px}.meta .k{color:#8a8f98;min-width:96px}.meta b{color:#23272e}
+  .prog{font-size:11px;color:#15803d;font-weight:700;margin:6px 0 2px}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:11.5px}thead{display:table-header-group}thead th{background:#23272e;color:#fff;text-align:left;padding:7px 10px;font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;font-weight:700}
+  td{padding:7px 10px;border-bottom:1px solid #ededed;vertical-align:top}tbody tr:nth-child(even){background:#faf7f5}tr{break-inside:avoid}.deliv{font-weight:600}
+  .own{display:inline-block;font-size:9.5px;font-weight:700;padding:2px 9px;border-radius:20px;color:#fff;white-space:nowrap}.own-mra{background:#e04826}.own-client{background:#2f5fbf}.own-vendor{background:#5b6470}
+  .due{white-space:nowrap;color:#3a3f47}.st-done{color:#15803d;font-weight:700;white-space:nowrap}.st-none{color:#c2c2c2}
+  .warn{margin-top:18px;padding:11px 14px;background:#fdecec;border:1px solid #f3bcbc;color:#b91c1c;font-weight:700;font-size:11.5px;border-radius:7px;text-align:center}
+  .foot{margin-top:12px;font-size:9.5px;color:#a2a2a2;text-align:center;letter-spacing:.3px}
+  @media print{.printbar{display:none}body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none;padding:0}}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>MRA Hard Date Schedule — ${esc(S.project)}</title><style>${css}</style></head><body>
+  <div class="printbar"><button onclick="window.print()">&#128424;&nbsp; Print / Save as PDF</button><span class="tip">In the dialog: <b>Save as PDF</b> &middot; Letter &middot; Default margins &middot; Background graphics ON.</span></div>
+  <div class="sheet">
+    <div class="lh"><img src="${logo}" alt="MRA" onerror="this.style.display='none'"><div class="addr">950 E Whitcomb Ave<br>Madison Heights, MI 48071<br>p 248.629.2929 &nbsp;/&nbsp; f 248.629.2921</div></div>
+    <div class="title">HARD DATE SCHEDULE</div>
+    <div class="proj">${esc(S.project)} <span class="ln">&middot; ${esc(S.launch)}</span></div>
+    <div class="meta"><div><span class="k">Issue Date</span><b>${esc(S.issue)}</b></div><div><span class="k">MRA Job #</span><b>${esc(S.job)}</b></div><div><span class="k">Project Manager</span><b>${esc(S.pm)}</b></div><div><span class="k">Attn</span><b>${esc(S.attn)}</b></div></div>
+    <div class="prog">${done} of ${S.rows.length} deliverables complete</div>
+    <table><thead><tr><th style="width:54%">Deliverable</th><th>Owner</th><th>Due Date</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="warn">Missing any of these dates may delay the launch or result in loss of position in the production queue.</div>
+    <div class="foot">Prepared by MRA &middot; mobile.experiential &mdash; generated from the MRA project system</div>
+  </div></body></html>`;
+}
+function openHardDate(){
+  const w=window.open('','_blank');
+  if(!w){ alert('Please allow pop-ups for this site to open the schedule.'); return; }
+  w.document.write(buildScheduleHTML(HARD_DATE_SAMPLE)); w.document.close();
 }
 
 function setView(v){
