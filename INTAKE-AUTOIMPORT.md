@@ -7,7 +7,8 @@ automatically. Nobody but the dashboard PC ever writes to the master workbook.
 ## How it flows
 1. Team member downloads the template (the **⬇ Download Intake Template** button
    on the dashboard's Projects tab, or you email them the file).
-2. They fill it in offline (dropdowns + a Phase 1–5 skeleton are already there).
+2. They fill it in offline: the info block at top (Project / Job # / PM), then
+   the task table (dropdowns + a Phase 1–5 skeleton are already there).
 3. They save it and drop it in the **`Intake Inbox`** folder.
 4. Your dashboard PC's 15-min job runs **`Import-Intake.ps1`** first: it opens
    the master in Excel, appends the rows to **Project Tasks**, archives the
@@ -47,11 +48,24 @@ drop their finished file in there. Done.
   file. Nothing is lost.
 - **Safe by design.** A file that isn't a real intake (no `Enter Here` sheet)
   is moved to `Rejected\`. A file that errors is left in the inbox for a look.
-- **Column rule.** The importer copies columns **A–L** from the `Enter Here`
-  sheet into Project Tasks (Project, Phase, Type, Task, Start, Finish,
-  Duration, Assigned To, Status, PM, Milestone, Comments) — same order as the
-  master. If the template's columns change, keep A–L in that order (or tell me
-  and I'll update both ends).
+- **Template layout (current "branded" template).** `Import-Intake.ps1` reads
+  the `Enter Here` sheet and fills Project Tasks (Project, Phase, Type, Task,
+  Start, Finish, Duration, Assigned To, Status, PM, Milestone, Comments):
+  - **Project** and **Project Manager** come from the one-time info block at the
+    top (labels `Project / Client:`, `MRA Job #:`, `Project Manager:`). Project
+    is **free text** — brand-new jobs are fine. If a Job # is given it's appended
+    as `Name (J####)`.
+  - **Per task row** (table whose header row is `Phase | Type | Task | Start |
+    Finish | Duration | Assigned To | Status | Milestone | Comments`): a row is
+    imported only if **Task** is filled, so the blank Phase 1–5 skeleton rows are
+    ignored until you add tasks to them.
+  - The reader finds the info-block labels and the task header **by name**, so
+    minor row shifts are fine. The old flat layout (header `Project` in A1, data
+    A–L from row 2) still imports too — archived files keep working.
+  - Change a label or a column header in `build_template.py` → update the
+    matching reader in `Import-Intake.ps1` (they're commented to stay in sync).
+- **First run after a template change:** drop one filled file and check
+  `import-log.txt` / the dashboard to confirm the rows land where expected.
 
 ## Troubleshooting
 - Check **`import-log.txt`** in the dashboard folder — it logs each run:

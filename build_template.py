@@ -1,38 +1,52 @@
 #!/usr/bin/env python3
 """Build the standard MRA Project Intake Template (.xlsx).
 
-Mirrors the layout CreateIntakeFile produces in MRA-Entry-Tools.bas so the
-downloadable template and the macro-generated file are the same 'standard'.
-Project-tasks side only.
-"""
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.worksheet.datavalidation import DataValidation
+Professional, branded layout modeled on the customer Hard-Date Schedule:
+a letterhead (logo + address), a one-time info block (Project / Job # / PM /
+dates -- Project & Job# are FREE TEXT because ~half of intakes are brand-new
+jobs), then a clean task table.
 
+Import-Intake.ps1 reads this sheet back. The two MUST stay in sync:
+  * Info block labels:  "Project / Client", "MRA Job #", "Project Manager"
+  * Task table header row:  A="Phase", B="Type", C="Task", D="Start",
+                            E="Finish", F="Duration", G="Assigned To",
+                            H="Status", I="Milestone", J="Comments"
+  * Task data starts on the row after that header.
+Change a label or column here -> update the matching reader in Import-Intake.ps1.
+"""
+import os
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.drawing.image import Image as XLImage
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 ORANGE = "E24E26"
+DARK = "1F2430"
+GREY = "6B7280"
+FIELD = "FFF7F4"   # very light orange tint for fill-in cells
 
 wb = openpyxl.Workbook()
 ws = wb.active
 ws.title = "Enter Here"
 
+# ---- Lists sheet (dropdown sources; Project is intentionally NOT here) ------
 lst = wb.create_sheet("Lists")
-
-# ---- Lists (dropdown sources) -------------------------------------------
 LISTS = {
-    "C": ("Phase", ["Phase 1 - Planning", "Phase 2 - Design & Detail",
+    "B": ("Phase", ["Phase 1 - Planning", "Phase 2 - Design & Detail",
                      "Phase 3 - Fabrication",
                      "Phase 4 - Electrical & Technology Integration",
                      "Phase 5 - Graphics, Soft Launch / QS / Handover"]),
-    "D": ("Type", ["Meeting", "Hard Date", "Design Task", "Materials",
-                   "Production Task", "Client"]),
-    "E": ("ProjStatus", ["Not Started", "Upcoming", "In Progress",
-                         "Completed", "TBD", "N/A"]),
-    "F": ("Milestone", ["Yes", "No"]),
-    "G": ("PM", ["Megan Fraser", "Al Karloff", "Stephanie Hardie", "Alex Karam",
+    "C": ("Type", ["Meeting", "Hard Date", "Design Task", "Materials",
+                   "Production Task", "Client", "Logistics", "QA"]),
+    "D": ("Status", ["Not Started", "Upcoming", "In Progress",
+                     "Completed", "TBD", "N/A"]),
+    "E": ("Milestone", ["Yes", "No"]),
+    "F": ("PM", ["Megan Fraser", "Al Karloff", "Stephanie Hardie", "Alex Karam",
                  "Luciana Giglio", "Frank Mancina", "Mark St Jean",
                  "Sherri Washington", "Sherrill Buchan", "Cindy Irland",
                  "Mitch Schirr", "Heather Maloney", "TBD"]),
-    "H": ("Assigned", ["Megan Fraser", "Al Karloff", "Steve K", "Rich Miller",
+    "G": ("Assigned", ["Megan Fraser", "Al Karloff", "Steve K", "Rich Miller",
                        "Ted O'Malley", "Gino Bitonti", "Sean Payton",
                        "Chris Beyer", "Sarah Williams", "Lindsay Smith",
                        "Kevin R. Sweeney", "Chris Nusbaum", "Luciana Giglio",
@@ -41,7 +55,6 @@ LISTS = {
                        "MRA Procurement", "Art Guild", "Art Guild AV",
                        "W2 Graphics", "Master Wraps", "Logistics", "Fleet",
                        "Vendor", "Client", "All"]),
-    "I": ("Project", ["2Heads Global Design Ltd (J1548)", "ABB (J1407)", "Aga Kahn Foundation (J1537)", "Age of Union (J1500)", "Amazon (J1513)", "Arizona 250 (J1554)", "Art Guild (J1563)", "ASICS (J1408)", "AWS (J1217)", "Baltimore Aircoil (J1555)", "Barton Malow (J1506)", "Beckman-Coulter-East (J1396)", "Beckman-Coulter-West (J1396)", "Bell Helicopters (J1440)", "BioMerieux (J1461)", "Booz Allen - US Army (J1527)", "Boston Scientific 40ft (J1491)", "Boston Scientific DX (J1507)", "Boston Scientific SE (J1496)", "BPIR Rodeo (J1468)", "Brain Tumor Foundation (J1481)", "Catholic Charities USA (J1538)", "Cirrus Aircraft (J1549)", "CISCO (J1558)", "Climate Action Campaign (J1560)", "County of Essex (J1467)", "Czarnowski (GA) (J1544)", "D&G - Canada (J1536)", "D&G - USA Midwest (J1535)", "Duracell (J1383)", "Expandable B.V. (J1494)", "Ferguson BizBox (J1557)", "FM Global (J1410)", "Fortinet III (J1476)", "GRAIL (J1470)", "Hershey (J1373)", "Hillrom/Baxter (J1445)", "Hologic (J1551)", "Hyperfine (J1453)", "Hyperfine Box Truck #6110 (J1556)", "Jewish Federation (J1526)", "Knightscope (J1447)", "LexCare Hearoes (J1546)", "Medtronic (J1553)", "Meijer (J1143)", "Mkt/Grinder (J1511)", "Moon Surgical (J1509)", "MOTT (J1428)", "MRA Internal (J1014)", "NHL United by Hockey (J1495)", "NYBC Pod #1 (J1517)", "NYBC Pod #2 (J1531)", "NYBC Pod #3 (J1532)", "NYBC Pod #4 (J1533)", "Oakland Schools (J1420)", "Oasis Live '25 - The Department (J1539)", "Omnicell (J1446)", "On Running (J1559)", "P&G - Tide (J1521)", "PGA of Americas (J1519)", "Promaster Retro-Fit (J1775)", "PSE&G / Impact XM (J1508)", "QuidelOrtho (J1384)", "Road Show Group (J1774)", "RoadShowGrp / ShowTruckMktng (J1530)", "Saskatchewan Health Authority (J1545)", "Schaeffler (J1497)", "Score (Canada) Limited (J1523)", "SEMI Foundation (J1550)", "SENO Medical (J1454)", "SENO Medical - Box Truck (J1541)", "Siemens Big Betty (J1381)", "Siemens Canada (J1501)", "Siemens Demo Pool (J1209)", "Siemens DI (J1524)", "Siemens DX #3005 (J1110W)", "Siemens DX #92 (J1110E)", "Siemens Global Warehousing (J1391)", "Siemens Mammo III (J1480)", "Siemens Mammo Mandy (J1424)", "Sigenergy (J1562)", "Simon Wiesenthal Center - MA (Massachusetts) (J1552)", "SMC Corporation (J1542)", "Sobeys/Safeway (J1400)", "STI Pod - #1052 (J1561)", "Stryker (J1412)", "SWC California (J1486)", "SWC Florida 1 (J1514)", "SWC Florida 2 (J1515)", "SWC Hawaii (J1512)", "SWC Illinois (J1422)", "SWC NY1 (J1487)", "SWC NY2 (J1488)", "Tim McGraw (J1421)", "Tissot US MotoGP (J1529)", "TravisMathew (J1387)", "Warhammer (J1434)", "Washtenaw Community College (J1543)", "Weill Cornell Imaging (J1540)", "WFCU (J1479)", "Windsor Champ (J1519)", "Winnipeg Regional Health Authority (J1547)"]),
 }
 for col, (head, vals) in LISTS.items():
     lst[f"{col}1"] = head
@@ -49,60 +62,151 @@ for col, (head, vals) in LISTS.items():
         lst[f"{col}{i+2}"] = v
 lst.sheet_state = "veryHidden"
 
-# ---- Header row ----------------------------------------------------------
-heads = ["Project", "Phase", "Type", "Task", "Start", "Finish", "Duration",
-         "Assigned To", "Status", "PM", "Milestone", "Comments"]
+# ---- Column widths (task table: A..J) ---------------------------------------
+widths = {"A": 34, "B": 15, "C": 46, "D": 12, "E": 12,
+          "F": 10, "G": 22, "H": 15, "I": 11, "J": 30}
+for c, w in widths.items():
+    ws.column_dimensions[c].width = w
+
+thin = Side(style="thin", color="D1D5DB")
+box = Border(left=thin, right=thin, top=thin, bottom=thin)
+bottom = Border(bottom=Side(style="thin", color="C9CDD3"))
+
+# ---- Letterhead -------------------------------------------------------------
+# Logo (orange MRA mark) floats over the left of the wide column A.
+logo_path = os.path.join(HERE, "logo.png")
+if os.path.exists(logo_path):
+    img = XLImage(logo_path)
+    img.width = 104
+    img.height = 104
+    ws.add_image(img, "A1")
+
+for r, h in {1: 26, 2: 24, 3: 16, 4: 20, 5: 8}.items():
+    ws.row_dimensions[r].height = h
+
+ws.merge_cells("C1:J2")
+t = ws["C1"]
+t.value = "PROJECT INTAKE  —  TASK SCHEDULE"
+t.font = Font(bold=True, size=20, color=ORANGE)
+t.alignment = Alignment(vertical="center")
+
+ws.merge_cells("C3:J3")
+a = ws["C3"]
+a.value = "950 E Whitcomb Ave  ·  Madison Heights, MI 48071  ·  p 248.629.2929 / f 248.629.2921"
+a.font = Font(size=9, color=GREY)
+
+ws.merge_cells("C4:J4")
+d = ws["C4"]
+d.value = ("Fill this out, then drop it in the Intake Inbox folder - it imports "
+           "into the shop schedule automatically.")
+d.font = Font(size=9, italic=True, color=GREY)
+
+# ---- Info block (one-time header fields) ------------------------------------
+def label(ref, text):
+    c = ws[ref]
+    c.value = text
+    c.font = Font(bold=True, size=10, color=DARK)
+    c.alignment = Alignment(horizontal="right", vertical="center")
+
+def field(top_left, span_to, prompt=None, title=None):
+    """A fill-in cell. Hint (if any) is an on-select tooltip, NOT a stored
+    value, so the importer never mistakes a placeholder for real data."""
+    ws.merge_cells(f"{top_left}:{span_to}")
+    c = ws[top_left]
+    c.fill = PatternFill("solid", fgColor=FIELD)
+    c.border = bottom
+    c.alignment = Alignment(vertical="center", indent=1)
+    c.font = Font(size=11, color=DARK)
+    if prompt:
+        dv = DataValidation(allow_blank=True, showInputMessage=True,
+                            showErrorMessage=False,
+                            prompt=prompt, promptTitle=title or "")
+        ws.add_data_validation(dv)
+        dv.add(top_left)
+    return c
+
+INFO0 = 6   # first info row
+for i, rr in enumerate((INFO0, INFO0 + 1, INFO0 + 2)):
+    ws.row_dimensions[rr].height = 20
+
+label(f"A{INFO0}", "Project / Client:")
+field(f"B{INFO0}", f"D{INFO0}", title="Project / Client",
+      prompt="Type the project name. Brand-new jobs are welcome - just type it.")
+label(f"F{INFO0}", "MRA Job #:")
+field(f"G{INFO0}", f"H{INFO0}", title="MRA Job #",
+      prompt='Job number if you have one, or type "NEW".')
+
+label(f"A{INFO0+1}", "Project Manager:")
+field(f"B{INFO0+1}", f"D{INFO0+1}")
+label(f"F{INFO0+1}", "Issue Date:")
+field(f"G{INFO0+1}", f"H{INFO0+1}")
+
+label(f"A{INFO0+2}", "Prepared By:")
+field(f"B{INFO0+2}", f"D{INFO0+2}")
+label(f"F{INFO0+2}", "Attn / Client Contact:")
+field(f"G{INFO0+2}", f"H{INFO0+2}")
+
+# ---- Task table -------------------------------------------------------------
+HDR = INFO0 + 4                       # blank spacer row between info & table
+ws.row_dimensions[HDR - 1].height = 8
+heads = ["Phase", "Type", "Task", "Start", "Finish", "Duration",
+         "Assigned To", "Status", "Milestone", "Comments"]
 for c, h in enumerate(heads, start=1):
-    cell = ws.cell(row=1, column=c, value=h)
-    cell.font = Font(bold=True, color="FFFFFF")
+    cell = ws.cell(row=HDR, column=c, value=h)
+    cell.font = Font(bold=True, color="FFFFFF", size=11)
     cell.fill = PatternFill("solid", fgColor=ORANGE)
-    cell.alignment = Alignment(vertical="center")
-ws.row_dimensions[1].height = 22
+    cell.alignment = Alignment(vertical="center",
+                               horizontal="left" if c in (1, 3, 7, 10) else "center",
+                               indent=1 if c in (1, 3, 7, 10) else 0)
+    cell.border = box
+ws.row_dimensions[HDR].height = 24
 
-# ---- Phase 1-5 skeleton rows --------------------------------------------
-phases = LISTS["C"][1]
-r = 2
-for ph in phases:
-    ws.cell(row=r, column=2, value=ph)        # Phase
-    ws.cell(row=r, column=9, value="Not Started")  # Status
-    ws.cell(row=r, column=11, value="No")     # Milestone
-    r += 1
+# Phase 1-5 skeleton rows
+DATA0 = HDR + 1
+phases = LISTS["B"][1]
+for i, ph in enumerate(phases):
+    r = DATA0 + i
+    ws.cell(row=r, column=1, value=ph)             # A Phase
+    ws.cell(row=r, column=8, value="Not Started")  # H Status
+    ws.cell(row=r, column=9, value="No")           # I Milestone
 
-# ---- Dropdowns -----------------------------------------------------------
-def add_dv(col_letter, src):
+# Light borders + date format down the table body
+LASTROW = DATA0 + 300
+for r in range(DATA0, LASTROW):
+    for c in range(1, 11):
+        ws.cell(row=r, column=c).border = box
+    ws.cell(row=r, column=4).number_format = "m/d/yyyy"  # Start
+    ws.cell(row=r, column=5).number_format = "m/d/yyyy"  # Finish
+
+# ---- Dropdowns (Project deliberately omitted - free text) -------------------
+def add_dv(col_letter, src, last=LASTROW - 1):
     dv = DataValidation(type="list", formula1=src, allow_blank=True,
-                        showDropDown=False)
+                        showErrorMessage=False, showDropDown=False)
     ws.add_data_validation(dv)
-    dv.add(f"{col_letter}2:{col_letter}300")
+    dv.add(f"{col_letter}{DATA0}:{col_letter}{last}")
 
-add_dv("A", "=Lists!$I$2:$I$103")
-add_dv("B", "=Lists!$C$2:$C$6")
-add_dv("C", "=Lists!$D$2:$D$7")
-add_dv("H", "=Lists!$H$2:$H$31")
-add_dv("I", "=Lists!$E$2:$E$7")
-add_dv("J", "=Lists!$G$2:$G$14")
-add_dv("K", "=Lists!$F$2:$F$3")
+add_dv("A", "=Lists!$B$2:$B$6")    # Phase
+add_dv("B", "=Lists!$C$2:$C$9")    # Type
+add_dv("H", "=Lists!$D$2:$D$7")    # Status
+add_dv("I", "=Lists!$E$2:$E$3")    # Milestone
+add_dv("G", "=Lists!$G$2:$G$31")   # Assigned To
+# PM dropdown on the info-block PM field
+dv_pm = DataValidation(type="list", formula1="=Lists!$F$2:$F$14",
+                       allow_blank=True, showErrorMessage=False, showDropDown=False)
+ws.add_data_validation(dv_pm)
+dv_pm.add(f"B{INFO0+1}")
 
-# ---- Sizing, filter, tip -------------------------------------------------
-for col in "ABCDEFGHIJKL":
-    ws.column_dimensions[col].width = 16
-ws.column_dimensions["D"].width = 40
-ws.auto_filter.ref = "A1:L1"
+# ---- Final touches ----------------------------------------------------------
+ws.freeze_panes = f"A{DATA0}"
+ws.sheet_view.showGridLines = False
+ws.print_options.horizontalCentered = True
+ws.page_setup.orientation = "landscape"
+ws.page_setup.fitToWidth = 1
+ws.page_setup.fitToHeight = 0
+ws.sheet_properties.pageSetUpPr.fitToPage = True
+ws.page_margins.left = ws.page_margins.right = 0.4
+ws.page_margins.top = ws.page_margins.bottom = 0.5
 
-# Pre-format Start/Finish as real dates so typed values parse correctly
-# (the dashboard only reads dates from genuine date cells, not text).
-for row in range(2, 301):
-    ws[f"E{row}"].number_format = "m/d/yyyy"
-    ws[f"F{row}"].number_format = "m/d/yyyy"
-
-tip = ("Tip: pick your Project (A), then fill Task, Start/Finish dates and "
-       "Assigned for each phase. Add rows as needed; delete phases you don't "
-       "use. When done, save this file and drop it in the team 'Intake Inbox' "
-       "folder (ask your PM for the link) — it imports into the schedule "
-       "automatically. Use real dates in Start/Finish (e.g. 6/15/26).")
-ws["N2"] = tip
-ws["N2"].font = Font(italic=True)
-ws.freeze_panes = "A2"
-
-wb.save("/home/user/MRA-Files/MRA_Project_Intake_Template.xlsx")
-print("wrote MRA_Project_Intake_Template.xlsx")
+out = os.path.join(HERE, "MRA_Project_Intake_Template.xlsx")
+wb.save(out)
+print("wrote", out, "| header row", HDR, "| data starts", DATA0)

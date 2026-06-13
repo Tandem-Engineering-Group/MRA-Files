@@ -91,6 +91,32 @@ function Coerce-Date($raw) {
     return "$raw"
 }
 
+# Grid helpers: resolved cell text by "A10" key (built once per file).
+function GVal($grid, $col, $rw) {
+    $v = $grid["$col$rw"]
+    if ($null -eq $v) { return '' }
+    return ([string]$v).Trim()
+}
+function GRaw($grid, $col, $rw) {
+    $v = $grid["$col$rw"]
+    if ($null -eq $v) { return $null }
+    return $v
+}
+# First real value to the right of a label cell, stopping at the next label.
+function Next-Val($grid, $rw, $startCol) {
+    $cols = @('A','B','C','D','E','F','G','H','I','J','K','L')
+    $idx = [array]::IndexOf($cols, $startCol)
+    for ($i = $idx + 1; $i -lt $cols.Count; $i++) {
+        $v = $grid["$($cols[$i])$rw"]
+        if ($null -eq $v) { continue }
+        $s = ([string]$v).Trim()
+        if ($s -eq '') { continue }
+        if ($s.EndsWith(':')) { break }   # ran into the next label
+        return $s
+    }
+    return ''
+}
+
 # Open a workbook's XML via a temp copy (safe even if open in Excel).
 function Open-Zip($path) {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ("mra_imp_" + [IO.Path]::GetFileName($path))
@@ -102,7 +128,11 @@ function Close-Zip($z) {
     if ($z.isCopy -and (Test-Path $z.tmp)) { Remove-Item $z.tmp -Force -ErrorAction SilentlyContinue }
 }
 
-# Read 'Enter Here' rows (A:L) -> array of object[12]; $null returned if no sheet.
+# Read the 'Enter Here' sheet -> array of object[12] (Project..Comments);
+# $null if the sheet is missing. Handles two layouts:
+#   LEGACY  : header "Project" in A1, data A:L straight down from row 2.
+#   BRANDED : letterhead + info block (Project / Job # / PM filled once), then
+#             a task table whose header row is A="Phase" .. J="Comments".
 function Read-IntakeRows($path) {
     $z = Open-Zip $path
     try {
@@ -113,26 +143,85 @@ function Read-IntakeRows($path) {
         [xml]$relsXml = Read-Entry $z.zip 'xl/_rels/workbook.xml.rels'
         $sx = Get-SheetXml $z.zip $wbXml $relsXml $SrcSheet
         if (-not $sx) { return $null }
-        $rows = New-Object System.Collections.ArrayList
+
+        # Build a resolved cell grid: $grid["A10"] = text/serial.
+        $grid = @{}; $maxRow = 1
         foreach ($row in $sx.worksheet.sheetData.row) {
-            if ([int]$row.r -lt 2) { continue }
-            $pc = Get-RowCells $row
-            $A = ([string](Resolve-Cell $pc['A'] $shared)).Trim()
-            $D = ([string](Resolve-Cell $pc['D'] $shared)).Trim()
-            if ($A -eq '' -and $D -eq '') { continue }
+            $rn = [int]$row.r
+            if ($rn -gt $maxRow) { $maxRow = $rn }
+            foreach ($c in $row.c) {
+                if ($null -eq $c.r) { continue }
+                $cl = ([regex]::Match([string]$c.r, '^[A-Z]+')).Value
+                $grid["$cl$rn"] = (Resolve-Cell $c $shared)
+            }
+        }
+
+        $rows = New-Object System.Collections.ArrayList
+
+        # ----- LEGACY layout ------------------------------------------------
+        if ((GVal $grid 'A' 1) -eq 'Project') {
+            for ($r = 2; $r -le $maxRow; $r++) {
+                $A = GVal $grid 'A' $r
+                $D = GVal $grid 'D' $r
+                if ($A -eq '' -and $D -eq '') { continue }
+                $line = New-Object 'object[]' $NCOLS
+                $line[0]=$A
+                $line[1]=GVal $grid 'B' $r
+                $line[2]=GVal $grid 'C' $r
+                $line[3]=$D
+                $line[4]=Coerce-Date (GRaw $grid 'E' $r)
+                $line[5]=Coerce-Date (GRaw $grid 'F' $r)
+                $line[6]=GRaw $grid 'G' $r
+                $line[7]=GVal $grid 'H' $r
+                $line[8]=GVal $grid 'I' $r
+                $line[9]=GVal $grid 'J' $r
+                $line[10]=GVal $grid 'K' $r
+                $line[11]=GRaw $grid 'L' $r
+                [void]$rows.Add($line)
+            }
+            return $rows
+        }
+
+        # ----- BRANDED layout -----------------------------------------------
+        $proj = ''; $pm = ''; $job = ''
+        for ($r = 1; $r -le $maxRow; $r++) {
+            foreach ($col in @('A','B','C','D','E','F','G','H','I','J')) {
+                $t = GVal $grid $col $r
+                if ($t -eq '') { continue }
+                $key = ($t -replace '[:\s]+$','').ToLower()
+                if     ($key -in @('project / client','project/client','project','project / client name')) { $proj = Next-Val $grid $r $col }
+                elseif ($key -eq 'project manager') { $pm = Next-Val $grid $r $col }
+                elseif ($key -in @('mra job #','mra job#','job #','job#')) { $job = Next-Val $grid $r $col }
+            }
+        }
+        $hdr = -1
+        for ($r = 1; $r -le $maxRow; $r++) {
+            if ((GVal $grid 'A' $r) -eq 'Phase' -and (GVal $grid 'C' $r) -eq 'Task') { $hdr = $r; break }
+        }
+        if ($hdr -lt 1) {
+            Log "SKIP '$([IO.Path]::GetFileName($path))' - 'Enter Here' present but no task header (Phase/Task) found."
+            return $null
+        }
+        $projOut = $proj
+        if ($job -ne '' -and $job.ToUpper() -ne 'NEW' -and $projOut -notmatch [regex]::Escape($job)) {
+            $projOut = if ($projOut -ne '') { "$projOut ($job)" } else { $job }
+        }
+        for ($r = $hdr + 1; $r -le $maxRow; $r++) {
+            $task = GVal $grid 'C' $r
+            if ($task -eq '') { continue }            # skip skeleton phase rows w/ no task
             $line = New-Object 'object[]' $NCOLS
-            $line[0]  = $A
-            $line[1]  = ([string](Resolve-Cell $pc['B'] $shared)).Trim()
-            $line[2]  = ([string](Resolve-Cell $pc['C'] $shared)).Trim()
-            $line[3]  = $D
-            $line[4]  = Coerce-Date (Resolve-Cell $pc['E'] $shared)
-            $line[5]  = Coerce-Date (Resolve-Cell $pc['F'] $shared)
-            $line[6]  = Resolve-Cell $pc['G'] $shared
-            $line[7]  = ([string](Resolve-Cell $pc['H'] $shared)).Trim()
-            $line[8]  = ([string](Resolve-Cell $pc['I'] $shared)).Trim()
-            $line[9]  = ([string](Resolve-Cell $pc['J'] $shared)).Trim()
-            $line[10] = ([string](Resolve-Cell $pc['K'] $shared)).Trim()
-            $line[11] = Resolve-Cell $pc['L'] $shared
+            $line[0]  = $projOut                       # Project (info block)
+            $line[1]  = GVal $grid 'A' $r              # Phase
+            $line[2]  = GVal $grid 'B' $r              # Type
+            $line[3]  = $task                          # Task
+            $line[4]  = Coerce-Date (GRaw $grid 'D' $r) # Start
+            $line[5]  = Coerce-Date (GRaw $grid 'E' $r) # Finish
+            $line[6]  = GRaw $grid 'F' $r              # Duration
+            $line[7]  = GVal $grid 'G' $r              # Assigned To
+            $line[8]  = GVal $grid 'H' $r              # Status
+            $line[9]  = $pm                            # PM (info block)
+            $line[10] = GVal $grid 'I' $r             # Milestone
+            $line[11] = GRaw $grid 'J' $r             # Comments
             [void]$rows.Add($line)
         }
         return $rows
