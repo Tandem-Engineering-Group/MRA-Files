@@ -356,6 +356,7 @@
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
       <div class="tab" data-view="equipment" onclick="setView('equipment')">EQUIPMENT</div>
       <div class="tab" data-view="fleet" onclick="setView('fleet')">FLEET</div>
+      <div class="tab" data-view="history" onclick="setView('history')">HISTORY</div>
     </div>
     <div class="linksmenu">
       <button class="editbtn" id="linksBtn" onclick="toggleLinks(event)" title="Frequently used links">🔗 Links ▾</button>
@@ -553,6 +554,58 @@
     </div>
   </div>
 
+  <!-- ===================== HISTORY VIEW ===================== -->
+  <style>
+    #historyView .histbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+    #historyView .histbar input[type=search]{flex:1;min-width:240px;padding:9px 11px;background:var(--panel2);
+      border:1px solid var(--line);border-radius:9px;color:var(--txt);font-size:13px}
+    #historyView .histbar select{padding:9px 10px;background:var(--panel2);border:1px solid var(--line);
+      border-radius:9px;color:var(--muted);font-size:12.5px}
+    #historyView mark{background:rgba(224,72,38,.30);color:var(--txt);border-radius:2px;padding:0 1px}
+    .histcard{border:1px solid var(--line);border-radius:12px;padding:12px 15px;margin-bottom:10px;background:var(--panel2)}
+    .histcard .hh{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:6px}
+    .histcard .hh .pj{font-weight:700;font-size:14px;color:var(--txt)}
+    .histcard .hh .jn{color:var(--brand);font-weight:600;font-size:12px}
+    .histcard .hh .mt{color:var(--muted);font-size:12px}
+    .histcard .stbadge{font-size:10.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;
+      padding:2px 7px;border-radius:20px;border:1px solid var(--line)}
+    .histcard .tk{font-size:12.5px;line-height:1.5;padding:2px 0 2px 20px;position:relative;color:var(--txt)}
+    .histcard .tk .mk{position:absolute;left:2px;top:3px;font-size:11px}
+    .histcard .tk.done{color:var(--muted)}
+    .histcard .tk.done .tx{text-decoration:line-through}
+    .histcard .more{font-size:11.5px;color:var(--brand);cursor:pointer;margin-top:5px;display:inline-block;user-select:none}
+    .hist-empty{color:var(--muted);font-size:13px;padding:16px 2px}
+    .hist-hint{color:var(--faint);font-size:12.5px;padding:18px 2px}
+  </style>
+  <div id="historyView" class="hidden">
+    <div class="panel">
+      <h2>🔎 Shop History — search everything <span class="count" id="histCount"></span></h2>
+      <div style="font-size:12px;color:var(--muted);margin:-2px 0 12px">
+        Search any job, client, Job #, PM, bay, or task across the whole board — open <b>and</b> completed work.
+        e.g. <span style="color:var(--fg)">“Sal ABB”</span> shows Sal’s tasks on ABB. Time filter is by the job’s dates.
+      </div>
+      <div class="histbar">
+        <input id="histSearch" type="search" placeholder="Search jobs, people, tasks…  (try: Sal, J1407, LED wall)" oninput="renderHistory()" />
+        <select id="histTime" onchange="renderHistory()">
+          <option value="any">Any time</option>
+          <option value="tq">This quarter</option>
+          <option value="lq">Last quarter</option>
+          <option value="ty">This year</option>
+          <option value="90">Last 90 days</option>
+          <option value="30">Last 30 days</option>
+        </select>
+        <select id="histStatus" onchange="renderHistory()">
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="on hold">On hold</option>
+          <option value="shipped">Shipped</option>
+        </select>
+      </div>
+      <div id="histResults"></div>
+    </div>
+  </div>
+
   <!-- ===================== FULL-SCREEN GANTT ===================== -->
   <div class="gfs-overlay" id="ganttFS" onclick="closeGantt(event)">
     <div class="gfs-head">
@@ -587,6 +640,7 @@
 <script>
 const REFRESH_SECONDS = 30;
 const DAY = 86400000;
+const SHIP_WINDOW_DAYS = 14;   // shipped jobs older than this drop off the floor (still in History)
 const DONE_STATUSES = ["shipped","done","completed"];
 const PALETTE = ['#3b82f6','#22c55e','#f59e0b','#a78bfa','#2dd4bf','#ef4444',
                  '#ec4899','#84cc16','#06b6d4','#fb923c','#8b5cf6','#14b8a6'];
@@ -612,6 +666,7 @@ function fmtMD(iso){ if(!iso) return "TBD"; const d=parseISO(iso); return (d.get
 function fmtMDY(iso){ if(!iso) return "TBD"; const d=parseISO(iso);
   return (d.getMonth()+1)+"/"+d.getDate()+"/"+String(d.getFullYear()).slice(2); }
 function daysBetween(aIso,bIso){ return Math.round((parseISO(aIso)-parseISO(bIso))/DAY); }
+function daysAgo(iso){ const d=parseISO(iso); return d?Math.round((todayMid()-d)/DAY):null; }
 function startOfWeek(d){ const x=new Date(d); const wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); x.setHours(0,0,0,0); return x; }
 function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
 
@@ -621,7 +676,9 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>① The tabs up top</h4>
     <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status, the next 2 weeks, Sal's tasks, flagged jobs, pipeline and staff on leave.
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, PM load and team capacity.
-    <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.</p></div>
+    <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
+    <span class="k">EQUIPMENT</span> = searchable list of equipment and their Job #s. <span class="k">FLEET</span> = the physical fleet + compliance.
+    <span class="k">HISTORY</span> = search the whole board — any job, person, Job # or task (open <b>and</b> completed), with a time filter. The floor only keeps shipped jobs for ~2 weeks; everything older lives here.</p></div>
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — see a trailer's tasks</h4>
@@ -809,13 +866,18 @@ function renderFloor(D){
     .filter(x=>x.c.overdue||x.c.dueSoon||(x.j.openCount>=4));
 
   const byStatus=s=>jobs.filter(j=>(j.status||"").toLowerCase()===s);
+  // Shipped is a rolling window so the floor never balloons — older shipped jobs
+  // stay searchable on the HISTORY tab, they just drop off the live board.
+  const shippedRecent=byStatus("shipped")
+    .filter(j=>{const a=daysAgo(j.completionISO); return a!=null && a<=SHIP_WINDOW_DAYS;})
+    .sort((a,b)=>(b.completionISO||'').localeCompare(a.completionISO||''));
   const openJobs=bayJobs.concat(pipeJobs).filter(j=>j.openCount>0).sort((a,b)=>(b.openCount||0)-(a.openCount||0));
   const overdueJobs=flagged.filter(x=>x.c.overdue).map(x=>x.j);
   const kpis=[
     {n:cnt("active"),l:"ACTIVE",c:"active",list:byStatus("active")},
     {n:cnt("scheduled"),l:"SCHEDULED",c:"sched",list:byStatus("scheduled")},
     {n:cnt("on hold"),l:"ON HOLD",c:"hold",list:byStatus("on hold")},
-    {n:cnt("shipped"),l:"SHIPPED",c:"ship",list:byStatus("shipped")},
+    {n:shippedRecent.length,l:"SHIPPED · "+SHIP_WINDOW_DAYS+"d",c:"ship",list:shippedRecent},
     {n:pipeJobs.length,l:"NEXT UP",c:"pipe",list:pipeJobs},
     {n:totalOpen,l:"OPEN TASKS",c:"tasks",list:openJobs,tasks:true},
     {n:flagged.filter(x=>x.c.overdue).length,l:"PAST DUE",c:"over",list:overdueJobs},
@@ -1441,6 +1503,92 @@ function openHardDate(v){
   w.document.write(html); w.document.close();
 }
 
+/* ---------- Shop History: search jobs + every task line (open & done) ---------- */
+const histExpanded=new Set();
+function quarterRange(year,q){
+  return {from:localISO(new Date(year,q*3,1).getTime()),
+          to:  localISO(new Date(year,q*3+3,0).getTime())};
+}
+function histRange(mode){
+  const now=todayMid(), y=now.getFullYear(), q=Math.floor(now.getMonth()/3);
+  if(mode==='tq') return quarterRange(y,q);
+  if(mode==='lq') return q===0?quarterRange(y-1,3):quarterRange(y,q-1);
+  if(mode==='ty') return {from:y+'-01-01', to:y+'-12-31'};
+  if(mode==='90'||mode==='30'){ const f=new Date(now); f.setDate(f.getDate()-(+mode));
+    return {from:localISO(f.getTime()), to:localISO(now.getTime())}; }
+  return null;  // any time
+}
+function jobInRange(j,r){
+  if(!r) return true;
+  const s=j.startISO||j.completionISO, e=j.completionISO||j.startISO;
+  if(!s&&!e) return false;          // undated jobs only show under "Any time"
+  return s<=r.to && r.from<=e;       // job window overlaps the range
+}
+function hlTokens(text,toks){
+  const safe=esc(text);
+  const v=toks.filter(Boolean).map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+  if(!v.length) return safe;
+  return safe.replace(new RegExp('('+v.join('|')+')','ig'),'<mark>$1</mark>');
+}
+function stColor(s){ s=(s||'').toLowerCase();
+  return s==='shipped'?'var(--blue)':s==='active'?'var(--green)':s==='on hold'?'var(--amber)':
+         s==='scheduled'?'var(--violet)':'var(--muted)'; }
+function histToggle(key){ histExpanded.has(key)?histExpanded.delete(key):histExpanded.add(key); renderHistory(); }
+
+function renderHistory(){
+  const box=document.getElementById('histResults'); if(!box) return;
+  const D=window.MRA_DATA||{}, jobs=(D.jobs||[]).filter(j=>j.category!=='leave');
+  const q=(document.getElementById('histSearch')||{}).value||'';
+  const toks=q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const range=histRange((document.getElementById('histTime')||{}).value||'any');
+  const stF=((document.getElementById('histStatus')||{}).value||'').toLowerCase();
+  const cnt=document.getElementById('histCount');
+
+  const results=[];
+  jobs.forEach(j=>{
+    if(stF && (j.status||'').toLowerCase()!==stF) return;
+    if(!jobInRange(j,range)) return;
+    const open=(j.openTasks||[]), done=(j.doneTasks||[]);
+    const hay=([j.project,j.client,j.jobNum,j.pm,j.bay,j.status].filter(Boolean).join(' ')
+               +' '+open.join(' ')+' '+done.join(' ')).toLowerCase();
+    if(toks.length && !toks.every(t=>hay.indexOf(t)>=0)) return;
+    results.push({j,open,done});
+  });
+
+  if(!toks.length && !stF && !range){
+    box.innerHTML=`<div class="hist-hint">Type to search — a job name, a person (e.g. <b>Sal</b>), a Job # (<b>J1407</b>), or any task wording. Add a time filter to scope by the job’s dates.</div>`;
+    if(cnt) cnt.textContent=''; return;
+  }
+  if(cnt) cnt.textContent=results.length+(results.length===1?' job':' jobs');
+  if(!results.length){
+    box.innerHTML=`<div class="hist-empty">No jobs match${q?` “${esc(q)}”`:''}${range?' in that time range':''}.</div>`; return;
+  }
+  results.sort((a,b)=>((b.j.completionISO||b.j.startISO||'')+'').localeCompare((a.j.completionISO||a.j.startISO||'')+''));
+
+  box.innerHTML=results.slice(0,80).map(({j,open,done},i)=>{
+    const key='h'+(j.row!=null?j.row:i);
+    const all=open.map(t=>({t,done:false})).concat(done.map(t=>({t,done:true})));
+    const matched=toks.length?all.filter(x=>toks.some(tk=>x.t.toLowerCase().indexOf(tk)>=0)):[];
+    const expanded=histExpanded.has(key);
+    const show = expanded ? all : (matched.length?matched:all.slice(0,4));
+    const dateTxt=(j.startISO||j.completionISO)?`${fmtMDY(j.startISO)} → ${fmtMDY(j.completionISO)}`:'no dates';
+    const rows=show.map(x=>`<div class="tk ${x.done?'done':''}"><span class="mk">${x.done?'✓':'•'}</span><span class="tx">${hlTokens(x.t.replace(/^\d+\.\s*/,''),toks)}</span></div>`).join('')
+      || `<div class="tk" style="color:var(--faint)">no task lines recorded</div>`;
+    const more=(all.length>show.length || expanded)
+      ? `<span class="more" onclick="histToggle('${key}')">${expanded?'▲ show less':'▾ show all '+all.length+' tasks'}</span>` : '';
+    return `<div class="histcard">
+      <div class="hh">
+        <span class="pj">${hlTokens(j.project||'—',toks)}</span>
+        ${j.jobNum?`<span class="jn">${hlTokens(j.jobNum,toks)}</span>`:''}
+        <span class="stbadge" style="color:${stColor(j.status)};border-color:${stColor(j.status)}">${esc(j.status||'—')}</span>
+        <span class="mt">${j.client?hlTokens(j.client,toks)+' · ':''}${j.pm?'PM '+hlTokens(j.pm,toks)+' · ':''}${j.bay?esc(j.bay)+' · ':''}${dateTxt}</span>
+        <span class="mt" style="margin-left:auto">${open.length} open · ${done.length} done</span>
+      </div>
+      ${rows}${more}
+    </div>`;
+  }).join('') + (results.length>80?`<div class="hist-hint">Showing first 80 of ${results.length} — refine your search to narrow.</div>`:'');
+}
+
 function setView(v){
   VIEW=v; try{localStorage.setItem('mra_view',v);}catch(e){}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
@@ -1449,6 +1597,8 @@ function setView(v){
   document.getElementById('fleetioView').classList.toggle('hidden',v!=='fleetio');
   document.getElementById('equipmentView').classList.toggle('hidden',v!=='equipment');
   document.getElementById('fleetView').classList.toggle('hidden',v!=='fleet');
+  document.getElementById('historyView').classList.toggle('hidden',v!=='history');
+  if(v==='history') renderHistory();
 }
 function setRange(m){
   RANGE=m; try{localStorage.setItem('mra_range',JSON.stringify(m));}catch(e){}
@@ -1506,7 +1656,9 @@ function jobsPop(title, list, tasks){
   h+=`<div class="pp-sub">${list.length} total</div><div class="pp-ms">`;
   h+= list.slice(0,20).map(j=>{
     const tag = (tasks&&j.openCount)?` <span class="badge amber">${j.openCount} open</span>`:'';
-    return `<div>• ${esc(j.project||'—')} <span style="color:var(--muted)">— ${esc(j.bay||'')}${j.jobNum?' · '+esc(j.jobNum):''}</span>${tag}</div>`;
+    const shipped = ((j.status||'').toLowerCase()==='shipped' && j.completionISO)
+      ? ` · shipped ${fmtMD(j.completionISO)}` : '';
+    return `<div>• ${esc(j.project||'—')} <span style="color:var(--muted)">— ${esc(j.bay||'')}${j.jobNum?' · '+esc(j.jobNum):''}${shipped}</span>${tag}</div>`;
   }).join('');
   if(list.length>20) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-20} more…</div>`;
   return h+`</div>`;
@@ -1625,6 +1777,7 @@ function renderAll(){
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
   renderFloor(D); renderProjects(D); renderFleetio(D);
+  if(VIEW==='history') renderHistory();
   if(GFS) renderGanttFS();
   setView(VIEW);
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===RANGE));
