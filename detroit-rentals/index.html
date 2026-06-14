@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Detroit Rentals Near DaVita · 4–6 BR · 2+ Bath · $1,250–$1,750</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+:root{
+  --bg:#0c1620; --panel:#13212e; --panel2:#182a39; --line:#22384a;
+  --ink:#e7eef3; --mut:#8aa2b1; --dim:#5d7585;
+  --teal:#2fb3a8; --teal-d:#1f7d75;
+  --red:#e05252; --amber:#e0a33c; --green:#39b48b;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+
+/* ── LAYOUT ── */
+.shell{display:flex;flex-direction:column;height:100vh}
+
+header{
+  background:var(--panel);border-bottom:1px solid var(--line);
+  padding:12px 20px;display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;gap:12px;flex-wrap:wrap;
+}
+.hd-title{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.hd-sub{font-family:var(--mono);font-size:11px;color:var(--mut);letter-spacing:.06em;margin-top:2px}
+.hd-filters{display:flex;gap:8px;flex-wrap:wrap}
+.chip{
+  background:var(--panel2);border:1px solid var(--line);border-radius:20px;
+  padding:4px 10px;font-family:var(--mono);font-size:11px;color:var(--teal);
+  letter-spacing:.04em;white-space:nowrap
+}
+
+.body{display:flex;flex:1;overflow:hidden}
+
+/* ── SIDEBAR ── */
+.rail{
+  width:310px;flex:none;background:var(--panel);
+  border-right:1px solid var(--line);
+  overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-direction:column;
+}
+.section{padding:16px;border-bottom:1px solid var(--line)}
+.section-head{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--dim);font-weight:600;margin-bottom:12px
+}
+
+/* DaVita list */
+.davita-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px;border-radius:8px;cursor:pointer;
+  transition:background .12s;margin-bottom:4px;
+}
+.davita-item:hover,.davita-item.active{background:var(--panel2)}
+.dv-dot{
+  width:10px;height:10px;border-radius:50%;background:var(--red);
+  flex:none;margin-top:4px;box-shadow:0 0 0 3px rgba(224,82,82,.2)
+}
+.dv-name{font-size:13px;font-weight:600;line-height:1.3}
+.dv-addr{font-size:11.5px;color:var(--mut);margin-top:2px;font-family:var(--mono)}
+.dv-link{
+  display:inline-block;margin-top:5px;font-family:var(--mono);font-size:10px;
+  color:var(--teal);letter-spacing:.05em;text-decoration:none;
+}
+.dv-link:hover{text-decoration:underline}
+
+/* Search buttons */
+.platform-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.platform-btn{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:10px 8px;border-radius:8px;text-decoration:none;
+  background:var(--panel2);border:1px solid var(--line);
+  transition:border-color .12s,background .12s;
+  font-family:var(--mono);
+}
+.platform-btn:hover{border-color:var(--teal);background:var(--bg)}
+.pb-name{font-size:11.5px;font-weight:700;color:var(--ink);letter-spacing:.03em}
+.pb-count{font-size:10px;color:var(--mut);letter-spacing:.04em}
+
+/* Legend */
+.legend-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12.5px;color:var(--mut)}
+.leg-dot{width:11px;height:11px;border-radius:50%;flex:none;border:1px solid rgba(255,255,255,.15)}
+.leg-ring{width:16px;height:11px;border-radius:3px;flex:none;opacity:.5}
+
+/* Note box */
+.note-box{
+  background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  padding:12px;font-size:12px;color:var(--mut);line-height:1.55;margin-top:0;
+}
+.note-box b{color:var(--ink)}
+
+/* ── MAP ── */
+#map{flex:1;background:#0a131b;z-index:0}
+
+/* ── LEAFLET OVERRIDES ── */
+.leaflet-popup-content-wrapper{
+  background:var(--panel);color:var(--ink);border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.6);
+}
+.leaflet-popup-tip{background:var(--panel)}
+.leaflet-popup-content{margin:14px 16px;font-family:var(--sans)}
+.pop-title{font-size:14px;font-weight:700;margin-bottom:4px}
+.pop-addr{font-size:12px;color:var(--mut);font-family:var(--mono)}
+.pop-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.pop-btn{
+  display:inline-block;padding:6px 12px;border-radius:6px;
+  font-size:11.5px;font-weight:600;text-decoration:none;
+  transition:background .12s;font-family:var(--mono);letter-spacing:.04em;
+  cursor:pointer;border:none;
+}
+.pop-btn-primary{background:var(--teal);color:#fff}
+.pop-btn-primary:hover{background:var(--teal-d)}
+.pop-btn-outline{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+.pop-btn-outline:hover{border-color:var(--teal);color:var(--teal)}
+
+/* ── MOBILE ── */
+@media(max-width:700px){
+  .body{flex-direction:column}
+  .rail{width:100%;height:40vh;border-right:0;border-top:1px solid var(--line)}
+  #map{flex:1;min-height:260px}
+  .platform-grid{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div>
+      <div class="hd-title">Detroit Rentals Near DaVita</div>
+      <div class="hd-sub">Click a DaVita pin · search live listings on your preferred platform</div>
+    </div>
+    <div class="hd-filters">
+      <span class="chip">4–6 Bedrooms</span>
+      <span class="chip">2+ Bathrooms</span>
+      <span class="chip">$1,250–$1,750 / mo</span>
+      <span class="chip">Houses only</span>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- ── SIDEBAR ── -->
+    <aside class="rail" id="rail">
+
+      <div class="section">
+        <div class="section-head">Search live listings</div>
+        <div class="platform-grid" id="platformGrid">
+          <!-- populated by JS with current coords -->
+        </div>
+        <div class="note-box" style="margin-top:10px">
+          <b>How to use:</b> Click any <span style="color:var(--red)">●</span> DaVita pin on the map, then hit <b>Search nearby</b> to find rentals within 5 miles of that location on your chosen platform. Or use the buttons above to search all of Detroit.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">DaVita locations · Detroit metro</div>
+        <div id="davitaList"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">Legend</div>
+        <div class="legend-row"><span class="leg-dot" style="background:var(--red)"></span>DaVita dialysis clinic</div>
+        <div class="legend-row"><span class="leg-ring" style="background:var(--red);border:2px dashed var(--red)"></span>5-mile commute radius</div>
+        <div class="legend-row"><span class="leg-dot" style="background:var(--teal)"></span>Selected clinic</div>
+      </div>
+
+    </aside>
+
+    <div id="map"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ── DaVita locations (confirmed from DaVita.com + Yelp, June 2026) ──
+const DAVITA = [
+  {
+    name:"DaVita Grosse Pointe Dialysis",
+    addr:"18000 E Warren Ave, Detroit, MI 48224",
+    lat:42.3878, lng:-82.9682,
+    url:"https://www.davita.com/locations/mi/detroit/18000-e-warren-ave--2273/",
+    phone:"(313) 343-5371"
+  },
+  {
+    name:"DaVita New Center Dialysis",
+    addr:"7700 2nd Ave, Detroit, MI 48202",
+    lat:42.3752, lng:-83.0711,
+    url:"https://www.davita.com/locations/mi/detroit/7700-2nd-ave--151/",
+    phone:""
+  },
+  {
+    name:"DaVita Schaeffer Drive Dialysis",
+    addr:"18100 Schaefer Hwy, Detroit, MI 48235",
+    lat:42.4082, lng:-83.1684,
+    url:"https://www.davita.com/locations/mi/detroit/18100-schaefer-hwy--3426",
+    phone:"(313) 861-4354"
+  },
+  {
+    name:"DaVita Motor City Dialysis",
+    addr:"4727 Saint Antoine St, Detroit, MI 48201",
+    lat:42.3491, lng:-83.0558,
+    url:"https://davita.com/locations/mi/detroit/4727-saint-antoine-st--3429/",
+    phone:""
+  },
+  {
+    name:"DaVita Wyoming Street Dialysis",
+    addr:"13945 Wyoming St, Detroit, MI 48238",
+    lat:42.4162, lng:-83.1327,
+    url:"https://www.davita.com/locations/MI/Detroit/13945WyomingSt--11667",
+    phone:""
+  },
+  {
+    name:"DaVita English Village Dialysis",
+    addr:"11707 Whittier Ave, Detroit, MI 48224",
+    lat:42.3835, lng:-82.9900,
+    url:"https://www.davita.com/locations/MI/Detroit/11707WhittierAve--1645",
+    phone:""
+  },
+  {
+    name:"DaVita State Fair Dialysis",
+    addr:"19800 Woodward Ave, Detroit, MI 48203",
+    lat:42.4278, lng:-83.0475,
+    url:"https://davita.com/locations/mi/detroit/19800-woodward-ave--1592/",
+    phone:""
+  },
+  {
+    name:"DaVita Kresge Dialysis",
+    addr:"4145 Cass Ave, Detroit, MI 48201",
+    lat:42.3558, lng:-83.0615,
+    url:"https://davita.com/locations/mi/detroit/4145-cass-ave--3428/",
+    phone:""
+  },
+  {
+    name:"DaVita Jefferson Dialysis",
+    addr:"2674 E Jefferson Ave, Detroit, MI 48207",
+    lat:42.3325, lng:-82.9993,
+    url:"https://www.davita.com/locations/facility-lookup/5522",
+    phone:""
+  },
+  {
+    name:"DaVita Southfield Dialysis",
+    addr:"21900 Melrose Ave, Southfield, MI 48075",
+    lat:42.4731, lng:-83.2223,
+    url:"https://www.yelp.com/biz/davita-southfield",
+    phone:""
+  },
+  {
+    name:"DaVita North Oakland Dialysis",
+    addr:"450 N Telegraph Rd, Pontiac, MI 48341",
+    lat:42.6538, lng:-83.2888,
+    url:"https://davita.com/locations/mi/pontiac/450-n-telegraph-rd--327/",
+    phone:""
+  }
+];
+
+// ── Rental search URL builders ──
+// lat/lng optional — if provided, filters by area; if null, searches all Detroit
+function buildSearchURLs(lat, lng, radiusMi) {
+  const radiusKm = radiusMi ? radiusMi * 1.609 : null;
+
+  // Platform base URLs (pre-filtered for criteria)
+  return [
+    {
+      name: "Zillow",
+      desc: "1,100+ houses",
+      color: "#0074e4",
+      url: lat
+        ? `https://www.zillow.com/detroit-mi/rent-houses-4-bedrooms/?searchQueryState=%7B%22mapBounds%22%3A%7B%22west%22%3A${(lng-0.07).toFixed(4)}%2C%22east%22%3A${(lng+0.07).toFixed(4)}%2C%22south%22%3A${(lat-0.05).toFixed(4)}%2C%22north%22%3A${(lat+0.05).toFixed(4)}%7D%7D`
+        : "https://www.zillow.com/detroit-mi/rent-houses-4-bedrooms/"
+    },
+    {
+      name: "HotPads",
+      desc: "4-6BR · 2+ bath",
+      color: "#f05c22",
+      url: lat
+        ? `https://hotpads.com/detroit-mi/4-plus-bedroom-houses-for-rent?lat=${lat.toFixed(4)}&lng=${lng.toFixed(4)}&z=13&bathrooms=2%2C3%2C4&price_max=1750&price_min=1250`
+        : "https://hotpads.com/detroit-mi/4-plus-bedroom-houses-for-rent?bathrooms=2%2C3%2C4&price_max=1750&price_min=1250"
+    },
+    {
+      name: "Apartments.com",
+      desc: "Houses only",
+      color: "#0f9d58",
+      url: lat
+        ? `https://www.apartments.com/houses/detroit-mi/4-bedrooms/min-1250-max-1750/`
+        : "https://www.apartments.com/houses/detroit-mi/4-bedrooms/min-1250-max-1750/"
+    },
+    {
+      name: "Redfin",
+      desc: "4BR 2Ba filter",
+      color: "#cc1414",
+      url: "https://www.redfin.com/city/5665/MI/Detroit/4-bedroom-2-bath-house-for-rent"
+    },
+    {
+      name: "Zumper",
+      desc: "570+ houses",
+      color: "#7c3aed",
+      url: lat
+        ? `https://www.zumper.com/houses-for-rent/detroit-mi?beds=4-6&baths=2&price_min=1250&price_max=1750&lat=${lat.toFixed(4)}&lng=${lng.toFixed(4)}`
+        : "https://www.zumper.com/houses-for-rent/detroit-mi?beds=4-6&baths=2&price_min=1250&price_max=1750"
+    },
+    {
+      name: "Facebook",
+      desc: "Marketplace",
+      color: "#1877f2",
+      url: "https://www.facebook.com/marketplace/detroit/4-bedroom-houses/"
+    }
+  ];
+}
+
+function renderPlatformButtons(lat, lng) {
+  const grid = document.getElementById('platformGrid');
+  const urls = buildSearchURLs(lat, lng, 5);
+  grid.innerHTML = urls.map(p => `
+    <a href="${p.url}" target="_blank" rel="noopener" class="platform-btn" title="Search on ${p.name}">
+      <span class="pb-name" style="color:${p.color}">${p.name}</span>
+      <span class="pb-count">${p.desc}</span>
+    </a>
+  `).join('');
+}
+
+// ── Map init ──
+const map = L.map('map', {zoomControl:true, attributionControl:true})
+  .setView([42.395, -83.06], 11);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution:'&copy; OpenStreetMap &copy; CARTO',
+  subdomains:'abcd', maxZoom:19
+}).addTo(map);
+
+// Custom DaVita icon
+function dvIcon(active) {
+  return L.divIcon({
+    className:'',
+    html:`<div style="
+      width:14px;height:14px;border-radius:50%;
+      background:${active?'var(--teal)':'#e05252'};
+      border:2px solid ${active?'#2fb3a8':'#ff7070'};
+      box-shadow:0 0 0 3px ${active?'rgba(47,179,168,.25)':'rgba(224,82,82,.25)'};
+    "></div>`,
+    iconSize:[14,14],
+    iconAnchor:[7,7],
+    popupAnchor:[0,-12]
+  });
+}
+
+let activeMarker = null;
+const circles = {};
+const markers = {};
+const listItems = {};
+
+// Build sidebar list
+const listEl = document.getElementById('davitaList');
+DAVITA.forEach((d, i) => {
+  const el = document.createElement('div');
+  el.className = 'davita-item';
+  el.dataset.idx = i;
+  el.innerHTML = `
+    <span class="dv-dot"></span>
+    <div>
+      <div class="dv-name">${d.name}</div>
+      <div class="dv-addr">${d.addr}</div>
+      <a href="${d.url}" target="_blank" rel="noopener" class="dv-link" onclick="event.stopPropagation()">
+        View on DaVita.com ↗
+      </a>
+    </div>`;
+  el.addEventListener('click', () => focusDaVita(i));
+  listEl.appendChild(el);
+  listItems[i] = el;
+});
+
+// Add markers and radius circles
+DAVITA.forEach((d, i) => {
+  const m = L.marker([d.lat, d.lng], {icon: dvIcon(false)}).addTo(map);
+  m.bindPopup(buildPopup(d, i), {maxWidth:300});
+  m.on('click', () => focusDaVita(i, false));
+  markers[i] = m;
+
+  const circle = L.circle([d.lat, d.lng], {
+    radius: 8047, // 5 miles in meters
+    color: '#e05252',
+    fillColor: '#e05252',
+    fillOpacity: 0.04,
+    weight: 1,
+    dashArray: '5,6'
+  }).addTo(map);
+  circles[i] = circle;
+});
+
+function buildPopup(d, i) {
+  const urls = buildSearchURLs(d.lat, d.lng, 5);
+  const searchLinks = urls.slice(0,3).map(p =>
+    `<a href="${p.url}" target="_blank" rel="noopener" class="pop-btn pop-btn-outline" style="font-size:10px">${p.name}</a>`
+  ).join('');
+  return `
+    <div class="pop-title">${d.name}</div>
+    <div class="pop-addr">${d.addr}${d.phone ? '<br>'+d.phone : ''}</div>
+    <div class="pop-actions">
+      <a href="${d.url}" target="_blank" rel="noopener" class="pop-btn pop-btn-primary">DaVita page ↗</a>
+      ${searchLinks}
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--mut)">5-mile search radius shown on map</div>
+  `;
+}
+
+function focusDaVita(i, panMap=true) {
+  const d = DAVITA[i];
+
+  // Reset previous
+  if (activeMarker !== null) {
+    markers[activeMarker].setIcon(dvIcon(false));
+    listItems[activeMarker].classList.remove('active');
+    circles[activeMarker].setStyle({color:'#e05252', fillColor:'#e05252', weight:1});
+  }
+
+  // Activate
+  activeMarker = i;
+  markers[i].setIcon(dvIcon(true));
+  listItems[i].classList.add('active');
+  circles[i].setStyle({color:'var(--teal)', fillColor:'var(--teal)', weight:2});
+  listItems[i].scrollIntoView({block:'nearest', behavior:'smooth'});
+
+  if (panMap) {
+    map.setView([d.lat, d.lng], 13, {animate:true});
+    markers[i].openPopup();
+  }
+
+  // Update platform buttons for this location
+  renderPlatformButtons(d.lat, d.lng);
+}
+
+// Initial platform buttons (all Detroit)
+renderPlatformButtons(null, null);
+
+// Fit all markers on load
+const bounds = DAVITA.map(d => [d.lat, d.lng]);
+map.fitBounds(bounds, {padding:[48,48]});
+
+// Attribution note
+const note = L.control({position:'bottomleft'});
+note.onAdd = () => {
+  const d = L.DomUtil.create('div');
+  d.style.cssText = 'background:rgba(12,22,32,.85);color:#8aa2b1;font-size:10.5px;padding:6px 10px;border-radius:6px;border:1px solid #22384a;font-family:ui-monospace,monospace;max-width:280px;line-height:1.5';
+  d.innerHTML = 'DaVita locations verified via DaVita.com &amp; Yelp, June 2026. Rental searches open live listings on external platforms. Listings change daily — verify availability directly with landlord.';
+  return d;
+};
+note.addTo(map);
+</script>
+</body>
+</html>
