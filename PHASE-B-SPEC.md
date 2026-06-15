@@ -81,9 +81,14 @@ PC, or do it during the workbook edit when you hand it over.
 ## 6. Execution order (safe cutover — board stays live throughout)
 
 1. **(me, now)** This spec. ✅
-2. **(me, solo)** Ship the **backward-compatible dashboard + Export-Data** that
-   read *either* format. Deploy — nothing changes yet because the data's still
-   old-format. Zero risk.
+2. **(me, solo)** Backward-compatible **Export-Data.ps1** dual-read built +
+   validated. ✅ Reads a `Shop Tasks` sheet when present (builds the same
+   open/done task strings the dashboard already renders, plus a structured
+   `tasks` array with opened/closed/status); falls back to the Notes cell when
+   the sheet is absent — so nothing changes until the sheet exists. The
+   dashboard needs no change to *display* it (done tasks even show their closed
+   date automatically). `Export-Data.ps1` runs on the PC, so it's delivered by
+   commit — you copy it over at cutover (step 3).
 3. **(you)** Drop the workbook here → **(me)** add `Shop Tasks`, migrate
    existing tasks, send it back → **(you)** put it back + copy the new
    `Export-Data.ps1` onto the PC.

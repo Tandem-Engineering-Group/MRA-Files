@@ -68,7 +68,68 @@ function Parse-Tasks($text) {
             }
         }
     }
-    return @{ open = @($open); openCount = $open.Count; doneCount = $doneCount; salOpen = $salOpen; done = @($done) }
+    return @{ open = @($open); openCount = $open.Count; doneCount = $doneCount; salOpen = $salOpen; done = @($done); tasks = @() }
+}
+
+# ---- Structured tasks (Phase B) -------------------------------------------
+# Optional 'Shop Tasks' sheet: one row per task, mirroring Project Tasks.
+#   A=Job#  B=Bay  C=Task  D=Assigned  E=Opened  F=Closed  G=Status
+#   H=Milestone  I=Comments
+# If the sheet is absent (or a job has no rows), we fall back to Parse-Tasks on
+# the Input Notes cell -> fully backward-compatible, nothing changes until the
+# sheet exists.
+function Read-ShopTasks($zip, $wbXml, $relsXml, $shared, $nsMain, $nsRel, $nsPkg) {
+    $map = @{}
+    $sx = Get-SheetXml $zip $wbXml $relsXml 'Shop Tasks' $nsMain $nsRel $nsPkg
+    if (-not $sx) { return $map }
+    foreach ($row in $sx.worksheet.sheetData.row) {
+        if ([int]$row.r -lt 2) { continue }
+        $c = Get-RowCells $row
+        $job  = ([string](Resolve-Cell $c['A'] $shared)).Trim()
+        $task = ([string](Resolve-Cell $c['C'] $shared)).Trim()
+        if ($job -eq '' -or $task -eq '') { continue }
+        $assigned = ([string](Resolve-Cell $c['D'] $shared)).Trim()
+        $od = Get-CellDate $c['E']
+        $cl = Get-CellDate $c['F']
+        $status = ([string](Resolve-Cell $c['G'] $shared)).Trim()
+        $mile   = ([string](Resolve-Cell $c['H'] $shared)).Trim()
+        $cmt    = ([string](Resolve-Cell $c['I'] $shared)).Trim()
+        $isDone = ($status -match '(?i)done|complete') -or ($null -ne $cl)
+        $obj = [PSCustomObject]@{
+            task = $task; who = $assigned
+            opened = $(if ($od) { $od.ToString('yyyy-MM-dd') } else { $null })
+            closed = $(if ($cl) { $cl.ToString('yyyy-MM-dd') } else { $null })
+            status = $status; milestone = $mile; comments = $cmt; done = $isDone
+        }
+        if (-not $map.ContainsKey($job)) { $map[$job] = New-Object System.Collections.ArrayList }
+        [void]$map[$job].Add($obj)
+    }
+    return $map
+}
+
+# Turn structured task rows into the same shape Parse-Tasks emits (so the
+# dashboard renders them with zero changes), plus a structured 'tasks' array.
+function Build-TasksFromRows($rows) {
+    $open = New-Object System.Collections.ArrayList
+    $done = New-Object System.Collections.ArrayList
+    $tasks = New-Object System.Collections.ArrayList
+    $doneCount = 0; $salOpen = 0; $n = 0
+    foreach ($r in $rows) {
+        $who = [string]$r.who
+        $label = if ($who -ne '') { "$who - $($r.task)" } else { [string]$r.task }
+        if ($r.done) {
+            $doneCount++
+            $cdisp = ''
+            if ($r.closed) { $p = $r.closed.Split('-'); $cdisp = "  (closed " + [int]$p[1] + "/" + [int]$p[2] + "/" + $p[0].Substring(2) + ")" }
+            [void]$done.Add($label + $cdisp)
+        } else {
+            $n++
+            [void]$open.Add("$n. $label")
+            if ($label -match '(?i)\bsal\b') { $salOpen++ }
+        }
+        [void]$tasks.Add([PSCustomObject]@{ t = [string]$r.task; who = $who; op = $r.opened; cl = $r.closed; st = [string]$r.status; done = [bool]$r.done })
+    }
+    return @{ open = @($open); openCount = $open.Count; doneCount = $doneCount; salOpen = $salOpen; done = @($done); tasks = @($tasks) }
 }
 
 # Resolve a worksheet's XML by its display name (returns [xml] or $null)
@@ -170,6 +231,9 @@ try {
     $sheetXml = Get-SheetXml $zip $wbXml $relsXml $SheetName $nsMain $nsRel $nsPkg
     if (-not $sheetXml) { throw "Sheet '$SheetName' not found" }
 
+    # Structured shop tasks (optional 'Shop Tasks' sheet). Empty => use Notes cell.
+    $shopTasks = Read-ShopTasks $zip $wbXml $relsXml $shared $nsMain $nsRel $nsPkg
+
     foreach ($row in $sheetXml.worksheet.sheetData.row) {
         $rowNum = [int]$row.r
         if ($rowNum -lt 4) { continue }
@@ -193,7 +257,12 @@ try {
         $startTxt = if ($sd) { $sd.ToString('MM/dd/yy') } else { '' }
         $compTxt  = if ($cd) { $cd.ToString('MM/dd/yy') } else { '' }
 
-        $t = Parse-Tasks $notes
+        # Prefer structured 'Shop Tasks' rows for this job; else parse Notes cell.
+        if ($job -ne '' -and $shopTasks.ContainsKey($job) -and $shopTasks[$job].Count -gt 0) {
+            $t = Build-TasksFromRows $shopTasks[$job]
+        } else {
+            $t = Parse-Tasks $notes
+        }
 
         $category = 'bay'
         if ($status -eq 'Leave' -or $bay -eq 'APL/Holidays') { $category = 'leave' }
@@ -203,7 +272,7 @@ try {
             row = $rowNum; bay = $bay; project = $proj; client = $client; jobNum = $job
             status = $status; pm = $pm; startISO = $startISO; completionISO = $compISO
             startText = $startTxt; completionText = $compTxt; category = $category
-            openTasks = $t.open; openCount = $t.openCount; doneCount = $t.doneCount; salOpen = $t.salOpen; doneTasks = $t.done
+            openTasks = $t.open; openCount = $t.openCount; doneCount = $t.doneCount; salOpen = $t.salOpen; doneTasks = $t.done; tasks = $t.tasks
         })
     }
 
