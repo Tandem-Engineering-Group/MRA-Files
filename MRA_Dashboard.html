@@ -194,6 +194,10 @@
     margin-right:6px; border:1px solid rgba(34,197,94,.4); border-radius:5px; padding:0 5px; user-select:none; white-space:nowrap}
   .closebtn:hover{background:rgba(34,197,94,.15)}
   body.closemode .closebtn{display:inline-block}
+  .editjob{display:none; cursor:pointer; color:#7aa2d6; font-size:10px; font-weight:700;
+    margin-left:6px; border:1px solid var(--line); border-radius:5px; padding:0 5px; user-select:none}
+  .editjob:hover{border-color:var(--blue); color:var(--blue)}
+  body.closemode .editjob{display:inline-block}
   @media(max-width:1100px){ .saltasks{grid-template-columns:1fr} }
 
   /* Team capacity panel */
@@ -334,6 +338,18 @@
   .revbtn{background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:6px;
     padding:2px 9px; font-size:11px; cursor:pointer; font-family:inherit}
   .revbtn:hover{border-color:var(--brand); color:var(--brand)}
+  /* Add-task form (modal) */
+  .addform{display:flex; flex-direction:column; gap:12px; margin-top:6px}
+  .addform label{font-size:11.5px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px; letter-spacing:.2px}
+  .addform select,.addform input,.addform textarea{width:100%; background:var(--panel2); border:1px solid var(--line);
+    color:var(--txt); border-radius:8px; padding:9px 11px; font-size:13px; font-family:inherit; box-sizing:border-box}
+  .addform textarea{resize:vertical; min-height:52px}
+  .addrow2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .addbtns{display:flex; gap:10px; justify-content:flex-end; margin-top:4px}
+  .btn-primary{background:var(--brand); color:#1a1206; border:none; border-radius:8px; padding:9px 18px; font-weight:700; cursor:pointer; font-family:inherit}
+  .btn-primary:disabled{opacity:.55; cursor:default}
+  .btn-ghost{background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:8px; padding:9px 16px; cursor:pointer; font-family:inherit}
+  .btn-ghost:hover{color:var(--txt)}
   /* Equipment / Job# board */
   .eqbar{display:flex; align-items:center; gap:12px; margin:2px 0 16px; flex-wrap:wrap}
   .eqsearch{flex:1; min-width:240px; max-width:440px; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:10px; padding:11px 15px; font-size:13.5px; font-family:inherit}
@@ -441,6 +457,7 @@
         <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">click a task count to see the tasks</span>
         <button class="expandbtn" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
         <button class="expandbtn" id="btnCloseMode" onclick="toggleCloseMode(this)" title="Enter your code to mark tasks done from the dashboard">🔒 Close mode</button>
+        <button class="expandbtn" id="btnAddTask" onclick="openAddTask()" title="Add a new shop task (needs code)">➕ Add task</button>
       </h2>
       <div class="bays" id="bays"></div>
     </div>
@@ -482,10 +499,8 @@
 
     <div style="display:flex; align-items:center; gap:10px; margin:2px 0 14px; flex-wrap:wrap">
       <div style="font-size:13px; color:var(--muted)">📋 Starting a project or adding tasks? Download the template, fill it offline, then drop it in the <b>Intake Inbox</b> folder — it shows here within ~15 min.</div>
-      <span style="margin-left:auto; align-self:center; font-size:12px; color:var(--muted); font-weight:600">📄 Hard-Date sample:</span>
-      <button class="editbtn" onclick="openHardDate(1)" title="Style 1 — Corporate: clean, formal, phase-grouped table">Style 1</button>
-      <button class="editbtn" onclick="openHardDate(2)" title="Style 2 — Timeline: visual milestone rail with date markers">Style 2</button>
-      <button class="editbtn" onclick="openHardDate(3)" title="Style 3 — Bold/Branded: orange header band, marketing-grade">Style 3</button>
+      <span style="margin-left:auto; align-self:center; font-size:12px; color:var(--muted); font-weight:600">📄 Hard-Date Schedule:</span>
+      <button class="editbtn" onclick="openTplPicker()" title="Build a print-ready Hard-Date schedule for one of your projects (pick project + style)">📄 Build Schedule</button>
       <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260613b" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx)">⬇ Download Intake Template</a>
       <button class="helpbtn" style="width:24px;height:24px;font-size:13px" onclick="openHelp('help-intake')" title="How adding a project works">?</button>
     </div>
@@ -694,6 +709,89 @@
     </div>
   </div>
 
+  <!-- ===================== ADD-TASK MODAL ===================== -->
+  <div class="modal-overlay" id="addModal" onclick="closeAdd(event)">
+    <div class="modal" style="max-width:520px">
+      <button class="modal-close" onclick="closeAdd()" title="Close">×</button>
+      <h3>➕ Add a shop task</h3>
+      <div class="msub">Writes a new row to the <b>Shop Tasks</b> sheet — it shows on the board within ~15 min.</div>
+      <div class="addform">
+        <div>
+          <label>Project</label>
+          <select id="atProject" onchange="atProjectChange()"></select>
+        </div>
+        <div id="atNewProjWrap" style="display:none">
+          <label>New project name</label>
+          <input id="atNewProj" placeholder="e.g. SWC MMOT" autocomplete="off">
+        </div>
+        <div class="addrow2">
+          <div><label>Job #</label><input id="atJob" placeholder="optional" autocomplete="off"></div>
+          <div><label>Bay</label><select id="atBay"></select></div>
+        </div>
+        <div>
+          <label>Task</label>
+          <textarea id="atTask" placeholder="What needs doing…"></textarea>
+        </div>
+        <div class="addrow2">
+          <div><label>Assigned to</label><select id="atAssigned"></select></div>
+          <div><label>Milestone?</label><select id="atMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
+        </div>
+        <div><label>Comments (optional)</label><input id="atComments" autocomplete="off"></div>
+        <div id="atMsg" style="font-size:12px; min-height:16px"></div>
+        <div class="addbtns">
+          <button class="btn-ghost" onclick="closeAdd()">Cancel</button>
+          <button class="btn-primary" id="atSubmit" onclick="submitAddTask()">Add task</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== EDIT-JOB MODAL ===================== -->
+  <div class="modal-overlay" id="editModal" onclick="closeEdit(event)">
+    <div class="modal" style="max-width:520px">
+      <button class="modal-close" onclick="closeEdit()" title="Close">×</button>
+      <h3>✎ Edit job</h3>
+      <div class="msub" id="ejSub">Move it to another bay, change the dates, or tweak the notes. Saves to the <b>Input</b> sheet — board updates within ~15 min.</div>
+      <div class="addform">
+        <div class="addrow2">
+          <div><label>Bay</label><select id="ejBay"></select></div>
+          <div><label>Status</label><select id="ejStatus"></select></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Start date</label><input id="ejStart" type="date"></div>
+          <div><label>Completion date</label><input id="ejComp" type="date"></div>
+        </div>
+        <div><label>Notes / tasks (Input cell)</label><textarea id="ejNotes" style="min-height:80px"></textarea></div>
+        <div id="ejMsg" style="font-size:12px; min-height:16px"></div>
+        <div class="addbtns">
+          <button class="btn-ghost" onclick="closeEdit()">Cancel</button>
+          <button class="btn-primary" id="ejSubmit" onclick="submitEditJob()">Save changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== HARD-DATE TEMPLATE PICKER ===================== -->
+  <div class="modal-overlay" id="tplModal" onclick="closeTpl(event)">
+    <div class="modal" style="max-width:480px">
+      <button class="modal-close" onclick="closeTpl()" title="Close">×</button>
+      <h3>📄 Build a Hard-Date Schedule</h3>
+      <div class="msub">Pick a project and a style — it builds a print-ready schedule from that project's milestones &amp; dates (opens in a new tab; <b>Save as PDF</b> there).</div>
+      <div class="addform">
+        <div><label>Project</label><select id="tplProject"></select></div>
+        <div>
+          <label>Style — click to build</label>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn-primary" style="flex:1; min-width:120px" onclick="buildHDS(1)" title="Clean, formal, phase-grouped table">① Corporate</button>
+            <button class="btn-primary" style="flex:1; min-width:120px" onclick="buildHDS(2)" title="Visual milestone timeline rail">② Timeline</button>
+            <button class="btn-primary" style="flex:1; min-width:120px" onclick="buildHDS(3)" title="Bold orange branded band">③ Bold</button>
+          </div>
+        </div>
+        <div style="font-size:11px; color:var(--faint)">Just want a blank example? <a href="#" onclick="buildHDS(1,true);return false" style="color:#7aa2d6">view the sample</a></div>
+      </div>
+    </div>
+  </div>
+
   <footer>
     <img class="footlogo" src="logo-full-dark.png" alt="MRA — mobile.experiential" onerror="this.style.display='none'">
     <div id="footerText"></div>
@@ -776,7 +874,11 @@ const GENERAL_HELP = `
     <p>Click <span class="k">🔒 Close mode</span> on Bay Status and enter the code — a small <b>✓</b> appears next to each open task. Click it to mark that task done; it writes <b>Done</b> + today's date straight back to the workbook, no Excel needed. <span class="k">Show closed</span> toggles completed tasks (struck-through) on each card.</p></div>
   <div class="hsec"><h4>⑬ 🚛 Fleetio issues become shop tasks</h4>
     <p>A trailer's open Fleetio issues are pulled in as editable <b>Shop Tasks</b> rows automatically, so you can assign them (Sal / MasterWraps / …) and track them like any other task. Resolve the issue in Fleetio and the task closes itself. Tractor issues stay on the FLEETIO tab only.</p></div>
-  <div class="hsec"><h4>⑭ 📋 What's new / Rev history</h4>
+  <div class="hsec"><h4>⑭ ➕ Add a task · ✎ Edit / move a job (from the board)</h4>
+    <p>Turn on <span class="k">🔒 Close mode</span> (your code) and two more tools appear: <span class="k">➕ Add task</span> (top of Bay Status) opens a form to drop a new task on any project; and an <span class="k">✎ edit</span> chip on each job card lets you <b>move it to another bay</b>, change the <b>start/finish dates</b>, and tweak the <b>notes</b>. Both write straight back to the workbook and show on the board within ~15 min. Same <b>code</b> as closing.</p></div>
+  <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
+    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule built from that project's milestones &amp; dates — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand.</p></div>
+  <div class="hsec"><h4>⑯ 📋 What's new / Rev history</h4>
     <p>The <span class="k">Rev … · What's new</span> button at the very bottom of the page opens the change log — every batch of updates, newest first. Check it after an update to see what changed.</p></div>
 `;
 const FLEETIO_HELP = `
@@ -800,6 +902,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.1", date:"2026-06-15", title:"Edit from the dashboard + Hard-Date builder", items:[
+    "➕ Add task and ✎ Edit/move a job right on the FLOOR board — move bays, change start/finish dates and tweak notes. Code-protected (same 1974 code as Close) and writes back to the workbook.",
+    "📄 Build a Hard-Date Schedule for any project: the PROJECTS tab now has a picker — choose a project + a style (Corporate / Timeline / Bold) and it generates a print-ready schedule from that project's milestones.",
+    "? help refreshed and a few small fixes." ] },
   { rev:"3.0", date:"2026-06-15", title:"Wall display, Next Up / On Hold, assignee routing", items:[
     "📺 Wall/TV mode: bays + three crew queues (Sal · MasterWraps · Electricians) fit one screen and auto-scroll.",
     "New combined Next Up / On Hold tile sits under Parking Lot and scrolls when full; removed the separate pipeline list and standalone On-Hold tile.",
@@ -843,6 +949,9 @@ function closeHelp(e){ if(!e || e.target.id==='helpModal' || e.target.classList.
   document.getElementById('helpModal').classList.remove('show'); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   document.getElementById('helpModal').classList.remove('show');
+  const am=document.getElementById('addModal'); if(am) am.classList.remove('show');
+  const tm=document.getElementById('tplModal'); if(tm) tm.classList.remove('show');
+  const em=document.getElementById('editModal'); if(em) em.classList.remove('show');
   document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop();
 } });
 document.addEventListener('click',e=>{ const p=document.getElementById('barPop');
@@ -942,6 +1051,93 @@ function closeTaskBtn(el){
     if(line){ line.style.opacity=".5"; line.style.textDecoration="line-through"; }
     el.textContent="✓ done"; el.title="Marked done — confirmed on the next refresh";
   }).catch(()=>{ el.textContent="✓ close"; el.style.pointerEvents=""; alert("Couldn't reach the close service — try again."); });
+}
+
+/* ---------- Add a task from the dashboard (PIN-gated, mirrors close) ---------- */
+const SHOP_WRITE_URL = "";   // paste the "MRA Shop Write" Power Automate URL here once the flow exists (powers Add + Edit/Move)
+const BAY_OPTIONS = ['Bay 2 Front','Bay 2 Back','Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back','Parking Lot','On Hold','Next Up'];
+const ASSIGNEE_OPTIONS = ['Sal','MasterWraps','Electricians','Doug','Vendor'];
+function openAddTask(){
+  if(!SHOP_WRITE_URL){ alert("Add-from-dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
+  if(!CLOSE_PIN){ const pin=(prompt("Enter your code to add a task:")||"").trim(); if(!pin) return;
+    if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
+  const D=window.MRA_DATA||{};
+  const projs=[...new Set((D.jobs||[]).filter(j=>j.category!=='leave').map(j=>j.project).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const jobByProj={}; (D.jobs||[]).forEach(j=>{ if(j.project && !jobByProj[j.project]) jobByProj[j.project]=j.jobNum||''; });
+  window._atJobByProj=jobByProj;
+  document.getElementById('atProject').innerHTML = projs.map(p=>`<option value="${escA(p)}">${esc(p)}</option>`).join("")+`<option value="__new__">➕ New project…</option>`;
+  document.getElementById('atBay').innerHTML = BAY_OPTIONS.map(b=>`<option>${esc(b)}</option>`).join("");
+  document.getElementById('atAssigned').innerHTML = ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
+  document.getElementById('atTask').value=""; document.getElementById('atComments').value="";
+  document.getElementById('atMsg').textContent=""; document.getElementById('atNewProj').value="";
+  document.getElementById('atMilestone').value=""; document.getElementById('atSubmit').disabled=false;
+  atProjectChange();
+  document.getElementById('addModal').classList.add('show');
+}
+function atProjectChange(){
+  const v=document.getElementById('atProject').value, isNew=(v==='__new__');
+  document.getElementById('atNewProjWrap').style.display = isNew?'':'none';
+  document.getElementById('atJob').value = isNew ? '' : ((window._atJobByProj&&window._atJobByProj[v])||'');
+}
+function closeAdd(e){ if(!e || e.target.id==='addModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('addModal').classList.remove('show'); }
+function submitAddTask(){
+  const sel=document.getElementById('atProject').value;
+  const proj=(sel==='__new__') ? document.getElementById('atNewProj').value.trim() : sel;
+  const task=document.getElementById('atTask').value.trim();
+  const msg=document.getElementById('atMsg');
+  if(!proj){ msg.style.color='var(--red)'; msg.textContent='Pick or name a project.'; return; }
+  if(!task){ msg.style.color='var(--red)'; msg.textContent='Enter the task.'; return; }
+  const payload={ action:"addTask", project:proj, jobNum:document.getElementById('atJob').value.trim(),
+    bay:document.getElementById('atBay').value, task:task, assigned:document.getElementById('atAssigned').value,
+    milestone:document.getElementById('atMilestone').value, comments:document.getElementById('atComments').value.trim(),
+    pin:CLOSE_PIN };
+  const btn=document.getElementById('atSubmit'); btn.disabled=true; btn.textContent="Adding…";
+  msg.style.color='var(--muted)'; msg.textContent='Sending…';
+  fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
+    .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Added — shows on the board within ~15 min.';
+      btn.textContent="Add task";
+      setTimeout(()=>{ document.getElementById('addModal').classList.remove('show'); }, 1700); })
+    .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the add service — try again.";
+      btn.textContent="Add task"; btn.disabled=false; });
+}
+
+/* ---------- Edit / move a job from the dashboard (PIN-gated) ---------- */
+const STATUS_OPTIONS = ['Active','Scheduled','On Hold','Shipped','Leave','TBD'];
+function openEditJob(row){
+  if(!SHOP_WRITE_URL){ alert("Editing from the dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
+  if(!CLOSE_PIN){ const pin=(prompt("Enter your code to edit:")||"").trim(); if(!pin) return;
+    if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
+  const D=window.MRA_DATA||{};
+  const j=(D.jobs||[]).find(x=>x.row===row);
+  if(!j){ alert("Couldn't find that job."); return; }
+  window._ejRow=row;
+  document.getElementById('ejSub').innerHTML = `<b>${esc(j.project)}</b>${j.jobNum?" · "+esc(j.jobNum):""} — saves to the Input sheet; board updates within ~15 min.`;
+  // Bay dropdown (include the job's current value even if it's not a standard bay)
+  let bays=BAY_OPTIONS.slice(); if(j.bay && bays.indexOf(j.bay)<0) bays.unshift(j.bay);
+  document.getElementById('ejBay').innerHTML = bays.map(b=>`<option${b===j.bay?' selected':''}>${esc(b)}</option>`).join("");
+  let stats=STATUS_OPTIONS.slice(); if(j.status && !stats.some(s=>s.toLowerCase()===j.status.toLowerCase())) stats.unshift(j.status);
+  document.getElementById('ejStatus').innerHTML = stats.map(s=>`<option${s.toLowerCase()===(j.status||"").toLowerCase()?' selected':''}>${esc(s)}</option>`).join("");
+  document.getElementById('ejStart').value = j.startISO||"";
+  document.getElementById('ejComp').value = j.completionISO||"";
+  document.getElementById('ejNotes').value = j.notesRaw||"";
+  document.getElementById('ejMsg').textContent=""; document.getElementById('ejSubmit').disabled=false;
+  document.getElementById('editModal').classList.add('show');
+}
+function closeEdit(e){ if(!e || e.target.id==='editModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('editModal').classList.remove('show'); }
+function submitEditJob(){
+  const row=window._ejRow; if(!row){ return; }
+  const payload={ action:"editJob", row:row, pin:CLOSE_PIN,
+    bay:document.getElementById('ejBay').value, status:document.getElementById('ejStatus').value,
+    start:document.getElementById('ejStart').value, completion:document.getElementById('ejComp').value,
+    notes:document.getElementById('ejNotes').value };
+  const btn=document.getElementById('ejSubmit'); btn.disabled=true; btn.textContent="Saving…";
+  const msg=document.getElementById('ejMsg'); msg.style.color='var(--muted)'; msg.textContent='Saving…';
+  fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
+    .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Saved — board updates within ~15 min.'; btn.textContent="Save changes";
+      setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1700); })
+    .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Save changes"; btn.disabled=false; });
 }
 
 function classify(job, today){
@@ -1127,7 +1323,7 @@ function renderFloor(D){
     if(SHOWCLOSED && (j.doneTasks||[]).length)
       tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
     const jc=c.state==="done"?" done":"";
-    return `<div class="job${jc}"><div class="pj">${esc(j.project)}</div>`+
+    return `<div class="job${jc}"><div class="pj">${esc(j.project)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
@@ -1737,10 +1933,55 @@ function hdsV3(S){
   return `<!doctype html><html><head><meta charset="utf-8"><title>MRA Hard Date Schedule — ${esc(S.project)}</title><style>${css}</style></head><body>${HDS_BAR}<div class="sheet"><div class="band"><div class="logobox"><img src="${MRA_LOGO}" alt="MRA"></div><div class="mid"><div class="ttl">HARD-DATE SCHEDULE</div><div class="sub">${esc(S.project)} &middot; ${esc(S.launchLabel)}</div></div><div class="launch"><div class="l">Launch</div><div class="v">${esc(S.launch)}</div></div></div><div class="pad"><div class="meta3"><span><span class="k">Client</span> <b>${esc(S.client)}</b></span><span><span class="k">Job</span> <b>${esc(S.job)}</b></span><span><span class="k">PM</span> <b>${esc(S.pm)}</b></span><span><span class="k">Attn</span> <b>${esc(S.attn)}</b></span><span><span class="k">Issued</span> <b>${esc(S.issue)}</b></span><span><span class="k">Done</span> <b>${done}/${all.length}</b></span></div>${blocks}<div class="warn">&#9888;&nbsp; Missing any of these dates may delay the launch or result in loss of position in the production queue.</div><div class="foot">Prepared by MRA &middot; mobile.experiential &mdash; ${esc(S.version)}</div></div></div></body></html>`;
 }
 
-function openHardDate(v){
+/* ---------- Hard-Date Schedule builder: real project -> a chosen style ---------- */
+const HD_WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const HD_MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function hdDate(iso){ const d=parseISO(iso); return d?`${HD_WD[d.getDay()]}, ${HD_MO[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`:'TBD'; }
+function hdShort(iso){ const d=parseISO(iso); return d?`${HD_MO[d.getMonth()]} ${d.getDate()}`:''; }
+// Map a Project-Tasks "Assigned" value onto the schedule's owner pill (MRA / Client / vendor name).
+function hdOwner(o){ o=(o||'').trim(); if(!o) return '—';
+  if(/^mra\b|^sal$|^doug$|shop|tech|electric|fab/i.test(o)) return 'MRA';
+  if(/client/i.test(o)) return 'Client'; return o; }
+function projectToHDS(p){
+  const ms=(p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'9999').localeCompare(b.dateISO||'9999'));
+  // group by phase if the export carries one, else a single section
+  const order=[], byPhase={};
+  ms.forEach(m=>{ const ph=(m.phase&&m.phase.trim())?m.phase.trim():'Milestones & Hard Dates';
+    if(!byPhase[ph]){ byPhase[ph]=[]; order.push(ph); } byPhase[ph].push(m); });
+  const phases=order.map(ph=>{ const rows=byPhase[ph];
+    const ds=rows.map(m=>m.dateISO).filter(Boolean).sort();
+    const span=ds.length?(hdShort(ds[0])+(ds.length>1&&ds[ds.length-1]!==ds[0]?' – '+hdShort(ds[ds.length-1]):'')):'';
+    return { name:ph, span,
+      rows:rows.map(m=>[ m.name, hdOwner(m.owner), hdDate(m.dateISO), (m.done?'Complete':'') ]) }; });
+  const today=new Date(), iss=`${HD_MO[today.getMonth()]} ${today.getDate()}, ${today.getFullYear()}`;
+  const dot=`${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}.${today.getFullYear()}`;
+  return { project:p.name, client:'—', attn:'—', job:'—', pm:p.pm||'TBD',
+    issue:iss, version:'Rev 1 · '+dot, launch:hdDate(p.finishISO), launchLabel:'Program Launch',
+    window:hdShort(p.startISO)+' – '+hdDate(p.finishISO), phases:phases.length?phases:[{name:'Milestones & Hard Dates',span:'',rows:[]}] };
+}
+function openTplPicker(){
+  const D=window.MRA_DATA||{};
+  const ps=(D.projects||[]).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById('tplProject').innerHTML = ps.length
+    ? ps.map(p=>`<option value="${escA(p.name)}">${esc(p.name)} — ${(p.milestones||[]).length} milestones</option>`).join("")
+    : `<option value="">(no projects loaded yet)</option>`;
+  document.getElementById('tplModal').classList.add('show');
+}
+function closeTpl(e){ if(!e || e.target.id==='tplModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('tplModal').classList.remove('show'); }
+function buildHDS(style, sample){
+  let S;
+  if(sample){ S=HARD_DATE_SAMPLE; }
+  else{
+    const D=window.MRA_DATA||{}, name=(document.getElementById('tplProject')||{}).value;
+    const p=(D.projects||[]).find(x=>x.name===name);
+    if(!p){ alert("Pick a project first."); return; }
+    if(!(p.milestones||[]).length){ if(!confirm("This project has no milestones flagged yet — build an empty schedule anyway?")) return; }
+    S=projectToHDS(p);
+  }
   const w=window.open('','_blank');
   if(!w){ alert('Please allow pop-ups for this site to open the schedule.'); return; }
-  const html = v===2 ? hdsV2(HARD_DATE_SAMPLE) : (v===3 ? hdsV3(HARD_DATE_SAMPLE) : hdsV1(HARD_DATE_SAMPLE));
+  const html = style===2 ? hdsV2(S) : (style===3 ? hdsV3(S) : hdsV1(S));
   w.document.write(html); w.document.close();
 }
 

@@ -166,6 +166,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     $name = ([string](Resolve-Cell $pc['A'] $shared)).Trim()
     if ($name -eq '') { return }
 
+    $pPhase    = ([string](Resolve-Cell $pc['B'] $shared)).Trim()
     $pStatus   = ([string](Resolve-Cell $pc['I'] $shared)).Trim()
     $pPM       = ([string](Resolve-Cell $pc['J'] $shared)).Trim()
     $pMile     = ([string](Resolve-Cell $pc['K'] $shared)).Trim()
@@ -190,7 +191,9 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     if ($pMile -eq 'Yes') {
         $md = if ($pfd) { $pfd } elseif ($psd) { $psd } else { $null }
         if ($md) { [void]$o.milestones.Add([PSCustomObject]@{
-            name = $pTask; dateISO = $md.ToString('yyyy-MM-dd') }) }
+            name = $pTask; dateISO = $md.ToString('yyyy-MM-dd')
+            owner = $pAssigned; status = $pStatus; phase = $pPhase
+            done = ($pStatus -eq 'Completed') }) }
     }
     if ($pAssigned -ne '' -and $pStatus -ne 'Completed') {
         $dueISO = if ($pfd) { $pfd.ToString('yyyy-MM-dd') }
@@ -274,6 +277,7 @@ try {
             row = $rowNum; bay = $bay; project = $proj; client = $client; jobNum = $job
             status = $status; pm = $pm; startISO = $startISO; completionISO = $compISO
             startText = $startTxt; completionText = $compTxt; category = $category
+            notesRaw = $notes
             openTasks = $t.open; openCount = $t.openCount; doneCount = $t.doneCount; salOpen = $t.salOpen; doneTasks = $t.done; tasks = $t.tasks
         })
     }
