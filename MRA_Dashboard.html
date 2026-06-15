@@ -810,8 +810,14 @@ function cleanTask(line, stripSal){
 }
 
 /* ---------- Close a task from the dashboard (Phase 2, PIN-gated) ---------- */
-const CLOSE_FLOW_URL = "";   // Power Automate HTTP POST URL — parked: transport not yet reliable (button hidden when empty)
+const CLOSE_FLOW_URL = "https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/0b7b06f423144f5cabe358f80179857e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=DuISFIuYHi06TJ2UEE49LmNCfNkoVsHJwJvNsnI4iUY";   // Power Automate close-from-dashboard
 let CLOSE_PIN = null;
+// Tasks closed from the dashboard this session — kept greyed until the next export confirms
+// them (so they don't visually "bounce" back to open before data.js catches up).
+let CLOSED_LOCAL = new Set(); try{ CLOSED_LOCAL = new Set(JSON.parse(localStorage.getItem('mra_closed')||'[]')); }catch(e){}
+function closedKey(p,t){ return (p||'')+''+(t||''); }
+function rememberClosed(p,t){ CLOSED_LOCAL.add(closedKey(p,t)); try{ localStorage.setItem('mra_closed', JSON.stringify([...CLOSED_LOCAL])); }catch(e){} }
+function isPendingClosed(p,t){ return t && CLOSED_LOCAL.has(closedKey(p,t)); }
 function toggleCloseMode(btn){
   if(!document.body.classList.contains('closemode')){
     if(!CLOSE_FLOW_URL){ alert("Close-from-dashboard isn't switched on yet."); return; }
@@ -829,16 +835,14 @@ function closeTaskBtn(el){
   if(!CLOSE_FLOW_URL){ alert("Close-from-dashboard isn't switched on yet."); return; }
   if(!CLOSE_PIN){ CLOSE_PIN=(prompt("Enter your close code:")||"").trim(); if(!CLOSE_PIN) return; }
   const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
-  const url=CLOSE_FLOW_URL
-    +"&project="+encodeURIComponent(el.dataset.proj)
-    +"&task="+encodeURIComponent(el.dataset.task)
-    +"&closedDate="+encodeURIComponent(cd)
-    +"&pin="+encodeURIComponent(CLOSE_PIN);
+  const proj=el.dataset.proj, task=el.dataset.task;
+  const body=JSON.stringify({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN});
   el.textContent="…"; el.style.pointerEvents="none";
-  fetch(url,{method:"POST",mode:"no-cors"}).then(()=>{
+  fetch(CLOSE_FLOW_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:body}).then(()=>{
+    rememberClosed(proj, task);
     const line=el.closest(".taskline")||el.closest("li");
     if(line){ line.style.opacity=".5"; line.style.textDecoration="line-through"; }
-    el.textContent="✓ sent"; el.title="Marked done — shows closed on the next refresh";
+    el.textContent="✓ done"; el.title="Marked done — confirmed on the next refresh";
   }).catch(()=>{ el.textContent="✓ close"; el.style.pointerEvents=""; alert("Couldn't reach the close service — try again."); });
 }
 
@@ -936,6 +940,13 @@ function renderFloor(D){
   ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ const k=(((it.jobNum||"").match(/\d{3,}/)||[])[0]); if(k){(flByJob[k]=flByJob[k]||[]).push(it);} });
   const fleetioFor=j=>{ const out=[],seen={}; (((j.jobNum||"").match(/\d{3,}/g))||[]).forEach(k=>{(flByJob[k]||[]).forEach(it=>{ if(!seen[it.num]){seen[it.num]=1; out.push(it);} });}); return out; };
   const shortAsset=s=>{ s=(s||"").trim(); const m=s.match(/^(.*?)(?:19|20)\d\d/); return (m?m[1]:s).trim().slice(0,26); };
+  // Prune locally-remembered closes the export has now confirmed (task no longer open).
+  if(CLOSED_LOCAL.size){
+    const _ok=new Set();
+    jobs.forEach(j=>{ (j.tasks||[]).forEach(t=>{ if(!t.done) _ok.add(closedKey(j.project,t.t)); }); });
+    let _ch=false; CLOSED_LOCAL.forEach(k=>{ if(!_ok.has(k)){ CLOSED_LOCAL.delete(k); _ch=true; } });
+    if(_ch){ try{ localStorage.setItem('mra_closed', JSON.stringify([...CLOSED_LOCAL])); }catch(e){} }
+  }
   const bayJobs=jobs.filter(j=>j.category==="bay");
   const pipeJobs=jobs.filter(j=>j.category==="pipeline");
   const leaveJobs=jobs.filter(j=>j.category==="leave");
@@ -1015,7 +1026,10 @@ function renderFloor(D){
             const opens=(j.tasks&&j.tasks.length)
               ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t)}))
               : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk)}));
-            tl+=`<div class="tasklist">`+opens.map(o=>`<div class="taskline${o.sal?" sal":""}">${closeHandle(j.project,o.raw)}${esc(o.disp)}</div>`).join("")+`</div>`;
+            tl+=`<div class="tasklist">`+opens.map(o=>{
+              const pend=isPendingClosed(j.project,o.raw);
+              return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`;
+            }).join("")+`</div>`;
           }
           if(fl.length){
             const byAsset={};
@@ -1096,7 +1110,7 @@ function renderSal(D){
   document.getElementById('salTasks').innerHTML = sal.length ? sal.map(s=>
     `<div class="salcard"><div class="sh">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?" · "+esc(s.jobNum):""}</div>`+
-    `<ol>${s.open.map(o=>`<li>${closeHandle(s.project,o.raw)}${esc(o.disp)}</li>`).join("")}${s.done.map(l=>`<li class="done">${esc(l)}</li>`).join("")}</ol></div>`).join("")
+    `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw);return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)}${esc(o.disp)}</li>`;}).join("")}${s.done.map(l=>`<li class="done">${esc(l)}</li>`).join("")}</ol></div>`).join("")
     : `<div class="empty">No ${SHOWSALCLOSED?"":"open "}Sal tasks 🎉</div>`;
   document.getElementById('salCount').textContent = total+" open"+(SHOWSALCLOSED?(" · "+totalDone+" done"):"")+" · "+sal.length+" trailers";
   const sb=document.getElementById('btnSalClosed'); if(sb){ sb.classList.toggle('on',SHOWSALCLOSED); sb.textContent=SHOWSALCLOSED?'✓ Closed shown':'Show closed'; }
