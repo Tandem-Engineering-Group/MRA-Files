@@ -134,6 +134,11 @@ try {
     $ws.Cells.Item($row,8).Value  = 'Open'
     $ws.Cells.Item($row,10).Value = "$($x.comments)"
   }
+  # keep the ShopTasks table covering all rows (so new rows stay banded/filterable)
+  try {
+    $lo=$null; foreach($l in $ws.ListObjects){ if($l.Name -eq 'ShopTasks'){ $lo=$l; break } }
+    if ($lo) { $dl=[int]$ws.Cells.Item($ws.Rows.Count,1).End(-4162).Row; if ($dl -ge 2) { $lo.Resize($ws.Range($ws.Cells.Item(1,1), $ws.Cells.Item($dl,10))) } }
+  } catch { Log "Note: ShopTasks table resize skipped: $($_.Exception.Message)" }
   $wb.Save(); $saved=$true; $wb.Close($true); $wb=$null
   Log ("Applied: added {0}, marked {1} done. Saved." -f $adds.Count, $doneNums.Count)
 }
