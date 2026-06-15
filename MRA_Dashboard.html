@@ -170,6 +170,10 @@
   .salcard ol{margin:8px 0 0 18px; padding:0}
   .salcard li{font-size:11px; color:#e7cba2; margin-bottom:4px; line-height:1.32}
   .salcard li.done{text-decoration:line-through; opacity:.5; color:var(--muted)}
+  .closebtn{display:none; cursor:pointer; color:var(--green); font-weight:700; font-size:9.5px;
+    margin-right:6px; border:1px solid rgba(34,197,94,.4); border-radius:5px; padding:0 5px; user-select:none; white-space:nowrap}
+  .closebtn:hover{background:rgba(34,197,94,.15)}
+  body.closemode .closebtn{display:inline-block}
   @media(max-width:1100px){ .saltasks{grid-template-columns:1fr} }
 
   /* Team capacity panel */
@@ -408,6 +412,7 @@
       <h2>Bay Status <span class="count" id="bayCount"></span>
         <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">click a task count to see the tasks</span>
         <button class="expandbtn" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
+        <button class="expandbtn" id="btnCloseMode" onclick="toggleCloseMode(this)" title="Enter your code to mark tasks done from the dashboard">🔒 Close mode</button>
       </h2>
       <div class="bays" id="bays"></div>
     </div>
@@ -798,6 +803,39 @@ function cleanTask(line, stripSal){
   return s.trim();
 }
 
+/* ---------- Close a task from the dashboard (Phase 2, PIN-gated) ---------- */
+const CLOSE_FLOW_URL = "";   // Power Automate HTTP POST URL — set once the flow is built
+let CLOSE_PIN = null;
+function toggleCloseMode(btn){
+  if(!document.body.classList.contains('closemode')){
+    if(!CLOSE_FLOW_URL){ alert("Close-from-dashboard isn't switched on yet."); return; }
+    const pin=(prompt("Enter your close code to turn on closing:")||"").trim();
+    if(!pin) return;
+    CLOSE_PIN=pin; document.body.classList.add('closemode'); if(btn) btn.classList.add('on');
+  } else { document.body.classList.remove('closemode'); if(btn) btn.classList.remove('on'); }
+}
+// ✓ handle shown (in Close mode) next to an open task that came from a Shop Tasks row.
+function closeHandle(project, raw){
+  if(!raw) return "";
+  return `<span class="closebtn" data-proj="${escA(project)}" data-task="${escA(raw)}" onclick="closeTaskBtn(this)" title="Mark this task done (needs code)">✓ close</span>`;
+}
+function closeTaskBtn(el){
+  if(!CLOSE_FLOW_URL){ alert("Close-from-dashboard isn't switched on yet."); return; }
+  if(!CLOSE_PIN){ CLOSE_PIN=(prompt("Enter your close code:")||"").trim(); if(!CLOSE_PIN) return; }
+  const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
+  const url=CLOSE_FLOW_URL
+    +"&project="+encodeURIComponent(el.dataset.proj)
+    +"&task="+encodeURIComponent(el.dataset.task)
+    +"&closedDate="+encodeURIComponent(cd)
+    +"&pin="+encodeURIComponent(CLOSE_PIN);
+  el.textContent="…"; el.style.pointerEvents="none";
+  fetch(url,{method:"POST",mode:"no-cors"}).then(()=>{
+    const line=el.closest(".taskline")||el.closest("li");
+    if(line){ line.style.opacity=".5"; line.style.textDecoration="line-through"; }
+    el.textContent="✓ sent"; el.title="Marked done — shows closed on the next refresh";
+  }).catch(()=>{ el.textContent="✓ close"; el.style.pointerEvents=""; alert("Couldn't reach the close service — try again."); });
+}
+
 function classify(job, today){
   const s=(job.status||"").toLowerCase();
   let overdue=false,dueSoon=false,daysLeft=null;
@@ -959,8 +997,12 @@ function renderFloor(D){
         const jOpen=expandedJobs.has(j.row);
         if(j.openCount>0) pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
         let tl="";
-        if(jOpen && (j.openTasks||[]).length)
-          tl=`<div class="tasklist">`+j.openTasks.map(tk=>`<div class="taskline${isSal(tk)?" sal":""}">${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
+        if(jOpen && (j.openTasks||[]).length){
+          const opens=(j.tasks&&j.tasks.length)
+            ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t)}))
+            : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk)}));
+          tl=`<div class="tasklist">`+opens.map(o=>`<div class="taskline${o.sal?" sal":""}">${closeHandle(j.project,o.raw)}${esc(o.disp)}</div>`).join("")+`</div>`;
+        }
         if(SHOWCLOSED && (j.doneTasks||[]).length)
           tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
         const jc=c.state==="done"?" done":"";
@@ -1019,7 +1061,9 @@ function renderSal(D){
   const order=D.physicalBays;
   const sal=[];
   (D.jobs||[]).filter(j=>j.category!=="leave" && (j.status||"").toLowerCase()!=="shipped").forEach(j=>{
-    const open=(j.openTasks||[]).filter(isSal).map(t=>cleanTask(t,true)).filter(x=>x);
+    const open=(j.tasks&&j.tasks.length)
+      ? j.tasks.filter(t=>!t.done&&isSal(t.t)).map(t=>({disp:cleanTask(t.t,true),raw:t.t})).filter(x=>x.disp)
+      : (j.openTasks||[]).filter(isSal).map(t=>({disp:cleanTask(t,true),raw:null})).filter(x=>x.disp);
     const done=SHOWSALCLOSED?(j.doneTasks||[]).filter(isSal).map(t=>cleanTask(t,true)).filter(x=>x):[];
     if(open.length||done.length) sal.push({bay:j.bay, project:j.project, jobNum:j.jobNum, open, done});
   });
@@ -1029,7 +1073,7 @@ function renderSal(D){
   document.getElementById('salTasks').innerHTML = sal.length ? sal.map(s=>
     `<div class="salcard"><div class="sh">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?" · "+esc(s.jobNum):""}</div>`+
-    `<ol>${s.open.map(l=>`<li>${esc(l)}</li>`).join("")}${s.done.map(l=>`<li class="done">${esc(l)}</li>`).join("")}</ol></div>`).join("")
+    `<ol>${s.open.map(o=>`<li>${closeHandle(s.project,o.raw)}${esc(o.disp)}</li>`).join("")}${s.done.map(l=>`<li class="done">${esc(l)}</li>`).join("")}</ol></div>`).join("")
     : `<div class="empty">No ${SHOWSALCLOSED?"":"open "}Sal tasks 🎉</div>`;
   document.getElementById('salCount').textContent = total+" open"+(SHOWSALCLOSED?(" · "+totalDone+" done"):"")+" · "+sal.length+" trailers";
   const sb=document.getElementById('btnSalClosed'); if(sb){ sb.classList.toggle('on',SHOWSALCLOSED); sb.textContent=SHOWSALCLOSED?'✓ Closed shown':'Show closed'; }
