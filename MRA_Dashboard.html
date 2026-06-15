@@ -818,11 +818,14 @@ let CLOSED_LOCAL = new Set(); try{ CLOSED_LOCAL = new Set(JSON.parse(localStorag
 function closedKey(p,t){ return (p||'')+''+(t||''); }
 function rememberClosed(p,t){ CLOSED_LOCAL.add(closedKey(p,t)); try{ localStorage.setItem('mra_closed', JSON.stringify([...CLOSED_LOCAL])); }catch(e){} }
 function isPendingClosed(p,t){ return t && CLOSED_LOCAL.has(closedKey(p,t)); }
+function pinHash(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))>>>0; } return h; }
+const CLOSE_PIN_HASH = 1516293;   // hash of the close code (kept out of plain sight; server also enforces)
 function toggleCloseMode(btn){
   if(!document.body.classList.contains('closemode')){
     if(!CLOSE_FLOW_URL){ alert("Close-from-dashboard isn't switched on yet."); return; }
     const pin=(prompt("Enter your close code to turn on closing:")||"").trim();
     if(!pin) return;
+    if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; }
     CLOSE_PIN=pin; document.body.classList.add('closemode'); if(btn) btn.classList.add('on');
   } else { document.body.classList.remove('closemode'); if(btn) btn.classList.remove('on'); }
 }
@@ -833,7 +836,7 @@ function closeHandle(project, raw){
 }
 function closeTaskBtn(el){
   if(!CLOSE_FLOW_URL){ alert("Close-from-dashboard isn't switched on yet."); return; }
-  if(!CLOSE_PIN){ CLOSE_PIN=(prompt("Enter your close code:")||"").trim(); if(!CLOSE_PIN) return; }
+  if(!CLOSE_PIN){ const pin=(prompt("Enter your close code:")||"").trim(); if(!pin) return; if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
   const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
   const proj=el.dataset.proj, task=el.dataset.task;
   const body=JSON.stringify({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN});
