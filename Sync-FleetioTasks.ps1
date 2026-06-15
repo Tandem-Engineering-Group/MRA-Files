@@ -69,6 +69,7 @@ foreach ($j in $bayJobs) {
   foreach ($it in $issues) {
     $idn = Digits $it.jobNum
     if ($idn -eq '' -or ($jd -notcontains $idn)) { continue }
+    if ("$($it.asset)" -match '(?i)tractor') { continue }   # tractors show on the Fleetio dash only, not the shop board
     $num = "$($it.num)"
     if ($seen.ContainsKey($num)) { continue }
     $seen[$num] = $true
