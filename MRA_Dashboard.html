@@ -177,7 +177,9 @@
   @media(max-width:1100px){ .assignees{grid-template-columns:1fr} }
   /* Wall (TV) mode: bound heights + scroll so bays + assignees fit one screen */
   body.wall .baycol{max-height:44vh; overflow-y:auto}
+  body.wall .bay-body.autoscroll{max-height:30vh; overflow-y:auto}   /* combined Next Up / On Hold tile scrolls on its own */
   body.wall .asgbody{max-height:30vh}
+  .bay-head .name .count{margin-left:6px}
   body.wall #floorView .grid, body.wall #floorGanttPanel{display:none}
   .asgbody::-webkit-scrollbar, .baycol::-webkit-scrollbar{width:8px}
   .asgbody::-webkit-scrollbar-thumb, .baycol::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px}
@@ -455,14 +457,10 @@
       </div>
     </div>
 
-    <div class="grid">
+    <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="panel">
         <h2>⚑ Flagged &amp; Past Due <span class="count" id="flagCount"></span></h2>
         <div id="flags"></div>
-      </div>
-      <div class="panel">
-        <h2>Next Up — Pipeline <span class="count" id="pipeCount"></span></h2>
-        <div id="pipeline"></div>
       </div>
       <div class="panel">
         <h2>Staff on Leave <span class="count" id="leaveCount"></span></h2>
@@ -996,6 +994,9 @@ function renderFloor(D){
   const bayJobs=jobs.filter(j=>j.category==="bay");
   const pipeJobs=jobs.filter(j=>j.category==="pipeline");
   const leaveJobs=jobs.filter(j=>j.category==="leave");
+  // "Next Up" KPI = genuine next-up jobs only (an "On Hold" bay is also a pipeline
+  // job now, but it shouldn't inflate the Next-Up count).
+  const nextUpJobs=jobs.filter(j=>(j.status||"").toLowerCase()!=="shipped" && j.category!=="leave" && /next\s*up/i.test(j.bay||""));
   const cnt=s=>jobs.filter(j=>(j.status||"").toLowerCase()===s).length;
   const totalOpen=bayJobs.concat(pipeJobs).reduce((a,j)=>a+(j.openCount||0),0);
   const flagged=bayJobs.concat(pipeJobs).map(j=>({j,c:classify(j,today)}))
@@ -1014,7 +1015,7 @@ function renderFloor(D){
     {n:cnt("scheduled"),l:"SCHEDULED",c:"sched",list:byStatus("scheduled")},
     {n:cnt("on hold"),l:"ON HOLD",c:"hold",list:byStatus("on hold")},
     {n:shippedRecent.length,l:"SHIPPED · "+SHIP_WINDOW_DAYS+"d",c:"ship",list:shippedRecent},
-    {n:pipeJobs.length,l:"NEXT UP",c:"pipe",list:pipeJobs},
+    {n:nextUpJobs.length,l:"NEXT UP",c:"pipe",list:nextUpJobs},
     {n:totalOpen,l:"OPEN TASKS",c:"tasks",list:openJobs,tasks:true},
     {n:flagged.filter(x=>x.c.overdue).length,l:"PAST DUE",c:"over",list:overdueJobs},
   ];
@@ -1039,61 +1040,91 @@ function renderFloor(D){
   renderGantt(document.getElementById('floorGantt'), floorRows, win);
   document.getElementById('floorGanttCount').textContent=floorRows.length+" jobs";
 
-  // Bay board
-  const byBay={}; order.forEach(b=>byBay[b]=[]);
-  bayJobs.forEach(j=>{ if((j.status||"").toLowerCase()==="shipped") return;
-    if(!byBay[j.bay]) byBay[j.bay]=[]; byBay[j.bay].push(j); });
+  // Bay board.  Real work bays render Front-over-Back as before; "Parking Lot",
+  // "Next Up" and "On Hold(/Off-Site)" are NOT real bays — they get a dedicated
+  // last column: a Parking Lot tile on top, and a combined "Next Up / On Hold"
+  // tile below it (which auto-scrolls in Wall mode when it overflows).
+  const isParkingBay=b=>/^\s*parking\s*lot\s*$/i.test(b||"");
+  const isHeldBay=b=>/next\s*up|on\s*hold|off.?site/i.test(b||"");
   const rank=j=>{const s=(j.status||"").toLowerCase();
     return s==="active"?0:s==="scheduled"?1:s==="on hold"?2:s==="tbd"?3:4;};
-  const bayCards=[];
-  order.forEach(bay=>{
-    const list=(byBay[bay]||[]).slice().sort((a,b)=>rank(a)-rank(b));
+
+  // one job tile (identical markup whether it lives in a bay or the held tile)
+  const jobTile=(j,showBay)=>{const c=classify(j,today);
+    let pills="";
+    if(showBay && j.bay) pills+=`<span class="pill">${esc(j.bay)}</span>`;
+    pills+=`<span class="pill j">${esc(j.jobNum||"—")}</span><span class="pill">${fmtMD(j.startISO)}→${fmtMD(j.completionISO)}</span>`;
+    if(c.overdue) pills+=`<span class="pill due">${Math.abs(c.daysLeft)}d overdue</span>`;
+    else if(c.dueSoon) pills+=`<span class="pill soon">due ${c.daysLeft}d</span>`;
+    const jOpen=expandedJobs.has(j.row);
+    if(j.openCount>0) pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
+    let tl="";
+    if(jOpen){
+      if((j.openTasks||[]).length){
+        const opens=(j.tasks&&j.tasks.length)
+          ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t)}))
+          : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk)}));
+        tl+=`<div class="tasklist">`+opens.map(o=>{
+          const pend=isPendingClosed(j.project,o.raw);
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`;
+        }).join("")+`</div>`;
+      }
+    }
+    if(SHOWCLOSED && (j.doneTasks||[]).length)
+      tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
+    const jc=c.state==="done"?" done":"";
+    return `<div class="job${jc}"><div class="pj">${esc(j.project)}</div>`+
+      `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
+
+  // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
+  const bayCard=(bay,rawList,opts={})=>{
+    const list=(rawList||[]).slice().sort((a,b)=>rank(a)-rank(b));
     let cls="s-open",stTxt="Open",stCls="open";
-    if(list.length){const c0=classify(list[0],today); cls="s-"+c0.state;
+    if(opts.fixedSt){ [stTxt,stCls]=opts.fixedSt; cls="s-"+stCls; }
+    else if(list.length){const c0=classify(list[0],today); cls="s-"+c0.state;
       const map={active:["Active","active"],scheduled:["Scheduled","scheduled"],onhold:["On Hold","onhold"],
         overdue:["Past Due","overdue"],done:["Done","open"],open:["Open","open"]};
       [stTxt,stCls]=map[c0.state]||["Open","open"];}
     let body;
-    if(!list.length) body=`<div class="empty">— open —</div>`;
+    if(!list.length) body=`<div class="empty">— ${opts.emptyTxt||"open"} —</div>`;
     else{
-      const bayOpen=expandedBays.has(bay);
+      const bayOpen=opts.expandAll||expandedBays.has(bay);
       const visible=bayOpen?list:list.slice(0,2);
-      const jobsHtml=visible.map(j=>{const c=classify(j,today);
-        let pills=`<span class="pill j">${esc(j.jobNum||"—")}</span><span class="pill">${fmtMD(j.startISO)}→${fmtMD(j.completionISO)}</span>`;
-        if(c.overdue) pills+=`<span class="pill due">${Math.abs(c.daysLeft)}d overdue</span>`;
-        else if(c.dueSoon) pills+=`<span class="pill soon">due ${c.daysLeft}d</span>`;
-        const jOpen=expandedJobs.has(j.row);
-        if(j.openCount>0) pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
-        let tl="";
-        if(jOpen){
-          if((j.openTasks||[]).length){
-            const opens=(j.tasks&&j.tasks.length)
-              ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t)}))
-              : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk)}));
-            tl+=`<div class="tasklist">`+opens.map(o=>{
-              const pend=isPendingClosed(j.project,o.raw);
-              return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`;
-            }).join("")+`</div>`;
-          }
-        }
-        if(SHOWCLOSED && (j.doneTasks||[]).length)
-          tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
-        const jc=c.state==="done"?" done":"";
-        return `<div class="job${jc}"><div class="pj">${esc(j.project)}</div>`+
-          `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;}).join("");
+      const jobsHtml=visible.map(j=>jobTile(j,opts.showBay)).join("");
       let moreHtml="";
-      if(list.length>2) moreHtml=`<div class="more morebtn" onclick="toggleBay('${esc(bay)}')">`+
+      if(!opts.expandAll && list.length>2) moreHtml=`<div class="more morebtn" onclick="toggleBay('${esc(bay)}')">`+
         (bayOpen?"▴ show less":`+${list.length-2} more in this bay ▾`)+`</div>`;
       body=jobsHtml+moreHtml;
     }
-    bayCards.push(`<div class="bay ${cls}"><div class="bay-head"><div class="name">${esc(bay)}</div>`+
-      `<div class="st ${stCls}">${stTxt}</div></div><div class="bay-body">${body}</div></div>`);
-  });
+    const cnt=opts.headCount&&list.length?` <span class="count">${list.length}</span>`:"";
+    const bodyCls=opts.scroll?"bay-body autoscroll":"bay-body";
+    return `<div class="bay ${cls}"><div class="bay-head"><div class="name">${esc(bay)}${cnt}</div>`+
+      `<div class="st ${stCls}">${stTxt}</div></div><div class="${bodyCls}">${body}</div></div>`;
+  };
+
+  // physical work bays (everything in physicalBays that isn't Parking/held)
+  const physBays=order.filter(b=>!isParkingBay(b)&&!isHeldBay(b));
+  const byBay={}; physBays.forEach(b=>byBay[b]=[]);
+  bayJobs.forEach(j=>{ if((j.status||"").toLowerCase()==="shipped") return;
+    if(isParkingBay(j.bay)||isHeldBay(j.bay)) return;
+    if(!byBay[j.bay]) byBay[j.bay]=[]; byBay[j.bay].push(j); });
+  // Parking Lot + the combined Next Up / On Hold buckets (across bay + pipeline jobs)
+  const parkingJobs=jobs.filter(j=>(j.status||"").toLowerCase()!=="shipped" && j.category!=="leave" && isParkingBay(j.bay));
+  const heldJobs=jobs.filter(j=>(j.status||"").toLowerCase()!=="shipped" && j.category!=="leave" && isHeldBay(j.bay))
+    .sort((a,b)=>{const ax=/next\s*up/i.test(a.bay||"")?0:1, bx=/next\s*up/i.test(b.bay||"")?0:1;
+      return ax-bx || (a.startISO||"9999").localeCompare(b.startISO||"9999");});
+
+  const physCards=physBays.map(bay=>bayCard(bay, byBay[bay]||[]));
   // pair each physical bay into a column — Front card on top of Back card
   let bayHtml="";
-  for(let i=0;i<bayCards.length;i+=2) bayHtml+=`<div class="baycol">`+bayCards[i]+(bayCards[i+1]||'')+`</div>`;
+  for(let i=0;i<physCards.length;i+=2) bayHtml+=`<div class="baycol">`+physCards[i]+(physCards[i+1]||'')+`</div>`;
+  // final column: Parking Lot on top, combined Next Up / On Hold below (scrolls)
+  const parkCard=bayCard('Parking Lot', parkingJobs, {emptyTxt:"empty"});
+  const heldCard=bayCard('Next Up / On Hold', heldJobs,
+    {expandAll:true, scroll:true, showBay:true, headCount:true, emptyTxt:"none", fixedSt:["Pipeline & holds","open"]});
+  bayHtml+=`<div class="baycol">`+parkCard+heldCard+`</div>`;
   document.getElementById('bays').innerHTML=bayHtml;
-  document.getElementById('bayCount').textContent=order.length+" bays";
+  document.getElementById('bayCount').textContent=physBays.length+" bays";
   const bc=document.getElementById('btnClosed'); if(bc){ bc.classList.toggle('on',SHOWCLOSED); bc.textContent=SHOWCLOSED?'✓ Closed shown':'Show closed'; }
 
   // Flagged
@@ -1108,13 +1139,7 @@ function renderFloor(D){
   }).join(""):`<div class="empty">Nothing flagged — all on track ✓</div>`;
   document.getElementById('flagCount').textContent=flagged.length;
 
-  // Pipeline
-  const pipeSorted=pipeJobs.slice().sort((a,b)=>(a.startISO||"9999").localeCompare(b.startISO||"9999"));
-  document.getElementById('pipeline').innerHTML=pipeSorted.map(j=>
-    `<div class="row"><div><div class="lead">${esc(j.project)}</div>`+
-    `<div class="meta">${esc(j.client)} · ${esc(j.jobNum||"—")}${j.pm&&j.pm!=="TBD"?" · "+esc(j.pm):""}</div></div>`+
-    `<div class="right"><span class="badge blue">${fmtMD(j.startISO)}</span></div></div>`).join("")||`<div class="empty">No pipeline jobs</div>`;
-  document.getElementById('pipeCount').textContent=pipeSorted.length;
+  // (Next Up / On Hold now live in the combined bay-board tile above.)
 
   // Leave (upcoming)
   const leaveSorted=leaveJobs.slice().filter(j=>!j.completionISO||j.completionISO>=today)
