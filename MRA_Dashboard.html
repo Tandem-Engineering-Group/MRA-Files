@@ -1157,13 +1157,24 @@ function renderFloor(D){
 /* ---------- Sal's open task queue (across all trailers) ---------- */
 function renderSal(D){
   const order=D.physicalBays;
+  const GROUPS=[
+    {id:"asgSal",cnt:"cntSal",re:/\bsal\b/i,label:"Sal"},
+    {id:"asgWrap",cnt:"cntWrap",re:/wrap|w2 graphic|\bw2\b/i,label:"MasterWraps"},
+    {id:"asgElec",cnt:"cntElec",re:/electr|beyer/i,label:"Electricians"}];
+  // An Assigned value naming a known crew wins outright (keeps a Sal-assigned task
+  // out of MasterWraps even if its text says "wrap"). But if Assigned names someone
+  // we have no panel for (e.g. "Vendor"), fall back to the task text too — so
+  // Assigned="Vendor" + "MasterWraps – …" still lands under MasterWraps.
+  const KNOWN=new RegExp(GROUPS.map(g=>g.re.source).join("|"),"i");
+  const basisFor=t=>{const w=(t.who||"").trim(), txt=(t.raw||t.disp)||"";
+    return (w && KNOWN.test(w)) ? w : (w ? (w+" "+txt) : txt);};
   const build=(re)=>{
     const out=[];
     (D.jobs||[]).filter(j=>j.category!=="leave" && (j.status||"").toLowerCase()!=="shipped").forEach(j=>{
       const tasks=(j.tasks&&j.tasks.length)
         ? j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||""}))
         : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:""}));
-      const open=tasks.filter(t=>{const w=(t.who||"").trim(); return re.test(w||(t.raw||t.disp));}).filter(x=>x.disp);
+      const open=tasks.filter(t=>re.test(basisFor(t))).filter(x=>x.disp);
       if(open.length) out.push({bay:j.bay,project:j.project,jobNum:j.jobNum,open});
     });
     out.sort((a,b)=>{const ai=order.indexOf(a.bay),bi=order.indexOf(b.bay);
@@ -1173,9 +1184,7 @@ function renderSal(D){
   const card=(s)=>`<div class="salcard"><div class="sh">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?" · "+esc(s.jobNum):""}</div>`+
     `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw);return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)}${esc(o.disp)}</li>`;}).join("")}</ol></div>`;
-  [{id:"asgSal",cnt:"cntSal",re:/\bsal\b/i,label:"Sal"},
-   {id:"asgWrap",cnt:"cntWrap",re:/wrap|w2 graphic|\bw2\b/i,label:"MasterWraps"},
-   {id:"asgElec",cnt:"cntElec",re:/electr|beyer/i,label:"Electricians"}].forEach(g=>{
+  GROUPS.forEach(g=>{
     const cards=build(g.re), el=document.getElementById(g.id); if(!el) return;
     el.innerHTML = cards.length ? cards.map(card).join("") : `<div class="empty">No open ${esc(g.label)} tasks</div>`;
     const tot=cards.reduce((s,x)=>s+x.open.length,0), c=document.getElementById(g.cnt);
