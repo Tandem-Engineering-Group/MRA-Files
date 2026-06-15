@@ -85,15 +85,16 @@ function Read-ShopTasks($zip, $wbXml, $relsXml, $shared, $nsMain, $nsRel, $nsPkg
     foreach ($row in $sx.worksheet.sheetData.row) {
         if ([int]$row.r -lt 2) { continue }
         $c = Get-RowCells $row
-        $job  = ([string](Resolve-Cell $c['A'] $shared)).Trim()
-        $task = ([string](Resolve-Cell $c['C'] $shared)).Trim()
-        if ($job -eq '' -or $task -eq '') { continue }
-        $assigned = ([string](Resolve-Cell $c['D'] $shared)).Trim()
-        $od = Get-CellDate $c['E']
-        $cl = Get-CellDate $c['F']
-        $status = ([string](Resolve-Cell $c['G'] $shared)).Trim()
-        $mile   = ([string](Resolve-Cell $c['H'] $shared)).Trim()
-        $cmt    = ([string](Resolve-Cell $c['I'] $shared)).Trim()
+        $key  = ([string](Resolve-Cell $c['A'] $shared)).Trim()   # Project (match key)
+        $job  = ([string](Resolve-Cell $c['B'] $shared)).Trim()   # Job # (info only)
+        $task = ([string](Resolve-Cell $c['D'] $shared)).Trim()
+        if ($key -eq '' -or $task -eq '') { continue }
+        $assigned = ([string](Resolve-Cell $c['E'] $shared)).Trim()
+        $od = Get-CellDate $c['F']
+        $cl = Get-CellDate $c['G']
+        $status = ([string](Resolve-Cell $c['H'] $shared)).Trim()
+        $mile   = ([string](Resolve-Cell $c['I'] $shared)).Trim()
+        $cmt    = ([string](Resolve-Cell $c['J'] $shared)).Trim()
         $isDone = ($status -match '(?i)done|complete') -or ($null -ne $cl)
         $obj = [PSCustomObject]@{
             task = $task; who = $assigned
@@ -101,8 +102,8 @@ function Read-ShopTasks($zip, $wbXml, $relsXml, $shared, $nsMain, $nsRel, $nsPkg
             closed = $(if ($cl) { $cl.ToString('yyyy-MM-dd') } else { $null })
             status = $status; milestone = $mile; comments = $cmt; done = $isDone
         }
-        if (-not $map.ContainsKey($job)) { $map[$job] = New-Object System.Collections.ArrayList }
-        [void]$map[$job].Add($obj)
+        if (-not $map.ContainsKey($key)) { $map[$key] = New-Object System.Collections.ArrayList }
+        [void]$map[$key].Add($obj)
     }
     return $map
 }
@@ -257,9 +258,10 @@ try {
         $startTxt = if ($sd) { $sd.ToString('MM/dd/yy') } else { '' }
         $compTxt  = if ($cd) { $cd.ToString('MM/dd/yy') } else { '' }
 
-        # Prefer structured 'Shop Tasks' rows for this job; else parse Notes cell.
-        if ($job -ne '' -and $shopTasks.ContainsKey($job) -and $shopTasks[$job].Count -gt 0) {
-            $t = Build-TasksFromRows $shopTasks[$job]
+        # Prefer structured 'Shop Tasks' rows for this job (matched by Project,
+        # since Job#s aren't unique); else parse the Notes cell.
+        if ($proj -ne '' -and $shopTasks.ContainsKey($proj) -and $shopTasks[$proj].Count -gt 0) {
+            $t = Build-TasksFromRows $shopTasks[$proj]
         } else {
             $t = Parse-Tasks $notes
         }
