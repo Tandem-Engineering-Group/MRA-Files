@@ -202,9 +202,9 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     $pAssigned = ([string](Resolve-Cell $pc['H'] $shared)).Trim()
     $pComments = ([string](Resolve-Cell $pc['L'] $shared)).Trim()
     $pDur      = ([string](Resolve-Cell $pc['G'] $shared)).Trim()
-    $pId       = ([string](Resolve-Cell $pc['M'] $shared)).Trim()   # Task ID  (col M)
+    $pTaskId   = ([string](Resolve-Cell $pc['M'] $shared)).Trim()   # Task ID  (col M)
     $pPred     = ([string](Resolve-Cell $pc['N'] $shared)).Trim()   # Predecessor (col N)
-    if ($pId -match '^\d+\.0+$')  { $pId  = $pId  -replace '\.0+$','' }   # numeric cell safety
+    if ($pTaskId -match '^\d+\.0+$')  { $pTaskId  = $pTaskId  -replace '\.0+$','' }   # numeric cell safety
     if ($pDur -match '^\d+\.0+$') { $pDur = $pDur -replace '\.0+$','' }
     $psd = Get-CellDate $pc['E']
     $pfd = Get-CellDate $pc['F']
@@ -241,7 +241,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
 
     # Full task list for the dashboard's Projects editor (every row, not just milestones).
     [void]$o.tasks.Add([PSCustomObject]@{
-        id    = $pId
+        id    = $pTaskId
         t     = $pTask
         phase = $pPhase
         type  = $pType
