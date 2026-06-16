@@ -1064,8 +1064,9 @@ function openAddTask(){
     if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
   const D=window.MRA_DATA||{};
   const projs=[...new Set((D.jobs||[]).filter(j=>j.category!=='leave').map(j=>j.project).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const jobByProj={}; (D.jobs||[]).forEach(j=>{ if(j.project && !jobByProj[j.project]) jobByProj[j.project]=j.jobNum||''; });
-  window._atJobByProj=jobByProj;
+  const jobByProj={}, bayByProj={};
+  (D.jobs||[]).forEach(j=>{ if(j.project && !jobByProj[j.project]){ jobByProj[j.project]=j.jobNum||''; bayByProj[j.project]=j.bay||''; } });
+  window._atJobByProj=jobByProj; window._atBayByProj=bayByProj;
   document.getElementById('atProject').innerHTML = projs.map(p=>`<option value="${escA(p)}">${esc(p)}</option>`).join("")+`<option value="__new__">➕ New project…</option>`;
   document.getElementById('atBay').innerHTML = BAY_OPTIONS.map(b=>`<option>${esc(b)}</option>`).join("");
   document.getElementById('atAssigned').innerHTML = ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
@@ -1079,6 +1080,12 @@ function atProjectChange(){
   const v=document.getElementById('atProject').value, isNew=(v==='__new__');
   document.getElementById('atNewProjWrap').style.display = isNew?'':'none';
   document.getElementById('atJob').value = isNew ? '' : ((window._atJobByProj&&window._atJobByProj[v])||'');
+  if(!isNew){   // default the Bay to where the job already lives
+    let bay=(window._atBayByProj&&window._atBayByProj[v])||'';
+    if(/off.?site/i.test(bay)) bay='On Hold';                 // normalize legacy label to a dropdown option
+    if(bay){ const bsel=document.getElementById('atBay');
+      for(const o of bsel.options){ if(o.value.toLowerCase()===bay.toLowerCase()){ bsel.value=o.value; break; } } }
+  }
 }
 function closeAdd(e){ if(!e || e.target.id==='addModal' || e.target.classList.contains('modal-close'))
   document.getElementById('addModal').classList.remove('show'); }
