@@ -1,7 +1,7 @@
 // Auto-generated tour schedule data (imported from MyMobileTour calendars June-Oct 2026)
 // Equipment/crew/hours are placeholders until the real lists are provided.
 window.MMT_DATA = {
- "generatedText": "Tue Jun 16, 2026  10:46 PM",
+ "generatedText": "Tue Jun 16, 2026  10:56 PM",
  "todayISO": "2026-06-16",
  "tours": [
   {
@@ -77,68 +77,36 @@ window.MMT_DATA = {
    "color": "#48a8a4"
   },
   {
-   "name": "SWC FL 1 - Augustine Historical Society",
+   "name": "SWC FL 1",
    "color": "#b95ba1"
   },
   {
-   "name": "SWC FL 1 - Casa Ranch Montessori",
+   "name": "SWC IL 1",
    "color": "#90bf69"
   },
   {
-   "name": "SWC FL 1 - Historic Virginia Key Beach Park",
+   "name": "Saskatchewan Mammography Trailer One",
    "color": "#4858a8"
   },
   {
-   "name": "SWC FL 1 - Mosaic Miami",
+   "name": "Saskatchewan Mammography Trailer Two",
    "color": "#b9675b"
   },
   {
-   "name": "SWC FL 1 - PBC Lantana Library Branch",
+   "name": "Siemens DI eXplore tour 2026",
    "color": "#69bf8d"
   },
   {
-   "name": "SWC FL 1 - PBC Library Gardens Branch",
+   "name": "Sobeys 53\" MFX Summer Tour",
    "color": "#8c48a8"
   },
   {
-   "name": "SWC FL 1 - PBC Library Main Branch",
+   "name": "Warhammer (J1434)",
    "color": "#b8b95b"
   },
   {
-   "name": "SWC FL 1 - PBC Library West Boynton Branch",
-   "color": "#69a5bf"
-  },
-  {
-   "name": "SWC IL 1 - Park Forest Public Library",
-   "color": "#a84870"
-  },
-  {
-   "name": "SWC IL1 - Evergreen Park Public Library",
-   "color": "#66b95b"
-  },
-  {
-   "name": "Saskatchewan Mammography Trailer One",
-   "color": "#7869bf"
-  },
-  {
-   "name": "Saskatchewan Mammography Trailer Two",
-   "color": "#a87448"
-  },
-  {
-   "name": "Siemens DI eXplore tour 2026",
-   "color": "#5bb9a2"
-  },
-  {
-   "name": "Sobeys 53\" MFX Summer Tour",
-   "color": "#bf69bb"
-  },
-  {
-   "name": "Warhammer (J1434)",
-   "color": "#87a848"
-  },
-  {
    "name": "bioMerieux",
-   "color": "#5b7eb9"
+   "color": "#69a5bf"
   }
  ],
  "events": [
@@ -155,9 +123,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "e80cf72b5",
+   "id": "e6f2c313f",
    "date": "2026-06-01",
-   "tour": "SWC FL 1 - Casa Ranch Montessori",
+   "tour": "SWC FL 1",
    "city": "Miramar",
    "state": "FL",
    "venue": "Casa Ranch Montessori",
@@ -167,9 +135,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "e99c3a0ae",
+   "id": "ee9e351af",
    "date": "2026-06-01",
-   "tour": "SWC IL 1 - Park Forest Public Library",
+   "tour": "SWC IL 1",
    "city": "Park Forest",
    "state": "IL",
    "venue": "Park Forest Public Library",
@@ -251,9 +219,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "ec8d2e9d8",
+   "id": "ed9ff6982",
    "date": "2026-06-02",
-   "tour": "SWC IL 1 - Park Forest Public Library",
+   "tour": "SWC IL 1",
    "city": "Park Forest",
    "state": "IL",
    "venue": "Park Forest Public Library",
@@ -371,9 +339,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "ee0aaa87f",
+   "id": "e6775bfeb",
    "date": "2026-06-03",
-   "tour": "SWC IL 1 - Park Forest Public Library",
+   "tour": "SWC IL 1",
    "city": "Park Forest",
    "state": "IL",
    "venue": "Park Forest Public Library",
@@ -443,9 +411,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "ef6363b15",
+   "id": "e8079b31a",
    "date": "2026-06-04",
-   "tour": "SWC IL 1 - Park Forest Public Library",
+   "tour": "SWC IL 1",
    "city": "Park Forest",
    "state": "IL",
    "venue": "Park Forest Public Library",
@@ -515,9 +483,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "e68844e7d",
+   "id": "e39c12f3a",
    "date": "2026-06-05",
-   "tour": "SWC IL 1 - Park Forest Public Library",
+   "tour": "SWC IL 1",
    "city": "Park Forest",
    "state": "IL",
    "venue": "Park Forest Public Library",
@@ -887,9 +855,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "e1db8bd93",
+   "id": "e821dc8c8",
    "date": "2026-06-12",
-   "tour": "SWC IL1 - Evergreen Park Public Library",
+   "tour": "SWC IL 1",
    "city": "Evergreen Park",
    "state": "IL",
    "venue": "Evergreen Park Public Library",
@@ -923,9 +891,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "e429de0df",
+   "id": "e069f5b4d",
    "date": "2026-06-13",
-   "tour": "SWC FL 1 - Historic Virginia Key Beach Park",
+   "tour": "SWC FL 1",
    "city": "Miami",
    "state": "FL",
    "venue": "Historic Virginia Keys Park",
@@ -959,9 +927,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "e4d9f729d",
+   "id": "e0087389b",
    "date": "2026-06-16",
-   "tour": "SWC FL 1 - Mosaic Miami",
+   "tour": "SWC FL 1",
    "city": "Miami Shores",
    "state": "FL",
    "venue": "Mosaic Miami",
@@ -1031,12 +999,12 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "ec222ed8d",
+   "id": "e54c07501",
    "date": "2026-06-18",
-   "tour": "SWC FL 1 - Augustine Historical Society",
+   "tour": "SWC FL 1",
    "city": "",
    "state": "",
-   "venue": "",
+   "venue": "Augustine Historical Society",
    "status": "Scheduled",
    "crew": [],
    "equipment": [],
@@ -1115,9 +1083,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "e61c40dbd",
+   "id": "e655cfdec",
    "date": "2026-06-20",
-   "tour": "SWC FL 1 - PBC Lantana Library Branch",
+   "tour": "SWC FL 1",
    "city": "Lake Worth",
    "state": "FL",
    "venue": "PBC Lantana Library Branch",
@@ -1271,9 +1239,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "efeeca7db",
+   "id": "ef699be3c",
    "date": "2026-06-23",
-   "tour": "SWC FL 1 - PBC Library West Boynton Branch",
+   "tour": "SWC FL 1",
    "city": "Boynton Beach",
    "state": "FL",
    "venue": "PBS Library West Boynton Beach",
@@ -1379,9 +1347,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "e64c991e2",
+   "id": "ef6941aff",
    "date": "2026-06-25",
-   "tour": "SWC FL 1 - PBC Library Gardens Branch",
+   "tour": "SWC FL 1",
    "city": "Palm Beach",
    "state": "FL",
    "venue": "PBC Gardens Library",
@@ -1439,9 +1407,9 @@ window.MMT_DATA = {
    "notes": ""
   },
   {
-   "id": "edfa9b6ea",
+   "id": "e4ca24d04",
    "date": "2026-06-27",
-   "tour": "SWC FL 1 - PBC Library Main Branch",
+   "tour": "SWC FL 1",
    "city": "West Palm Beach",
    "state": "FL",
    "venue": "PBC Library Main Branch",
