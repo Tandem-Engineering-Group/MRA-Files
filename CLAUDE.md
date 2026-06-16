@@ -87,3 +87,24 @@ See `INSTRUCTIONS.md` for the complete Azure deployment runbook.
   + columns A–L, and auto-fill the Project name down every row.
 - **Task-level Gantt bars** (level 3): draw each Project Task as its own bar when a
   project is expanded — do after the project data is cleaned up.
+- **M365 tasking integration — Planner-per-person + email the assignee** (PARKED
+  2026-06-16; Rich chose these two from Teams/Planner/Email/two-way). When a task is
+  added/assigned on the dashboard, extend the **existing** Power Automate flow (add
+  steps AFTER the Run script): Parse JSON the trigger body → Condition `action ==
+  addTask` → look up the assignee's email → **send an Outlook email** + **create an
+  assigned Planner task** (lands in their Teams ▸ Tasks app + phone, with due date).
+  Prereq: a **roster** mapping each *assignee* → email. NOTE assignees (Sal, Doug =
+  individuals; MasterWraps, Electricians, Vendor = outside groups → email only, no
+  Planner) are a DIFFERENT list from the **login Users** (Rich, Luc). Also need a
+  Planner plan (e.g. "MRA Shop Tasks" in the *MRA Site Project* team) or create one.
+  Teams/Outlook/Planner connectors are reliable (unlike the Office Script step).
+- **Activity Log "Who" not stamping** (OPEN 2026-06-16). Per-person login *validation*
+  works (unknown codes rejected) and the dashboard recognizes users, but the
+  `ActivityLog` `Who` column logs **blank** — Power Automate keeps executing a
+  cached/stale compiled copy of the Office Script (verified the correct `MRA Sync`
+  script is saved, the flow is bound to it, and `payload = Body`, yet runs still use
+  old code; behavior flip-flopped). Fix path: **rebuild the flow from scratch** (fresh
+  HTTP trigger + Run script → `MRA Sync`), update the dashboard `CLOSE_FLOW_URL`, and
+  redeploy. ~5 min of clicks + a dashboard redeploy.
+- **Clean up `ZZ QA` test rows** (housekeeping): delete the `ZZ QA` test tasks on the
+  `Shop Tasks` sheet (and the `ZZ QA` job on `Input`) left over from login testing.
