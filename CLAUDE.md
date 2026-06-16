@@ -98,11 +98,43 @@ See `INSTRUCTIONS.md` for the complete Azure deployment runbook.
   Planner) are a DIFFERENT list from the **login Users** (Rich, Luc). Also need a
   Planner plan (e.g. "MRA Shop Tasks" in the *MRA Site Project* team) or create one.
   Teams/Outlook/Planner connectors are reliable (unlike the Office Script step).
-- **Activity Log "Who" not stamping** (OPEN 2026-06-16). Per-person login *validation*
-  works (unknown codes rejected) and the dashboard recognizes users, but the
-  `ActivityLog` `Who` column logs **blank** — Power Automate keeps executing a
-  cached/stale compiled copy of the Office Script (verified the correct `MRA Sync`
-  script is saved, the flow is bound to it, and `payload = Body`, yet runs still use
-  old code; behavior flip-flopped). Fix path: **rebuild the flow from scratch** (fresh
-  HTTP trigger + Run script → `MRA Sync`), update the dashboard `CLOSE_FLOW_URL`, and
-  redeploy. ~5 min of clicks + a dashboard redeploy.
+- **Activity Log "Who" not stamping** (STILL OPEN — worked on 2026-06-16 evening, not solved).
+  The `ActivityLog` `Who` column (col B) logs **blank** on every action. What we tried this
+  session, all of which did NOT fix it:
+  - Rebuilt the Power Automate flow from scratch → **`MRA Sync V2`** (fresh HTTP trigger,
+    workflow id `c7056430c8f645719ac5d29038822b04`; updated the dashboard `CLOSE_FLOW_URL`
+    to it and redeployed via `mode=live`).
+  - Created a **brand-new Office Script `MRA Sync 2`** (new name to dodge the compiled cache)
+    containing the full merged code (see `MRA-Sync.ts`), and pointed the flow's Run script at it.
+  - Confirmed via the flow run history: runs **Succeed (200)**, payload arrives correct
+    (e.g. `{"action":"editJob","pin":"1974","user":"Rich Miller",...}` — so Rich's code 1974
+    maps to "Rich Miller"), and **edits DO save + rows DO get logged** — but `Who` is still blank.
+  - This is logically impossible for the merged code (its `who` is name | "Shop" | null, and
+    null returns before logging) → means the **executed code ≠ the saved `MRA Sync 2` code**.
+  Leading theories / next steps to try:
+  1. **`MRA Sync 2` may not have actually SAVED its code** (Office Scripts shows pasted code in
+     the editor but the cloud save can silently not persist). Re-open it, force **Save script**,
+     watch for the saved confirmation, retest. Cheapest likely fix.
+  2. If still blank → the genuine **Office Scripts compiled-cache** gremlin. Workaround:
+     **stamp the name from the FLOW**, not the script — after Run script, add an Excel
+     "Add a row"/"Update a row" writing `payload.user` into `Who` (downside: would double-log
+     unless the script's own logging is also silenced). Flow connectors aren't subject to the
+     Office Script cache.
+  NOTE: write-back itself WORKS (edits save); only the `Who` column is cosmetically blank, so
+  the log is a usable audit trail (action / time / project) minus the name. Parked at Rich's request.
+
+## Shipped 2026-06-16 (evening) — Projects editor
+
+- **In-dashboard Project Tasks editor is LIVE** (rev 3.5): PROJECTS tab → **✎ Edit Project Tasks**
+  (or click a project in *Project Progress*) → popup with that project's tasks **grouped by phase**,
+  collapsible (▸/▾, Collapse/Expand all), milestone rows shaded gold. Add / edit / ✓ complete /
+  ↩ reopen / 🗑 delete + Predecessor links; code-gated by the same `ensureAuth` as the shop board.
+- **Workbook `Project Tasks` sheet** now has **Task ID (col M)** + **Predecessor (col N)**, colored
+  project divider lines, milestone gold shading, and Excel phase **grouping (+/− outline)**.
+- **`Export-Data.ps1`** emits each project's full `tasks[]` (id, task, phase, type, who, start/finish,
+  status, milestone, comments, predecessor). FIXED a crash where `$pId` collided with PowerShell's
+  read-only `$PID` — renamed to `$pTaskId`. (Rich's local pipeline: `Update-Auto.ps1` → `Export-Data.ps1`
+  → AzCopy push, run by right-click; workbook lives one level UP from the `dashboard` folder.)
+- **`MRA-Sync.ts`** = the merged Office Script (shop-floor actions + 5 project-task actions:
+  add/edit/delete/close/reopen ProjectTask). Matches rows by Project + Task ID, falls back to task text.
+
