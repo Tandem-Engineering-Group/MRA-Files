@@ -1121,9 +1121,8 @@ function closeTaskBtn(el){
   el.textContent="…"; el.style.pointerEvents="none";
   fetch(CLOSE_FLOW_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:body}).then(()=>{
     rememberClosed(proj, task);
-    const line=el.closest(".taskline")||el.closest("li");
-    if(line){ line.style.opacity=".5"; line.style.textDecoration="line-through"; }
-    el.textContent="✓ done"; el.title="Marked done — confirmed on the next refresh";
+    const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===task); if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); } oRecompute(j); }
+    oApply();   // instant: task drops out of open list now, not in 15 min
   }).catch(()=>{ el.textContent="✓ close"; el.style.pointerEvents=""; alert("Couldn't reach the close service — try again."); });
 }
 
@@ -1131,6 +1130,20 @@ function closeTaskBtn(el){
 function ensurePin(action){ if(!CLOSE_PIN){ const pin=(prompt("Enter your code to "+action+":")||"").trim();
   if(!pin) return false; if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return false; } CLOSE_PIN=pin; } return true; }
 function shopWrite(payload){ return fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
+
+/* ---------- Instant on-screen update: reflect a save immediately, and stop the
+   30s poll from reverting it until the workbook's data.js actually regenerates. ---------- */
+let EDIT_PENDING=false, EDIT_BASE_GEN=null;
+function markPending(){ const D=window.MRA_DATA; EDIT_BASE_GEN=(D&&D.generatedAt)||null; EDIT_PENDING=true; }
+function oApply(){ markPending(); if(window.MRA_DATA) renderAll(); }
+function oJob(project){ return (window.MRA_DATA&&window.MRA_DATA.jobs||[]).find(j=>j.project===project); }
+function oJobRow(row){ return (window.MRA_DATA&&window.MRA_DATA.jobs||[]).find(j=>j.row===row); }
+function oRecompute(j){ if(j&&j.tasks){ const op=j.tasks.filter(t=>!t.done), dn=j.tasks.filter(t=>t.done);
+  j.openCount=op.length; j.doneCount=dn.length; j.openTasks=op.map(t=>t.t); j.doneTasks=dn.map(t=>t.t); j.salOpen=op.filter(t=>isSal(t.t)).length; } }
+function oRecat(j){ const D=window.MRA_DATA||{}; const phys=(D.physicalBays||[]).map(b=>(b||'').toLowerCase());
+  const s=(j.status||'').toLowerCase(), b=(j.bay||'');
+  if(s==='leave'||/apl\/holidays/i.test(b)) j.category='leave';
+  else if(phys.indexOf(b.toLowerCase())<0) j.category='pipeline'; else j.category='bay'; }
 function taskTools(project, raw, done){
   if(!raw) return "";   // only structured Shop Tasks rows can be edited/deleted
   const a=`data-proj="${escA(project)}" data-task="${escA(raw)}"`;
@@ -1145,8 +1158,8 @@ function delTaskBtn(el){
   if(!confirm("Delete this task?\n\n"+task)) return;
   el.textContent="…"; el.style.pointerEvents="none";
   shopWrite({action:"deleteTask", project:proj, task:task, pin:CLOSE_PIN}).then(()=>{
-    const line=el.closest(".taskline"); if(line){ line.style.opacity=".4"; line.style.textDecoration="line-through"; }
-    el.textContent="🗑 gone";
+    const j=oJob(proj); if(j&&j.tasks){ j.tasks=j.tasks.filter(x=>x.t!==task); oRecompute(j); }
+    oApply();
   }).catch(()=>{ el.textContent="🗑"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
 }
 function reopenTaskBtn(el){
@@ -1154,7 +1167,8 @@ function reopenTaskBtn(el){
   const proj=el.dataset.proj, task=el.dataset.task;
   el.textContent="…"; el.style.pointerEvents="none";
   shopWrite({action:"reopenTask", project:proj, task:task, pin:CLOSE_PIN}).then(()=>{
-    el.textContent="↩ reopened"; el.title="Reopened — confirmed on next refresh";
+    const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===task); if(t){ t.done=false; t.st='Open'; t.cl=null; } oRecompute(j); }
+    oApply();
   }).catch(()=>{ el.textContent="↩"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
 }
 function editTaskBtn(el){ if(!ensurePin("edit a task")) return; openEditTask(el.dataset.proj, el.dataset.task); }
@@ -1187,8 +1201,14 @@ function submitEditTask(){
     pin:CLOSE_PIN };
   const btn=document.getElementById('etSubmit'); btn.disabled=true; btn.textContent="Saving…";
   msg.style.color='var(--muted)'; msg.textContent='Saving…';
-  shopWrite(payload).then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Saved — board updates within ~15 min.'; btn.textContent="Save changes";
-      setTimeout(()=>document.getElementById('editTaskModal').classList.remove('show'),1700); })
+  shopWrite(payload).then(()=>{
+      const j=oJob(window._etProj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===window._etOld);
+        if(t){ t.t=payload.task; t.who=payload.assigned; t.ml=payload.milestone; t.cm=payload.comments;
+          if(payload.status){ t.st=payload.status; t.done=/done|complete/i.test(payload.status); t.cl=t.done?localISO(Date.now()):null; } }
+        oRecompute(j); }
+      oApply();
+      msg.style.color='var(--green)'; msg.textContent='✓ Saved.'; btn.textContent="Save changes";
+      setTimeout(()=>document.getElementById('editTaskModal').classList.remove('show'),1100); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Save changes"; btn.disabled=false; });
 }
 
@@ -1241,9 +1261,13 @@ function submitAddTask(){
   const btn=document.getElementById('atSubmit'); btn.disabled=true; btn.textContent="Adding…";
   msg.style.color='var(--muted)'; msg.textContent='Sending…';
   fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
-    .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Added — shows on the board within ~15 min.';
-      btn.textContent="Add task";
-      setTimeout(()=>{ document.getElementById('addModal').classList.remove('show'); }, 1700); })
+    .then(()=>{
+      const j=oJob(proj); if(j){ if(!j.tasks) j.tasks=[];
+        j.tasks.push({t:payload.task, who:payload.assigned, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:payload.milestone, cm:payload.comments});
+        oRecompute(j); }
+      oApply();
+      msg.style.color='var(--green)'; msg.textContent='✓ Added.'; btn.textContent="Add task";
+      setTimeout(()=>{ document.getElementById('addModal').classList.remove('show'); }, 1100); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the add service — try again.";
       btn.textContent="Add task"; btn.disabled=false; });
 }
@@ -1281,18 +1305,26 @@ function submitEditJob(){
   const btn=document.getElementById('ejSubmit'); btn.disabled=true; btn.textContent="Saving…";
   const msg=document.getElementById('ejMsg'); msg.style.color='var(--muted)'; msg.textContent='Saving…';
   fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
-    .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Saved — board updates within ~15 min.'; btn.textContent="Save changes";
-      setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1700); })
+    .then(()=>{
+      const j=oJobRow(row); if(j){ j.bay=payload.bay; j.status=payload.status;
+        j.startISO=payload.start||null; j.completionISO=payload.completion||null; j.notesRaw=payload.notes; oRecat(j); }
+      oApply();
+      msg.style.color='var(--green)'; msg.textContent='✓ Saved.'; btn.textContent="Save changes";
+      setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1100); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Save changes"; btn.disabled=false; });
 }
 function submitDeleteJob(){
   if(!window._ejRow) return;
-  if(!confirm("Delete this entire job from the schedule?\n\n"+(window._ejProj||"")+"\n\nThis removes the row and all its tasks stay in Shop Tasks unless you delete them too.")) return;
-  const payload={ action:"deleteJob", row:window._ejRow, project:window._ejProj||"", pin:CLOSE_PIN };
+  if(!confirm("Delete this entire job from the schedule?\n\n"+(window._ejProj||"")+"\n\nThis removes the row; its tasks stay in Shop Tasks unless you delete them too.")) return;
+  const row=window._ejRow;
+  const payload={ action:"deleteJob", row:row, project:window._ejProj||"", pin:CLOSE_PIN };
   const btn=document.getElementById('ejDelete'); if(btn){ btn.disabled=true; btn.textContent="Deleting…"; }
   const msg=document.getElementById('ejMsg'); msg.style.color='var(--muted)'; msg.textContent='Deleting…';
-  shopWrite(payload).then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Job deleted — board updates within ~15 min.';
-      setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1700); })
+  shopWrite(payload).then(()=>{
+      const D=window.MRA_DATA||{}; if(D.jobs) D.jobs=D.jobs.filter(j=>j.row!==row);
+      oApply();
+      msg.style.color='var(--green)'; msg.textContent='✓ Job deleted.';
+      setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1100); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; if(btn){ btn.disabled=false; btn.textContent="🗑 Delete job"; } });
 }
 
@@ -1321,8 +1353,16 @@ function submitAddJob(){
   const btn=document.getElementById('ajSubmit'); btn.disabled=true; btn.textContent="Adding…";
   msg.style.color='var(--muted)'; msg.textContent='Sending…';
   fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
-    .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Job added — shows on the board within ~15 min.'; btn.textContent="Add job";
-      setTimeout(()=>document.getElementById('addJobModal').classList.remove('show'),1700); })
+    .then(()=>{
+      const D=window.MRA_DATA||{};
+      if(D.jobs){ const nj={ row:900000+Math.floor(Math.random()*90000), bay:payload.bay, project:payload.project,
+        client:payload.client, jobNum:payload.jobNum, status:payload.status, pm:payload.pm,
+        startISO:payload.start||null, completionISO:payload.completion||null, notesRaw:payload.notes,
+        openTasks:[], openCount:0, doneCount:0, doneTasks:[], salOpen:0, tasks:[] };
+        oRecat(nj); D.jobs.push(nj); }
+      oApply();
+      msg.style.color='var(--green)'; msg.textContent='✓ Job added.'; btn.textContent="Add job";
+      setTimeout(()=>document.getElementById('addJobModal').classList.remove('show'),1100); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Add job"; btn.disabled=false; });
 }
 
@@ -2469,7 +2509,15 @@ async function refresh(){
   try{
     const r=await fetch('data.js?t='+Date.now(),{cache:'no-store'});
     const txt=await r.text();
-    window.MRA_DATA=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1));
+    const incoming=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1));
+    // If you just made an edit and the workbook's data.js hasn't regenerated yet
+    // (same generatedAt as when you edited), keep your instant changes on screen
+    // instead of reverting. Once the file catches up (generatedAt advances), apply it.
+    if(EDIT_PENDING && incoming.generatedAt && EDIT_BASE_GEN && incoming.generatedAt===EDIT_BASE_GEN){
+      return true;
+    }
+    EDIT_PENDING=false;
+    window.MRA_DATA=incoming;
     renderAll();
     return true;
   }catch(e){ return false; /* file:// or server down — keep showing current data */ }
