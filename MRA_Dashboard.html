@@ -229,7 +229,10 @@
   body.closemode .ttool{display:inline-block}
   /* Project editor (task list) */
   .pephase{font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);
-    margin:13px 2px 4px; border-bottom:1px solid var(--line); padding-bottom:3px}
+    margin:13px 2px 4px; border-bottom:1px solid var(--line); padding-bottom:3px; cursor:pointer; user-select:none}
+  .pephase:hover{color:var(--text)}
+  .pecaret{display:inline-block; width:14px; color:var(--blue)}
+  .pephase-n{font-weight:400; text-transform:none; letter-spacing:0; opacity:.75}
   .petask{display:flex; gap:10px; align-items:flex-start; padding:7px 6px; border-radius:7px}
   .petask:hover{background:rgba(125,125,125,.10)}
   .petask-main{flex:1; min-width:0}
@@ -900,9 +903,13 @@
           <div id="peNewProjWrap" style="display:none"><label>New project name</label><input id="peNewProj" autocomplete="off" placeholder="e.g. Acme Phase 2"></div>
         </div>
       </div>
-      <div style="display:flex; gap:8px; align-items:center; margin:6px 0 8px">
+      <div style="display:flex; gap:8px; align-items:center; margin:6px 0 8px; flex-wrap:wrap">
         <button class="btn-primary" onclick="openProjTaskNew()">➕ Add task</button>
         <span id="peCount" style="color:var(--muted); font-size:12px"></span>
+        <span style="margin-left:auto; display:flex; gap:6px">
+          <button class="btn-ghost" style="padding:3px 9px; font-size:11px" onclick="peCollapseAll()" title="Collapse every phase">⊟ Collapse all</button>
+          <button class="btn-ghost" style="padding:3px 9px; font-size:11px" onclick="peExpandAll()" title="Expand every phase">⊞ Expand all</button>
+        </span>
       </div>
       <div id="peList" style="max-height:58vh; overflow:auto; margin:0 -4px; padding:0 4px"></div>
     </div>
@@ -1081,6 +1088,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.5", date:"2026-06-16", title:"Collapsible phases in the Project editor", items:[
+    "✎ Edit Project Tasks now opens with each phase collapsed for a clean overview — click a phase header (▸) to expand just the tasks you want, with a per-phase task/done count.",
+    "⊟ Collapse all / ⊞ Expand all buttons; a single-phase project opens expanded automatically." ] },
   { rev:"3.4", date:"2026-06-16", title:"Edit Project Tasks from the dashboard", items:[
     "✎ Edit Project Tasks (PROJECTS tab) — pick a project (or click one in Project Progress) and a clean popup opens with all its tasks, grouped by phase. Add, edit, complete, reopen or delete tasks right there — no Excel, no filtering the big sheet.",
     "Set Predecessor links (a task starts after another) and Milestone/Status/dates per task; changes write back to the workbook and show on the board instantly (everyone else catches up on the ~15-min cycle).",
@@ -1515,6 +1525,7 @@ function submitAddJob(){
 
 /* ===================== Projects editor — add / edit / delete / complete project tasks ===================== */
 const PROJ_STATUS_OPTIONS = ['Not Started','In Progress','Completed','On Hold'];
+let PE_EXPANDED = new Set();   // phase sections currently expanded in the editor (default: all collapsed)
 function projIsDone(t){ return !!(t && (t.done || /^completed$/i.test(t.st||''))); }
 function oProj(name){ return (((window.MRA_DATA||{}).projects)||[]).find(p=>p.name===name); }
 function projAssignees(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.who) s.add(t.who.trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
@@ -1553,6 +1564,7 @@ function peCurrentProject(){
 }
 function peProjectChange(){
   document.getElementById('peNewProjWrap').style.display = (document.getElementById('peProject').value==='__new__')?'':'none';
+  PE_EXPANDED = new Set();   // start each project collapsed for a clean overview
   renderProjTaskList();
 }
 
@@ -1576,8 +1588,11 @@ function renderProjTaskList(){
   const byId={}; tasks.forEach(t=>{ if(t.id!=null && t.id!=='') byId[String(t.id)]=t; });
   const order=[], groups={};
   tasks.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!groups[ph]){ groups[ph]=[]; order.push(ph); } groups[ph].push(t); });
+  window._peOrder=order;
+  if(PE_EXPANDED.size===0 && order.length===1) PE_EXPANDED.add(order[0]);   // a single phase opens by default
   list.innerHTML = order.map(ph=>{
-    const rows=groups[ph].map(t=>{
+    const open=PE_EXPANDED.has(ph), g=groups[ph], doneN=g.filter(projIsDone).length;
+    const rows=g.map(t=>{
       const predT=(t.pred!=null&&t.pred!=='' && byId[String(t.pred)])?byId[String(t.pred)]:null;
       const dates=[t.startISO?('▸ '+fmtMD(t.startISO)):'', t.finISO?('⤇ '+fmtMD(t.finISO)):''].filter(Boolean).join('  ');
       const meta=[ t.who?esc(t.who):'', dates, predT?('after: '+esc(predT.t)):'', /yes/i.test(t.ml||'')?'◆ milestone':'' ].filter(Boolean).join(' · ');
@@ -1589,9 +1604,14 @@ function renderProjTaskList(){
         (meta?`<div class="petask-m">${meta}</div>`:'')+`</div>`+
         `<div class="petask-r">${projStatusBadge(t)}<span class="petask-tools">${tools}</span></div></div>`;
     }).join("");
-    return `<div class="pephase">${esc(ph)}</div>${rows}`;
+    return `<div class="pephase" data-ph="${escA(ph)}" onclick="togglePhase(this)" title="Click to ${open?'collapse':'expand'}">`+
+      `<span class="pecaret">${open?'▾':'▸'}</span>${esc(ph)} <span class="pephase-n">${g.length}${doneN?(' · '+doneN+' done'):''}</span></div>`+
+      `<div class="pephase-body"${open?'':' style="display:none"'}>${rows}</div>`;
   }).join("");
 }
+function togglePhase(el){ const ph=el.dataset.ph; if(PE_EXPANDED.has(ph)) PE_EXPANDED.delete(ph); else PE_EXPANDED.add(ph); renderProjTaskList(); }
+function peExpandAll(){ (window._peOrder||[]).forEach(ph=>PE_EXPANDED.add(ph)); renderProjTaskList(); }
+function peCollapseAll(){ PE_EXPANDED.clear(); renderProjTaskList(); }
 
 /* ---- single-task form (add or edit) ---- */
 function projTaskById(p,id){ return ((p&&p.tasks)||[]).find(t=>String(t.id)===String(id)); }
