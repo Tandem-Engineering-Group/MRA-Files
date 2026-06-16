@@ -439,13 +439,13 @@
       <div class="tab" data-view="fleet" onclick="setView('fleet')">FLEET</div>
       <div class="tab" data-view="history" onclick="setView('history')">HISTORY</div>
     </div>
-    <div class="linksmenu" id="topMenu" style="margin-left:auto">
-      <button class="editbtn" id="menuBtn" onclick="toggleMenu(event)" title="Tools &amp; links">☰ Menu ▾</button>
+    <button class="helpbtn" onclick="openHelp()" style="margin-left:auto" title="How to use this dashboard">?</button>
+    <div class="linksmenu" id="topMenu">
+      <button class="editbtn" id="menuBtn" onclick="toggleDrop(event,'menuPop')" title="Tools &amp; links">☰ Menu ▾</button>
       <div class="linksmenu-pop" id="menuPop">
         <button class="mi" id="btnWall" onclick="toggleWall(this)" title="Wall/TV mode: fit bays + assignee tables on one screen, auto-scroll">📺 Wall mode</button>
         <button class="mi" id="btnTheme" onclick="toggleTheme(this)" title="Switch light / dark — remembered on this device">☀️ Light</button>
-        <a class="mi" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" onclick="closeMenu()" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
-        <button class="mi" onclick="openHelp();closeMenu()" title="How to use this dashboard">❓ How to use</button>
+        <a class="mi" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" onclick="closeDrops()" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
         <div class="mi-div">Quick links</div>
         <div id="linksPop"></div>
       </div>
@@ -493,11 +493,17 @@
     <div class="panel">
       <h2>Bay Status <span class="count" id="bayCount"></span>
         <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">click a task count to see the tasks</span>
-        <button class="expandbtn" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
-        <button class="expandbtn" id="btnCloseMode" onclick="toggleCloseMode(this)" title="Enter your code (1974) to close tasks AND move/edit jobs (bay, dates, notes) from the board">🔒 Edit mode</button>
-        <button class="expandbtn" id="btnAddTask" onclick="openAddTask()" title="Add a new shop task (needs code)">➕ Add task</button>
-        <button class="expandbtn" id="btnAddJob" onclick="openAddJob()" title="Create a brand-new shop job on the schedule (needs code)">➕ Add job</button>
-        <button class="expandbtn" id="btnPrint" onclick="printBoard()" title="Print the shop board (bays + open tasks) on one page">🖨 Print</button>
+        <div class="linksmenu" style="margin-left:8px">
+          <button class="expandbtn" onclick="toggleDrop(event,'bayPop')" title="Bay actions — edit, add, print">☰ Actions ▾</button>
+          <div class="linksmenu-pop" id="bayPop">
+            <button class="mi" id="btnCloseMode" onclick="toggleCloseMode(this)" title="Enter your code (1974) to close tasks AND move/edit jobs">🔒 Edit mode</button>
+            <button class="mi" id="btnAddTask" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
+            <button class="mi" id="btnAddJob" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
+            <button class="mi" id="btnPrint" onclick="printBoard();closeDrops()" title="Print the shop board on one page">🖨 Print</button>
+            <div class="mi-div">View</div>
+            <button class="mi" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
+          </div>
+        </div>
       </h2>
       <div class="bays" id="bays"></div>
     </div>
@@ -1127,9 +1133,12 @@ function renderLinks(){
 }
 function toggleLinks(e){ if(e) e.stopPropagation(); const pop=document.getElementById('linksPop'); if(pop) pop.classList.toggle('show'); }
 function closeLinks(){ const pop=document.getElementById('linksPop'); if(pop) pop.classList.remove('show'); }
-function toggleMenu(e){ if(e) e.stopPropagation(); const p=document.getElementById('menuPop'); if(p) p.classList.toggle('show'); }
-function closeMenu(){ const p=document.getElementById('menuPop'); if(p) p.classList.remove('show'); }
-document.addEventListener('click',e=>{ if(!(e.target.closest && e.target.closest('.linksmenu'))){ closeLinks(); closeMenu(); } });
+function toggleDrop(e,id){ if(e) e.stopPropagation(); const p=document.getElementById(id); if(!p) return;
+  const open=p.classList.contains('show'); document.querySelectorAll('.linksmenu-pop.show').forEach(x=>x.classList.remove('show')); if(!open) p.classList.add('show'); }
+function closeDrops(){ document.querySelectorAll('.linksmenu-pop.show').forEach(p=>p.classList.remove('show')); }
+function toggleMenu(e){ toggleDrop(e,'menuPop'); }   /* back-compat */
+function closeMenu(){ closeDrops(); }
+document.addEventListener('click',e=>{ if(!(e.target.closest && e.target.closest('.linksmenu'))) closeDrops(); });
 function isSal(line){ return /\bsal\b/i.test(line||""); }
 function cleanTask(line, stripSal){
   let s=(line||"").replace(/^\s*\d+\s*[\.\)]\s*/,"").replace(/^[-–]\s*/,"");
