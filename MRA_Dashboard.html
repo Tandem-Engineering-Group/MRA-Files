@@ -1152,7 +1152,8 @@ function cleanTask(line, stripSal){
 
 /* ---------- Close a task from the dashboard (Phase 2, PIN-gated) ---------- */
 const CLOSE_FLOW_URL = "https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/0b7b06f423144f5cabe358f80179857e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=DuISFIuYHi06TJ2UEE49LmNCfNkoVsHJwJvNsnI4iUY";   // Power Automate close-from-dashboard
-let CLOSE_PIN = null;
+let CLOSE_PIN = null;       // current signed-in person's code (this browser session)
+let CURRENT_USER = "";      // current signed-in person's name (display + attribution)
 // Tasks closed from the dashboard this session — kept greyed until the next export confirms
 // them (so they don't visually "bounce" back to open before data.js catches up).
 let CLOSED_LOCAL = new Set(); try{ CLOSED_LOCAL = new Set(JSON.parse(localStorage.getItem('mra_closed')||'[]')); }catch(e){}
@@ -1160,15 +1161,29 @@ function closedKey(p,t){ return (p||'')+''+(t||''); }
 function rememberClosed(p,t){ CLOSED_LOCAL.add(closedKey(p,t)); try{ localStorage.setItem('mra_closed', JSON.stringify([...CLOSED_LOCAL])); }catch(e){} }
 function isPendingClosed(p,t){ return t && CLOSED_LOCAL.has(closedKey(p,t)); }
 function pinHash(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))>>>0; } return h; }
-const CLOSE_PIN_HASH = 1516293;   // hash of the close code (kept out of plain sight; server also enforces)
+const CLOSE_PIN_HASH = 1516293;   // legacy 1974 fallback until the Users list is published
+// Resolve a typed code to a person's name. Uses the published Users list (codes are
+// hashed, never plaintext); falls back to the legacy 1974 code until that list exists.
+function findUser(code){
+  const us=((window.MRA_DATA||{}).users)||[]; const h=pinHash(code);
+  if(us.length){ const u=us.find(x=>x.h===h); return u?(u.name||""):null; }
+  return (h===CLOSE_PIN_HASH)?"":null;
+}
+// Central sign-in: prompt once per session; remember who. Returns false if not recognized.
+function ensureAuth(action){
+  if(CLOSE_PIN) return true;
+  if(!CLOSE_FLOW_URL){ alert("Editing from the dashboard isn't switched on yet."); return false; }
+  const code=(prompt("Enter your code to "+(action||"edit")+":")||"").trim(); if(!code) return false;
+  const name=findUser(code);
+  if(name===null){ alert("Code not recognized."); return false; }
+  CLOSE_PIN=code; CURRENT_USER=name; return true;
+}
+function authLabel(){ return CURRENT_USER ? (' — '+CURRENT_USER) : ''; }
 function toggleCloseMode(btn){
   if(!document.body.classList.contains('closemode')){
-    if(!CLOSE_FLOW_URL){ alert("Editing from the dashboard isn't switched on yet."); return; }
-    const pin=(prompt("Enter your code to turn on editing (close tasks + move/edit jobs):")||"").trim();
-    if(!pin) return;
-    if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; }
-    CLOSE_PIN=pin; document.body.classList.add('closemode');
-    if(btn){ btn.classList.add('on'); btn.textContent='🔒 Edit mode: ON'; }
+    if(!ensureAuth("turn on editing (close tasks + move/edit jobs)")) return;
+    document.body.classList.add('closemode');
+    if(btn){ btn.classList.add('on'); btn.textContent='🔒 Edit mode: ON'+authLabel(); }
   } else { document.body.classList.remove('closemode'); if(btn){ btn.classList.remove('on'); btn.textContent='🔒 Edit mode'; } }
 }
 // ✓ handle shown (in Close mode) next to an open task that came from a Shop Tasks row.
@@ -1178,10 +1193,10 @@ function closeHandle(project, raw){
 }
 function closeTaskBtn(el){
   if(!CLOSE_FLOW_URL){ alert("Close-from-dashboard isn't switched on yet."); return; }
-  if(!CLOSE_PIN){ const pin=(prompt("Enter your close code:")||"").trim(); if(!pin) return; if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
+  if(!ensureAuth("close a task")) return;
   const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
   const proj=el.dataset.proj, task=el.dataset.task;
-  const body=JSON.stringify({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN});
+  const body=JSON.stringify({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});
   el.textContent="…"; el.style.pointerEvents="none";
   fetch(CLOSE_FLOW_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:body}).then(()=>{
     rememberClosed(proj, task);
@@ -1191,8 +1206,7 @@ function closeTaskBtn(el){
 }
 
 /* ---------- Per-task tools (edit / delete / reopen) — shown in Edit mode ---------- */
-function ensurePin(action){ if(!CLOSE_PIN){ const pin=(prompt("Enter your code to "+action+":")||"").trim();
-  if(!pin) return false; if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return false; } CLOSE_PIN=pin; } return true; }
+function ensurePin(action){ return ensureAuth(action); }
 function shopWrite(payload){ return fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
 
 /* ---------- Instant on-screen update: reflect a save immediately, and stop the
@@ -1221,7 +1235,7 @@ function delTaskBtn(el){
   const proj=el.dataset.proj, task=el.dataset.task;
   if(!confirm("Delete this task?\n\n"+task)) return;
   el.textContent="…"; el.style.pointerEvents="none";
-  shopWrite({action:"deleteTask", project:proj, task:task, pin:CLOSE_PIN}).then(()=>{
+  shopWrite({action:"deleteTask", project:proj, task:task, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
     const j=oJob(proj); if(j&&j.tasks){ j.tasks=j.tasks.filter(x=>x.t!==task); oRecompute(j); }
     oApply();
   }).catch(()=>{ el.textContent="🗑"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
@@ -1230,7 +1244,7 @@ function reopenTaskBtn(el){
   if(!ensurePin("reopen a task")) return;
   const proj=el.dataset.proj, task=el.dataset.task;
   el.textContent="…"; el.style.pointerEvents="none";
-  shopWrite({action:"reopenTask", project:proj, task:task, pin:CLOSE_PIN}).then(()=>{
+  shopWrite({action:"reopenTask", project:proj, task:task, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
     const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===task); if(t){ t.done=false; t.st='Open'; t.cl=null; } oRecompute(j); }
     oApply();
   }).catch(()=>{ el.textContent="↩"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
@@ -1262,7 +1276,7 @@ function submitEditTask(){
   const payload={ action:"editTask", project:window._etProj, taskOld:window._etOld, task:task,
     assigned:document.getElementById('etAssigned').value, status:document.getElementById('etStatus').value,
     milestone:document.getElementById('etMilestone').value, comments:document.getElementById('etComments').value.trim(),
-    pin:CLOSE_PIN };
+    pin:CLOSE_PIN, user:CURRENT_USER };
   const btn=document.getElementById('etSubmit'); btn.disabled=true; btn.textContent="Saving…";
   msg.style.color='var(--muted)'; msg.textContent='Saving…';
   shopWrite(payload).then(()=>{
@@ -1282,8 +1296,7 @@ const BAY_OPTIONS = ['Bay 2 Front','Bay 2 Back','Bay 3 Front','Bay 3 Back','Bay 
 const ASSIGNEE_OPTIONS = ['Sal','MasterWraps','Electricians','Doug','Vendor'];
 function openAddTask(){
   if(!SHOP_WRITE_URL){ alert("Add-from-dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
-  if(!CLOSE_PIN){ const pin=(prompt("Enter your code to add a task:")||"").trim(); if(!pin) return;
-    if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
+  if(!ensureAuth("add a task")) return;
   const D=window.MRA_DATA||{};
   const projs=[...new Set((D.jobs||[]).filter(j=>j.category!=='leave').map(j=>j.project).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const jobByProj={}, bayByProj={};
@@ -1321,7 +1334,7 @@ function submitAddTask(){
   const payload={ action:"addTask", project:proj, jobNum:document.getElementById('atJob').value.trim(),
     bay:document.getElementById('atBay').value, task:task, assigned:document.getElementById('atAssigned').value,
     milestone:document.getElementById('atMilestone').value, comments:document.getElementById('atComments').value.trim(),
-    pin:CLOSE_PIN };
+    pin:CLOSE_PIN, user:CURRENT_USER };
   const btn=document.getElementById('atSubmit'); btn.disabled=true; btn.textContent="Adding…";
   msg.style.color='var(--muted)'; msg.textContent='Sending…';
   fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
@@ -1340,8 +1353,7 @@ function submitAddTask(){
 const STATUS_OPTIONS = ['Active','Scheduled','On Hold','Shipped','Leave','TBD'];
 function openEditJob(row){
   if(!SHOP_WRITE_URL){ alert("Editing from the dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
-  if(!CLOSE_PIN){ const pin=(prompt("Enter your code to edit:")||"").trim(); if(!pin) return;
-    if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
+  if(!ensureAuth("edit")) return;
   const D=window.MRA_DATA||{};
   const j=(D.jobs||[]).find(x=>x.row===row);
   if(!j){ alert("Couldn't find that job."); return; }
@@ -1362,7 +1374,7 @@ function closeEdit(e){ if(!e || e.target.id==='editModal' || e.target.classList.
   document.getElementById('editModal').classList.remove('show'); }
 function submitEditJob(){
   const row=window._ejRow; if(!row){ return; }
-  const payload={ action:"editJob", row:row, project:window._ejProj||"", pin:CLOSE_PIN,
+  const payload={ action:"editJob", row:row, project:window._ejProj||"", pin:CLOSE_PIN, user:CURRENT_USER,
     bay:document.getElementById('ejBay').value, status:document.getElementById('ejStatus').value,
     start:document.getElementById('ejStart').value, completion:document.getElementById('ejComp').value,
     notes:document.getElementById('ejNotes').value };
@@ -1381,7 +1393,7 @@ function submitDeleteJob(){
   if(!window._ejRow) return;
   if(!confirm("Delete this entire job from the schedule?\n\n"+(window._ejProj||"")+"\n\nThis removes the row; its tasks stay in Shop Tasks unless you delete them too.")) return;
   const row=window._ejRow;
-  const payload={ action:"deleteJob", row:row, project:window._ejProj||"", pin:CLOSE_PIN };
+  const payload={ action:"deleteJob", row:row, project:window._ejProj||"", pin:CLOSE_PIN, user:CURRENT_USER };
   const btn=document.getElementById('ejDelete'); if(btn){ btn.disabled=true; btn.textContent="Deleting…"; }
   const msg=document.getElementById('ejMsg'); msg.style.color='var(--muted)'; msg.textContent='Deleting…';
   shopWrite(payload).then(()=>{
@@ -1395,8 +1407,7 @@ function submitDeleteJob(){
 /* ---------- Add a brand-new shop job (Input row) from the dashboard ---------- */
 function openAddJob(){
   if(!SHOP_WRITE_URL){ alert("Adding from the dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
-  if(!CLOSE_PIN){ const pin=(prompt("Enter your code to add a job:")||"").trim(); if(!pin) return;
-    if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
+  if(!ensureAuth("add a job")) return;
   document.getElementById('ajBay').innerHTML = BAY_OPTIONS.map(b=>`<option>${esc(b)}</option>`).join("");
   document.getElementById('ajStatus').innerHTML = STATUS_OPTIONS.map(s=>`<option${/^scheduled$/i.test(s)?' selected':''}>${esc(s)}</option>`).join("");
   ['ajProject','ajClient','ajJob','ajPM','ajNotes','ajStart','ajComp'].forEach(id=>document.getElementById(id).value="");
@@ -1409,7 +1420,7 @@ function submitAddJob(){
   const project=document.getElementById('ajProject').value.trim();
   const msg=document.getElementById('ajMsg');
   if(!project){ msg.style.color='var(--red)'; msg.textContent='Project name is required.'; return; }
-  const payload={ action:"addJob", project:project, pin:CLOSE_PIN,
+  const payload={ action:"addJob", project:project, pin:CLOSE_PIN, user:CURRENT_USER,
     client:document.getElementById('ajClient').value.trim(), jobNum:document.getElementById('ajJob').value.trim(),
     bay:document.getElementById('ajBay').value, start:document.getElementById('ajStart').value,
     completion:document.getElementById('ajComp').value, status:document.getElementById('ajStatus').value,
