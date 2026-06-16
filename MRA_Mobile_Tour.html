@@ -75,6 +75,9 @@
   .seg .o.on{background:var(--blue); color:#fff}
   .navwrap{display:flex; align-items:center; gap:8px}
   .navwrap .mlabel{font-size:15px; font-weight:800; min-width:150px; text-align:center}
+  .tourfilter{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:9px;
+    padding:6px 10px; font-size:12px; font-weight:700; max-width:230px; cursor:pointer}
+  .tourfilter:focus{outline:none; border-color:var(--blue)}
 
   /* Calendar grid */
   .cal{width:100%; border-collapse:collapse; table-layout:fixed}
@@ -215,6 +218,7 @@
           <button class="btn sm" onclick="goToday()">Today</button>
         </div>
         <span class="count" id="monthCount">0</span>
+        <select id="tourFilter" class="tourfilter" onchange="setTourFilter(this.value)" title="Show only one tour"><option value="">All tours</option></select>
         <span class="sp"></span>
         <div class="seg">
           <div class="o on" id="seg-cal" onclick="setSchedView('cal')">Calendar</div>
@@ -412,6 +416,15 @@ let DATA = load();
 const TODAY = SEED.todayISO || new Date().toISOString().slice(0,10);
 let CUR = new Date(TODAY+'T00:00:00'); CUR.setDate(1);
 let SCHED_VIEW='cal';
+let FILTER_TOUR='';
+function matchFilter(e){return !FILTER_TOUR || e.tour===FILTER_TOUR;}
+function setTourFilter(v){FILTER_TOUR=v; renderSchedule(); renderLegend();}
+function populateTourFilter(){
+  const sel=$('tourFilter'); if(!sel) return;
+  const names=[...new Set((DATA.events||[]).map(e=>e.tour))].sort();
+  if(FILTER_TOUR && !names.includes(FILTER_TOUR)) FILTER_TOUR='';
+  sel.innerHTML='<option value="">All tours</option>'+names.map(n=>`<option value="${esc(n)}" ${n===FILTER_TOUR?'selected':''}>${esc(n)}</option>`).join('');
+}
 
 function load(){ try{const r=localStorage.getItem(STORE); if(r) return JSON.parse(r);}catch(e){} return JSON.parse(JSON.stringify(SEED)); }
 function save(){ try{localStorage.setItem(STORE, JSON.stringify(DATA));}catch(e){} renderAll(); }
@@ -444,7 +457,7 @@ function setView(v){VIEW=v;try{localStorage.setItem('mmt_view',v);}catch(e){}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));}
 
 /* ---------- render ---------- */
-function renderAll(){renderKpis();renderSchedule();renderEquipment();renderLegend();$('genstamp').textContent=SEED.generatedText||'';setView(VIEW);}
+function renderAll(){renderKpis();populateTourFilter();renderSchedule();renderEquipment();renderLegend();$('genstamp').textContent=SEED.generatedText||'';setView(VIEW);}
 
 function renderKpis(){
   const ev=DATA.events||[];
@@ -463,12 +476,12 @@ function renderKpis(){
     <div class="kpi c6"><div class="n">${eq}</div><div class="l">EQUIPMENT IN SERVICE</div></div>`;
 }
 
-function eventsOn(iso){return (DATA.events||[]).filter(e=>e.date===iso).sort((a,b)=>a.tour.localeCompare(b.tour));}
+function eventsOn(iso){return (DATA.events||[]).filter(e=>e.date===iso && matchFilter(e)).sort((a,b)=>a.tour.localeCompare(b.tour));}
 
 function renderSchedule(){
   $('mlabel').textContent=CUR.toLocaleDateString(undefined,{month:'long',year:'numeric'});
   const ym=ymd(CUR).slice(0,7);
-  $('monthCount').textContent=(DATA.events||[]).filter(e=>e.date.slice(0,7)===ym).length+' stops';
+  $('monthCount').textContent=(DATA.events||[]).filter(e=>e.date.slice(0,7)===ym && matchFilter(e)).length+' stops';
   if(SCHED_VIEW==='cal'){ $('calWrap').classList.remove('hidden'); $('listWrap').classList.add('hidden'); renderCal(); }
   else { $('listWrap').classList.remove('hidden'); $('calWrap').classList.add('hidden'); renderList(); }
 }
@@ -501,8 +514,8 @@ function renderCal(){
 
 function renderList(){
   const ym=ymd(CUR).slice(0,7);
-  const evs=(DATA.events||[]).filter(e=>e.date.slice(0,7)===ym).sort((a,b)=>a.date.localeCompare(b.date)||a.tour.localeCompare(b.tour));
-  if(!evs.length){$('listWrap').innerHTML='<div class="empty">No stops this month. Use ＋ Add Event.</div>';return;}
+  const evs=(DATA.events||[]).filter(e=>e.date.slice(0,7)===ym && matchFilter(e)).sort((a,b)=>a.date.localeCompare(b.date)||a.tour.localeCompare(b.tour));
+  if(!evs.length){$('listWrap').innerHTML='<div class="empty">No stops match this view. Try “All tours” or another month.</div>';return;}
   const byday={}; evs.forEach(e=>{(byday[e.date]=byday[e.date]||[]).push(e);});
   let html='';
   Object.keys(byday).sort().forEach(d=>{
@@ -520,7 +533,7 @@ function renderList(){
 
 function renderLegend(){
   const ym=ymd(CUR).slice(0,7);
-  const names=[...new Set((DATA.events||[]).filter(e=>e.date.slice(0,7)===ym).map(e=>e.tour))].sort();
+  const names=FILTER_TOUR?[FILTER_TOUR]:[...new Set((DATA.events||[]).filter(e=>e.date.slice(0,7)===ym).map(e=>e.tour))].sort();
   $('legend').innerHTML=names.map(n=>`<span class="li"><span class="sw" style="background:${tourColor(n)}"></span>${esc(n)}</span>`).join('');
 }
 
