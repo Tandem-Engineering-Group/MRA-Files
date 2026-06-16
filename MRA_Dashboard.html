@@ -12,6 +12,29 @@
     --amber:#f59e0b; --violet:#a78bfa; --teal:#2dd4bf;
     --brand:#e04826;  /* MRA brand orange (sampled from logo.png) */
   }
+  /* ---------- Light mode (per-device; header toggle, remembered) ---------- */
+  body.light{
+    --bg:#eef1f6; --panel:#ffffff; --panel2:#f3f6fa; --line:#d4dde8;
+    --txt:#1b2531; --muted:#586a7e; --faint:#8a99ab;
+  }
+  body.light .pill{background:#e7edf4; color:#586a7e}
+  body.light .pill.j{color:#1b2531}
+  body.light .pill.task,body.light .pill.soon{background:#fdeccb; color:#8a5e00}
+  body.light .pill.due{background:#fde0e0; color:#c22222}
+  body.light .pill.open{color:#3a2600}
+  body.light .pill.fleet{background:rgba(239,68,68,.10); color:#c22222}
+  body.light .taskline{color:#26313f; border-bottom-color:rgba(0,0,0,.08)}
+  body.light .taskline.sal{color:#8a5e00}
+  body.light .taskline.done{color:var(--muted)}
+  body.light .taskline.fleet{color:#b23a3a}
+  body.light .taskline.fleet .flnum,body.light .tasklist.fleet .fl-h{color:#c22222}
+  body.light .salcard li{color:#7a5300}
+  body.light .badge.red{background:#fde0e0; color:#c22222}
+  body.light .badge.amber{background:#fdeccb; color:#8a5e00}
+  body.light .badge.green{background:#dcf5e6; color:#15803d}
+  body.light .badge.blue{background:#dde9fb; color:#1d65c9}
+  body.light .badge.grey{background:#e7edf4; color:#5b6b7e}
+  body.light .pmbar{background:#e2e8f0}
   *{box-sizing:border-box; margin:0; padding:0}
   html,body{background:var(--bg); color:var(--txt);
     font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
@@ -391,6 +414,11 @@
   .linksmenu-pop a{display:block; padding:8px 11px; border-radius:7px; color:var(--txt); text-decoration:none; font-size:12.5px; white-space:nowrap}
   .linksmenu-pop a:hover{background:var(--panel2); color:#93c5fd}
   .linksmenu-pop .empty{padding:8px 11px; font-style:italic}
+  .linksmenu-pop .mi{display:block; width:100%; text-align:left; padding:8px 11px; border-radius:7px; color:var(--txt);
+    text-decoration:none; font-size:12.5px; white-space:nowrap; background:none; border:none; cursor:pointer; font-family:inherit}
+  .linksmenu-pop .mi:hover{background:var(--panel2); color:#93c5fd}
+  .linksmenu-pop .mi-div{font-size:9.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--faint);
+    padding:8px 11px 3px; border-top:1px solid var(--line); margin-top:4px}
 
   @media(max-width:1500px){ .kpis{grid-template-columns:repeat(4,1fr)} }
   @media(max-width:1100px){ .grid{grid-template-columns:1fr} .g-gutter{width:130px;flex-basis:130px} }
@@ -411,13 +439,17 @@
       <div class="tab" data-view="fleet" onclick="setView('fleet')">FLEET</div>
       <div class="tab" data-view="history" onclick="setView('history')">HISTORY</div>
     </div>
-    <div class="linksmenu">
-      <button class="editbtn" id="linksBtn" onclick="toggleLinks(event)" title="Frequently used links">🔗 Links ▾</button>
-      <div class="linksmenu-pop" id="linksPop"></div>
+    <button class="helpbtn" onclick="openHelp()" style="margin-left:auto" title="How to use this dashboard">?</button>
+    <div class="linksmenu" id="topMenu">
+      <button class="editbtn" id="menuBtn" onclick="toggleDrop(event,'menuPop')" title="Tools &amp; links">☰ Menu ▾</button>
+      <div class="linksmenu-pop" id="menuPop">
+        <button class="mi" id="btnWall" onclick="toggleWall(this)" title="Wall/TV mode: fit bays + assignee tables on one screen, auto-scroll">📺 Wall mode</button>
+        <button class="mi" id="btnTheme" onclick="toggleTheme(this)" title="Switch light / dark — remembered on this device">☀️ Light</button>
+        <a class="mi" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" onclick="closeDrops()" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
+        <div class="mi-div">Quick links</div>
+        <div id="linksPop"></div>
+      </div>
     </div>
-    <a class="editbtn" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
-    <button class="editbtn" id="btnWall" onclick="toggleWall(this)" title="Wall/TV mode: fit bays + assignee tables on one screen, auto-scroll (mouse takes over)">📺 Wall</button>
-    <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
     <div class="clockbox">
       <div class="time" id="clock">--:--</div>
       <div class="meta"><span class="dot-live"></span><span id="refreshInfo">loading…</span></div>
@@ -461,11 +493,17 @@
     <div class="panel">
       <h2>Bay Status <span class="count" id="bayCount"></span>
         <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">click a task count to see the tasks</span>
-        <button class="expandbtn" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
-        <button class="expandbtn" id="btnCloseMode" onclick="toggleCloseMode(this)" title="Enter your code (1974) to close tasks AND move/edit jobs (bay, dates, notes) from the board">🔒 Edit mode</button>
-        <button class="expandbtn" id="btnAddTask" onclick="openAddTask()" title="Add a new shop task (needs code)">➕ Add task</button>
-        <button class="expandbtn" id="btnAddJob" onclick="openAddJob()" title="Create a brand-new shop job on the schedule (needs code)">➕ Add job</button>
-        <button class="expandbtn" id="btnPrint" onclick="printBoard()" title="Print the shop board (bays + open tasks) on one page">🖨 Print</button>
+        <div class="linksmenu" style="margin-left:8px">
+          <button class="expandbtn" onclick="toggleDrop(event,'bayPop')" title="Bay actions — edit, add, print">☰ Actions ▾</button>
+          <div class="linksmenu-pop" id="bayPop">
+            <button class="mi" id="btnCloseMode" onclick="toggleCloseMode(this)" title="Enter your code (1974) to close tasks AND move/edit jobs">🔒 Edit mode</button>
+            <button class="mi" id="btnAddTask" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
+            <button class="mi" id="btnAddJob" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
+            <button class="mi" id="btnPrint" onclick="printBoard();closeDrops()" title="Print the shop board on one page">🖨 Print</button>
+            <div class="mi-div">View</div>
+            <button class="mi" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
+          </div>
+        </div>
       </h2>
       <div class="bays" id="bays"></div>
     </div>
@@ -975,6 +1013,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.3", date:"2026-06-16", title:"Cleaner header + light mode", items:[
+    "☀️/🌙 Light / Dark toggle (in ☰ Menu), remembered per device — the shop TV can stay dark while you use light on a laptop.",
+    "Tidier top bar: Wall, Light, Edit Schedule and Links tucked into one ☰ Menu; the ? help stays out where everyone can see it.",
+    "Bay Status actions (Edit mode, Add task, Add job, Print, Show closed) consolidated into a single ☰ Actions menu." ] },
   { rev:"3.2", date:"2026-06-15", title:"Run the shop board from the dashboard", items:[
     "🖨 Print — one click prints the board on two clean pages: page 1 by bay (jobs + open tasks), page 2 by crew (Sal / MasterWraps / Electricians) to hand out.",
     "➕ Add job — create a brand-new job on the schedule right from the board (no Excel).",
@@ -1047,6 +1089,14 @@ function toggleClosed(){ SHOWCLOSED=!SHOWCLOSED; renderAll(); }
 function toggleSalClosed(){ SHOWSALCLOSED=!SHOWSALCLOSED; renderAll(); }
 /* ---------- Wall (TV) mode: bound heights, auto-expand tasks, auto-scroll ---------- */
 let WALL=false, AS_TIMER=null;
+function setThemeBtn(b){ if(!b) return; const light=document.body.classList.contains('light');
+  b.textContent=light?'🌙 Dark':'☀️ Light'; b.title='Switch to '+(light?'dark':'light')+' mode (remembered on this device)'; }
+function toggleTheme(btn){
+  const light=!document.body.classList.contains('light');
+  document.body.classList.toggle('light',light);
+  try{ localStorage.setItem('mra_theme', light?'light':'dark'); }catch(e){}
+  setThemeBtn(btn||document.getElementById('btnTheme'));
+}
 function toggleWall(btn){
   WALL=!WALL; document.body.classList.toggle('wall',WALL);
   try{ localStorage.setItem('mra_wall', WALL?'1':''); }catch(e){}
@@ -1087,7 +1137,12 @@ function renderLinks(){
 }
 function toggleLinks(e){ if(e) e.stopPropagation(); const pop=document.getElementById('linksPop'); if(pop) pop.classList.toggle('show'); }
 function closeLinks(){ const pop=document.getElementById('linksPop'); if(pop) pop.classList.remove('show'); }
-document.addEventListener('click',e=>{ if(!(e.target.closest && e.target.closest('.linksmenu'))) closeLinks(); });
+function toggleDrop(e,id){ if(e) e.stopPropagation(); const p=document.getElementById(id); if(!p) return;
+  const open=p.classList.contains('show'); document.querySelectorAll('.linksmenu-pop.show').forEach(x=>x.classList.remove('show')); if(!open) p.classList.add('show'); }
+function closeDrops(){ document.querySelectorAll('.linksmenu-pop.show').forEach(p=>p.classList.remove('show')); }
+function toggleMenu(e){ toggleDrop(e,'menuPop'); }   /* back-compat */
+function closeMenu(){ closeDrops(); }
+document.addEventListener('click',e=>{ if(!(e.target.closest && e.target.closest('.linksmenu'))) closeDrops(); });
 function isSal(line){ return /\bsal\b/i.test(line||""); }
 function cleanTask(line, stripSal){
   let s=(line||"").replace(/^\s*\d+\s*[\.\)]\s*/,"").replace(/^[-–]\s*/,"");
@@ -2633,6 +2688,8 @@ renderEquipment();
 renderFleet();
 // Close-from-dashboard is parked until the write-back transport is reliable — hide the toggle.
 if(!CLOSE_FLOW_URL){ const _cb=document.getElementById('btnCloseMode'); if(_cb) _cb.style.display='none'; }
+try{ if(localStorage.getItem('mra_theme')==='light') document.body.classList.add('light'); }catch(e){}
+setThemeBtn(document.getElementById('btnTheme'));
 refresh().then(ok=>{ if(!ok) renderAll(); try{ if(localStorage.getItem('mra_wall')){ const b=document.getElementById('btnWall'); if(b && !WALL) toggleWall(b); } }catch(e){} });
 tick(); setInterval(tick,1000);
 setInterval(refresh, REFRESH_SECONDS*1000);
