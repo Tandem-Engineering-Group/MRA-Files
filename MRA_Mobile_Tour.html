@@ -425,6 +425,12 @@ function tint(name,a){const c=tourColor(name);
   if(c[0]==='#'){const n=parseInt(c.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
   const m=c.match(/hsla?\(([\d.]+)[, ]+([\d.]+)%[, ]+([\d.]+)%/);
   return m?`hsla(${m[1]},${m[2]}%,${m[3]}%,${a})`:c;}
+function rgbOf(c){ if(c[0]==='#'){const n=parseInt(c.slice(1),16);return [(n>>16)&255,(n>>8)&255,n&255];}
+  const m=c.match(/hsla?\(([\d.]+)[, ]+([\d.]+)%[, ]+([\d.]+)%/);
+  if(m){let h=+m[1]/360,s=+m[2]/100,l=+m[3]/100;const f=n=>{const k=(n+h*12)%12;return l-s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,9-k,1));};
+    return [Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255)];}
+  return [120,120,120];}
+function contrastText(name){const [r,g,b]=rgbOf(tourColor(name));return (0.299*r+0.587*g+0.114*b)>150?'#12181f':'#ffffff';}
 function eqById(id){return (DATA.equipment||[]).find(e=>e.id===id);}
 function locStr(e){let s=[e.city,e.state].filter(Boolean).join(', ');if(e.venue)s+=(s?' · ':'')+e.venue;return s;}
 function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -482,7 +488,7 @@ function renderCal(){
         `<div class="daynum">${cur.getDate()}<span class="add" onclick="openEvent(null,'${iso}')">＋</span></div>`;
       const showN=4;
       evs.slice(0,showN).forEach(e=>{
-        cell+=`<span class="chip" style="background:${tint(e.tour,0.18)};border-left-color:${tourColor(e.tour)}" onclick="openEvent('${e.id}')" title="${esc(e.tour)} — ${esc(locStr(e))}">${esc(e.tour)}${e.city?` <span class="loc">· ${esc(e.city)}</span>`:''}</span>`;
+        cell+=`<span class="chip" style="background:${tourColor(e.tour)};color:${contrastText(e.tour)};border-left-color:rgba(0,0,0,.25)" onclick="openEvent('${e.id}')" title="${esc(e.tour)} — ${esc(locStr(e))}">${esc(e.tour)}${e.city?` <span class="loc">· ${esc(e.city)}</span>`:''}</span>`;
       });
       if(evs.length>showN) cell+=`<span class="morelink" onclick="(function(){CUR=new Date('${iso}T00:00:00');CUR.setDate(1);setSchedView('list');})()">+${evs.length-showN} more…</span>`;
       cell+='</td>';
