@@ -1,0 +1,52 @@
+name: Deploy Mobile Tour to Azure
+
+# Publishes ONLY the Mobile Tour board (MRA_Mobile_Tour.html + mmt_data.js) to the
+# same Azure static website ($web container) the shop board uses. It never touches
+# the shop board's files (MRA_Dashboard.html / data.js / index.html), so the shop
+# dashboard and its live data are completely unaffected.
+
+on:
+  push:
+    branches: [claude/mymobiletour-dashboard-a9lkcx]
+    paths:
+      - 'MRA_Mobile_Tour.html'
+      - 'mmt_data.js'
+      - '.github/workflows/deploy-tour.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload Mobile Tour files to Azure ($web)
+        uses: azure/CLI@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'MRA_Mobile_Tour.html' \
+              --file MRA_Mobile_Tour.html \
+              --content-type 'text/html' \
+              --overwrite --auth-mode key --only-show-errors
+
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'mmt_data.js' \
+              --file mmt_data.js \
+              --content-type 'application/javascript' \
+              --overwrite --auth-mode key --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      - name: Verify live URL
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://mrashopdash.z13.web.core.windows.net/MRA_Mobile_Tour.html")
+          echo "MRA_Mobile_Tour.html -> HTTP $STATUS"
+          if [ "$STATUS" != "200" ]; then echo "WARNING: not 200"; exit 1; fi
+          echo "Live: https://mrashopdash.z13.web.core.windows.net/MRA_Mobile_Tour.html"
