@@ -459,7 +459,7 @@
   <!-- ===================== PRINT STYLESHEET ===================== -->
   <style>
   @media print{
-    @page{ size:landscape; margin:.4in; }
+    @page{ size:letter portrait; margin:.4in; }
     /* flip the dark theme to clean light-on-white for paper (accent colors kept) */
     :root{
       --bg:#fff; --panel:#fff; --panel2:#fff; --line:#c2c8d0;
@@ -2289,12 +2289,7 @@ function printBoard(){
   const isHeld=b=>/next\s*up|on\s*hold|off.?site/i.test(b||"");
   const live=j=>j.category!=="leave" && (j.status||"").toLowerCase()!=="shipped";
   const jobs=(D.jobs||[]).filter(live);
-  const opensOf=j=>{
-    const arr=(j.tasks&&j.tasks.length)
-      ? j.tasks.filter(t=>!t.done).map(t=>cleanTask(t.t,false))
-      : (j.openTasks||[]).map(tk=>cleanTask(tk,false));
-    return arr.filter(Boolean);
-  };
+  const opensOf=j=>{ const arr=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>cleanTask(t.t,false)):(j.openTasks||[]).map(tk=>cleanTask(tk,false)); return arr.filter(Boolean); };
   const fmt=iso=>{ if(!iso) return ""; const p=iso.split("-"); return (+p[1])+"/"+(+p[2]); };
   const phys=order.filter(b=>!isParking(b)&&!isHeld(b));
   const buckets=[];
@@ -2302,72 +2297,73 @@ function printBoard(){
   buckets.push({name:"Parking Lot", jobs:jobs.filter(j=>isParking(j.bay))});
   buckets.push({name:"Next Up / On Hold", jobs:jobs.filter(j=>isHeld(j.bay))});
   let cards="", totalOpen=0;
-  buckets.forEach(bk=>{
-    let inner="";
-    bk.jobs.forEach(j=>{
-      const ops=opensOf(j); if(!ops.length) return;   // open work only — skip jobs with nothing open
-      totalOpen+=ops.length;
-      const dates=(j.startISO||j.completionISO)?` <span class="dt">${fmt(j.startISO)}–${fmt(j.completionISO)}</span>`:"";
-      inner+=`<div class="job"><div class="jh">${esc(j.project)} <span class="jn">${esc(j.jobNum||"")}</span>${dates}</div>`+
-        `<ul>`+ops.map(o=>`<li>${esc(o)}</li>`).join("")+`</ul></div>`;
-    });
-    if(inner) cards+=`<div class="bay"><div class="bn">${esc(bk.name)}</div>${inner}</div>`;
-  });
-  // ----- Open Tasks by Assignee (Sal / MasterWraps / Electricians) -----
+  buckets.forEach(bk=>{ let inner="";
+    bk.jobs.forEach(j=>{ const ops=opensOf(j); if(!ops.length) return; totalOpen+=ops.length;
+      const dates=(j.startISO||j.completionISO)?` <span class="pa-dt">${fmt(j.startISO)}–${fmt(j.completionISO)}</span>`:"";
+      inner+=`<div class="pa-job"><div class="pa-jh">${esc(j.project)} <span class="pa-jn">${esc(j.jobNum||"")}</span>${dates}</div>`+
+        `<ul>`+ops.map(o=>`<li>${esc(o)}</li>`).join("")+`</ul></div>`; });
+    if(inner) cards+=`<div class="pa-bay"><div class="pa-bn">${esc(bk.name)}</div>${inner}</div>`; });
   const GROUPS=[{label:"🔧 Sal",re:/\bsal\b/i},{label:"🎨 MasterWraps",re:/wrap|w2 graphic|\bw2\b/i},{label:"⚡ Electricians",re:/electr|beyer/i}];
   const KNOWN=new RegExp(GROUPS.map(g=>g.re.source).join("|"),"i");
   const basisFor=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN.test(who))?who:(who?(who+" "+txt):txt); };
   const oIdx=b=>{const i=order.indexOf(b); return i<0?99:i;};
   const crewCards=re=>{ const out=[];
-    jobs.forEach(j=>{
-      const tl=(j.tasks&&j.tasks.length)
-        ? j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t}))
-        : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk}));
+    jobs.forEach(j=>{ const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk}));
       const open=tl.filter(t=>re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
       if(open.length) out.push({bay:j.bay,project:j.project,jobNum:j.jobNum,open}); });
-    out.sort((a,b)=>oIdx(a.bay)-oIdx(b.bay) || a.project.localeCompare(b.project));
-    return out; };
+    out.sort((a,b)=>oIdx(a.bay)-oIdx(b.bay)||a.project.localeCompare(b.project)); return out; };
   let crew="";
   GROUPS.forEach(g=>{ const cs=crewCards(g.re); const tot=cs.reduce((s,x)=>s+x.open.length,0);
-    const body=cs.length ? cs.map(c=>`<div class="ct"><div class="cth">${esc(c.project)} <span class="jn">${esc(c.jobNum||"")}</span> <span class="bayt">${esc(c.bay||"")}</span></div><ul>`+c.open.map(o=>`<li>${esc(o.disp)}</li>`).join("")+`</ul></div>`).join("") : `<div class="none">— nothing open —</div>`;
-    crew+=`<div class="crew"><div class="crewh">${g.label} <span class="cnt">${tot}</span></div><div class="crewb">${body}</div></div>`; });
+    const body=cs.length?cs.map(c=>`<div class="pa-ct"><div class="pa-cth">${esc(c.project)} <span class="pa-jn">${esc(c.jobNum||"")}</span> <span class="pa-bayt">${esc(c.bay||"")}</span></div><ul>`+c.open.map(o=>`<li>${esc(o.disp)}</li>`).join("")+`</ul></div>`).join(""):`<div class="pa-none">— nothing open —</div>`;
+    crew+=`<div class="pa-crew"><div class="pa-crewh">${g.label} <span class="pa-cnt">${tot}</span></div><div class="pa-crewb">${body}</div></div>`; });
   const now=new Date();
-  const stamp=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear()+" "+now.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
-  const css=`@page{size:letter portrait;margin:.4in}*{box-sizing:border-box}`+
-    `body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}`+
-    `.printbar{background:#23272e;color:#fff;padding:8px 14px;font-size:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}`+
-    `.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-weight:700;cursor:pointer;font-size:12px}`+
-    `.printbar .tip{color:#aeb6c2}`+
-    `.hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #e04826;padding:0 0 4px;margin:4px 0 7px}`+
-    `.hd h1{font-size:14px;margin:0;font-weight:800}.hd .mra{color:#e04826}.hd .sub{font-size:10px;color:#555}`+
-    `.bars{column-count:4;column-gap:9px}`+
-    `.bay{break-inside:avoid;border:1px solid #cfd3d8;border-radius:5px;margin:0 0 6px;overflow:hidden}`+
-    `.bn{color:#23272e;font-size:9px;font-weight:800;padding:2px 6px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1.5px solid #23272e;background:#f0f2f5}`+
-    `.job{padding:2px 6px 3px;border-top:1px solid #eee}.job:first-of-type{border-top:none}`+
-    `.jh{font-size:9.5px;font-weight:700;line-height:1.2}.jh .jn{color:#777;font-weight:600}.jh .dt{color:#e04826;font-weight:700;font-size:8.5px}`+
-    `.job ul{margin:1px 0 0 12px;padding:0}.job li{font-size:8.5px;line-height:1.22;margin-bottom:.5px}`+
-    `.none{font-size:9px;color:#999;font-style:italic;padding-left:2px}`+
-    `.sec2{margin-top:9px}`+
-    `.hd2{font-size:12px;font-weight:800;border-bottom:2px solid #e04826;padding-bottom:3px;margin:0 0 6px;break-after:avoid}`+
-    `.crews{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;align-items:start}`+
-    `.crew{break-inside:avoid;border:1px solid #cfd3d8;border-radius:5px;overflow:hidden}`+
-    `.crewh{color:#e04826;font-size:10px;font-weight:800;padding:3px 7px;display:flex;justify-content:space-between;border-bottom:1.5px solid #e04826}`+
-    `.crewh .cnt{font-weight:700;color:#777}`+
-    `.crewb{padding:1px 0}`+
-    `.ct{padding:2px 7px 3px;border-top:1px solid #eee}.ct:first-child{border-top:none}`+
-    `.cth{font-size:9px;font-weight:700;line-height:1.15}.cth .jn{color:#777;font-weight:600}.cth .bayt{color:#e04826;font-weight:600;font-size:8px}`+
-    `.crew ul{margin:1px 0 0 12px;padding:0}.crew li{font-size:8.5px;line-height:1.22;margin-bottom:.5px}`+
-    `@media print{.printbar{display:none}}`;
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA Shop Floor — ${stamp}</title><style>${css}</style></head><body>`+
-    `<div class="printbar"><button onclick="window.print()">🖨 Print / Save PDF</button><span class="tip">Letter · Portrait · Fit to page.</span></div>`+
-    `<div class="hd"><h1><span class="mra">MRA</span> Shop Floor — Open Tasks</h1><div class="sub">${stamp} · ${totalOpen} open</div></div>`+
-    `<div class="bars">${cards||'<div class="none">No active jobs on the floor.</div>'}</div>`+
-    `<div class="sec2"><div class="hd2">Open Tasks by Assignee</div><div class="crews">${crew}</div></div>`+
-    `</body></html>`;
-  const w=window.open('','_blank');
-  if(!w){ alert('Please allow pop-ups for this site to print.'); return; }
-  w.document.write(html); w.document.close();
-  setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 400);
+  const stamp=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear()+" "+now.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  // ---- print inline on this page (no popup): build a hidden #printArea, show only it in @media print ----
+  const oldA=document.getElementById('printArea'); if(oldA) oldA.remove();
+  const oldS=document.getElementById('printAreaCSS'); if(oldS) oldS.remove();
+  const css=
+    `#printArea{display:none}`+
+    `@media print{body.printing>*{display:none !important}body.printing #printArea{display:block !important}@page{size:letter portrait;margin:.4in}}`+
+    `#printArea{font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#fff;font-size:9px;-webkit-print-color-adjust:exact;print-color-adjust:exact}`+`#printArea .pa-wrap{transform-origin:top left}`+
+    `#printArea .pa-hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #e04826;padding:0 0 4px;margin:0 0 7px}`+
+    `#printArea .pa-h1{font-size:1.56em;font-weight:800}#printArea .pa-mra{color:#e04826}#printArea .pa-sub{font-size:1.1em;color:#555}`+
+    `#printArea .pa-bars{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;align-items:start}`+
+    `#printArea .pa-bay{break-inside:avoid;border:1px solid #cfd3d8;border-radius:5px;margin:0;overflow:hidden}`+
+    `#printArea .pa-bn{color:#23272e;font-size:1em;font-weight:800;padding:2px 6px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1.5px solid #23272e;background:#f0f2f5}`+
+    `#printArea .pa-job{padding:2px 6px 3px;border-top:1px solid #eee}#printArea .pa-job:first-of-type{border-top:none}`+
+    `#printArea .pa-jh{font-size:1.06em;font-weight:700;line-height:1.2}#printArea .pa-jn{color:#777;font-weight:600}#printArea .pa-dt{color:#e04826;font-weight:700;font-size:.94em}`+
+    `#printArea .pa-job ul{margin:1px 0 0 12px;padding:0}#printArea .pa-job li{font-size:.94em;line-height:1.22;margin-bottom:.5px}`+
+    `#printArea .pa-none{font-size:1em;color:#999;font-style:italic}`+
+    `#printArea .pa-sec2{margin-top:9px}`+
+    `#printArea .pa-hd2{font-size:1.33em;font-weight:800;border-bottom:2px solid #e04826;padding-bottom:3px;margin:0 0 6px}`+
+    `#printArea .pa-crews{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;align-items:start}`+
+    `#printArea .pa-crew{break-inside:avoid;border:1px solid #cfd3d8;border-radius:5px;overflow:hidden}`+
+    `#printArea .pa-crewh{color:#e04826;font-size:1.1em;font-weight:800;padding:3px 7px;display:flex;justify-content:space-between;border-bottom:1.5px solid #e04826}`+
+    `#printArea .pa-cnt{font-weight:700;color:#777}`+
+    `#printArea .pa-crewb{padding:1px 0}`+
+    `#printArea .pa-ct{padding:2px 7px 3px;border-top:1px solid #eee}#printArea .pa-ct:first-child{border-top:none}`+
+    `#printArea .pa-cth{font-size:1em;font-weight:700;line-height:1.15}#printArea .pa-bayt{color:#e04826;font-weight:600;font-size:.89em}`+
+    `#printArea .pa-crew ul{margin:1px 0 0 12px;padding:0}#printArea .pa-crew li{font-size:.94em;line-height:1.22;margin-bottom:.5px}`;
+  const style=document.createElement('style'); style.id='printAreaCSS'; style.textContent=css; document.head.appendChild(style);
+  const area=document.createElement('div'); area.id='printArea';
+  area.innerHTML=`<div class="pa-wrap">`+
+    `<div class="pa-hd"><div class="pa-h1"><span class="pa-mra">MRA</span> Shop Floor — Open Tasks</div><div class="pa-sub">${stamp} · ${totalOpen} open</div></div>`+
+    `<div class="pa-bars">${cards||'<div class="pa-none">No active jobs on the floor.</div>'}</div>`+
+    `<div class="pa-sec2"><div class="pa-hd2">Open Tasks by Assignee</div><div class="pa-crews">${crew}</div></div>`+
+    `</div>`;
+  document.body.appendChild(area);
+  // auto-fit to one page: measure off-screen at print width, shrink the base font until it fits (real reflow — print honors it)
+  const wrap=area.firstElementChild;
+  area.style.display='block'; area.style.position='fixed'; area.style.left='-10000px'; area.style.top='0'; area.style.width='7.7in';
+  const MAXPX=945;                                   // ~9.85in usable on a Letter portrait page (.4in margins) with safety
+  let fs=9; area.style.fontSize=fs+'px';
+  for(let i=0;i<4;i++){ const h=wrap.getBoundingClientRect().height; if(h<=MAXPX) break; fs=fs*(MAXPX/h)*0.985; area.style.fontSize=fs.toFixed(2)+'px'; }
+  area.style.position=''; area.style.left=''; area.style.top=''; area.style.width=''; area.style.display='';
+  function cleanup(){ try{ document.body.classList.remove('printing'); if(area&&area.parentNode) area.remove(); if(style&&style.parentNode) style.remove(); }catch(e){} window.removeEventListener('afterprint',cleanup); }
+  window.addEventListener('afterprint',cleanup);
+  document.body.classList.add('printing');
+  setTimeout(()=>{ try{ window.print(); }catch(e){} }, 80);
+  setTimeout(cleanup, 60000);
 }
 
 /* ---------- Shop History: search jobs + every task line (open & done) ---------- */
