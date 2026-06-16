@@ -458,6 +458,7 @@
         <button class="expandbtn" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
         <button class="expandbtn" id="btnCloseMode" onclick="toggleCloseMode(this)" title="Enter your code (1974) to close tasks AND move/edit jobs (bay, dates, notes) from the board">🔒 Edit mode</button>
         <button class="expandbtn" id="btnAddTask" onclick="openAddTask()" title="Add a new shop task (needs code)">➕ Add task</button>
+        <button class="expandbtn" id="btnAddJob" onclick="openAddJob()" title="Create a brand-new shop job on the schedule (needs code)">➕ Add job</button>
       </h2>
       <div class="bays" id="bays"></div>
     </div>
@@ -746,6 +747,39 @@
     </div>
   </div>
 
+  <!-- ===================== ADD-JOB MODAL ===================== -->
+  <div class="modal-overlay" id="addJobModal" onclick="closeAddJob(event)">
+    <div class="modal" style="max-width:560px">
+      <button class="modal-close" onclick="closeAddJob()" title="Close">×</button>
+      <h3>➕ Add a shop job</h3>
+      <div class="msub">Creates a brand-new job on the <b>Input</b> schedule — it appears on the board within ~15 min.</div>
+      <div class="addform">
+        <div class="addrow2">
+          <div><label>Project</label><input id="ajProject" placeholder="e.g. Washtenaw County" autocomplete="off"></div>
+          <div><label>Client</label><input id="ajClient" placeholder="optional" autocomplete="off"></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Job #</label><input id="ajJob" placeholder="e.g. J1560" autocomplete="off"></div>
+          <div><label>Bay</label><select id="ajBay"></select></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Start date</label><input id="ajStart" type="date"></div>
+          <div><label>Completion date</label><input id="ajComp" type="date"></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Status</label><select id="ajStatus"></select></div>
+          <div><label>PM</label><input id="ajPM" placeholder="optional" autocomplete="off"></div>
+        </div>
+        <div><label>Notes (optional)</label><textarea id="ajNotes"></textarea></div>
+        <div id="ajMsg" style="font-size:12px; min-height:16px"></div>
+        <div class="addbtns">
+          <button class="btn-ghost" onclick="closeAddJob()">Cancel</button>
+          <button class="btn-primary" id="ajSubmit" onclick="submitAddJob()">Add job</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== EDIT-JOB MODAL ===================== -->
   <div class="modal-overlay" id="editModal" onclick="closeEdit(event)">
     <div class="modal" style="max-width:520px">
@@ -950,6 +984,7 @@ function closeHelp(e){ if(!e || e.target.id==='helpModal' || e.target.classList.
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   document.getElementById('helpModal').classList.remove('show');
   const am=document.getElementById('addModal'); if(am) am.classList.remove('show');
+  const ajm=document.getElementById('addJobModal'); if(ajm) ajm.classList.remove('show');
   const tm=document.getElementById('tplModal'); if(tm) tm.classList.remove('show');
   const em=document.getElementById('editModal'); if(em) em.classList.remove('show');
   document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop();
@@ -1146,6 +1181,36 @@ function submitEditJob(){
     .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Saved — board updates within ~15 min.'; btn.textContent="Save changes";
       setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1700); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Save changes"; btn.disabled=false; });
+}
+
+/* ---------- Add a brand-new shop job (Input row) from the dashboard ---------- */
+function openAddJob(){
+  if(!SHOP_WRITE_URL){ alert("Adding from the dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
+  if(!CLOSE_PIN){ const pin=(prompt("Enter your code to add a job:")||"").trim(); if(!pin) return;
+    if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return; } CLOSE_PIN=pin; }
+  document.getElementById('ajBay').innerHTML = BAY_OPTIONS.map(b=>`<option>${esc(b)}</option>`).join("");
+  document.getElementById('ajStatus').innerHTML = STATUS_OPTIONS.map(s=>`<option${/^scheduled$/i.test(s)?' selected':''}>${esc(s)}</option>`).join("");
+  ['ajProject','ajClient','ajJob','ajPM','ajNotes','ajStart','ajComp'].forEach(id=>document.getElementById(id).value="");
+  document.getElementById('ajMsg').textContent=""; document.getElementById('ajSubmit').disabled=false;
+  document.getElementById('addJobModal').classList.add('show');
+}
+function closeAddJob(e){ if(!e || e.target.id==='addJobModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('addJobModal').classList.remove('show'); }
+function submitAddJob(){
+  const project=document.getElementById('ajProject').value.trim();
+  const msg=document.getElementById('ajMsg');
+  if(!project){ msg.style.color='var(--red)'; msg.textContent='Project name is required.'; return; }
+  const payload={ action:"addJob", project:project, pin:CLOSE_PIN,
+    client:document.getElementById('ajClient').value.trim(), jobNum:document.getElementById('ajJob').value.trim(),
+    bay:document.getElementById('ajBay').value, start:document.getElementById('ajStart').value,
+    completion:document.getElementById('ajComp').value, status:document.getElementById('ajStatus').value,
+    pm:document.getElementById('ajPM').value.trim(), notes:document.getElementById('ajNotes').value.trim() };
+  const btn=document.getElementById('ajSubmit'); btn.disabled=true; btn.textContent="Adding…";
+  msg.style.color='var(--muted)'; msg.textContent='Sending…';
+  fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
+    .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Job added — shows on the board within ~15 min.'; btn.textContent="Add job";
+      setTimeout(()=>document.getElementById('addJobModal').classList.remove('show'),1700); })
+    .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Add job"; btn.disabled=false; });
 }
 
 function classify(job, today){
