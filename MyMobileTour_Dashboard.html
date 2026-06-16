@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0b0e13">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Mobile Tour — Dashboard & Home</title>
+<style>
+  :root{
+    --bg:#0b0e13; --panel:#161c26; --panel2:#1d2632; --line:#2a3543;
+    --txt:#e8edf3; --muted:#8b9bb0; --faint:#5d6b7e;
+    --green:#22c55e; --blue:#3b82f6; --grey:#64748b; --red:#ef4444;
+    --amber:#f59e0b; --violet:#a78bfa; --teal:#2dd4bf;
+    --brand:#e11d2a;  /* MRA red accent — change to your brand color */
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{background:var(--bg); color:var(--txt);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  body{padding:16px 22px 34px}
+
+  /* ---------- Header ---------- */
+  header{display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    padding-bottom:13px; border-bottom:1px solid var(--line)}
+  .logo{height:46px; width:auto; border-radius:6px}
+  .brand h1{font-size:25px; font-weight:800; letter-spacing:.5px; line-height:1}
+  .brand h1 .mra{color:var(--brand)}
+  .brand .sub{font-size:12px; color:var(--muted); margin-top:3px}
+  .tabs{display:flex; gap:8px; margin-left:8px}
+  .tab{background:var(--panel); border:1px solid var(--line); color:var(--muted);
+    padding:8px 18px; border-radius:10px; font-size:13px; font-weight:700;
+    cursor:pointer; letter-spacing:.5px}
+  .tab.active{background:var(--brand); border-color:var(--brand); color:#fff}
+  .clockbox{margin-left:auto; text-align:right; font-variant-numeric:tabular-nums}
+  .clockbox .time{font-size:28px; font-weight:700; letter-spacing:1px; line-height:1}
+  .clockbox .meta{font-size:11.5px; color:var(--muted); margin-top:4px}
+  .dot-live{display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--green); margin-right:5px; animation:pulse 2s infinite}
+  @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
+
+  /* ---------- Prototype banner ---------- */
+  .protobar{background:#3a2e12; border:1px solid #6b541d; color:#fcd9a8; border-radius:10px;
+    padding:9px 14px; font-size:12.5px; margin:14px 0 2px; display:flex; align-items:center; gap:9px}
+  .protobar b{color:#ffe7bd}
+
+  /* ---------- KPI tiles ---------- */
+  .kpis{display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin:16px 0}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:13px 16px; position:relative; overflow:hidden}
+  .kpi .n{font-size:34px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:10.5px; color:var(--muted); margin-top:7px; letter-spacing:1.2px; font-weight:600}
+  .kpi::before{content:""; position:absolute; left:0; top:0; bottom:0; width:5px}
+  .kpi.upc::before{background:var(--blue)}    .kpi.upc .n{color:var(--blue)}
+  .kpi.act::before{background:var(--green)}   .kpi.act .n{color:var(--green)}
+  .kpi.mil::before{background:var(--teal)}    .kpi.mil .n{color:var(--teal)}
+  .kpi.gen::before{background:var(--amber)}   .kpi.gen .n{color:var(--amber)}
+  .kpi.lab::before{background:var(--violet)}  .kpi.lab .n{color:var(--violet)}
+  .kpi.eq::before{background:var(--brand)}    .kpi.eq .n{color:#fb7185}
+
+  /* ---------- Panels / layout ---------- */
+  .grid2{display:grid; grid-template-columns:1.4fr 1fr; gap:16px; align-items:start}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:15px 18px; margin-bottom:16px}
+  .panel h2{font-size:13px; letter-spacing:1.4px; color:var(--muted); font-weight:700;
+    text-transform:uppercase; margin-bottom:13px; display:flex; align-items:center; gap:8px}
+  .panel h2 .count{background:var(--panel2); color:var(--txt);
+    font-size:12px; padding:2px 9px; border-radius:20px; letter-spacing:0}
+  .panel h2 .sp{margin-left:auto}
+
+  /* ---------- Buttons ---------- */
+  .btn{background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    font-size:12.5px; font-weight:700; padding:7px 14px; border-radius:9px; cursor:pointer;
+    letter-spacing:.3px; display:inline-flex; align-items:center; gap:6px}
+  .btn:hover{border-color:var(--blue)}
+  .btn.primary{background:var(--brand); border-color:var(--brand); color:#fff}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.sm{padding:4px 9px; font-size:11px}
+  .btn.ghost{background:transparent}
+  .iconbtn{background:transparent; border:none; color:var(--muted); cursor:pointer;
+    font-size:14px; padding:3px 6px; border-radius:6px}
+  .iconbtn:hover{color:var(--txt); background:var(--panel2)}
+  .iconbtn.del:hover{color:var(--red)}
+
+  /* ---------- Event cards ---------- */
+  .evlist{display:flex; flex-direction:column; gap:11px}
+  .ev{background:var(--panel2); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; border-left:4px solid var(--grey)}
+  .ev.s-scheduled{border-left-color:var(--blue)}
+  .ev.s-active{border-left-color:var(--green)}
+  .ev.s-complete{border-left-color:var(--grey); opacity:.62}
+  .ev-top{display:flex; align-items:flex-start; gap:10px}
+  .ev .title{font-size:15px; font-weight:700; line-height:1.2}
+  .ev .when{font-size:11.5px; color:var(--muted); margin-top:3px}
+  .ev .where{font-size:11.5px; color:var(--muted); margin-top:1px}
+  .ev .acts{margin-left:auto; white-space:nowrap}
+  .ev .pills{margin-top:9px; display:flex; flex-wrap:wrap; gap:6px}
+  .ev .notes{font-size:11.5px; color:var(--faint); margin-top:8px; line-height:1.4; font-style:italic}
+  .pill{font-size:10.5px; padding:2px 9px; border-radius:20px; background:#243042; color:#cdd8e6; white-space:nowrap}
+  .pill.crew{background:#1e2c44; color:#bcd4f5}
+  .pill.eq-truck{background:#10302a; color:#7fe6cf}
+  .pill.eq-vehicle{background:#1e2c44; color:#bcd4f5}
+  .pill.eq-generator{background:#3a2e12; color:#fcd9a8}
+  .pill.hdr{background:transparent; color:var(--faint); padding-left:0; font-weight:700; letter-spacing:.5px}
+  .empty{color:var(--faint); font-size:12px; font-style:italic; padding:8px 0}
+
+  /* ---------- Tables ---------- */
+  table{width:100%; border-collapse:collapse; font-size:12.5px}
+  th{text-align:left; font-size:10.5px; letter-spacing:.8px; color:var(--muted);
+    text-transform:uppercase; font-weight:700; padding:6px 8px; border-bottom:1px solid var(--line)}
+  td{padding:8px; border-bottom:1px solid var(--line); vertical-align:middle}
+  td.num{text-align:right; font-variant-numeric:tabular-nums; font-weight:600}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .tag{font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; background:#243042; color:#cdd8e6}
+  .tag.truck{background:#10302a; color:#7fe6cf}
+  .tag.vehicle{background:#1e2c44; color:#bcd4f5}
+  .tag.generator{background:#3a2e12; color:#fcd9a8}
+
+  /* ---------- Modal / forms ---------- */
+  .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:100;
+    display:none; align-items:center; justify-content:center; padding:30px}
+  .modal-overlay.show{display:flex}
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    max-width:620px; width:100%; max-height:88vh; overflow:auto; padding:24px 28px; position:relative}
+  .modal h3{font-size:19px; font-weight:800; margin-bottom:16px}
+  .modal-close{position:absolute; top:12px; right:16px; font-size:24px; color:var(--muted);
+    cursor:pointer; line-height:1; background:none; border:none}
+  .modal-close:hover{color:var(--txt)}
+  .frow{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:13px}
+  .field{flex:1 1 0; min-width:140px; display:flex; flex-direction:column}
+  .field.full{flex-basis:100%}
+  label{font-size:11px; color:var(--muted); font-weight:700; letter-spacing:.5px; margin-bottom:5px; text-transform:uppercase}
+  input,select,textarea{background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:8px; padding:9px 11px; font-size:13px; font-family:inherit; width:100%}
+  input:focus,select:focus,textarea:focus{outline:none; border-color:var(--blue)}
+  textarea{resize:vertical; min-height:62px}
+  .checks{display:flex; flex-wrap:wrap; gap:8px; background:var(--panel2);
+    border:1px solid var(--line); border-radius:8px; padding:10px}
+  .chk{display:flex; align-items:center; gap:6px; font-size:12.5px; background:#243042;
+    border:1px solid var(--line); border-radius:7px; padding:5px 10px; cursor:pointer}
+  .chk input{width:auto}
+  .chk.on{border-color:var(--blue); background:#1e2c44}
+  .modal-actions{display:flex; gap:10px; justify-content:flex-end; margin-top:20px; flex-wrap:wrap}
+  .modal-actions .left{margin-right:auto}
+  .help p{font-size:13px; color:var(--txt); line-height:1.6; margin-bottom:10px}
+  .help h4{font-size:13px; color:#7aa2d6; font-weight:700; margin:14px 0 5px}
+  .help .tip{background:var(--panel2); border-left:3px solid var(--green); border-radius:8px;
+    padding:10px 14px; font-size:12.5px; line-height:1.55; margin-top:6px}
+
+  footer{margin-top:18px; text-align:center; color:var(--faint); font-size:11px}
+  .hidden{display:none !important}
+  @media(max-width:1300px){ .kpis{grid-template-columns:repeat(3,1fr)} }
+  @media(max-width:980px){ .grid2{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+  <header>
+    <img class="logo" src="logo.png" alt="" onerror="this.style.display='none'">
+    <div class="brand">
+      <h1><span class="mra">MY</span> MOBILE TOUR</h1>
+      <div class="sub">Tours · schedules · crew, equipment &amp; generator hours</div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" data-view="schedule" onclick="setView('schedule')">SCHEDULE</div>
+      <div class="tab" data-view="hours" onclick="setView('hours')">HOURS</div>
+      <div class="tab" data-view="equipment" onclick="setView('equipment')">EQUIPMENT</div>
+    </div>
+    <button class="btn ghost sm" onclick="openHelp()" title="How this works">?</button>
+    <div class="clockbox">
+      <div class="time" id="clock">—</div>
+      <div class="meta"><span class="dot-live"></span><span id="today">—</span></div>
+    </div>
+  </header>
+
+  <div class="protobar">
+    <b>PROTOTYPE</b> — your edits save to <b>this browser only</b> for now, so you can try the layout.
+    Once it's right, we connect "Save" to a shared store so the whole team sees the same data. Click <b>?</b> for the plan.
+  </div>
+
+  <!-- ===================== KPI TILES ===================== -->
+  <div class="kpis" id="kpis"></div>
+
+  <!-- ===================== SCHEDULE VIEW ===================== -->
+  <div id="view-schedule">
+    <div class="grid2">
+      <div class="panel">
+        <h2>Upcoming &amp; Active <span class="count" id="upcCount">0</span>
+          <span class="sp"></span>
+          <button class="btn primary sm" onclick="openEvent()">＋ Add Event</button>
+        </h2>
+        <div class="evlist" id="upcoming"></div>
+      </div>
+      <div class="panel">
+        <h2>Today's Assignments</h2>
+        <div class="evlist" id="todayAssign"></div>
+        <h2 style="margin-top:18px">Completed <span class="count" id="doneCount">0</span></h2>
+        <div class="evlist" id="completed"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== HOURS VIEW ===================== -->
+  <div id="view-hours" class="hidden">
+    <div class="panel">
+      <h2>Time, Mileage &amp; Generator Log <span class="count" id="logCount">0</span>
+        <span class="sp"></span>
+        <button class="btn primary sm" onclick="openLog()">＋ Add Entry</button>
+      </h2>
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Person</th><th>Event / Tour</th><th>Equipment</th>
+          <th style="text-align:right">Labor hrs</th><th style="text-align:right">Mileage</th>
+          <th style="text-align:right">Gen. hrs</th><th></th>
+        </tr></thead>
+        <tbody id="logRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===================== EQUIPMENT VIEW ===================== -->
+  <div id="view-equipment" class="hidden">
+    <div class="grid2">
+      <div class="panel">
+        <h2>Equipment <span class="count" id="eqCount">0</span>
+          <span class="sp"></span>
+          <button class="btn primary sm" onclick="openEquip()">＋ Add Equipment</button>
+        </h2>
+        <table>
+          <thead><tr><th>Type</th><th>Name / Unit</th><th>Status</th><th></th></tr></thead>
+          <tbody id="eqRows"></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>Crew <span class="count" id="crewCount">0</span>
+          <span class="sp"></span>
+          <button class="btn primary sm" onclick="addPersonPrompt()">＋ Add Person</button>
+        </h2>
+        <table>
+          <thead><tr><th>Name</th><th></th></tr></thead>
+          <tbody id="crewRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>My Mobile Tour · prototype build · data stored locally in this browser</footer>
+
+  <!-- ===================== EVENT MODAL ===================== -->
+  <div class="modal-overlay" id="eventModal" onclick="closeModal(event,'eventModal')">
+    <div class="modal">
+      <button class="modal-close" onclick="hide('eventModal')">×</button>
+      <h3 id="eventTitle">Add Event</h3>
+      <input type="hidden" id="ev_id">
+      <div class="frow">
+        <div class="field full"><label>Tour / Event name</label><input id="ev_title" placeholder="e.g. Summer Concert Tour — Leg 2"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Client</label><input id="ev_client" placeholder="optional"></div>
+        <div class="field"><label>Location</label><input id="ev_location" placeholder="City / venue"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Start date</label><input id="ev_start" type="date"></div>
+        <div class="field"><label>End date</label><input id="ev_end" type="date"></div>
+        <div class="field"><label>Status</label>
+          <select id="ev_status"><option>Scheduled</option><option>Active</option><option>Complete</option></select>
+        </div>
+      </div>
+      <div class="frow"><div class="field full"><label>Crew assigned</label><div class="checks" id="ev_crew"></div></div></div>
+      <div class="frow"><div class="field full"><label>Equipment assigned</label><div class="checks" id="ev_equip"></div></div></div>
+      <div class="frow"><div class="field full"><label>Notes</label><textarea id="ev_notes"></textarea></div></div>
+      <div class="modal-actions">
+        <button class="btn ghost del left hidden" id="ev_delete" onclick="deleteEvent()">Delete</button>
+        <button class="btn" onclick="hide('eventModal')">Cancel</button>
+        <button class="btn primary" onclick="saveEvent()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== LOG MODAL ===================== -->
+  <div class="modal-overlay" id="logModal" onclick="closeModal(event,'logModal')">
+    <div class="modal">
+      <button class="modal-close" onclick="hide('logModal')">×</button>
+      <h3 id="logTitle">Add Log Entry</h3>
+      <input type="hidden" id="lg_id">
+      <div class="frow">
+        <div class="field"><label>Date</label><input id="lg_date" type="date"></div>
+        <div class="field"><label>Person</label><select id="lg_person"></select></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Event / Tour</label><select id="lg_event"></select></div>
+        <div class="field"><label>Equipment</label><select id="lg_equip" onchange="logEquipChanged()"></select></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Labor hours</label><input id="lg_hours" type="number" step="0.25" min="0" placeholder="0"></div>
+        <div class="field" id="lg_mileWrap"><label>Mileage</label><input id="lg_mileage" type="number" step="1" min="0" placeholder="0"></div>
+        <div class="field" id="lg_genWrap"><label>Generator hrs</label><input id="lg_gen" type="number" step="0.1" min="0" placeholder="0"></div>
+      </div>
+      <div class="frow"><div class="field full"><label>Notes</label><textarea id="lg_notes"></textarea></div></div>
+      <div class="modal-actions">
+        <button class="btn ghost del left hidden" id="lg_delete" onclick="deleteLog()">Delete</button>
+        <button class="btn" onclick="hide('logModal')">Cancel</button>
+        <button class="btn primary" onclick="saveLog()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== EQUIPMENT MODAL ===================== -->
+  <div class="modal-overlay" id="equipModal" onclick="closeModal(event,'equipModal')">
+    <div class="modal">
+      <button class="modal-close" onclick="hide('equipModal')">×</button>
+      <h3 id="equipTitle">Add Equipment</h3>
+      <input type="hidden" id="eq_id">
+      <div class="frow">
+        <div class="field"><label>Type</label>
+          <select id="eq_type"><option value="Truck">Truck (tractor)</option><option value="Vehicle">Vehicle (small)</option><option value="Generator">Generator</option></select>
+        </div>
+        <div class="field"><label>Name / Unit #</label><input id="eq_name" placeholder="e.g. Tractor 1 / T-101"></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label>Status</label><select id="eq_active"><option value="true">In service</option><option value="false">Out of service</option></select></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost del left hidden" id="eq_delete" onclick="deleteEquip()">Delete</button>
+        <button class="btn" onclick="hide('equipModal')">Cancel</button>
+        <button class="btn primary" onclick="saveEquip()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== HELP MODAL ===================== -->
+  <div class="modal-overlay" id="helpModal" onclick="closeModal(event,'helpModal')">
+    <div class="modal">
+      <button class="modal-close" onclick="hide('helpModal')">×</button>
+      <h3>How this works</h3>
+      <div class="help">
+        <p>This is the replacement for the parts of MyMobileTour you still use — the <b>calendar / Add Event</b>
+        and the <b>Affiliation Report</b> (time, mileage &amp; generator hours). Nothing here touches the old site.</p>
+        <h4>Three tabs</h4>
+        <p><b>SCHEDULE</b> — add &amp; edit tours/events, assign crew and equipment.<br>
+        <b>HOURS</b> — log labor hours, vehicle mileage, and generator runtime against each event.<br>
+        <b>EQUIPMENT</b> — manage the truck / vehicle / generator list and the crew roster.</p>
+        <h4>Editing</h4>
+        <p>Hit <b>＋ Add</b> or the ✎ pencil on any item. A window pops up, you type, you Save — just like you pictured.</p>
+        <div class="tip"><b>Right now this is a prototype.</b> Your edits save only in <i>this</i> browser
+        (so you can try it without anything going live). The next step is wiring <b>Save</b> to a shared store on your
+        Azure/Microsoft 365 — then every team member sees the same data and the dashboard stays current for everyone,
+        and it can still be opened as a file. Tell me what to add/change and I'll fold it in before we go live.</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ============================================================
+   My Mobile Tour — prototype data layer
+   Persists to localStorage for now. The load()/save() seam below
+   is what gets pointed at the shared Azure/M365 store for go-live.
+   ============================================================ */
+const STORE_KEY = 'mmt_data_v1';
+
+const SEED = {
+  people: ['R. Miller','J. Carter','D. Owens','M. Reyes'],
+  equipment: [
+    {id:'e1', type:'Truck',     name:'Tractor 1 · T-101', active:true},
+    {id:'e2', type:'Truck',     name:'Tractor 2 · T-102', active:true},
+    {id:'e3', type:'Vehicle',   name:'Sprinter · V-204',  active:true},
+    {id:'e4', type:'Generator', name:'Gen 50kW · G-11',   active:true},
+  ],
+  events: [
+    {id:'v1', title:'Summer Concert Tour — Leg 2', client:'Live Nation', location:'Nashville, TN',
+     start:iso(0), end:iso(3), status:'Active', crew:['R. Miller','J. Carter'], equipment:['e1','e4'],
+     notes:'Load-in 6am. Generator on site all 3 days.'},
+    {id:'v2', title:'Trade Show Setup', client:'TGCS', location:'Atlanta, GA',
+     start:iso(5), end:iso(6), status:'Scheduled', crew:['D. Owens'], equipment:['e3'], notes:''},
+    {id:'v3', title:'Festival Power Support', client:'City Events', location:'Charlotte, NC',
+     start:iso(-6), end:iso(-4), status:'Complete', crew:['M. Reyes','R. Miller'], equipment:['e2','e4'], notes:'Wrapped on schedule.'},
+  ],
+  logs: [
+    {id:'l1', date:iso(0),  person:'R. Miller', eventId:'v1', equipId:'e1', hours:10, mileage:420, gen:0,  notes:''},
+    {id:'l2', date:iso(0),  person:'J. Carter', eventId:'v1', equipId:'e4', hours:10, mileage:0,   gen:9.5,notes:'Gen ran load-in to load-out'},
+    {id:'l3', date:iso(-5), person:'M. Reyes',  eventId:'v3', equipId:'e2', hours:8,  mileage:310, gen:0,  notes:''},
+  ]
+};
+
+function iso(offsetDays){ const d=new Date(); d.setDate(d.getDate()+offsetDays); return d.toISOString().slice(0,10); }
+function uid(){ return 'x'+Math.random().toString(36).slice(2,9); }
+
+let DATA = load();
+
+function load(){
+  try{ const raw=localStorage.getItem(STORE_KEY); if(raw) return JSON.parse(raw); }catch(e){}
+  return JSON.parse(JSON.stringify(SEED));
+}
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(DATA)); }catch(e){}
+  renderAll();
+}
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function eqById(id){ return DATA.equipment.find(e=>e.id===id); }
+function evById(id){ return DATA.events.find(e=>e.id===id); }
+function fmtDate(s){ if(!s) return ''; const d=new Date(s+'T00:00:00'); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
+function fmtRange(a,b){ if(!a) return ''; if(!b||b===a) return fmtDate(a); return fmtDate(a)+' – '+fmtDate(b); }
+function todayISO(){ return iso(0); }
+function eqClass(t){ return 'eq-'+String(t||'').toLowerCase(); }
+
+/* ============================================================
+   VIEW SWITCHING
+   ============================================================ */
+let VIEW = 'schedule';
+try{ VIEW = localStorage.getItem('mmt_view') || 'schedule'; }catch(e){}
+function setView(v){
+  VIEW=v; try{ localStorage.setItem('mmt_view',v); }catch(e){}
+  ['schedule','hours','equipment'].forEach(x=>$('view-'+x).classList.toggle('hidden', x!==v));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.view===v));
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function renderAll(){
+  renderKpis();
+  renderSchedule();
+  renderHours();
+  renderEquipment();
+  setView(VIEW);
+}
+
+function renderKpis(){
+  const t=todayISO();
+  const upcoming = DATA.events.filter(e=>e.status!=='Complete' && (e.end||e.start)>=t).length;
+  const active   = DATA.events.filter(e=>e.status==='Active').length;
+  const mileage  = DATA.logs.reduce((s,l)=>s+(+l.mileage||0),0);
+  const gen      = DATA.logs.reduce((s,l)=>s+(+l.gen||0),0);
+  const labor    = DATA.logs.reduce((s,l)=>s+(+l.hours||0),0);
+  const eq       = DATA.equipment.filter(e=>e.active).length;
+  $('kpis').innerHTML = `
+    <div class="kpi upc"><div class="n">${upcoming}</div><div class="l">UPCOMING / OPEN</div></div>
+    <div class="kpi act"><div class="n">${active}</div><div class="l">ACTIVE NOW</div></div>
+    <div class="kpi mil"><div class="n">${mileage.toLocaleString()}</div><div class="l">TOTAL MILEAGE</div></div>
+    <div class="kpi gen"><div class="n">${gen.toFixed(1)}</div><div class="l">GENERATOR HRS</div></div>
+    <div class="kpi lab"><div class="n">${labor.toFixed(1)}</div><div class="l">LABOR HRS</div></div>
+    <div class="kpi eq"><div class="n">${eq}</div><div class="l">EQUIPMENT IN SERVICE</div></div>`;
+}
+
+function eventCard(e){
+  const crew = (e.crew||[]).map(c=>`<span class="pill crew">${esc(c)}</span>`).join('');
+  const equip = (e.equipment||[]).map(id=>{ const q=eqById(id); return q?`<span class="pill ${eqClass(q.type)}">${esc(q.name)}</span>`:''; }).join('');
+  const pills = (crew||equip) ? `<div class="pills">${crew}${equip}</div>` : '';
+  const notes = e.notes ? `<div class="notes">${esc(e.notes)}</div>` : '';
+  return `<div class="ev s-${esc((e.status||'').toLowerCase())}">
+      <div class="ev-top">
+        <div>
+          <div class="title">${esc(e.title)}</div>
+          <div class="when">${fmtRange(e.start,e.end)} · ${esc(e.status)}${e.client?' · '+esc(e.client):''}</div>
+          ${e.location?`<div class="where">📍 ${esc(e.location)}</div>`:''}
+        </div>
+        <div class="acts"><button class="iconbtn" title="Edit" onclick="openEvent('${e.id}')">✎</button></div>
+      </div>${pills}${notes}</div>`;
+}
+
+function renderSchedule(){
+  const t=todayISO();
+  const sorted=[...DATA.events].sort((a,b)=>(a.start||'').localeCompare(b.start||''));
+  const upcoming=sorted.filter(e=>e.status!=='Complete');
+  const done=sorted.filter(e=>e.status==='Complete').reverse();
+  const todays=sorted.filter(e=>e.status!=='Complete' && (e.start||'')<=t && (e.end||e.start||'')>=t);
+
+  $('upcoming').innerHTML = upcoming.length? upcoming.map(eventCard).join('') : `<div class="empty">No upcoming events. Hit “Add Event”.</div>`;
+  $('upcCount').textContent = upcoming.length;
+  $('todayAssign').innerHTML = todays.length? todays.map(eventCard).join('') : `<div class="empty">Nothing scheduled for today.</div>`;
+  $('completed').innerHTML = done.length? done.map(eventCard).join('') : `<div class="empty">No completed events yet.</div>`;
+  $('doneCount').textContent = done.length;
+}
+
+function renderHours(){
+  const rows=[...DATA.logs].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  $('logCount').textContent = rows.length;
+  $('logRows').innerHTML = rows.length? rows.map(l=>{
+    const ev=evById(l.eventId); const q=eqById(l.equipId);
+    return `<tr>
+      <td>${esc(fmtDate(l.date))}</td>
+      <td>${esc(l.person)}</td>
+      <td>${ev?esc(ev.title):'<span style="color:var(--faint)">—</span>'}</td>
+      <td>${q?`<span class="tag ${String(q.type).toLowerCase()}">${esc(q.name)}</span>`:'—'}</td>
+      <td class="num">${(+l.hours||0).toFixed(2)}</td>
+      <td class="num">${(+l.mileage||0).toLocaleString()}</td>
+      <td class="num">${(+l.gen||0).toFixed(1)}</td>
+      <td style="text-align:right"><button class="iconbtn" title="Edit" onclick="openLog('${l.id}')">✎</button></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty">No entries yet. Hit “Add Entry”.</td></tr>`;
+}
+
+function renderEquipment(){
+  $('eqCount').textContent = DATA.equipment.length;
+  $('eqRows').innerHTML = DATA.equipment.length? DATA.equipment.map(q=>`
+    <tr>
+      <td><span class="tag ${String(q.type).toLowerCase()}">${esc(q.type)}</span></td>
+      <td>${esc(q.name)}</td>
+      <td>${q.active?'<span style="color:var(--green)">In service</span>':'<span style="color:var(--faint)">Out</span>'}</td>
+      <td style="text-align:right"><button class="iconbtn" title="Edit" onclick="openEquip('${q.id}')">✎</button></td>
+    </tr>`).join('') : `<tr><td colspan="4" class="empty">No equipment yet.</td></tr>`;
+  $('crewCount').textContent = DATA.people.length;
+  $('crewRows').innerHTML = DATA.people.length? DATA.people.map((p,i)=>`
+    <tr><td>${esc(p)}</td>
+    <td style="text-align:right"><button class="iconbtn del" title="Remove" onclick="removePerson(${i})">🗑</button></td></tr>`).join('')
+    : `<tr><td colspan="2" class="empty">No crew yet.</td></tr>`;
+}
+
+/* ============================================================
+   MODALS — open / close
+   ============================================================ */
+function show(id){ $(id).classList.add('show'); }
+function hide(id){ $(id).classList.remove('show'); }
+function closeModal(e,id){ if(e.target.id===id) hide(id); }
+function openHelp(){ show('helpModal'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show')); });
+
+/* ---------- EVENT ---------- */
+function checkboxList(containerId, items, selected, valueKey, labelFn){
+  $(containerId).innerHTML = items.map(it=>{
+    const val = valueKey?it[valueKey]:it; const on=selected.includes(val);
+    return `<label class="chk${on?' on':''}"><input type="checkbox" value="${esc(val)}" ${on?'checked':''}
+      onchange="this.closest('.chk').classList.toggle('on',this.checked)">${esc(labelFn?labelFn(it):it)}</label>`;
+  }).join('') || '<span style="color:var(--faint);font-size:12px">none yet</span>';
+}
+function getChecked(containerId){ return [...$(containerId).querySelectorAll('input:checked')].map(i=>i.value); }
+
+function openEvent(id){
+  const e = id? evById(id) : null;
+  $('eventTitle').textContent = e?'Edit Event':'Add Event';
+  $('ev_id').value = e?e.id:'';
+  $('ev_title').value=e?e.title:''; $('ev_client').value=e?e.client||'':'';
+  $('ev_location').value=e?e.location||'':''; $('ev_start').value=e?e.start||'':todayISO();
+  $('ev_end').value=e?e.end||'':''; $('ev_status').value=e?e.status||'Scheduled':'Scheduled';
+  $('ev_notes').value=e?e.notes||'':'';
+  checkboxList('ev_crew', DATA.people, e?e.crew||[]:[]);
+  checkboxList('ev_equip', DATA.equipment, e?e.equipment||[]:[], 'id', q=>q.name);
+  $('ev_delete').classList.toggle('hidden', !e);
+  show('eventModal');
+}
+function saveEvent(){
+  const title=$('ev_title').value.trim();
+  if(!title){ alert('Give the event a name.'); return; }
+  const id=$('ev_id').value || uid();
+  const rec={ id, title, client:$('ev_client').value.trim(), location:$('ev_location').value.trim(),
+    start:$('ev_start').value, end:$('ev_end').value, status:$('ev_status').value,
+    crew:getChecked('ev_crew'), equipment:getChecked('ev_equip'), notes:$('ev_notes').value.trim() };
+  const i=DATA.events.findIndex(e=>e.id===id);
+  if(i>=0) DATA.events[i]=rec; else DATA.events.push(rec);
+  hide('eventModal'); save();
+}
+function deleteEvent(){
+  const id=$('ev_id').value; if(!id) return;
+  if(!confirm('Delete this event?')) return;
+  DATA.events=DATA.events.filter(e=>e.id!==id); hide('eventModal'); save();
+}
+
+/* ---------- LOG ---------- */
+function fillSelect(id, items, valueFn, labelFn, current, blankLabel){
+  const opts = (blankLabel?`<option value="">${blankLabel}</option>`:'') +
+    items.map(it=>`<option value="${esc(valueFn(it))}" ${valueFn(it)===current?'selected':''}>${esc(labelFn(it))}</option>`).join('');
+  $(id).innerHTML=opts;
+}
+function openLog(id){
+  const l = id? DATA.logs.find(x=>x.id===id):null;
+  $('logTitle').textContent = l?'Edit Log Entry':'Add Log Entry';
+  $('lg_id').value=l?l.id:'';
+  $('lg_date').value=l?l.date:todayISO();
+  fillSelect('lg_person', DATA.people, p=>p, p=>p, l?l.person:'');
+  fillSelect('lg_event', DATA.events, e=>e.id, e=>e.title, l?l.eventId:'', '— none —');
+  fillSelect('lg_equip', DATA.equipment, q=>q.id, q=>q.type+' · '+q.name, l?l.equipId:'', '— none —');
+  $('lg_hours').value=l?l.hours||'':''; $('lg_mileage').value=l?l.mileage||'':''; $('lg_gen').value=l?l.gen||'':'';
+  $('lg_notes').value=l?l.notes||'':'';
+  logEquipChanged();
+  $('lg_delete').classList.toggle('hidden', !l);
+  show('logModal');
+}
+function logEquipChanged(){
+  const q=eqById($('lg_equip').value);
+  const t=q?q.type:null;
+  $('lg_mileWrap').style.opacity = (t==='Generator')?'.4':'1';
+  $('lg_genWrap').style.opacity  = (t==='Generator'||!t)?(t==='Generator'?'1':'.4'):'.4';
+}
+function saveLog(){
+  const id=$('lg_id').value || uid();
+  if(!$('lg_person').value){ alert('Pick a person.'); return; }
+  const rec={ id, date:$('lg_date').value, person:$('lg_person').value, eventId:$('lg_event').value,
+    equipId:$('lg_equip').value, hours:+$('lg_hours').value||0, mileage:+$('lg_mileage').value||0,
+    gen:+$('lg_gen').value||0, notes:$('lg_notes').value.trim() };
+  const i=DATA.logs.findIndex(x=>x.id===id);
+  if(i>=0) DATA.logs[i]=rec; else DATA.logs.push(rec);
+  hide('logModal'); save();
+}
+function deleteLog(){
+  const id=$('lg_id').value; if(!id) return;
+  if(!confirm('Delete this entry?')) return;
+  DATA.logs=DATA.logs.filter(x=>x.id!==id); hide('logModal'); save();
+}
+
+/* ---------- EQUIPMENT ---------- */
+function openEquip(id){
+  const q = id? eqById(id):null;
+  $('equipTitle').textContent = q?'Edit Equipment':'Add Equipment';
+  $('eq_id').value=q?q.id:'';
+  $('eq_type').value=q?q.type:'Truck'; $('eq_name').value=q?q.name:'';
+  $('eq_active').value=q?String(q.active):'true';
+  $('eq_delete').classList.toggle('hidden', !q);
+  show('equipModal');
+}
+function saveEquip(){
+  const name=$('eq_name').value.trim();
+  if(!name){ alert('Give it a name/unit #.'); return; }
+  const id=$('eq_id').value || uid();
+  const rec={ id, type:$('eq_type').value, name, active:$('eq_active').value==='true' };
+  const i=DATA.equipment.findIndex(e=>e.id===id);
+  if(i>=0) DATA.equipment[i]=rec; else DATA.equipment.push(rec);
+  hide('equipModal'); save();
+}
+function deleteEquip(){
+  const id=$('eq_id').value; if(!id) return;
+  if(!confirm('Delete this equipment?')) return;
+  DATA.equipment=DATA.equipment.filter(e=>e.id!==id); hide('equipModal'); save();
+}
+
+/* ---------- CREW ---------- */
+function addPersonPrompt(){
+  const n=prompt('Crew member name:'); if(!n) return;
+  const name=n.trim(); if(!name) return;
+  if(!DATA.people.includes(name)) DATA.people.push(name);
+  save();
+}
+function removePerson(i){
+  if(!confirm('Remove '+DATA.people[i]+' from the roster?')) return;
+  DATA.people.splice(i,1); save();
+}
+
+/* ============================================================
+   CLOCK + BOOT
+   ============================================================ */
+function tick(){
+  const d=new Date(); let h=d.getHours(), m=String(d.getMinutes()).padStart(2,'0');
+  const ap=h>=12?'PM':'AM'; h=h%12||12;
+  $('clock').textContent=h+':'+m+' '+ap;
+  $('today').textContent=d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+}
+renderAll();
+tick(); setInterval(tick,1000);
+</script>
+</body>
+</html>
