@@ -128,7 +128,7 @@ function Build-TasksFromRows($rows) {
             [void]$open.Add("$n. $label")
             if ($label -match '(?i)\bsal\b') { $salOpen++ }
         }
-        [void]$tasks.Add([PSCustomObject]@{ t = [string]$r.task; who = $who; op = $r.opened; cl = $r.closed; st = [string]$r.status; done = [bool]$r.done })
+        [void]$tasks.Add([PSCustomObject]@{ t = [string]$r.task; who = $who; op = $r.opened; cl = $r.closed; st = [string]$r.status; done = [bool]$r.done; ml = [string]$r.milestone; cm = [string]$r.comments })
     }
     return @{ open = @($open); openCount = $open.Count; doneCount = $doneCount; salOpen = $salOpen; done = @($done); tasks = @($tasks) }
 }

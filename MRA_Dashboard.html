@@ -198,6 +198,12 @@
     margin-left:6px; border:1px solid var(--line); border-radius:5px; padding:0 5px; user-select:none}
   .editjob:hover{border-color:var(--blue); color:var(--blue)}
   body.closemode .editjob{display:inline-block}
+  .ttool{display:none; cursor:pointer; font-size:10px; font-weight:700; margin-right:5px;
+    border:1px solid var(--line); border-radius:5px; padding:0 5px; user-select:none; white-space:nowrap}
+  .ttool.edit{color:#7aa2d6} .ttool.edit:hover{border-color:var(--blue)}
+  .ttool.del{color:#fca5a5} .ttool.del:hover{border-color:var(--red)}
+  .ttool.reopen{color:var(--amber)} .ttool.reopen:hover{border-color:var(--amber)}
+  body.closemode .ttool{display:inline-block}
   @media(max-width:1100px){ .saltasks{grid-template-columns:1fr} }
 
   /* Team capacity panel */
@@ -798,8 +804,34 @@
         <div><label>Notes / tasks (Input cell)</label><textarea id="ejNotes" style="min-height:80px"></textarea></div>
         <div id="ejMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
+          <button class="btn-ghost" onclick="submitDeleteJob()" id="ejDelete" style="margin-right:auto;border-color:rgba(239,68,68,.5);color:#fca5a5">🗑 Delete job</button>
           <button class="btn-ghost" onclick="closeEdit()">Cancel</button>
           <button class="btn-primary" id="ejSubmit" onclick="submitEditJob()">Save changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== EDIT-TASK MODAL ===================== -->
+  <div class="modal-overlay" id="editTaskModal" onclick="closeEditTask(event)">
+    <div class="modal" style="max-width:520px">
+      <button class="modal-close" onclick="closeEditTask()" title="Close">×</button>
+      <h3>✎ Edit task</h3>
+      <div class="msub" id="etSub"></div>
+      <div class="addform">
+        <div><label>Task</label><textarea id="etTask" style="min-height:60px"></textarea></div>
+        <div class="addrow2">
+          <div><label>Assigned to</label><select id="etAssigned"></select></div>
+          <div><label>Status</label><select id="etStatus"><option>Open</option><option>In Progress</option><option>Done</option><option>N/A</option></select></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Milestone?</label><select id="etMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
+          <div><label>Comments</label><input id="etComments" autocomplete="off"></div>
+        </div>
+        <div id="etMsg" style="font-size:12px; min-height:16px"></div>
+        <div class="addbtns">
+          <button class="btn-ghost" onclick="closeEditTask()">Cancel</button>
+          <button class="btn-primary" id="etSubmit" onclick="submitEditTask()">Save changes</button>
         </div>
       </div>
     </div>
@@ -909,7 +941,12 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑬ 🚛 Fleetio issues become shop tasks</h4>
     <p>A trailer's open Fleetio issues are pulled in as editable <b>Shop Tasks</b> rows automatically, so you can assign them (Sal / MasterWraps / …) and track them like any other task. Resolve the issue in Fleetio and the task closes itself. Tractor issues stay on the FLEETIO tab only.</p></div>
   <div class="hsec"><h4>⑭ ➕ Add a task · ✎ Edit / move a job (from the board)</h4>
-    <p>Turn on <span class="k">🔒 Edit mode</span> (your code) and two tools appear: <span class="k">➕ Add task</span> (top of Bay Status) opens a form to drop a new task on any project; and an <span class="k">✎ edit</span> chip on each job card lets you <b>move it to another bay</b>, change the <b>start/finish dates</b>, and tweak the <b>notes</b>. Both write straight back to the workbook and show on the board within ~15 min.</p></div>
+    <p>Turn on <span class="k">🔒 Edit mode</span> (your code) and the editing tools appear — all write straight back to the workbook (~15 min to show):</p>
+    <ul>
+      <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule.</li>
+      <li><span class="k">✎ edit</span> on a job card — move bay, change start/finish dates, tweak notes; <b>🗑 Delete job</b> is in that form too.</li>
+      <li>On each task line: <span class="k">✓ close</span>, <span class="k">✎</span> edit (text, assignee, status, milestone, comments), <span class="k">🗑</span> delete. Turn on <span class="k">Show closed</span> and closed tasks get <span class="k">↩</span> reopen + 🗑 delete.</li>
+    </ul></div>
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule built from that project's milestones &amp; dates — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand.</p></div>
   <div class="hsec"><h4>⑯ 📋 What's new / Rev history</h4>
@@ -987,6 +1024,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   const ajm=document.getElementById('addJobModal'); if(ajm) ajm.classList.remove('show');
   const tm=document.getElementById('tplModal'); if(tm) tm.classList.remove('show');
   const em=document.getElementById('editModal'); if(em) em.classList.remove('show');
+  const etm=document.getElementById('editTaskModal'); if(etm) etm.classList.remove('show');
   document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop();
 } });
 document.addEventListener('click',e=>{ const p=document.getElementById('barPop');
@@ -1089,6 +1127,71 @@ function closeTaskBtn(el){
   }).catch(()=>{ el.textContent="✓ close"; el.style.pointerEvents=""; alert("Couldn't reach the close service — try again."); });
 }
 
+/* ---------- Per-task tools (edit / delete / reopen) — shown in Edit mode ---------- */
+function ensurePin(action){ if(!CLOSE_PIN){ const pin=(prompt("Enter your code to "+action+":")||"").trim();
+  if(!pin) return false; if(pinHash(pin)!==CLOSE_PIN_HASH){ alert("Incorrect code."); return false; } CLOSE_PIN=pin; } return true; }
+function shopWrite(payload){ return fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
+function taskTools(project, raw, done){
+  if(!raw) return "";   // only structured Shop Tasks rows can be edited/deleted
+  const a=`data-proj="${escA(project)}" data-task="${escA(raw)}"`;
+  if(done) return `<span class="ttool reopen" ${a} onclick="reopenTaskBtn(this)" title="Reopen — mark not done">↩</span>`+
+                  `<span class="ttool del" ${a} onclick="delTaskBtn(this)" title="Delete this task">🗑</span>`;
+  return `<span class="ttool edit" ${a} onclick="editTaskBtn(this)" title="Edit this task (text, assignee, status…)">✎</span>`+
+         `<span class="ttool del" ${a} onclick="delTaskBtn(this)" title="Delete this task">🗑</span>`;
+}
+function delTaskBtn(el){
+  if(!ensurePin("delete a task")) return;
+  const proj=el.dataset.proj, task=el.dataset.task;
+  if(!confirm("Delete this task?\n\n"+task)) return;
+  el.textContent="…"; el.style.pointerEvents="none";
+  shopWrite({action:"deleteTask", project:proj, task:task, pin:CLOSE_PIN}).then(()=>{
+    const line=el.closest(".taskline"); if(line){ line.style.opacity=".4"; line.style.textDecoration="line-through"; }
+    el.textContent="🗑 gone";
+  }).catch(()=>{ el.textContent="🗑"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
+}
+function reopenTaskBtn(el){
+  if(!ensurePin("reopen a task")) return;
+  const proj=el.dataset.proj, task=el.dataset.task;
+  el.textContent="…"; el.style.pointerEvents="none";
+  shopWrite({action:"reopenTask", project:proj, task:task, pin:CLOSE_PIN}).then(()=>{
+    el.textContent="↩ reopened"; el.title="Reopened — confirmed on next refresh";
+  }).catch(()=>{ el.textContent="↩"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
+}
+function editTaskBtn(el){ if(!ensurePin("edit a task")) return; openEditTask(el.dataset.proj, el.dataset.task); }
+function openEditTask(proj, raw){
+  const D=window.MRA_DATA||{};
+  const j=(D.jobs||[]).find(x=>x.project===proj);
+  const t=j&&(j.tasks||[]).find(x=>x.t===raw);
+  window._etProj=proj; window._etOld=raw;
+  document.getElementById('etSub').innerHTML=`<b>${esc(proj)}</b>${(j&&j.jobNum)?" · "+esc(j.jobNum):""} — edits the Shop Tasks row; board updates within ~15 min.`;
+  document.getElementById('etTask').value=raw||"";
+  const who=(t&&t.who)||"";
+  let aOpts=`<option value="">— none —</option>`+ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
+  if(who && !ASSIGNEE_OPTIONS.some(a=>a.toLowerCase()===who.toLowerCase())) aOpts+=`<option>${esc(who)}</option>`;
+  const asel=document.getElementById('etAssigned'); asel.innerHTML=aOpts; asel.value=who;
+  document.getElementById('etStatus').value=(t&&t.st)||"Open";
+  document.getElementById('etMilestone').value=(t&&/yes/i.test(t.ml||""))?"Yes":"";
+  document.getElementById('etComments').value=(t&&t.cm)||"";
+  document.getElementById('etMsg').textContent=""; document.getElementById('etSubmit').disabled=false;
+  document.getElementById('editTaskModal').classList.add('show');
+}
+function closeEditTask(e){ if(!e || e.target.id==='editTaskModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('editTaskModal').classList.remove('show'); }
+function submitEditTask(){
+  const task=document.getElementById('etTask').value.trim();
+  const msg=document.getElementById('etMsg');
+  if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
+  const payload={ action:"editTask", project:window._etProj, taskOld:window._etOld, task:task,
+    assigned:document.getElementById('etAssigned').value, status:document.getElementById('etStatus').value,
+    milestone:document.getElementById('etMilestone').value, comments:document.getElementById('etComments').value.trim(),
+    pin:CLOSE_PIN };
+  const btn=document.getElementById('etSubmit'); btn.disabled=true; btn.textContent="Saving…";
+  msg.style.color='var(--muted)'; msg.textContent='Saving…';
+  shopWrite(payload).then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Saved — board updates within ~15 min.'; btn.textContent="Save changes";
+      setTimeout(()=>document.getElementById('editTaskModal').classList.remove('show'),1700); })
+    .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Save changes"; btn.disabled=false; });
+}
+
 /* ---------- Add a task from the dashboard (PIN-gated, mirrors close) ---------- */
 const SHOP_WRITE_URL = CLOSE_FLOW_URL;   // Add + Edit/Move reuse the existing close flow (its script now handles all 3 actions)
 const BAY_OPTIONS = ['Bay 2 Front','Bay 2 Back','Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back','Parking Lot','On Hold','Next Up'];
@@ -1154,7 +1257,7 @@ function openEditJob(row){
   const D=window.MRA_DATA||{};
   const j=(D.jobs||[]).find(x=>x.row===row);
   if(!j){ alert("Couldn't find that job."); return; }
-  window._ejRow=row;
+  window._ejRow=row; window._ejProj=j.project;
   document.getElementById('ejSub').innerHTML = `<b>${esc(j.project)}</b>${j.jobNum?" · "+esc(j.jobNum):""} — saves to the Input sheet; board updates within ~15 min.`;
   // Bay dropdown (include the job's current value even if it's not a standard bay)
   let bays=BAY_OPTIONS.slice(); if(j.bay && bays.indexOf(j.bay)<0) bays.unshift(j.bay);
@@ -1171,7 +1274,7 @@ function closeEdit(e){ if(!e || e.target.id==='editModal' || e.target.classList.
   document.getElementById('editModal').classList.remove('show'); }
 function submitEditJob(){
   const row=window._ejRow; if(!row){ return; }
-  const payload={ action:"editJob", row:row, pin:CLOSE_PIN,
+  const payload={ action:"editJob", row:row, project:window._ejProj||"", pin:CLOSE_PIN,
     bay:document.getElementById('ejBay').value, status:document.getElementById('ejStatus').value,
     start:document.getElementById('ejStart').value, completion:document.getElementById('ejComp').value,
     notes:document.getElementById('ejNotes').value };
@@ -1181,6 +1284,16 @@ function submitEditJob(){
     .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Saved — board updates within ~15 min.'; btn.textContent="Save changes";
       setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1700); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Save changes"; btn.disabled=false; });
+}
+function submitDeleteJob(){
+  if(!window._ejRow) return;
+  if(!confirm("Delete this entire job from the schedule?\n\n"+(window._ejProj||"")+"\n\nThis removes the row and all its tasks stay in Shop Tasks unless you delete them too.")) return;
+  const payload={ action:"deleteJob", row:window._ejRow, project:window._ejProj||"", pin:CLOSE_PIN };
+  const btn=document.getElementById('ejDelete'); if(btn){ btn.disabled=true; btn.textContent="Deleting…"; }
+  const msg=document.getElementById('ejMsg'); msg.style.color='var(--muted)'; msg.textContent='Deleting…';
+  shopWrite(payload).then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Job deleted — board updates within ~15 min.';
+      setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1700); })
+    .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; if(btn){ btn.disabled=false; btn.textContent="🗑 Delete job"; } });
 }
 
 /* ---------- Add a brand-new shop job (Input row) from the dashboard ---------- */
@@ -1389,12 +1502,17 @@ function renderFloor(D){
           : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk)}));
         tl+=`<div class="tasklist">`+opens.map(o=>{
           const pend=isPendingClosed(j.project,o.raw);
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`;
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`;
         }).join("")+`</div>`;
       }
     }
-    if(SHOWCLOSED && (j.doneTasks||[]).length)
-      tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
+    if(SHOWCLOSED){
+      const doneStruct=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>t.done):null;
+      if(doneStruct&&doneStruct.length)
+        tl+=`<div class="tasklist closed">`+doneStruct.map(t=>`<div class="taskline done${isSal(t.t)?" sal":""}">${taskTools(j.project,t.t,true)}✓ ${esc(cleanTask(t.t,false))}</div>`).join("")+`</div>`;
+      else if((j.doneTasks||[]).length)
+        tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
+    }
     const jc=c.state==="done"?" done":"";
     return `<div class="job${jc}"><div class="pj">${esc(j.project)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
