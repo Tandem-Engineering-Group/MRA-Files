@@ -106,5 +106,3 @@ See `INSTRUCTIONS.md` for the complete Azure deployment runbook.
   old code; behavior flip-flopped). Fix path: **rebuild the flow from scratch** (fresh
   HTTP trigger + Run script → `MRA Sync`), update the dashboard `CLOSE_FLOW_URL`, and
   redeploy. ~5 min of clicks + a dashboard redeploy.
-- **Clean up `ZZ QA` test rows** (housekeeping): delete the `ZZ QA` test tasks on the
-  `Shop Tasks` sheet (and the `ZZ QA` job on `Input`) left over from login testing.
