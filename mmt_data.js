@@ -1,144 +1,144 @@
 // Auto-generated tour schedule data (imported from MyMobileTour calendars June-Oct 2026)
 // Equipment/crew/hours are placeholders until the real lists are provided.
 window.MMT_DATA = {
- "generatedText": "Tue Jun 16, 2026  10:30 PM",
+ "generatedText": "Tue Jun 16, 2026  10:37 PM",
  "todayISO": "2026-06-16",
  "tours": [
   {
    "name": "ABB",
-   "color": "#5b8bd0"
+   "color": "#c75757"
   },
   {
    "name": "ABB - Grand Rapids, MI",
-   "color": "#5fae7e"
+   "color": "#75d190"
   },
   {
    "name": "Aga Khan Foundation Canada",
-   "color": "#cc9a52"
+   "color": "#853db8"
   },
   {
    "name": "BAC Roadshow",
-   "color": "#9b86c9"
+   "color": "#c7b957"
   },
   {
    "name": "Baxter CEC 2026",
-   "color": "#5bb0a6"
+   "color": "#75c2d1"
   },
   {
    "name": "Boston Scientific - SX",
-   "color": "#cf7f8c"
+   "color": "#b83d7f"
   },
   {
    "name": "Callaway Drop off",
-   "color": "#6fa8c7"
+   "color": "#73c757"
   },
   {
    "name": "Callaway Pick up",
-   "color": "#bba14e"
+   "color": "#7975d1"
   },
   {
    "name": "Duracell Mobile Innovation Center",
-   "color": "#6fa86f"
+   "color": "#b8663d"
   },
   {
    "name": "Durastar Days (Ferguson)",
-   "color": "#a98fc0"
+   "color": "#57c79d"
   },
   {
    "name": "FM Risk Prevention Tour",
-   "color": "#c98aa6"
+   "color": "#ca75d1"
   },
   {
    "name": "Hyperfine #2 (J1556)",
-   "color": "#69a98f"
+   "color": "#9eb83d"
   },
   {
    "name": "Hyperfine - East (J1453)",
-   "color": "#7a9bd0"
+   "color": "#578fc7"
   },
   {
    "name": "JFSD - Jewish Open House",
-   "color": "#bfa85e"
+   "color": "#d17588"
   },
   {
    "name": "JFSD - Mira Costa Community College",
-   "color": "#cf9a6b"
+   "color": "#3db848"
   },
   {
    "name": "OS- Bloomfield Hills",
-   "color": "#79b3aa"
+   "color": "#8157c7"
   },
   {
    "name": "Omnicell (J1446)",
-   "color": "#bf86c2"
+   "color": "#d1b375"
   },
   {
    "name": "PSEG - Bayonne Hometown Fair",
-   "color": "#8aa8cf"
+   "color": "#3db8b3"
   },
   {
    "name": "SWC FL 1 - Augustine Historical Society",
-   "color": "#9ab36a"
+   "color": "#c757ab"
   },
   {
    "name": "SWC FL 1 - Casa Ranch Montessori",
-   "color": "#bf8585"
+   "color": "#9fd175"
   },
   {
    "name": "SWC FL 1 - Historic Virginia Key Beach Park",
-   "color": "#5b8bd0"
+   "color": "#3d51b8"
   },
   {
    "name": "SWC FL 1 - Mosaic Miami",
-   "color": "#5fae7e"
+   "color": "#c76557"
   },
   {
    "name": "SWC FL 1 - PBC Lantana Library Branch",
-   "color": "#cc9a52"
+   "color": "#75d19c"
   },
   {
    "name": "SWC FL 1 - PBC Library Gardens Branch",
-   "color": "#9b86c9"
+   "color": "#943db8"
   },
   {
    "name": "SWC FL 1 - PBC Library Main Branch",
-   "color": "#5bb0a6"
+   "color": "#c7c757"
   },
   {
    "name": "SWC FL 1 - PBC Library West Boynton Branch",
-   "color": "#cf7f8c"
+   "color": "#75b6d1"
   },
   {
    "name": "SWC IL 1 - Park Forest Public Library",
-   "color": "#6fa8c7"
+   "color": "#b83d70"
   },
   {
    "name": "SWC IL1 - Evergreen Park Public Library",
-   "color": "#bba14e"
+   "color": "#64c757"
   },
   {
    "name": "Saskatchewan Mammography Trailer One",
-   "color": "#6fa86f"
+   "color": "#8575d1"
   },
   {
    "name": "Saskatchewan Mammography Trailer Two",
-   "color": "#a98fc0"
+   "color": "#b8763d"
   },
   {
    "name": "Siemens DI eXplore tour 2026",
-   "color": "#c98aa6"
+   "color": "#57c7ab"
   },
   {
    "name": "Sobeys 53\" MFX Summer Tour",
-   "color": "#69a98f"
+   "color": "#d175cd"
   },
   {
    "name": "Warhammer (J1434)",
-   "color": "#7a9bd0"
+   "color": "#8eb83d"
   },
   {
    "name": "bioMerieux",
-   "color": "#bfa85e"
+   "color": "#5780c7"
   }
  ],
  "events": [
