@@ -194,11 +194,18 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     if ($name -eq '') { return }
 
     $pPhase    = ([string](Resolve-Cell $pc['B'] $shared)).Trim()
+    $pType     = ([string](Resolve-Cell $pc['C'] $shared)).Trim()
     $pStatus   = ([string](Resolve-Cell $pc['I'] $shared)).Trim()
     $pPM       = ([string](Resolve-Cell $pc['J'] $shared)).Trim()
     $pMile     = ([string](Resolve-Cell $pc['K'] $shared)).Trim()
     $pTask     = ([string](Resolve-Cell $pc['D'] $shared)).Trim()
     $pAssigned = ([string](Resolve-Cell $pc['H'] $shared)).Trim()
+    $pComments = ([string](Resolve-Cell $pc['L'] $shared)).Trim()
+    $pDur      = ([string](Resolve-Cell $pc['G'] $shared)).Trim()
+    $pId       = ([string](Resolve-Cell $pc['M'] $shared)).Trim()   # Task ID  (col M)
+    $pPred     = ([string](Resolve-Cell $pc['N'] $shared)).Trim()   # Predecessor (col N)
+    if ($pId -match '^\d+\.0+$')  { $pId  = $pId  -replace '\.0+$','' }   # numeric cell safety
+    if ($pDur -match '^\d+\.0+$') { $pDur = $pDur -replace '\.0+$','' }
     $psd = Get-CellDate $pc['E']
     $pfd = Get-CellDate $pc['F']
 
@@ -207,6 +214,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
             name = $name; pm = ''; minStart = $null; maxFinish = $null
             taskCount = 0; doneCount = 0
             milestones = (New-Object System.Collections.ArrayList)
+            tasks      = (New-Object System.Collections.ArrayList)
         }
     }
     $o = $pmap[$name]
@@ -230,6 +238,23 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
             dueISO = $dueISO; status = $pStatus
         })
     }
+
+    # Full task list for the dashboard's Projects editor (every row, not just milestones).
+    [void]$o.tasks.Add([PSCustomObject]@{
+        id    = $pId
+        t     = $pTask
+        phase = $pPhase
+        type  = $pType
+        who   = $pAssigned
+        startISO = $(if ($psd) { $psd.ToString('yyyy-MM-dd') } else { $null })
+        finISO   = $(if ($pfd) { $pfd.ToString('yyyy-MM-dd') } else { $null })
+        dur   = $pDur
+        st    = $pStatus
+        ml    = $pMile
+        cm    = $pComments
+        pred  = $pPred
+        done  = ($pStatus -eq 'Completed')
+    })
 }
 
 # --- Copy workbook to temp (avoids any file lock) and open as zip ------------
@@ -375,6 +400,7 @@ try {
             doneCount = $o.doneCount
             pct       = $pct
             milestones = @($o.milestones)
+            tasks      = @($o.tasks)
         })
     }
 } finally {

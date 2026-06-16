@@ -227,6 +227,17 @@
   .ttool.del{color:#fca5a5} .ttool.del:hover{border-color:var(--red)}
   .ttool.reopen{color:var(--amber)} .ttool.reopen:hover{border-color:var(--amber)}
   body.closemode .ttool{display:inline-block}
+  /* Project editor (task list) */
+  .pephase{font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);
+    margin:13px 2px 4px; border-bottom:1px solid var(--line); padding-bottom:3px}
+  .petask{display:flex; gap:10px; align-items:flex-start; padding:7px 6px; border-radius:7px}
+  .petask:hover{background:rgba(125,125,125,.10)}
+  .petask-main{flex:1; min-width:0}
+  .petask-t{font-size:13px; line-height:1.3}
+  .petask-m{font-size:11px; color:var(--muted); margin-top:2px}
+  .petask.isdone .petask-t{text-decoration:line-through; color:var(--muted)}
+  .petask-r{display:flex; align-items:center; gap:8px; white-space:nowrap}
+  .petask-tools .ttool{display:inline-block}
   @media(max-width:1100px){ .saltasks{grid-template-columns:1fr} }
 
   /* Team capacity panel */
@@ -545,6 +556,7 @@
 
     <div style="display:flex; align-items:center; gap:10px; margin:2px 0 14px; flex-wrap:wrap">
       <div style="font-size:13px; color:var(--muted)">📋 Starting a project or adding tasks? Download the template, fill it offline, then drop it in the <b>Intake Inbox</b> folder — it shows here within ~15 min.</div>
+      <button class="editbtn" onclick="openProjectEditor()" title="Add, edit, complete or delete a project's tasks — and set predecessors — right here (no Excel)">✎ Edit Project Tasks</button>
       <span style="margin-left:auto; align-self:center; font-size:12px; color:var(--muted); font-weight:600">📄 Hard-Date Schedule:</span>
       <button class="editbtn" onclick="openTplPicker()" title="Build a print-ready Hard-Date schedule for one of your projects (pick project + style)">📄 Build Schedule</button>
       <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260613b" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx)">⬇ Download Intake Template</a>
@@ -876,6 +888,61 @@
     </div>
   </div>
 
+  <!-- ===================== PROJECT EDITOR (task list for one project) ===================== -->
+  <div class="modal-overlay" id="projEditModal" onclick="closePE(event)">
+    <div class="modal" style="max-width:880px">
+      <button class="modal-close" onclick="closePE()" title="Close">×</button>
+      <h3>✎ Edit Project Tasks</h3>
+      <div class="msub">Add, edit, complete, delete tasks and set predecessors — writes back to the workbook (board updates within ~15 min).</div>
+      <div class="addform">
+        <div class="addrow2">
+          <div><label>Project</label><select id="peProject" onchange="peProjectChange()"></select></div>
+          <div id="peNewProjWrap" style="display:none"><label>New project name</label><input id="peNewProj" autocomplete="off" placeholder="e.g. Acme Phase 2"></div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin:6px 0 8px">
+        <button class="btn-primary" onclick="openProjTaskNew()">➕ Add task</button>
+        <span id="peCount" style="color:var(--muted); font-size:12px"></span>
+      </div>
+      <div id="peList" style="max-height:58vh; overflow:auto; margin:0 -4px; padding:0 4px"></div>
+    </div>
+  </div>
+
+  <!-- ===================== PROJECT TASK FORM (add / edit one task) ===================== -->
+  <div class="modal-overlay" id="projTaskModal" onclick="closePT(event)">
+    <div class="modal" style="max-width:580px">
+      <button class="modal-close" onclick="closePT()" title="Close">×</button>
+      <h3 id="ptTitle">Task</h3>
+      <div class="msub" id="ptSub"></div>
+      <div class="addform">
+        <div><label>Task</label><textarea id="ptTask" style="min-height:54px"></textarea></div>
+        <div class="addrow2">
+          <div><label>Phase</label><input id="ptPhase" list="ptPhaseList" autocomplete="off"><datalist id="ptPhaseList"></datalist></div>
+          <div><label>Type</label><input id="ptType" autocomplete="off"></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Assigned to</label><input id="ptAssigned" list="ptAssignList" autocomplete="off"><datalist id="ptAssignList"></datalist></div>
+          <div><label>Status</label><select id="ptStatus"></select></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Start date</label><input id="ptStart" type="date"></div>
+          <div><label>Finish date</label><input id="ptFinish" type="date"></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Predecessor — starts after…</label><select id="ptPred"></select></div>
+          <div><label>Milestone?</label><select id="ptMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
+        </div>
+        <div><label>Comments</label><input id="ptComments" autocomplete="off"></div>
+        <div id="ptMsg" style="font-size:12px; min-height:16px"></div>
+        <div class="addbtns">
+          <button class="btn-ghost" onclick="delProjTaskFromForm()" id="ptDelete" style="margin-right:auto; border-color:rgba(239,68,68,.5); color:#fca5a5">🗑 Delete</button>
+          <button class="btn-ghost" onclick="closePT()">Cancel</button>
+          <button class="btn-primary" id="ptSubmit" onclick="submitProjTask()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== HARD-DATE TEMPLATE PICKER ===================== -->
   <div class="modal-overlay" id="tplModal" onclick="closeTpl(event)">
     <div class="modal" style="max-width:480px">
@@ -926,6 +993,7 @@ function localISO(ms){ const d=new Date(ms); return d.getFullYear()+'-'+String(d
 /* ---------- helpers ---------- */
 function esc(s){return (s==null?"":""+s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function escA(s){return esc(s).replace(/"/g,'&quot;');}   // attribute-safe (for title="…")
+function escJsAttr(s){return escA(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));}   // safe inside onclick="fn('…')"
 function parseISO(s){ if(!s) return null; const p=s.split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
 function todayMid(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
 function fmtMD(iso){ if(!iso) return "TBD"; const d=parseISO(iso); return (d.getMonth()+1)+"/"+d.getDate(); }
@@ -1013,6 +1081,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.4", date:"2026-06-16", title:"Edit Project Tasks from the dashboard", items:[
+    "✎ Edit Project Tasks (PROJECTS tab) — pick a project (or click one in Project Progress) and a clean popup opens with all its tasks, grouped by phase. Add, edit, complete, reopen or delete tasks right there — no Excel, no filtering the big sheet.",
+    "Set Predecessor links (a task starts after another) and Milestone/Status/dates per task; changes write back to the workbook and show on the board instantly (everyone else catches up on the ~15-min cycle).",
+    "Project Tasks sheet cleaned up: Task ID + Predecessor columns, colored divider between each project, and standardized Status." ] },
   { rev:"3.3", date:"2026-06-16", title:"Cleaner header + light mode", items:[
     "☀️/🌙 Light / Dark toggle (in ☰ Menu), remembered per device — the shop TV can stay dark while you use light on a laptop.",
     "Tidier top bar: Wall, Light, Edit Schedule and Links tucked into one ☰ Menu; the ? help stays out where everyone can see it.",
@@ -1439,6 +1511,217 @@ function submitAddJob(){
       msg.style.color='var(--green)'; msg.textContent='✓ Job added.'; btn.textContent="Add job";
       setTimeout(()=>document.getElementById('addJobModal').classList.remove('show'),1100); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Add job"; btn.disabled=false; });
+}
+
+/* ===================== Projects editor — add / edit / delete / complete project tasks ===================== */
+const PROJ_STATUS_OPTIONS = ['Not Started','In Progress','Completed','On Hold'];
+function projIsDone(t){ return !!(t && (t.done || /^completed$/i.test(t.st||''))); }
+function oProj(name){ return (((window.MRA_DATA||{}).projects)||[]).find(p=>p.name===name); }
+function projAssignees(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.who) s.add(t.who.trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
+function projPhases(p){ const s=new Set(); ((p&&p.tasks)||[]).forEach(t=>{ if(t.phase) s.add(t.phase.trim()); }); return [...s].filter(Boolean); }
+
+// Recompute a project's rollups locally so on-screen counts / gantt / milestones update instantly.
+function oRecomputeProject(p){
+  if(!p) return; const tasks=p.tasks||[];
+  p.taskCount=tasks.length;
+  p.doneCount=tasks.filter(projIsDone).length;
+  p.pct=p.taskCount?Math.round(p.doneCount*100/p.taskCount):0;
+  let mn=null,mx=null;
+  tasks.forEach(t=>{ if(t.startISO&&(!mn||t.startISO<mn)) mn=t.startISO; if(t.finISO&&(!mx||t.finISO>mx)) mx=t.finISO; });
+  p.startISO=mn; p.finishISO=mx;
+  p.milestones=tasks.filter(t=>/yes/i.test(t.ml||''))
+    .map(t=>({ name:t.t, dateISO:(t.finISO||t.startISO||null), owner:t.who||'', status:t.st||'', phase:t.phase||'', done:projIsDone(t) }))
+    .filter(m=>m.dateISO);
+}
+
+/* ---- open / switch the editor ---- */
+function openProjectEditor(name){
+  const D=window.MRA_DATA||{};
+  const names=((D.projects)||[]).map(p=>p.name).filter(Boolean).sort((a,b)=>a.localeCompare(b));
+  const sel=document.getElementById('peProject');
+  sel.innerHTML = names.map(n=>`<option value="${escA(n)}">${esc(n)}</option>`).join("")+`<option value="__new__">➕ New project…</option>`;
+  if(name && names.indexOf(name)>=0) sel.value=name; else if(names.length) sel.value=names[0]; else sel.value='__new__';
+  document.getElementById('peNewProj').value="";
+  peProjectChange();
+  document.getElementById('projEditModal').classList.add('show');
+}
+function closePE(e){ if(!e || e.target.id==='projEditModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('projEditModal').classList.remove('show'); }
+function peCurrentProject(){
+  const v=document.getElementById('peProject').value;
+  return (v==='__new__') ? document.getElementById('peNewProj').value.trim() : v;
+}
+function peProjectChange(){
+  document.getElementById('peNewProjWrap').style.display = (document.getElementById('peProject').value==='__new__')?'':'none';
+  renderProjTaskList();
+}
+
+/* ---- render the task list for the selected project ---- */
+function projStatusBadge(t){
+  const st=(t.st||'').trim();
+  if(projIsDone(t)) return `<span class="badge green">Completed</span>`;
+  if(/in progress/i.test(st)) return `<span class="badge amber">In Progress</span>`;
+  if(/on hold/i.test(st)) return `<span class="badge grey">On Hold</span>`;
+  return `<span class="badge grey">${esc(st||'Not Started')}</span>`;
+}
+function renderProjTaskList(){
+  const name=peCurrentProject(), p=oProj(name);
+  const list=document.getElementById('peList'), cnt=document.getElementById('peCount');
+  const tasks=(p&&p.tasks)||[];
+  if(!p || !tasks.length){
+    list.innerHTML=`<div class="empty">${name?('No tasks yet for '+esc(name)+' — click ➕ Add task.'):'Pick a project or name a new one, then ➕ Add task.'}</div>`;
+    cnt.textContent = p?'0 tasks':''; return;
+  }
+  cnt.textContent = tasks.length+" task"+(tasks.length===1?"":"s")+" · "+p.doneCount+" done ("+p.pct+"%)";
+  const byId={}; tasks.forEach(t=>{ if(t.id!=null && t.id!=='') byId[String(t.id)]=t; });
+  const order=[], groups={};
+  tasks.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!groups[ph]){ groups[ph]=[]; order.push(ph); } groups[ph].push(t); });
+  list.innerHTML = order.map(ph=>{
+    const rows=groups[ph].map(t=>{
+      const predT=(t.pred!=null&&t.pred!=='' && byId[String(t.pred)])?byId[String(t.pred)]:null;
+      const dates=[t.startISO?('▸ '+fmtMD(t.startISO)):'', t.finISO?('⤇ '+fmtMD(t.finISO)):''].filter(Boolean).join('  ');
+      const meta=[ t.who?esc(t.who):'', dates, predT?('after: '+esc(predT.t)):'', /yes/i.test(t.ml||'')?'◆ milestone':'' ].filter(Boolean).join(' · ');
+      const idA=`data-id="${escA(t.id!=null?String(t.id):'')}"`;
+      const tools=projIsDone(t)
+        ? `<span class="ttool reopen" ${idA} onclick="reopenProjTaskBtn(this)" title="Reopen">↩</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`
+        : `<span class="ttool done" ${idA} onclick="completeProjTaskBtn(this)" title="Mark complete" style="color:var(--green)">✓</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`;
+      return `<div class="petask${projIsDone(t)?' isdone':''}"><div class="petask-main"><div class="petask-t">${esc(t.t||'(task)')}</div>`+
+        (meta?`<div class="petask-m">${meta}</div>`:'')+`</div>`+
+        `<div class="petask-r">${projStatusBadge(t)}<span class="petask-tools">${tools}</span></div></div>`;
+    }).join("");
+    return `<div class="pephase">${esc(ph)}</div>${rows}`;
+  }).join("");
+}
+
+/* ---- single-task form (add or edit) ---- */
+function projTaskById(p,id){ return ((p&&p.tasks)||[]).find(t=>String(t.id)===String(id)); }
+function fillPredOptions(p,excludeId){
+  const tasks=((p&&p.tasks)||[]).filter(t=>t.id!=null&&t.id!=='' && String(t.id)!==String(excludeId));
+  document.getElementById('ptPred').innerHTML=`<option value="">— none —</option>`+
+    tasks.map(t=>`<option value="${escA(String(t.id))}">${esc((t.t||'').slice(0,70))}</option>`).join("");
+}
+function fillAssignAndPhase(p){
+  document.getElementById('ptAssignList').innerHTML = projAssignees().map(a=>`<option value="${escA(a)}">`).join("");
+  document.getElementById('ptPhaseList').innerHTML = projPhases(p).map(ph=>`<option value="${escA(ph)}">`).join("");
+  document.getElementById('ptStatus').innerHTML = PROJ_STATUS_OPTIONS.map(s=>`<option>${esc(s)}</option>`).join("");
+}
+function openProjTaskNew(){
+  const name=peCurrentProject();
+  if(!name){ alert("Pick a project or type a new project name first."); return; }
+  if(!ensureAuth("add a project task")) return;
+  const p=oProj(name);
+  window._ptProj=name; window._ptId=null;
+  document.getElementById('ptTitle').textContent="➕ Add project task";
+  document.getElementById('ptSub').innerHTML=`<b>${esc(name)}</b>`;
+  fillAssignAndPhase(p); fillPredOptions(p,null);
+  document.getElementById('ptTask').value=""; document.getElementById('ptType').value="";
+  document.getElementById('ptPhase').value=""; document.getElementById('ptAssigned').value="";
+  document.getElementById('ptStatus').value="Not Started";
+  document.getElementById('ptStart').value=""; document.getElementById('ptFinish').value="";
+  document.getElementById('ptPred').value=""; document.getElementById('ptMilestone').value="";
+  document.getElementById('ptComments').value="";
+  document.getElementById('ptDelete').style.display='none';
+  document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Add task";
+  document.getElementById('projTaskModal').classList.add('show');
+}
+function editProjTaskBtn(el){ if(!ensureAuth("edit a project task")) return; openProjTaskEdit(el.dataset.id); }
+function openProjTaskEdit(id){
+  const name=peCurrentProject(), p=oProj(name), t=projTaskById(p,id);
+  if(!t){ alert("Couldn't find that task — try reloading."); return; }
+  window._ptProj=name; window._ptId=id;
+  document.getElementById('ptTitle').textContent="✎ Edit project task";
+  document.getElementById('ptSub').innerHTML=`<b>${esc(name)}</b>`;
+  fillAssignAndPhase(p); fillPredOptions(p,id);
+  document.getElementById('ptTask').value=t.t||"";
+  document.getElementById('ptType').value=t.type||"";
+  document.getElementById('ptPhase').value=t.phase||"";
+  document.getElementById('ptAssigned').value=t.who||"";
+  document.getElementById('ptStatus').value=(PROJ_STATUS_OPTIONS.find(s=>s.toLowerCase()===(t.st||'').toLowerCase()))||(projIsDone(t)?'Completed':'Not Started');
+  document.getElementById('ptStart').value=t.startISO||"";
+  document.getElementById('ptFinish').value=t.finISO||"";
+  document.getElementById('ptPred').value=(t.pred!=null?String(t.pred):"");
+  document.getElementById('ptMilestone').value=/yes/i.test(t.ml||'')?"Yes":"";
+  document.getElementById('ptComments').value=t.cm||"";
+  document.getElementById('ptDelete').style.display=(t.id!=null&&t.id!=='')?'':'none';
+  document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Save";
+  document.getElementById('projTaskModal').classList.add('show');
+}
+function closePT(e){ if(!e || e.target.id==='projTaskModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('projTaskModal').classList.remove('show'); }
+
+/* ---- submit add / edit ---- */
+function submitProjTask(){
+  const name=window._ptProj, p=oProj(name);
+  const task=document.getElementById('ptTask').value.trim();
+  const msg=document.getElementById('ptMsg');
+  if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
+  const f={ task:task, phase:document.getElementById('ptPhase').value.trim(), type:document.getElementById('ptType').value.trim(),
+    assigned:document.getElementById('ptAssigned').value.trim(), status:document.getElementById('ptStatus').value,
+    start:document.getElementById('ptStart').value, finish:document.getElementById('ptFinish').value,
+    pred:document.getElementById('ptPred').value, milestone:document.getElementById('ptMilestone').value,
+    comments:document.getElementById('ptComments').value.trim() };
+  const editing=(window._ptId!=null);
+  const payload=Object.assign({ action: editing?"editProjectTask":"addProjectTask", project:name, pin:CLOSE_PIN, user:CURRENT_USER }, f);
+  if(editing){ payload.id=window._ptId; const old=projTaskById(p,window._ptId); payload.taskOld=old?old.t:task; }
+  const btn=document.getElementById('ptSubmit'); btn.disabled=true; btn.textContent="Saving…";
+  msg.style.color='var(--muted)'; msg.textContent='Saving…';
+  shopWrite(payload).then(()=>{
+    if(p){ if(!p.tasks) p.tasks=[];
+      const obj={ id:(editing?window._ptId:('tmp'+Date.now())), t:f.task, phase:f.phase, type:f.type, who:f.assigned,
+        startISO:f.start||null, finISO:f.finish||null, st:f.status, ml:f.milestone, cm:f.comments, pred:f.pred,
+        done:/^completed$/i.test(f.status) };
+      if(editing){ const i=p.tasks.findIndex(t=>String(t.id)===String(window._ptId)); if(i>=0) p.tasks[i]=Object.assign(p.tasks[i],obj); }
+      else { p.tasks.push(obj); }
+      oRecomputeProject(p);
+    }
+    renderProjTaskList(); oApply();
+    msg.style.color='var(--green)'; msg.textContent='✓ Saved.'; btn.textContent= editing?"Save":"Add task";
+    setTimeout(()=>document.getElementById('projTaskModal').classList.remove('show'),900);
+  }).catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent= editing?"Save":"Add task"; btn.disabled=false; });
+}
+
+/* ---- per-row delete / complete / reopen ---- */
+function projRowFind(id){ const p=oProj(peCurrentProject()); return {p:p, t:projTaskById(p,id)}; }
+function delProjTaskBtn(el){
+  if(!ensureAuth("delete a project task")) return;
+  const id=el.dataset.id, r=projRowFind(id);
+  if(!r.t){ alert("Couldn't find that task."); return; }
+  if(!confirm("Delete this task?\n\n"+(r.t.t||""))) return;
+  el.textContent="…"; el.style.pointerEvents="none";
+  shopWrite({action:"deleteProjectTask", project:r.p.name, id:id, task:r.t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
+    r.p.tasks=r.p.tasks.filter(x=>String(x.id)!==String(id)); oRecomputeProject(r.p);
+    renderProjTaskList(); oApply();
+  }).catch(()=>{ el.textContent="🗑"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
+}
+function delProjTaskFromForm(){
+  if(window._ptId==null){ closePT(); return; }
+  const p=oProj(window._ptProj), t=projTaskById(p,window._ptId);
+  if(!t){ closePT(); return; }
+  if(!confirm("Delete this task?\n\n"+(t.t||""))) return;
+  shopWrite({action:"deleteProjectTask", project:p.name, id:window._ptId, task:t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
+    p.tasks=p.tasks.filter(x=>String(x.id)!==String(window._ptId)); oRecomputeProject(p);
+    renderProjTaskList(); oApply();
+    document.getElementById('projTaskModal').classList.remove('show');
+  }).catch(()=>{ alert("Couldn't reach the service — try again."); });
+}
+function completeProjTaskBtn(el){
+  if(!ensureAuth("complete a project task")) return;
+  const id=el.dataset.id, r=projRowFind(id); if(!r.t) return;
+  el.textContent="…"; el.style.pointerEvents="none";
+  const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
+  shopWrite({action:"closeProjectTask", project:r.p.name, id:id, task:r.t.t, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
+    r.t.done=true; r.t.st='Completed'; if(!r.t.finISO) r.t.finISO=localISO(Date.now()); oRecomputeProject(r.p);
+    renderProjTaskList(); oApply();
+  }).catch(()=>{ el.textContent="✓"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
+}
+function reopenProjTaskBtn(el){
+  if(!ensureAuth("reopen a project task")) return;
+  const id=el.dataset.id, r=projRowFind(id); if(!r.t) return;
+  el.textContent="…"; el.style.pointerEvents="none";
+  shopWrite({action:"reopenProjectTask", project:r.p.name, id:id, task:r.t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
+    r.t.done=false; r.t.st='In Progress'; oRecomputeProject(r.p);
+    renderProjTaskList(); oApply();
+  }).catch(()=>{ el.textContent="↩"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
 }
 
 function classify(job, today){
@@ -1896,7 +2179,7 @@ function renderProjects(D){
   const prog=projects.slice().filter(p=>projStatus(p,today)!=="done")
     .sort((a,b)=>(a.finishISO||"9999").localeCompare(b.finishISO||"9999"));
   document.getElementById('progress').innerHTML=prog.map(p=>
-    `<div class="row"><div style="flex:1"><div class="lead">${esc(p.name)}</div>`+
+    `<div class="row" style="cursor:pointer" onclick="openProjectEditor('${escJsAttr(p.name)}')" title="Click to add / edit this project's tasks"><div style="flex:1"><div class="lead">${esc(p.name)} <span class="ttool edit" style="display:inline-block">✎</span></div>`+
     `<div class="meta">${esc(p.pm||"—")}${p.finishISO?" · due "+fmtMDY(p.finishISO):""}</div>`+
     `<div class="pmbar" style="margin-top:5px;height:8px"><div class="seg" style="width:${p.pct}%;background:${p._color}"></div></div>`+
     `</div><div class="right"><span class="badge grey">${p.pct}%</span></div></div>`).join("")||`<div class="empty">No active projects</div>`;
