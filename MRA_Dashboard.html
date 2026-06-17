@@ -94,7 +94,10 @@
     text-transform:uppercase; margin-bottom:13px; display:flex; align-items:center; gap:8px}
   .panel h2 .count{margin-left:auto; background:var(--panel2); color:var(--txt);
     font-size:12px; padding:2px 9px; border-radius:20px; letter-spacing:0}
-  .rangebtns{display:flex; gap:6px; margin-left:auto}
+  .rangebtns{display:flex; gap:6px; margin-left:auto; align-items:center}
+  .gwinwrap{display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); margin-right:4px}
+  .gwinslider{width:120px; accent-color:var(--blue); vertical-align:middle}
+  .gwinlab{min-width:34px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums}
   .rb{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
     font-size:11px; font-weight:700; padding:3px 11px; border-radius:7px; cursor:pointer; letter-spacing:.5px}
   .rb.active{background:var(--blue); border-color:var(--blue); color:#fff}
@@ -379,6 +382,9 @@
   .g-barlabel{position:relative; z-index:2; padding:0 7px; font-size:10px; font-weight:600;
     color:#fff; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.6)}
   .g-pct{position:absolute; right:5px; font-size:9.5px; color:#fff; opacity:.85; z-index:2}
+  .g-d{position:absolute; top:50%; transform:translateY(-50%); font-size:9px; color:#fff; opacity:.92; z-index:3; pointer-events:none; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.55)}
+  .g-d0{left:6px} .g-d1{right:6px}
+  .g-mid{position:absolute; left:0; right:0; text-align:center; font-size:9.5px; color:#fff; opacity:.92; z-index:2; pointer-events:none}
   .g-ms{position:absolute; top:8px; width:10px; height:10px; background:var(--amber);
     transform:translateX(-5px) rotate(45deg); border:1px solid #1a1206; z-index:4}
   .g-out{position:absolute; left:8px; top:6px; font-size:10px; color:var(--faint); font-style:italic}
@@ -619,6 +625,7 @@
     <div class="panel">
       <h2>Project Schedules — Gantt
         <div class="rangebtns" id="rangeBtns">
+          <span class="gwinwrap" title="Zoom the timeline — drag from 1 week to 1 year">🔍<input id="gwinSlider" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider"><span id="gwinLab" class="gwinlab"></span></span>
           <div class="rb" data-m="1" onclick="setRange(1)">1 mo</div>
           <div class="rb active" data-m="3" onclick="setRange(3)">3 mo</div>
           <div class="rb" data-m="6" onclick="setRange(6)">6 mo</div>
@@ -1095,6 +1102,7 @@ const PALETTE = ['#3b82f6','#22c55e','#f59e0b','#a78bfa','#2dd4bf','#ef4444',
 let RANGE = 'all';           // projects gantt range (months or 'all')
 let VIEW = 'floor';
 try{ VIEW = localStorage.getItem('mra_view')||'floor'; RANGE = JSON.parse(localStorage.getItem('mra_range'))||3; }catch(e){ RANGE=3; }
+let GWIN_DAYS=null; try{ const _gw=parseInt(localStorage.getItem('mra_gwin'),10); if(_gw>=7&&_gw<=365) GWIN_DAYS=_gw; }catch(e){}  // gantt zoom: continuous window length (days); overrides RANGE presets when set
 let TEAMFILTER='all';
 try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
 let GFS=null;              // full-screen gantt: 'floor' | 'projects' | null
@@ -1220,6 +1228,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.30", date:"2026-06-17", title:"Projects Gantt: dates on bars + zoom slider", items:[
+    "Each Gantt bar now shows its Start and Finish dates — on the bar when there's room, and always in the hover tooltip (which also shows PM, task count and % complete). Milestone ◆ already show name + date on hover.",
+    "New 🔍 zoom slider on the Projects Gantt — drag smoothly from a 1-week view out to a full year; the 1 / 3 / 6-mo buttons still work as quick jumps, and your zoom level is remembered per screen.",
+    "The Projects action buttons (Download/Upload Intake, Build Hard-Date Schedule, Edit, Status Report) explain what they do and how on hover." ] },
   { rev:"3.29", date:"2026-06-17", title:"Project Gantts start a week before today", items:[
     "The PROJECTS Gantt (both the dashboard panel and the full-screen view) now always begins 7 days before today — so you always see the last week plus everything ahead, instead of starting at the 1st of the month." ] },
   { rev:"3.28", date:"2026-06-17", title:"Wall mode: card titles stay put while task lists scroll", items:[
@@ -2305,7 +2317,7 @@ function syncMraHlBtns(){ document.querySelectorAll('.mraHlBtn').forEach(b=>{ b.
 function toggleMraHl(){ MRASHOP_HL=!MRASHOP_HL; try{localStorage.setItem('mra_hl_mrashop',MRASHOP_HL?'1':'0');}catch(e){}
   if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); } syncMraHlBtns(); }
 
-function renderGantt(el, rows, win){
+function renderGantt(el, rows, win, opts){ opts=opts||{};
   const bands = (win.weekends||[]).map(w=>`<div class="g-weekend" style="left:${w.pos}%;width:${w.width}%"></div>`).join('')
     + (win.curWeek?`<div class="g-curweek" style="left:${win.curWeek.pos}%;width:${win.curWeek.width}%"></div>`:'');
   const grid = bands + win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
@@ -2318,12 +2330,18 @@ function renderGantt(el, rows, win){
     let bar='';
     if(r.noBar){ bar=''; }
     else if(g){
-      const pctTxt = (r.pct!=null && g.width>9) ? `<span class="g-pct">${r.pct}%</span>` : '';
       const onclk = r.popKey ? ` onclick="showBarPop(event,'${r.popKey}')"` : '';
       const styleAttr = `${r.popKey?'cursor:pointer;':''}left:${g.left}%;width:${g.width}%;background:${hexA(r.color,.28)};border-color:${r.color}`;
-      bar=`<div class="g-bar${r.conflict?' conflict':''}${r.done?' done':''}"${onclk} style="${styleAttr}">`
-        + (r.pct!=null?`<div class="g-fill" style="width:${r.pct}%;background:${r.color}"></div>`:'')
-        + `<span class="g-barlabel">${esc(r.barLabel||'')}</span>${pctTxt}</div>`;
+      const ttl = escA(`${r.label||''}${r.sub?' — '+r.sub:''}\n${fmtMDY(r.startISO)} – ${fmtMDY(r.endISO)}${r.pct!=null?'  ·  '+r.pct+'% complete':''}`);
+      const showPct = (r.pct!=null && g.width>9);
+      let inner = (r.pct!=null?`<div class="g-fill" style="width:${r.pct}%;background:${r.color}"></div>`:'');
+      if(opts.dates && g.width>18){   // overlay start/end dates on wide enough bars; pct/label centered
+        inner += `<span class="g-d g-d0">${esc(fmtMDY(r.startISO))}</span><span class="g-d g-d1">${esc(fmtMDY(r.endISO))}</span>`
+              + (showPct ? `<span class="g-mid">${r.pct}%</span>` : (r.barLabel?`<span class="g-mid">${esc(r.barLabel)}</span>`:''));
+      } else {
+        inner += `<span class="g-barlabel">${esc(r.barLabel||'')}</span>` + (showPct?`<span class="g-pct">${r.pct}%</span>`:'');
+      }
+      bar=`<div class="g-bar${r.conflict?' conflict':''}${r.done?' done':''}"${onclk} style="${styleAttr}" title="${ttl}">${inner}</div>`;
     } else bar=`<div class="g-out">— outside range —</div>`;
     const ms=(r.milestones||[]).map(m=>{const p=msPos(m.dateISO,win);
       return p==null?'':`<div class="g-ms" style="left:${p}%" title="${esc(m.name)} · ${fmtMDY(m.dateISO)}"></div>`;}).join('');
@@ -2729,12 +2747,14 @@ function renderProjects(D){
   // Gantt window: always start 7 days before today (so you always see the last week + forward)
   const mStart=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7);
   let days;
-  if(RANGE==='all'){
+  if(GWIN_DAYS!=null) days=GWIN_DAYS;
+  else if(RANGE==='all'){
     let maxFin=mStart.getTime();
     projects.forEach(p=>{const f=parseISO(p.finishISO); if(f&&f.getTime()>maxFin)maxFin=f.getTime();});
     days=Math.max(31,Math.ceil((maxFin-mStart.getTime())/DAY)+20);
   } else days=Math.round(RANGE*30.4);
   const win=buildWindow(mStart,days);
+  { const sl=document.getElementById('gwinSlider'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(days); }
 
   const dated=projects.filter(p=>p.startISO&&p.finishISO);
   const rows=dated.map(p=>({_p:p})).map(({_p:p})=>({
@@ -2745,11 +2765,12 @@ function renderProjects(D){
     _has:!!barGeom(p.startISO,p.finishISO,win)
   })).filter(r=>r._has)
     .sort((a,b)=>(a.startISO||"").localeCompare(b.startISO||""));
-  renderGantt(document.getElementById('projGantt'), rows, win);
+  renderGantt(document.getElementById('projGantt'), rows, win, {dates:true});
   syncMraHlBtns();
   const undated=projects.filter(p=>!p.startISO||!p.finishISO).map(p=>p.name);
   document.getElementById('projGanttNote').textContent=
-    (RANGE==='all'?"Showing full timeline. ":`Showing ~${RANGE} month window from `+mStart.toLocaleString('en',{month:'short',year:'numeric'})+". ")
+    ((GWIN_DAYS!=null)?`Showing a ~${gwinLabel(days)} window from `+mStart.toLocaleString('en',{month:'short',day:'numeric'})+". "
+      :RANGE==='all'?"Showing full timeline. ":`Showing ~${RANGE} month window from `+mStart.toLocaleString('en',{month:'short',year:'numeric'})+". ")
     + (undated.length?("No dates yet: "+undated.join(", ")+"."):"");
 
   // PM Project Load (stacked: active / upcoming / done)
@@ -3445,8 +3466,19 @@ function setView(v){
 }
 function setRange(m){
   RANGE=m; try{localStorage.setItem('mra_range',JSON.stringify(m));}catch(e){}
+  GWIN_DAYS=null; try{localStorage.removeItem('mra_gwin');}catch(e){}   // a preset overrides the zoom slider
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===m));
   if(window.MRA_DATA) renderProjects(window.MRA_DATA);
+  if(GFS) renderGanttFS();
+}
+// Gantt zoom slider: continuous 1 week … 1 year (log scale), independent of the month presets.
+function _s2d(v){ return Math.round(7*Math.pow(365/7, (+v)/100)); }     // slider 0..100 -> 7..365 days
+function _d2s(d){ d=Math.max(7,Math.min(365,d)); return Math.round(100*Math.log(d/7)/Math.log(365/7)); }
+function gwinLabel(d){ if(d<14) return d+'d'; if(d<60) return Math.round(d/7)+'w'; if(d<350) return Math.round(d/30.4)+'mo'; return (Math.round(d/365*10)/10)+'y'; }
+function setGwin(d){ GWIN_DAYS=Math.max(7,Math.min(365,Math.round(d))); try{localStorage.setItem('mra_gwin',String(GWIN_DAYS));}catch(e){}
+  document.querySelectorAll('#rangeBtns .rb[data-m]').forEach(b=>b.classList.remove('active'));
+  const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(GWIN_DAYS);
+  if(window.MRA_DATA) renderProjects(window.MRA_DATA); if(GFS) renderGanttFS();
 }
 
 /* ---------- Full-screen Gantt + conflict detection ---------- */
@@ -3593,7 +3625,8 @@ function renderGanttFS(){
     const projects=(D.projects||[]).slice(); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
     const t=parseISO(today), mStart=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7);
     let days;
-    if(RANGE==='all'){ let maxFin=mStart.getTime();
+    if(GWIN_DAYS!=null) days=GWIN_DAYS;
+    else if(RANGE==='all'){ let maxFin=mStart.getTime();
       projects.forEach(p=>{const f=parseISO(p.finishISO); if(f&&f.getTime()>maxFin)maxFin=f.getTime();});
       days=Math.max(31,Math.ceil((maxFin-mStart.getTime())/DAY)+20); }
     else days=Math.round(RANGE*30.4);
@@ -3611,7 +3644,7 @@ function renderGanttFS(){
       if(exp) (p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')).forEach(m=>{
         rows.push({label:'◆ '+m.name, sub:fmtMDY(m.dateISO), startISO:null, endISO:null, color:p._color, milestones:[m], noBar:true, cls:'g-subrow'}); });
     });
-    renderGantt(cont, rows, win);
+    renderGantt(cont, rows, win, {dates:true});
     legEl.innerHTML=`<span style="color:var(--amber)">◆ milestone gate</span><span style="color:#93c5fd">▎this week</span>`
       +`<span style="color:var(--red)">▏today</span><span style="color:var(--muted)">faded = complete · solid = % · click a project name to expand</span>`;
   }
