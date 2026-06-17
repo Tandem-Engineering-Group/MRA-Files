@@ -316,8 +316,16 @@
   /* ---------- PM bars ---------- */
   .pmrow{display:grid; grid-template-columns:130px 1fr 30px; align-items:center; gap:10px; margin-bottom:9px}
   .pmrow .nm{font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  .pmbar{height:18px; background:#202a38; border-radius:5px; overflow:hidden; display:flex}
+  .pmbar{height:18px; background:#202a38; border-radius:5px; overflow:hidden; display:flex; position:relative}
   .pmbar .seg{height:100%}
+  .exp-tick{position:absolute; top:-2px; bottom:-2px; width:2px; background:#e2e8f0; box-shadow:0 0 2px rgba(0,0,0,.7); border-radius:1px; transform:translateX(-1px); z-index:2}
+  body.light .exp-tick{background:#475569; box-shadow:0 0 2px rgba(255,255,255,.7)}
+  .hchip{font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px; margin-left:6px; white-space:nowrap}
+  .hchip.late{background:#3a1414; color:#fca5a5} .hchip.behind{background:#3a2e12; color:var(--amber)} .hchip.ok{background:#13331f; color:#86efac}
+  body.light .hchip.late{background:#fde0e0; color:#c22222} body.light .hchip.behind{background:#fdeccb; color:#8a5e00} body.light .hchip.ok{background:#dcf5e6; color:#15803d}
+  .missed-hd{font-size:11px; font-weight:800; color:#fca5a5; letter-spacing:.3px; margin:2px 0 5px; text-transform:uppercase}
+  body.light .missed-hd{color:#c22222}
+  #statusBody{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; white-space:pre-wrap; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; max-height:48vh; overflow:auto; color:var(--txt)}
   .pmrow .v{font-size:12px; font-weight:700; text-align:right; font-variant-numeric:tabular-nums}
   .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-top:13px}
   .legend span::before{content:"●"; margin-right:5px}
@@ -573,6 +581,7 @@
     <div style="display:flex; align-items:center; gap:10px; margin:2px 0 14px; flex-wrap:wrap">
       <div style="font-size:13px; color:var(--muted)">📋 Starting a project or adding tasks? Download the template, fill it in, then <b>Upload</b> it here (or drop it in the <b>Intake Inbox</b> folder) — it shows here within ~15 min.</div>
       <button class="editbtn" onclick="openProjectEditor()" title="Add, edit, complete or delete a project's tasks — and set predecessors — right here (no Excel)">✎ Edit Project Tasks</button>
+      <button class="editbtn" onclick="openStatus()" title="One-click portfolio status — every active project's %, health, next gate and overdue items. Copy it into an email or print to PDF.">📤 Status Report</button>
       <span style="display:inline-flex; align-items:center; gap:8px; flex-wrap:nowrap; padding:4px 9px; border:1px solid var(--line); border-radius:9px">
         <span style="font-size:12px; color:var(--muted); font-weight:600; white-space:nowrap">📋 Project Intake:</span>
         <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260617c" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx) — same columns & look as the schedule, so you can upload it, drop it in the Intake Inbox, or paste straight into Excel">⬇ Download Template</a>
@@ -1010,6 +1019,20 @@
     </div>
   </div>
 
+  <!-- ===================== PORTFOLIO STATUS REPORT ===================== -->
+  <div class="modal-overlay" id="statusModal" onclick="closeStatus(event)">
+    <div class="modal" style="max-width:720px">
+      <button class="modal-close" onclick="closeStatus()" title="Close">×</button>
+      <h3>📤 Portfolio Status — <span id="statusDate"></span></h3>
+      <div class="msub">A snapshot of every active project — %, health, next gate and overdue items. Copy it into an email or print to PDF.</div>
+      <div style="display:flex; gap:8px; margin:8px 0 10px; flex-wrap:wrap">
+        <button class="editbtn" onclick="copyStatus()" id="copyStatusBtn" title="Copy the report text to your clipboard">📋 Copy text</button>
+        <button class="editbtn" onclick="printStatus()" title="Open a clean printable page — then Save as PDF">🖨 Print / PDF</button>
+      </div>
+      <pre id="statusBody"></pre>
+    </div>
+  </div>
+
   <!-- ===================== HARD-DATE TEMPLATE PICKER ===================== -->
   <div class="modal-overlay" id="tplModal" onclick="closeTpl(event)">
     <div class="modal" style="max-width:480px">
@@ -1138,6 +1161,13 @@ const GENERAL_HELP = `
     <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. The highlight is a clean <b>white outline</b>; adjacent tasks merge into one continuous band so it reads over any bar color. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
     <p>Every Gantt shows dated gridlines on the <b>1st &amp; 15th</b> of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. <span style="color:var(--amber)">◆</span> = milestone gate, <span style="color:var(--red)">▏</span> = today, <span style="color:#93c5fd">blue band</span> = this week.</p></div>
+  <div class="hsec"><h4>⑲ ⚠ Spotting at-risk projects</h4>
+    <p>The dashboard now flags projects that are slipping. The <span class="k">⚠ AT RISK</span> KPI card counts every project that's <b>behind</b> (less done than it should be by today) or <b>past due</b> (finish date gone, not complete) — hover it for the list. In <b>Project Progress</b>, each project shows an <span class="hchip ok">on track</span> / <span class="hchip behind">behind</span> / <span class="hchip late">⚠ past due</span> chip, any <b>overdue tasks</b>, and a small <b>tick on the progress bar marking where it should be today</b> — if the colored fill is left of the tick, it's behind. At-risk projects sort to the top.</p>
+    <p>Under <b>Upcoming Milestones</b>, any <span class="k">⚠ Missed gates</span> (a milestone whose date passed while the project isn't done) are listed first, in red, with how many days late.</p></div>
+  <div class="hsec"><h4>⑳ 📤 Status Report</h4>
+    <p>Click <span class="k">📤 Status Report</span> (PROJECTS tab) for a one-click snapshot of every active project — %, health, next gate and overdue items. <b>📋 Copy text</b> drops it on your clipboard to paste into an email; <b>🖨 Print / PDF</b> opens a clean page to Save as PDF.</p></div>
+  <div class="hsec"><h4>㉑ 🖱 Click a Gantt bar</h4>
+    <p>On the Projects Gantt, <b>click any project bar</b> (or its name) to jump straight into that project's task editor.</p></div>
   <div class="hsec"><h4>⑲ 🔧 Fleetio issues on a bay card (FLOOR)</h4>
     <p>A trailer's open Fleetio issues show right on its bay card — a <span class="k">🔧 N Fleetio</span> pill; click to expand them. Only the <b>trailer's</b> issues appear (tractor issues stay on the FLEETIO tab). Hit <span class="k">➕</span> on an issue to turn it into an assignable Shop Task; when it's resolved in Fleetio it <b>auto‑closes</b> here, and you can also close it manually.</p></div>
   <div class="hsec"><h4>⑳ 📋 What's new / Rev history</h4>
@@ -1166,6 +1196,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.19", date:"2026-06-17", title:"Spot at-risk projects + Status Report", items:[
+    "New ⚠ AT RISK KPI card + on-track/behind/past-due chips on every project in Project Progress, with a tick on each progress bar showing where it should be today — at-risk projects sort to the top, and overdue task counts show per project.",
+    "Upcoming Milestones now lists ⚠ Missed gates first (a milestone whose date passed while the project isn't done), in red with days-late.",
+    "New 📤 Status Report button: one-click portfolio status (every active project's %, health, next gate, overdue items) — Copy to email or Print/PDF.",
+    "Click any project bar on the Gantt (or its name) to open that project's task editor." ] },
   { rev:"3.18", date:"2026-06-17", title:"Intake buttons grouped together", items:[
     "Download / Upload / How to are now one tidy “📋 Project Intake” group on the PROJECTS toolbar — they stay side-by-side instead of wrapping onto a second row." ] },
   { rev:"3.17", date:"2026-06-17", title:"Intake: How-to button + leaner template", items:[
@@ -1916,6 +1951,68 @@ function reopenProjTaskBtn(el){
    otherwise it's added as a new one. The rows land on the board on the next ~15-min cycle. */
 function openIntakeHow(){ document.getElementById('intakeHowModal').classList.add('show'); }
 function closeIntakeHow(ev){ if(ev && ev.target!==ev.currentTarget) return; document.getElementById('intakeHowModal').classList.remove('show'); }
+
+/* ---------- Portfolio status report (every active project, copy / print) ---------- */
+function buildStatusText(){
+  const D=window.MRA_DATA||{}, today=D.todayISO||'';
+  const projects=(D.projects||[]).slice();
+  const odMap=overdueByProject(D);
+  const active=projects.filter(p=>projStatus(p,today)!=='done')
+    .map(p=>({p,h:projHealth(p,today)}))
+    .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||'9999').localeCompare(b.p.finishISO||'9999')));
+  const flag={late:'[PAST DUE]', behind:'[BEHIND]', ontrack:'[on track]', upcoming:'[not started]'};
+  const atRisk=active.filter(x=>x.h.state==='late'||x.h.state==='behind').length;
+  const L=[];
+  L.push('MRA PROJECT STATUS  —  '+fmtMDY(today));
+  L.push(active.length+' active projects · '+atRisk+' need attention');
+  L.push('='.repeat(54));
+  L.push('');
+  active.forEach(({p,h})=>{
+    const ng=nextGate(p,today);
+    const od=odMap[p.name]||0;
+    L.push(`${p.name}  (${p.pm||'—'})`);
+    let l2=`   ${String(p.pct).padStart(3)}%  ${(h.state==='ontrack'&&h.expectedPct==null)?'[in progress]':(flag[h.state]||'')}`;
+    if(p.finishISO) l2+=`  · due ${fmtMDY(p.finishISO)}`;
+    if(h.state==='behind' && h.behindBy!=null) l2+=` (${h.behindBy}% behind schedule)`;
+    L.push(l2);
+    L.push(`   Next gate: ${ng? (ng.name+' — '+fmtMDY(ng.dateISO)) : '—'}`);
+    if(od) L.push(`   ⚠ ${od} overdue task${od>1?'s':''}`);
+    L.push('');
+  });
+  if(!active.length) L.push('No active projects.');
+  L.push('— generated from the MRA Shop Floor dashboard'+(D.generatedText?' · data as of '+D.generatedText:''));
+  return L.join('\n');
+}
+function openStatus(){
+  document.getElementById('statusDate').textContent = fmtMDY((window.MRA_DATA||{}).todayISO||'');
+  document.getElementById('statusBody').textContent = buildStatusText();
+  const b=document.getElementById('copyStatusBtn'); if(b) b.textContent='📋 Copy text';
+  document.getElementById('statusModal').classList.add('show');
+}
+function closeStatus(ev){ if(ev && ev.target!==ev.currentTarget) return; document.getElementById('statusModal').classList.remove('show'); }
+function copyStatus(){
+  const txt=document.getElementById('statusBody').textContent, b=document.getElementById('copyStatusBtn');
+  const ok=()=>{ if(b){ b.textContent='✓ Copied'; setTimeout(()=>{b.textContent='📋 Copy text';},1600);} };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok,()=>fallbackCopy(txt,ok)); }
+  else fallbackCopy(txt,ok);
+}
+function fallbackCopy(txt,ok){ const ta=document.createElement('textarea'); ta.value=txt;
+  ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); ok&&ok(); }catch(e){} document.body.removeChild(ta); }
+function printStatus(){
+  const txt=document.getElementById('statusBody').textContent;
+  const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
+  const css=`@page{size:letter portrait;margin:.6in}body{font-family:'Segoe UI',Arial,sans-serif;color:#23272e;margin:0}`+
+    `.bar{background:#23272e;color:#fff;padding:11px 18px;font-size:13px;display:flex;gap:14px;align-items:center}`+
+    `.bar button{background:#e04826;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer}`+
+    `.sheet{max-width:7.6in;margin:22px auto;padding:0 .2in}h1{font-size:20px;color:#23272e;border-bottom:3px solid #e04826;padding-bottom:8px}`+
+    `pre{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12.5px;line-height:1.55;white-space:pre-wrap}`+
+    `@media print{.bar{display:none}.sheet{margin:0}}`;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MRA Project Status</title><style>${css}</style></head><body>`+
+    `<div class="bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><span>Use your browser's “Save as PDF”.</span></div>`+
+    `<div class="sheet"><h1>📤 MRA Project Status</h1><pre>${esc(txt)}</pre></div></body></html>`);
+  w.document.close();
+}
 let UP_DATA=null;
 function openUpload(){
   if(!ensureAuth("upload a project template")) return;
@@ -2443,6 +2540,40 @@ function projStatus(p, today){
   if(p.startISO && p.startISO>today) return "upcoming";
   return "active";
 }
+/* Schedule health: compare % complete against % of the timeline elapsed.
+   late = past finish & not done · behind = >=15 pts under expected · else on track. */
+function projHealth(p, today){
+  if(p.pct>=100) return {state:'done'};
+  if(p.startISO && p.startISO>today) return {state:'upcoming'};
+  let exp=null;
+  if(p.startISO && p.finishISO && p.finishISO>p.startISO){
+    const s=parseISO(p.startISO).getTime(), f=parseISO(p.finishISO).getTime(), n=parseISO(today).getTime();
+    exp=Math.max(0,Math.min(100,Math.round((n-s)/(f-s)*100)));
+  }
+  const behindBy = (exp!=null) ? exp-p.pct : null;
+  if(p.finishISO && p.finishISO<today && p.pct<100) return {state:'late', expectedPct:exp, behindBy};
+  if(behindBy!=null && behindBy>=15) return {state:'behind', expectedPct:exp, behindBy};
+  return {state:'ontrack', expectedPct:exp, behindBy};
+}
+const HEALTH_RANK={late:0, behind:1, ontrack:2, upcoming:3, done:9};
+function overdueByProject(D){
+  const m={}; (D.teamTasks||[]).forEach(t=>{ if(t.dueISO && t.dueISO<D.todayISO) m[t.project]=(m[t.project]||0)+1; });
+  return m;
+}
+function nextGate(p, today){
+  return (p.milestones||[]).filter(m=>!m.done && m.dateISO>=today)
+    .sort((a,b)=>a.dateISO.localeCompare(b.dateISO))[0] || null;
+}
+function riskListPop(title, list){
+  let h=`<h4>${esc(title)}</h4>`;
+  if(!list||!list.length){ h+=`<div class="pp-sub">none — every project's on track 🎉</div>`; return h; }
+  h+=`<div class="pp-sub">${list.length} need attention</div><div class="pp-ms">`;
+  h+= list.slice(0,24).map(x=>{const p=x.p, hh=x.h;
+    const tag=hh.state==='late'?'past due':(hh.behindBy!=null?hh.behindBy+'% behind':'behind');
+    return `<div>• ${esc(p.name)} <span style="color:var(--muted)">— ${esc(p.pm||'—')} · ${p.pct}% · ${tag}</span></div>`;}).join('');
+  if(list.length>24) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-24} more…</div>`;
+  return h+`</div>`;
+}
 function projListPop(title, list){
   let h=`<h4>${esc(title)}</h4>`;
   if(!list||!list.length){ h+=`<div class="pp-sub">none</div>`; return h; }
@@ -2473,16 +2604,27 @@ function renderProjects(D){
   projects.forEach(p=>(p.milestones||[]).forEach(m=>{const d=parseISO(m.dateISO);
     if(d>=t && d<=horizon) upMs.push({proj:p.name,color:p._color,...m});}));
   upMs.sort((a,b)=>a.dateISO.localeCompare(b.dateISO));
+  // schedule health + at-risk projects
+  const health=new Map(); projects.forEach(p=>health.set(p, projHealth(p,today)));
+  const atRisk=projects.map(p=>({p,h:health.get(p)})).filter(x=>x.h.state==='late'||x.h.state==='behind')
+    .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || (b.h.behindBy||0)-(a.h.behindBy||0));
+  // missed milestone gates (date passed, not done, project not yet complete)
+  const missed=[];
+  projects.forEach(p=>{ if(p.pct>=100) return; (p.milestones||[]).forEach(m=>{ if(!m.done && m.dateISO<today) missed.push({proj:p.name,color:p._color,...m}); }); });
+  missed.sort((a,b)=>a.dateISO.localeCompare(b.dateISO));
+  const odMap=overdueByProject(D);
   const pk=[
     {n:projects.length,l:"PROJECTS",c:"proj"},
     {n:active.length,l:"IN PROGRESS",c:"active"},
+    {n:atRisk.length,l:"AT RISK",c:"over"},
     {n:upcoming.length,l:"UPCOMING",c:"sched"},
     {n:done.length,l:"COMPLETED",c:"ship"},
     {n:upMs.length,l:"MILESTONES / 60D",c:"tasks"},
   ];
   document.getElementById('projKpis').innerHTML=pk.map((k,idx)=>{
     const key='pk'+idx;
-    KPIPOP[key] = k.l==='MILESTONES / 60D' ? msListPop('Milestones · next 60 days', upMs)
+    KPIPOP[key] = k.l==='AT RISK' ? riskListPop('At risk · behind or past due', atRisk)
+               : k.l==='MILESTONES / 60D' ? msListPop('Milestones · next 60 days', upMs)
                : k.l==='IN PROGRESS' ? projListPop('In progress', active)
                : k.l==='UPCOMING' ? projListPop('Upcoming', upcoming)
                : k.l==='COMPLETED' ? projListPop('Completed', done)
@@ -2505,6 +2647,7 @@ function renderProjects(D){
     label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
     startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
     barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p),
+    cls:'clickable', onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
     _has:!!barGeom(p.startISO,p.finishISO,win)
   })).filter(r=>r._has)
     .sort((a,b)=>(a.startISO||"").localeCompare(b.startISO||""));
@@ -2530,23 +2673,40 @@ function renderProjects(D){
     `</div><div class="v">${p.tot}</div></div>`).join("");
   document.getElementById('pmCount').textContent=pmArr.length+" PMs";
 
-  // Upcoming milestones
-  document.getElementById('milestones').innerHTML=upMs.length?upMs.slice(0,12).map(m=>{
+  // Milestones panel: missed gates first (red), then upcoming 60-day
+  let msHtml='';
+  if(missed.length){
+    msHtml += `<div class="missed-hd">⚠ Missed gates (${missed.length})</div>`
+      + missed.slice(0,8).map(m=>{ const late=Math.abs(daysBetween(m.dateISO,today));
+        return `<div class="row"><div><div class="lead">${esc(m.name)}</div>`+
+          `<div class="meta" style="color:${m.color}">${esc(m.proj)}</div></div>`+
+          `<div class="right"><span class="badge red">${late}d late</span></div></div>`;}).join("")
+      + (missed.length>8?`<div class="meta" style="color:var(--muted);margin:3px 0 8px">+${missed.length-8} more…</div>`:'');
+  }
+  msHtml += upMs.length?upMs.slice(0,12).map(m=>{
     const dl=daysBetween(m.dateISO,today);
     const badge=dl<=7?`<span class="badge red">${dl}d</span>`:dl<=21?`<span class="badge amber">${dl}d</span>`:`<span class="badge grey">${fmtMD(m.dateISO)}</span>`;
     return `<div class="row"><div><div class="lead">${esc(m.name)}</div>`+
       `<div class="meta" style="color:${m.color}">${esc(m.proj)}</div></div><div class="right">${badge}</div></div>`;
-  }).join(""):`<div class="empty">No milestones in the next 60 days</div>`;
-  document.getElementById('msCount').textContent=upMs.length;
+  }).join(""):(missed.length?'':`<div class="empty">No milestones in the next 60 days</div>`);
+  document.getElementById('milestones').innerHTML=msHtml;
+  document.getElementById('msCount').textContent = upMs.length + (missed.length?` · ${missed.length} missed`:'');
 
-  // Project progress list
-  const prog=projects.slice().filter(p=>projStatus(p,today)!=="done")
-    .sort((a,b)=>(a.finishISO||"9999").localeCompare(b.finishISO||"9999"));
-  document.getElementById('progress').innerHTML=prog.map(p=>
-    `<div class="row" style="cursor:pointer" onclick="openProjectEditor('${escJsAttr(p.name)}')" title="Click to add / edit this project's tasks"><div style="flex:1"><div class="lead">${esc(p.name)} <span class="ttool edit" style="display:inline-block">✎</span></div>`+
-    `<div class="meta">${esc(p.pm||"—")}${p.finishISO?" · due "+fmtMDY(p.finishISO):""}</div>`+
-    `<div class="pmbar" style="margin-top:5px;height:8px"><div class="seg" style="width:${p.pct}%;background:${p._color}"></div></div>`+
-    `</div><div class="right"><span class="badge grey">${p.pct}%</span></div></div>`).join("")||`<div class="empty">No active projects</div>`;
+  // Project progress list — at-risk first, with health chip + expected-progress tick
+  const prog=projects.filter(p=>projStatus(p,today)!=="done").map(p=>({p,h:health.get(p)}))
+    .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||"9999").localeCompare(b.p.finishISO||"9999")));
+  document.getElementById('progress').innerHTML=prog.map(({p,h})=>{
+    const chip = h.state==='late'?`<span class="hchip late">⚠ past due</span>`
+              : h.state==='behind'?`<span class="hchip behind">${h.behindBy!=null?h.behindBy+'% ':''}behind</span>`
+              : (h.state==='ontrack' && h.expectedPct!=null)?`<span class="hchip ok">on track</span>`:'';
+    const od=odMap[p.name]||0;
+    const odTxt=od?` · <span style="color:var(--red);font-weight:700">${od} overdue</span>`:'';
+    const tick=(h.expectedPct!=null && h.state!=='upcoming')
+      ? `<div class="exp-tick" style="left:${h.expectedPct}%" title="should be ~${h.expectedPct}% complete by today"></div>` : '';
+    return `<div class="row" style="cursor:pointer" onclick="openProjectEditor('${escJsAttr(p.name)}')" title="Click to add / edit this project's tasks"><div style="flex:1"><div class="lead">${esc(p.name)} <span class="ttool edit" style="display:inline-block">✎</span>${chip}</div>`+
+    `<div class="meta">${esc(p.pm||"—")}${p.finishISO?" · due "+fmtMDY(p.finishISO):""}${odTxt}</div>`+
+    `<div class="pmbar" style="margin-top:5px;height:8px"><div class="seg" style="width:${p.pct}%;background:${p._color}"></div>${tick}</div>`+
+    `</div><div class="right"><span class="badge grey">${p.pct}%</span></div></div>`;}).join("")||`<div class="empty">No active projects</div>`;
   document.getElementById('progCount').textContent=prog.length;
 
   renderTeam(D);
