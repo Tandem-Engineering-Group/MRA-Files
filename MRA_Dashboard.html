@@ -1242,6 +1242,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.43", date:"2026-06-17", title:"Equipment tab: 🧤 / 🍁 now cross-reference the job #", items:[
+    "The EQUIPMENT tab lists items by job # (e.g. J1557), so it now cross-references that job # to the shop floor and the fleet — a 🧤 shows when the job is in a work bay or its unit is at MRA (e.g. Ferguson BizBox J1557), and a 🍁 when its unit is Canadian. Before, equipment never showed either flag." ] },
   { rev:"3.42", date:"2026-06-17", title:"🧤 plant flag now trusts GPS over the board", items:[
     "Fixed the 🧤 \"at the MRA plant\" flag appearing on units that are actually off-site (e.g. 9639 & 3005 in Hayward CA, 6160 in Wisconsin). Live GPS now wins, and it matches the MRA plant precisely — the MRA geofence / E. Whitcomb address, NOT just the city of Madison Heights (so a unit at another shop in town, like 11 Mile Truck & Axle, no longer counts). The shop-board fallback only applies to units with no GPS at all, and only for real work bays (the Parking Lot status no longer implies on-site)." ] },
   { rev:"3.41", date:"2026-06-17", title:"Shop board: Project vs Maintenance tags", items:[
@@ -3147,7 +3149,7 @@ function renderEquipment(){
   const se=document.getElementById('eqSearch'); const q=(se?se.value:'').trim().toLowerCase();
   const list = q ? JOB_BOARD.filter(e=>(e.n+' '+e.j+' '+(e.d||'')).toLowerCase().indexOf(q)>=0) : JOB_BOARD;
   grid.innerHTML = list.length
-    ? list.map(e=>`<div class="eqcard"><div><div class="nm">${esc(e.n)}${canFlag(e.n+' '+e.j+' '+(e.d||''))}${plantFlag(e.n+' '+e.j)}</div>${e.d?`<div class="ds" title="${escA(e.d)}">${esc(e.d)}</div>`:''}</div><span class="jb">${esc(e.j)}</span></div>`).join('')
+    ? list.map(e=>`<div class="eqcard"><div><div class="nm">${esc(e.n)}${canFlagEquip(e)}${plantFlagEquip(e)}</div>${e.d?`<div class="ds" title="${escA(e.d)}">${esc(e.d)}</div>`:''}</div><span class="jb">${esc(e.j)}</span></div>`).join('')
     : `<div class="empty">No equipment matches “${esc(q)}”</div>`;
   const c=document.getElementById('eqCount'); if(c) c.textContent = q ? (list.length+' of '+JOB_BOARD.length) : (JOB_BOARD.length+' jobs');
 }
@@ -3235,6 +3237,22 @@ function plantKeys(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_plantG
   return _plantKeys; }
 function atPlant(s){ if(!s) return false; return plantKeys().has(_normKey(s)); }
 function plantFlag(s){ return atPlant(s)?' <span class="mitten" title="At the MRA plant — back home in the mitten 🧤 (Madison Heights, MI)">🧤</span>':''; }
+// EQUIPMENT items link by JOB # (e.g. J1557), not fleet #. Build job#→flag indexes: a job is "at the
+// plant" if a floor job with that # is in a work bay OR a fleet unit working that # is at MRA; it's
+// Canadian if a fleet unit working that # is Canadian. So equipment inherits the right flag.
+let _ejGen=null,_plantJobs=new Set(),_canJobs=new Set();
+function _equipJobIndex(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_ejGen) return;
+  _ejGen=g; _plantJobs=new Set(); _canJobs=new Set();
+  ((D&&D.jobs)||[]).forEach(j=>{ if(!/^bay\s/i.test(String(j.bay||''))) return;
+    (String(j.jobNum||'').match(/\d{3,5}/g)||[]).forEach(n=>_plantJobs.add(n)); });
+  ((D&&D.fleetio&&D.fleetio.fleet)||[]).forEach(v=>{ const jns=String(v.tour||'').match(/\d{3,5}/g)||[]; if(!jns.length) return;
+    const atp=atPlant(v.f), can=isCanadian({rs:v.rs,nm:v.nm,m:v.mk});
+    jns.forEach(n=>{ if(atp)_plantJobs.add(n); if(can)_canJobs.add(n); }); }); }
+function _ejnums(e){ return (String(e&&e.j||'').match(/\d{3,5}/g)||[]); }
+function atPlantEquip(e){ _equipJobIndex(); if(_ejnums(e).some(n=>_plantJobs.has(n))) return true; return atPlant((e&&e.n||'')+' '+(e&&e.j||'')); }
+function canEquip(e){ _equipJobIndex(); if(_ejnums(e).some(n=>_canJobs.has(n))) return true; return canAsset((e&&e.n||'')+' '+(e&&e.j||'')+' '+(e&&e.d||'')); }
+function plantFlagEquip(e){ return atPlantEquip(e)?' <span class="mitten" title="At the MRA plant — back home in the mitten 🧤 (Madison Heights, MI)">🧤</span>':''; }
+function canFlagEquip(e){ return canEquip(e)?' <span title="Canadian asset">🍁</span>':''; }
 
 function renderFleet(){
   const tb=document.getElementById('fleetBody'); if(!tb) return;
