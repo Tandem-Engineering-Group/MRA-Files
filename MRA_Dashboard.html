@@ -102,6 +102,8 @@
   .gwinlab{min-width:34px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums}
   .projsearch{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 10px; font-size:12px; font-family:inherit; margin-left:12px; width:210px; font-weight:400}
   .mitten{font-size:14px; vertical-align:middle; line-height:1}
+  .mappin{text-decoration:none; cursor:pointer; opacity:.8}
+  .mappin:hover{opacity:1}
   .authpill{margin-left:10px; background:rgba(34,197,94,.15); border:1px solid var(--green); color:#86efac; border-radius:20px; padding:7px 13px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap}
   .authpill:hover{background:rgba(34,197,94,.3); color:#bbf7d0}
   .rb{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
@@ -733,7 +735,7 @@
     <div class="panel">
       <h2>Equipment — Job #s <span class="count" id="eqCount"></span></h2>
       <div class="eqbar">
-        <input id="eqSearch" class="eqsearch" type="search" placeholder="Find equipment or J#…" oninput="renderEquipment()" />
+        <input id="eqSearch" class="eqsearch" type="search" placeholder="Find equipment or J#…" oninput="renderEquipment()" title="Search equipment by name, description or job # (e.g. J1557)" />
         <select id="eqFlag" onchange="renderEquipment()" title="Filter by flag — in Michigan 🧤 or Canadian 🍁"><option value="">All flags</option><option value="plant">🧤 In Michigan</option><option value="can">🍁 Canadian</option></select>
       </div>
       <div class="eqgrid" id="eqGrid"></div>
@@ -747,7 +749,7 @@
         <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">live roster from Fleetio · 📍 location live from Samsara GPS (equipped units) · compliance <span style="color:#fca5a5">red = expired/overdue</span>, <span style="color:var(--amber)">amber = due soon</span> · IFTA from the office list</span>
       </h2>
       <div class="fltbar">
-        <input id="fleetSearch" type="search" placeholder="Find unit, job, driver, plate…" oninput="renderFleet()" />
+        <input id="fleetSearch" type="search" placeholder="Find unit, job, driver, plate…" oninput="renderFleet()" title="Search by fleet #, type, make, job/tour, plate, VIN or location — tip: type 'canada' to list Canadian units" />
         <select id="fleetType" onchange="renderFleet()"></select>
         <select id="fleetFlag" onchange="renderFleet()" title="Filter by flag — in Michigan 🧤 or Canadian 🍁"><option value="">All flags</option><option value="plant">🧤 In Michigan</option><option value="can">🍁 Canadian</option></select>
         <button class="expandbtn" id="fleetIssues" onclick="this.classList.toggle('on');renderFleet()" title="Show only units with expired or soon-expiring compliance">⚠ Compliance issues only</button>
@@ -755,7 +757,7 @@
       <div class="fltwrap">
         <table class="flt">
           <thead><tr>
-            <th>Fleet #</th><th>Type</th><th>Year</th><th>Make</th><th>Job / Tour</th><th>Location</th><th>Status</th><th>Miles</th><th>Open</th><th>DOT</th><th>Reg</th><th>Ins</th><th>IFTA</th>
+            <th title="Unit / fleet number · 🍁 = Canadian, 🧤 = in Michigan">Fleet #</th><th title="Vehicle type (from Fleetio)">Type</th><th>Year</th><th>Make</th><th title="Current job / tour — Fleetio Group, else the office list">Job / Tour</th><th title="Live GPS location (Samsara) — click the 📍 to open it in Google Maps">Location</th><th title="Fleetio status — Active / In Shop / Inactive">Status</th><th title="Current odometer / engine hours (Fleetio)">Miles</th><th title="Open Fleetio issues + work orders — hover the badge for the breakdown">Open</th><th title="DOT / annual inspection — next due date (Fleetio)">DOT</th><th title="Registration renewal — next due date (Fleetio)">Reg</th><th title="Insurance renewal — next due date (Fleetio)">Ins</th><th title="IFTA — from the office list (Fleetio doesn't track it)">IFTA</th>
           </tr></thead>
           <tbody id="fleetBody"></tbody>
         </table>
@@ -1245,6 +1247,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.46", date:"2026-06-17", title:"Click-to-map 📍 + more hover help", items:[
+    "Every located unit now has a 📍 — click it to open that unit's spot in Google Maps (on FLEET, plus the FLEETIO issue / work-order / service rows and the By-Trailer cards). Exact pin once the updated export runs; address-level until then.",
+    "Added hover help across FLEET / FLEETIO / EQUIPMENT — the column headers (Status, Miles, Open, DOT/Reg/Ins/IFTA, Location), the search boxes, the flag pickers and the trailer cards now explain what they are on hover." ] },
   { rev:"3.45", date:"2026-06-17", title:"🧤 mitten = in Michigan (not just MRA)", items:[
     "The 🧤 now means the unit is in Michigan (the mitten state) — based on its GPS state, or sitting in a work bay at the shop — instead of only the MRA plant address. Off-state units (e.g. Hayward CA, Wisconsin) stay unflagged; the flag dropdown's option is now '🧤 In Michigan'." ] },
   { rev:"3.44", date:"2026-06-17", title:"Flag picker: filter by 🧤 / 🍁", items:[
@@ -3061,7 +3066,7 @@ function renderFleetio(D){
             : s.c.soon?`<span class="badge amber">${(s.c.days!=null&&s.c.days>=0)?'due '+s.c.days+'d':'due soon'}</span>`
             : (s.dueISO?`<span class="badge grey">${fmtMD(s.dueISO)}</span>`:`<span class="badge grey">${esc(s.meterDue?('@ '+s.meterDue):'—')}</span>`);
     return `<div class="row"><div><div class="lead">${esc(s.service||'Service')}</div>`+
-      `<div class="meta">${esc(s.asset||'')}${canFlag(s.asset)}${plantFlag(s.asset)}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
+      `<div class="meta">${esc(s.asset||'')}${canFlag(s.asset)}${plantFlag(s.asset)}${mapPinFor(s.asset)}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
   }).join('') : `<div class="empty">No service ${FFILTER==='svc_over'?'overdue':FFILTER==='svc_soon'?'due soon':'reminders due'}</div>`);
   document.getElementById('fSvcCount').textContent=svcSorted.length;
 
@@ -3083,7 +3088,7 @@ function renderFleetio(D){
     const wa=fAsg(i); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = i.reporter?` · ✍ ${esc(i.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${esc(i.summary||('Issue '+(i.num||'')))}</div>`+
-      `<div class="meta">${esc(i.asset||'')}${canFlag(i.asset)}${plantFlag(i.asset)}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
+      `<div class="meta">${esc(i.asset||'')}${canFlag(i.asset)}${plantFlag(i.asset)}${mapPinFor(i.asset)}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
       `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${pr} ${b}</div></div>`;
   }).join('') : `<div class="empty">${issEmpty}</div>`);
   document.getElementById('fIssueCount').textContent=issues.length;
@@ -3098,7 +3103,7 @@ function renderFleetio(D){
     const wa=fAsg(w); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = w.reporter?` · ✍ ${esc(w.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${esc(w.summary||('WO '+(w.num||'')))}</div>`+
-      `<div class="meta">${esc(w.asset||'')}${canFlag(w.asset)}${plantFlag(w.asset)}${w.jobNum?' · '+esc(w.jobNum):''}${who}${rby}</div>`+
+      `<div class="meta">${esc(w.asset||'')}${canFlag(w.asset)}${plantFlag(w.asset)}${mapPinFor(w.asset)}${w.jobNum?' · '+esc(w.jobNum):''}${who}${rby}</div>`+
       `${w.detail?`<div class="det" title="${escA(w.detail)}">${esc(w.detail)}</div>`:''}</div>`+
       `<div class="right">${st}${age!=null?` <span class="badge grey">${age}d</span>`:''}</div></div>`;
   }).join('') : `<div class="empty">No ${(FASSIGN||FREPORT)?'matching work orders':'open work orders'}</div>`);
@@ -3128,7 +3133,7 @@ function renderTrailerCards(){
   grid.innerHTML = arr.length ? arr.map((t,idx)=>{
     const edge = t.svcOver?'#ef4444' : (t.iss?'#f59e0b' : (t.wo?'#3b82f6' : '#22c55e'));
     const key='ft'+idx; BARPOP[key]=trailerPop(t);
-    return `<div class="teamcard" style="border-left-color:${edge}" onclick="showBarPop(event,'${key}')"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}${canFlag((t.name||'')+' '+(t.jobNum||''))}${plantFlag(t.name||t.jobNum)}</span>`+
+    return `<div class="teamcard" style="border-left-color:${edge}" onclick="showBarPop(event,'${key}')" title="Click for this unit's open issues / work orders / service due"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}${canFlag((t.name||'')+' '+(t.jobNum||''))}${plantFlag(t.name||t.jobNum)}${mapPinFor(t.name||t.jobNum)}</span>`+
     `<span class="tc">${t.iss+t.wo+t.svc}</span></div><div class="tmeta">`+
       (t.iss?`<span class="badge amber">${t.iss} issue${t.iss>1?'s':''}</span>`:'')+
       (t.wo?`<span class="badge blue">${t.wo} WO</span>`:'')+
@@ -3267,6 +3272,12 @@ function canFlagEquip(e){ return canEquip(e)?' <span title="Canadian asset">🍁
 // Flag picker (FLEETIO): '' = any, 'plant' = 🧤 at MRA, 'can' = 🍁 Canadian. Reads the dropdown live.
 function fioFlagOK(name){ const fg=(document.getElementById('fioFlag')||{}).value||''; if(!fg) return true; return fg==='can'?canAsset(name):atPlant(name); }
 function setFioFlag(){ if(window.MRA_DATA) renderFleetio(window.MRA_DATA); if(typeof renderTrailerCards==='function') renderTrailerCards(); }
+// Click-to-map 📍 — opens the unit's spot in Google Maps. Uses exact lat/long when the export sends
+// it, otherwise falls back to a maps search on the address text (so it works even before that.)
+function mapHref(l){ if(!l) return ''; if(l.lat!=null&&l.lng!=null) return 'https://www.google.com/maps?q='+l.lat+','+l.lng;
+  const a=l.full||l.place; return a?('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a)):''; }
+function mapPin(l){ const h=mapHref(l); return h?` <a class="mappin" href="${h}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open this location in Google Maps">📍</a>`:''; }
+function mapPinFor(name){ const LOC=(window.MRA_DATA&&window.MRA_DATA.fleetio&&window.MRA_DATA.fleetio.locations)||{}; return mapPin(LOC[_normKey(name)]); }
 
 function renderFleet(){
   const tb=document.getElementById('fleetBody'); if(!tb) return;
@@ -3317,7 +3328,7 @@ function renderFleet(){
       `<td class="mut">${esc(r.y||'')}</td>`+
       `<td>${esc(r.m||'')}</td>`+
       `<td>${esc(r.j||'—')}</td>`+
-      `<td class="loc"${l?` title="${locTitle}"`:''}>${locTxt}</td>`+
+      `<td class="loc"${l?` title="${locTitle}"`:''}>${locTxt}${mapPin(l)}</td>`+
       `<td>${fleetStatPill(r.stat)}</td>`+
       `<td class="fmi">${fmtMiles(r.mi,r.mu)}</td>`+
       `<td>${fleetOpenBadge(r)}</td>`+
