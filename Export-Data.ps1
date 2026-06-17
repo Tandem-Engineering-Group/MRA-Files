@@ -411,6 +411,26 @@ try {
 # --- Write payload ----------------------------------------------------------
 $now = Get-Date
 
+# --- Shared: vehicle location map (filled by Samsara below) + fleet#/place helpers ---
+$fLoc = @{}
+function NormFleet($s){ $t = ((([string]$s).Trim()) -split '\s+')[0]; $t = $t.Trim()
+    if ($t -match '^(\d+)G$') { return ([int64]$matches[1]).ToString() }   # genset "1546G" -> base unit "1546"
+    if ($t -match '^\d+$') { return ([int64]$t).ToString() }
+    return $t.ToUpper() }
+# Reduce a full address to "City, ST" — handles US ("…, MA, 01505") and Canada ("…, ON N8Y 1L6").
+function PlaceFromAddr($addr){
+    $addr = ([string]$addr).Trim(); if ($addr -eq '') { return '' }
+    $parts = $addr -split ','
+    for ($k=0; $k -lt $parts.Count; $k++){
+        if ($parts[$k].Trim() -match '^([A-Z]{2})(?:\s+[0-9A-Za-z][0-9A-Za-z\s-]*)?$') {
+            $st = $matches[1]
+            $city = if ($k-1 -ge 0) { $parts[$k-1].Trim() } else { '' }
+            if ($city) { return "$city, $st" } else { return $st }
+        }
+    }
+    if ($addr.Length -gt 40) { return $addr.Substring(0,40) } else { return $addr }
+}
+
 # --- Fleetio (optional) — reads fleetio.txt: line1 = API key, line2 = Account Token ---
 $fleetio = $null
 $FleetioTokenFile = Join-Path $ScriptDir 'fleetio.txt'
@@ -505,33 +525,11 @@ if (Test-Path $FleetioTokenFile) {
             })
         }
 
-        # --- Vehicle locations (GPS units only) -> map keyed by normalized fleet # ---
-        # Matches the static FLEET roster on the dashboard by the leading token of the
-        # Fleetio asset name (e.g. "1546 FREIGHTLINER ..." -> "1546"). Only powered units
-        # (buses/tractors/trucks/RVs/vans) get queried, to keep the per-vehicle calls down;
-        # trailers/PODs have no tracker. Reduces the geocoded address to "City, ST".
-        $fLoc = @{}
-        function NormFleet($s){ $t = ((([string]$s).Trim()) -split '\s+')[0]; $t = $t.Trim()
-            if ($t -match '^\d+$') { return ([int64]$t).ToString() } return $t.ToUpper() }
-        # Reduce a full geocoded address to "City, ST". The state part is anchored as a
-        # 2-UPPERCASE-letter token optionally followed by a ZIP and nothing else, so
-        # "St. Augustine" (mixed case) is never mistaken for a state.
-        function PlaceFromAddr($addr){
-            $addr = ([string]$addr).Trim(); if ($addr -eq '') { return '' }
-            $parts = $addr -split ','
-            for ($k=0; $k -lt $parts.Count; $k++){
-                if ($parts[$k].Trim() -match '^([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?\s*$') {
-                    $st = $matches[1]
-                    $city = if ($k-1 -ge 0) { $parts[$k-1].Trim() } else { '' }
-                    if ($city) { return "$city, $st" } else { return $st }
-                }
-            }
-            if ($addr.Length -gt 40) { return $addr.Substring(0,40) } else { return $addr }
-        }
-        function EntryStamp($e){ foreach($p in @('located_at','created_at','recorded_at','updated_at')){ if($e.$p){ try { return [datetime]$e.$p } catch {} } } return [datetime]::MinValue }
-        function GrabAddr($o){ foreach($p in @('geocoded_address','formatted_address','address','name','description','place_name')){ if($o.$p){ return [string]$o.$p } } return '' }
-        $LocDbg = Join-Path $ScriptDir 'fleetio-loc-debug.txt'
-        # The vehicles endpoint uses Fleetio's cursor-paginated API: { records:[...], next_cursor }.
+        # --- Fleetio vehicles roster + compliance (renewal reminders) probe ---
+        # Location now comes from Samsara (below). This pulls the cursor-paginated vehicle
+        # roster + the renewal reminders so we can see what compliance data Fleetio holds
+        # (DOT/Reg/Ins/IFTA) for the FLEET-tab rebuild. Writes fleetio-debug.txt.
+        $FleetDbg = Join-Path $ScriptDir 'fleetio-debug.txt'
         function Get-FleetioCursor($path, $headers) {
             $all = New-Object System.Collections.ArrayList; $cursor = $null; $guard = 0
             do { $guard++
@@ -546,39 +544,26 @@ if (Test-Path $FleetioTokenFile) {
             return $all
         }
         try {
-            "=== Fleetio location debug  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $LocDbg -Encoding utf8
+            "=== Fleetio roster/compliance probe  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $FleetDbg -Encoding utf8
             $veh = @(Get-FleetioCursor 'vehicles' $fhead)
-            "vehicles fetched: $($veh.Count)" | Out-File $LocDbg -Append -Encoding utf8
-            $withLoc = @($veh | Where-Object { $_.current_location_entry_id })   # only these have a GPS fix
-            "vehicles with a location: $($withLoc.Count)" | Out-File $LocDbg -Append -Encoding utf8
-            $locN = 0; $tried = 0; $dumpedLE = $false
-            foreach ($v in $withLoc) {
-                $key = NormFleet $v.name; if ($key -eq '') { continue }
-                if ($tried -ge 250) { break }   # safety cap
-                $tried++
-                $addr=''; $lat=$null; $lng=$null; $atISO=$null
+            "vehicles fetched: $($veh.Count)" | Out-File $FleetDbg -Append -Encoding utf8
+            "with a Fleetio location entry: $((@($veh | Where-Object { $_.current_location_entry_id })).Count)" | Out-File $FleetDbg -Append -Encoding utf8
+            "with renewal reminders: $((@($veh | Where-Object { $_.vehicle_renewal_reminders_count -gt 0 })).Count)" | Out-File $FleetDbg -Append -Encoding utf8
+            ($veh | Select-Object -First 1 -Property id,name,vehicle_type_name,vehicle_status_name,year,make,model,license_plate,registration_state,primary_meter_value,primary_meter_unit,group_name,issues_count,work_orders_count,service_reminders_count,vehicle_renewal_reminders_count | ConvertTo-Json -Depth 4) | Out-File $FleetDbg -Append -Encoding utf8
+            foreach ($ep in @('vehicle_renewal_reminders','renewal_reminders')) {
                 try {
-                    $leResp = Invoke-WebRequest -Uri "https://secure.fleetio.com/api/v1/vehicles/$($v.id)/location_entries?per_page=5" -Headers $fhead -UseBasicParsing -Method GET -TimeoutSec 20
-                    if (-not $dumpedLE) { $dumpedLE = $true; "--- first location_entries response (vehicle '$($v.name)' id $($v.id)) ---" | Out-File $LocDbg -Append -Encoding utf8; $leResp.Content | Out-File $LocDbg -Append -Encoding utf8 }
-                    $o = $leResp.Content | ConvertFrom-Json
-                    $entries = if ($null -ne $o.records) { @($o.records) } else { @($o) }
-                    if ($entries.Count -gt 0) {
-                        $e = $entries | Sort-Object { EntryStamp $_ } -Descending | Select-Object -First 1
-                        $addr = GrabAddr $e; if ($e.latitude) { $lat=$e.latitude; $lng=$e.longitude }
-                        $st = EntryStamp $e; if ($st -ne [datetime]::MinValue) { $atISO = $st.ToString('o') }
+                    $rr = @(Get-FleetioCursor $ep $fhead)
+                    "[$ep] fetched: $($rr.Count)" | Out-File $FleetDbg -Append -Encoding utf8
+                    if ($rr.Count -gt 0) {
+                        $types = @($rr | ForEach-Object { $_.vehicle_renewal_type_name } | Where-Object { $_ } | Sort-Object -Unique)
+                        "[$ep] types: $($types -join ' | ')" | Out-File $FleetDbg -Append -Encoding utf8
+                        ($rr | Select-Object -First 5 | ConvertTo-Json -Depth 5) | Out-File $FleetDbg -Append -Encoding utf8
+                        break
                     }
-                } catch { "loc_entries error '$($v.name)': $($_.Exception.Message)" | Out-File $LocDbg -Append -Encoding utf8 }
-                $place = PlaceFromAddr $addr
-                if ($place -eq '' -and $lat -and $lng) { $place = ("{0:N3}, {1:N3}" -f [double]$lat, [double]$lng) }
-                if ($place -eq '') { continue }
-                $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO }
-                $locN++
-                if ($locN -le 8) { "LOCATED $key -> '$place'  (addr='$addr' at='$atISO')" | Out-File $LocDbg -Append -Encoding utf8 }
-                Start-Sleep -Milliseconds 200
+                } catch { "[$ep] error: $($_.Exception.Message)" | Out-File $FleetDbg -Append -Encoding utf8 }
             }
-            "located total: $locN  (queried: $tried)" | Out-File $LocDbg -Append -Encoding utf8
-            Write-Output "  -> Fleetio: located $locN unit(s); debug -> fleetio-loc-debug.txt"
-        } catch { "FATAL: $($_.Exception.Message)" | Out-File $LocDbg -Append -Encoding utf8; Write-Output "  -> Fleetio location pull failed: $($_.Exception.Message)" }
+            Write-Output "  -> Fleetio: $($veh.Count) vehicles; roster/compliance probe -> fleetio-debug.txt"
+        } catch { "FATAL: $($_.Exception.Message)" | Out-File $FleetDbg -Append -Encoding utf8; Write-Output "  -> Fleetio roster probe failed: $($_.Exception.Message)" }
 
         $fleetio = [PSCustomObject]@{
             generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt')
@@ -589,6 +574,49 @@ if (Test-Path $FleetioTokenFile) {
     } catch {
         Write-Output "  -> Fleetio fetch failed: $($_.Exception.Message)"
     }
+}
+
+# --- Samsara (optional) — LIVE GPS location, reads samsara.txt: line1 = API token ---
+# Samsara is the upstream GPS source (Fleetio only mirrors it nightly). One paginated call
+# gets every tracked vehicle's current location + a reverse-geocoded address. Fills the shared
+# $fLoc (keyed by fleet #), which $fleetio.locations references. Matches by the leading token
+# of the Samsara vehicle name. Writes samsara-debug.txt.
+$SamsaraTokenFile = Join-Path $ScriptDir 'samsara.txt'
+if (Test-Path $SamsaraTokenFile) {
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $stoken = (Get-Content $SamsaraTokenFile | Select-Object -First 1).Trim()
+        $shead  = @{ 'Authorization' = "Bearer $stoken"; 'Accept' = 'application/json' }
+        $SamDbg = Join-Path $ScriptDir 'samsara-debug.txt'
+        "=== Samsara GPS  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $SamDbg -Encoding utf8
+        $cursor = $null; $guard = 0; $samN = 0; $dumped = $false; $hasNext = $false
+        do {
+            $guard++
+            $url = "https://api.samsara.com/fleet/vehicles/stats?types=gps"
+            if ($cursor) { $url += "&after=$([uri]::EscapeDataString([string]$cursor))" }
+            $resp = Invoke-WebRequest -Uri $url -Headers $shead -UseBasicParsing -Method GET -TimeoutSec 30
+            $obj  = $resp.Content | ConvertFrom-Json
+            if (-not $dumped) { $dumped = $true; "--- first page (first 3 vehicles) ---" | Out-File $SamDbg -Append -Encoding utf8; ($obj.data | Select-Object -First 3 | ConvertTo-Json -Depth 6) | Out-File $SamDbg -Append -Encoding utf8 }
+            foreach ($v in @($obj.data)) {
+                $key = NormFleet $v.name; if ($key -eq '') { continue }
+                $g = $v.gps; if (-not $g) { continue }
+                $addr = ''
+                if ($g.reverseGeo -and $g.reverseGeo.formattedLocation) { $addr = [string]$g.reverseGeo.formattedLocation }
+                $place = PlaceFromAddr $addr
+                if ($place -eq '' -and $g.latitude -and $g.longitude) { $place = ("{0:N3}, {1:N3}" -f [double]$g.latitude, [double]$g.longitude) }
+                if ($place -eq '') { continue }
+                $atISO = if ($g.time) { [string]$g.time } else { $null }
+                $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO }
+                $samN++
+                if ($samN -le 8) { "SAM $key -> '$place'  (name='$($v.name)' addr='$addr')" | Out-File $SamDbg -Append -Encoding utf8 }
+            }
+            $cursor  = $obj.pagination.endCursor
+            $hasNext = [bool]$obj.pagination.hasNextPage
+        } while ($hasNext -and $guard -lt 20)
+        "samsara located: $samN" | Out-File $SamDbg -Append -Encoding utf8
+        Write-Output "  -> Samsara: located $samN unit(s); debug -> samsara-debug.txt"
+        if ($null -eq $fleetio) { $fleetio = [PSCustomObject]@{ generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt'); issues=@(); workOrders=@(); service=@(); locations=$fLoc } }
+    } catch { Write-Output "  -> Samsara fetch failed: $($_.Exception.Message)" }
 }
 
 # --- Logistics calendars -> MRA trailer logistics ---------------------------
