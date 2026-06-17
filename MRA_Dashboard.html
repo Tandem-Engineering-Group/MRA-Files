@@ -342,8 +342,8 @@
   .g-bar{position:absolute; top:5px; height:16px; border-radius:5px; border:1px solid;
     display:flex; align-items:center; overflow:hidden; z-index:2}
   .g-fill{position:absolute; left:0; top:0; bottom:0; opacity:.85}
-  .g-hl{position:absolute; top:0; bottom:0; border-radius:3px; pointer-events:none; z-index:4;
-    border:2px solid #38bdf8; background:rgba(56,189,248,.12)}
+  .g-hl{position:absolute; top:1px; bottom:1px; border-radius:4px; pointer-events:none; z-index:4;
+    background:rgba(250,204,21,.30); border:1px solid rgba(250,204,21,.6)}
   .pill.fleet{background:rgba(56,189,248,.16); color:#7dd3fc; border-color:rgba(56,189,248,.45)}
   .taskline.fleet{color:#bae6fd}
   .fladd{display:inline-block; cursor:pointer; color:#7dd3fc; font-weight:700; font-size:10px; line-height:1;
@@ -1083,7 +1083,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
     <p>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
-    <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights — in sky‑blue — every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. Click to turn on/off (remembered per device); works in every range and the full‑screen view. More resources can be added later.</p></div>
+    <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights — as light‑yellow bands — every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. Click to turn on/off (remembered per device); works in every range and the full‑screen view. More resources can be added later.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
     <p>Every Gantt shows dated gridlines on the <b>1st &amp; 15th</b> of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. <span style="color:var(--amber)">◆</span> = milestone gate, <span style="color:var(--red)">▏</span> = today, <span style="color:#93c5fd">blue band</span> = this week.</p></div>
   <div class="hsec"><h4>⑲ 🔧 Fleetio issues on a bay card (FLOOR)</h4>
@@ -1114,6 +1114,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.10", date:"2026-06-17", title:"Cleaner MRA Shop load highlight", items:[
+    "The MRA Shop load highlight is now soft light‑yellow bands instead of blue outlines, and adjacent tasks merge into one continuous band — far less clutter and it reads clearly over any bar color." ] },
   { rev:"3.9", date:"2026-06-17", title:"Readable dates on the Gantts", items:[
     "All Gantt charts now show dated gridlines on the 1st and 15th of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. Very long (All) views stay monthly to avoid clutter." ] },
   { rev:"3.8", date:"2026-06-17", title:"Fleetio: trailer-only on cards, ➕ add as task, auto-close on resolve", items:[
@@ -1866,8 +1868,13 @@ function msPos(iso,win){ const d=parseISO(iso); if(!d) return null;
 function isHlAssignee(who){ return (who||'').trim().toLowerCase()===HL_ASSIGNEE.toLowerCase(); }
 function mraShopSegs(p){
   if(!MRASHOP_HL) return [];
-  return ((p&&p.tasks)||[]).filter(t=>isHlAssignee(t.who) && (t.startISO||t.finISO) && !t.done)
-    .map(t=>({startISO:t.startISO||t.finISO, endISO:t.finISO||t.startISO}));
+  const raw=((p&&p.tasks)||[]).filter(t=>isHlAssignee(t.who) && (t.startISO||t.finISO) && !t.done)
+    .map(t=>{const s=parseISO(t.startISO||t.finISO), e=parseISO(t.finISO||t.startISO); return s&&e?{s:s.getTime(),e:e.getTime()}:null;})
+    .filter(Boolean).sort((a,b)=>a.s-b.s);
+  const merged=[];   // merge overlapping/adjacent spans (within 2 days) into clean bands
+  raw.forEach(x=>{ const last=merged[merged.length-1];
+    if(last && x.s<=last.e+2*DAY){ last.e=Math.max(last.e,x.e); } else merged.push({s:x.s,e:x.e}); });
+  return merged.map(m=>({startISO:localISO(m.s), endISO:localISO(m.e)}));
 }
 function syncMraHlBtns(){ document.querySelectorAll('.mraHlBtn').forEach(b=>{ b.classList.toggle('on',MRASHOP_HL);
   if(b.tagName==='BUTTON') b.textContent=MRASHOP_HL?'🟧 MRA Shop: ON':'🟧 MRA Shop load'; }); }
