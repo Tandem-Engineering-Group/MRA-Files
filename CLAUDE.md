@@ -67,6 +67,15 @@ This repo (`tandem-engineering-group/mra-files`) holds the deployable dashboard:
 Live site: `https://mrashopdash.z13.web.core.windows.net/`
 See `INSTRUCTIONS.md` for the complete Azure deployment runbook.
 
+### ⚠️ Dashboard release checklist (do EVERY time `MRA_Dashboard.html` changes — Rich shouldn't have to remind us)
+
+1. **Build the feature.**
+2. **Update the `? help`** — add/adjust the matching section in `GENERAL_HELP` (and `FLEETIO_HELP` for fleet stuff) so the in-app guide always matches what shipped.
+3. **Bump the rev / CHANGELOG** — add a new entry at the TOP of the `CHANGELOG` array (rev + date + plain-English items). The footer badge + "What's new" modal read from it.
+4. **Deploy** — commit, push, then trigger the `deploy.yml` workflow with `mode=live` (HTML only; leaves `data.js` alone) and verify the new code is live.
+
+Treat help + rev as PART OF the feature, not an afterthought.
+
 ## Pending / requested (not yet built — remind Rich)
 
 - **Replace-by-project import** (deferred 2026-06-11, Rich said "hold for now but
