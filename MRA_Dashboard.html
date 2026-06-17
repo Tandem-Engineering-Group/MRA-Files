@@ -203,6 +203,8 @@
   /* Wall (TV) mode: bound heights + scroll so bays + assignees fit one screen */
   body.wall .baycol{max-height:44vh; overflow-y:auto}
   body.wall .bay-body.autoscroll{max-height:30vh; overflow-y:auto}   /* combined Next Up / On Hold tile scrolls on its own */
+  body.wall .baycol.parkcol{max-height:none; overflow:visible}                /* Parking Lot column: don't scroll the column… */
+  body.wall .baycol.parkcol .bay-body.autoscroll{max-height:19vh}            /* …each card (Parking Lot + Next Up/On Hold) auto-scrolls itself */
   body.wall .asgbody{max-height:30vh}
   .bay-head .name .count{margin-left:6px}
   body.wall #floorView .grid, body.wall #floorGanttPanel{display:none}
@@ -705,7 +707,7 @@
   <div id="fleetView" class="hidden">
     <div class="panel">
       <h2>🚛 Fleet &amp; Compliance <span class="count" id="fleetCount"></span>
-        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">all owned/operated units · expiration <span style="color:#fca5a5">red = expired</span>, <span style="color:var(--amber)">amber = ≤45 days</span></span>
+        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">all owned/operated units · expiration <span style="color:#fca5a5">red = expired</span>, <span style="color:var(--amber)">amber = ≤45 days</span> · 📍 Location is live from Fleetio (GPS-equipped units only)</span>
       </h2>
       <div class="fltbar">
         <input id="fleetSearch" type="search" placeholder="Find unit, job, driver, plate…" oninput="renderFleet()" />
@@ -715,7 +717,7 @@
       <div class="fltwrap">
         <table class="flt">
           <thead><tr>
-            <th>Fleet #</th><th>Type</th><th>Year</th><th>Make</th><th>Job / Tour</th><th>DOT</th><th>Reg</th><th>Ins</th><th>IFTA</th>
+            <th>Fleet #</th><th>Type</th><th>Year</th><th>Make</th><th>Job / Tour</th><th>Location</th><th>DOT</th><th>Reg</th><th>Ins</th><th>IFTA</th>
           </tr></thead>
           <tbody id="fleetBody"></tbody>
         </table>
@@ -1107,7 +1109,7 @@ const GENERAL_HELP = `
     <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs and staff on leave.
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, PM load and team capacity.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
-    <span class="k">EQUIPMENT</span> = searchable list of equipment and their Job #s. <span class="k">FLEET</span> = the physical fleet + compliance.
+    <span class="k">EQUIPMENT</span> = searchable list of equipment and their Job #s. <span class="k">FLEET</span> = the physical fleet + compliance, with a live <b>📍 Location</b> column (last known GPS from Fleetio — City, ST · time ago; hover for the full address). Only GPS-equipped units report a location; trailers/PODs show —.
     <span class="k">HISTORY</span> = search the whole board — any job, person, Job # or task (open <b>and</b> completed), with a time filter. The floor only keeps shipped jobs for ~2 weeks; everything older lives here.</p></div>
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
@@ -1199,6 +1201,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.22", date:"2026-06-17", title:"Wall mode: Parking Lot column scrolls right", items:[
+    "In 📺 Wall mode the Parking Lot and Next Up / On Hold tiles now each auto-scroll on their own, so a tall Parking Lot no longer hides the Next Up / On Hold list (it wasn't scrolling before)." ] },
+  { rev:"3.21", date:"2026-06-17", title:"Fleet tab shows live location", items:[
+    "The FLEET tab has a new Location column — the last known GPS location (City, ST · time ago) pulled live from Fleetio, matched to each unit by fleet number. Hover for the full address.",
+    "Only GPS/telematics-equipped units (buses, tractors, trucks, RVs, vans) report a location; trailers/PODs show —. Needs the updated Export-Data.ps1 running to feed it." ] },
   { rev:"3.20", date:"2026-06-17", title:"Projects toolbar tidied to one line", items:[
     "The PROJECTS action bar is now a single clean row — Edit / Status Report on the left, a 📋 Project Intake group and a 📄 Hard-Date Schedule group as matching pill-boxes (the old intro sentence moved into the ⓘ How to popup)." ] },
   { rev:"3.19", date:"2026-06-17", title:"Spot at-risk projects + Status Report", items:[
@@ -2423,10 +2430,11 @@ function renderFloor(D){
   let bayHtml="";
   for(let i=0;i<physCards.length;i+=2) bayHtml+=`<div class="baycol">`+physCards[i]+(physCards[i+1]||'')+`</div>`;
   // final column: Parking Lot on top, combined Next Up / On Hold below (scrolls)
-  const parkCard=bayCard('Parking Lot', parkingJobs, {emptyTxt:"empty"});
+  const parkCard=bayCard('Parking Lot', parkingJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true});
   const heldCard=bayCard('Next Up / On Hold', heldJobs,
     {expandAll:true, scroll:true, showBay:true, headCount:true, emptyTxt:"none", fixedSt:["Pipeline & holds","open"]});
-  bayHtml+=`<div class="baycol">`+parkCard+heldCard+`</div>`;
+  // parkcol: don't scroll the whole column — let Parking Lot AND Next Up/On Hold each auto-scroll on their own
+  bayHtml+=`<div class="baycol parkcol">`+parkCard+heldCard+`</div>`;
   document.getElementById('bays').innerHTML=bayHtml;
   document.getElementById('bayCount').textContent=physBays.length+" bays";
   const bc=document.getElementById('btnClosed'); if(bc){ bc.classList.toggle('on',SHOWCLOSED); bc.textContent=SHOWCLOSED?'✓ Closed shown':'Show closed'; }
@@ -2988,6 +2996,14 @@ function fltExp(st){
   if(st==='ok')   return '<td><span class="ch ch-ok">OK</span></td>';
   return '<td><span class="ch ch-na">—</span></td>';
 }
+// Normalize a fleet number to match Export-Data.ps1's NormFleet (leading token;
+// pure-digit numbers drop leading zeros; otherwise upper-case).
+function fleetKey(s){ const t=String(s||'').trim().split(/\s+/)[0]; return /^\d+$/.test(t)?String(parseInt(t,10)):t.toUpperCase(); }
+function fleetAgo(iso){ if(!iso) return ''; const d=new Date(iso); if(isNaN(d)) return '';
+  let s=(Date.now()-d.getTime())/1000; if(s<0) s=0;
+  if(s<90) return 'just now'; const m=s/60; if(m<60) return Math.round(m)+'m ago';
+  const h=m/60; if(h<24) return Math.round(h)+'h ago'; const dd=h/24;
+  if(dd<30) return Math.round(dd)+'d ago'; return Math.round(dd/30)+'mo ago'; }
 function renderFleet(){
   const tb=document.getElementById('fleetBody'); if(!tb) return;
   const ty=document.getElementById('fleetType');
@@ -2996,12 +3012,17 @@ function renderFleet(){
   const tf=ty?ty.value:'';
   const issuesEl=document.getElementById('fleetIssues'); const issuesOnly=issuesEl&&issuesEl.classList.contains('on');
   const flag=a=>['dot','reg','ins','ift'].some(k=>a[k]==='exp'||a[k]==='soon');
-  const list=FLEET.filter(a=>(!tf||a.t===tf)&&(!q||[a.f,a.t,a.m,a.j].join(' ').toLowerCase().indexOf(q)>=0)&&(!issuesOnly||flag(a)));
-  tb.innerHTML = list.length ? list.map(a=>
-    `<tr><td class="fnum">${esc(a.f||'—')}</td><td><span class="typ">${esc(a.t||'?')}</span></td>`+
+  const LOC=(window.MRA_DATA&&window.MRA_DATA.fleetio&&window.MRA_DATA.fleetio.locations)||{};
+  const locOf=a=>LOC[fleetKey(a.f)]||null;
+  const list=FLEET.filter(a=>(!tf||a.t===tf)&&(!q||[a.f,a.t,a.m,a.j,(locOf(a)?locOf(a).place:'')].join(' ').toLowerCase().indexOf(q)>=0)&&(!issuesOnly||flag(a)));
+  tb.innerHTML = list.length ? list.map(a=>{
+    const l=locOf(a);
+    const locCell = l ? `${esc(l.place)}${l.atISO?` <span class="mut">· ${esc(fleetAgo(l.atISO))}</span>`:''}` : `<span class="mut">—</span>`;
+    return `<tr><td class="fnum">${esc(a.f||'—')}</td><td><span class="typ">${esc(a.t||'?')}</span></td>`+
     `<td class="mut">${esc(a.y)}</td><td>${esc(a.m)}</td><td>${esc(a.j||'—')}</td>`+
-    fltExp(a.dot)+fltExp(a.reg)+fltExp(a.ins)+fltExp(a.ift)+`</tr>`
-  ).join('') : `<tr><td colspan="9" style="padding:16px;color:var(--faint);font-style:italic">No matching units</td></tr>`;
+    `<td class="loc"${l&&l.full?` title="${escA(l.full)}"`:''}>${locCell}</td>`+
+    fltExp(a.dot)+fltExp(a.reg)+fltExp(a.ins)+fltExp(a.ift)+`</tr>`;
+  }).join('') : `<tr><td colspan="10" style="padding:16px;color:var(--faint);font-style:italic">No matching units</td></tr>`;
   const expN=FLEET.filter(a=>['dot','reg','ins','ift'].some(k=>a[k]==='exp')).length;
   const c=document.getElementById('fleetCount'); if(c) c.textContent=`${list.length} of ${FLEET.length} units · ${expN} with an expired item`;
 }

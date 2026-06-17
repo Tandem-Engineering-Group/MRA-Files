@@ -504,9 +504,65 @@ if (Test-Path $FleetioTokenFile) {
                 dueISO = (FleetD10 $s.next_due_at); meterDue = $s.next_due_meter_value; status = $st
             })
         }
+
+        # --- Vehicle locations (GPS units only) -> map keyed by normalized fleet # ---
+        # Matches the static FLEET roster on the dashboard by the leading token of the
+        # Fleetio asset name (e.g. "1546 FREIGHTLINER ..." -> "1546"). Only powered units
+        # (buses/tractors/trucks/RVs/vans) get queried, to keep the per-vehicle calls down;
+        # trailers/PODs have no tracker. Reduces the geocoded address to "City, ST".
+        $fLoc = @{}
+        function NormFleet($s){ $t = ((([string]$s).Trim()) -split '\s+')[0]; $t = $t.Trim()
+            if ($t -match '^\d+$') { return ([int64]$t).ToString() } return $t.ToUpper() }
+        # Reduce a full geocoded address to "City, ST". The state part is anchored as a
+        # 2-UPPERCASE-letter token optionally followed by a ZIP and nothing else, so
+        # "St. Augustine" (mixed case) is never mistaken for a state.
+        function PlaceFromAddr($addr){
+            $addr = ([string]$addr).Trim(); if ($addr -eq '') { return '' }
+            $parts = $addr -split ','
+            for ($k=0; $k -lt $parts.Count; $k++){
+                if ($parts[$k].Trim() -match '^([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?\s*$') {
+                    $st = $matches[1]
+                    $city = if ($k-1 -ge 0) { $parts[$k-1].Trim() } else { '' }
+                    if ($city) { return "$city, $st" } else { return $st }
+                }
+            }
+            if ($addr.Length -gt 40) { return $addr.Substring(0,40) } else { return $addr }
+        }
+        function EntryStamp($e){ foreach($p in @('located_at','created_at','recorded_at','updated_at')){ if($e.$p){ try { return [datetime]$e.$p } catch {} } } return [datetime]::MinValue }
+        try {
+            $locN = 0; $cap = 0
+            foreach ($v in (Get-FleetioAll 'vehicles?q%5Barchived_eq%5D=false' $fhead)) {
+                $key = NormFleet $v.name; if ($key -eq '') { continue }
+                $tn = ([string]$v.vehicle_type_name).ToLower()
+                if ($tn -match 'trailer|pod|gooseneck|stacker|tag|container|landoll|td38') { continue }   # no tracker
+                if ($cap -ge 200) { break }   # safety cap on per-vehicle calls
+                $cap++
+                try {
+                    $leUrl = "https://secure.fleetio.com/api/v1/vehicles/$($v.id)/location_entries?per_page=10"
+                    $leResp = Invoke-WebRequest -Uri $leUrl -Headers $fhead -UseBasicParsing -Method GET -TimeoutSec 20
+                    $le = @($leResp.Content | ConvertFrom-Json)
+                    if ($le.Count -eq 0) { continue }
+                    $e = $le | Sort-Object { EntryStamp $_ } -Descending | Select-Object -First 1   # newest
+                    # best address string across the field names Fleetio may use
+                    $addr = ''
+                    foreach ($p in @('geocoded_address','formatted_address','address','name','description')) { if ($e.$p) { $addr = [string]$e.$p; break } }
+                    $place = PlaceFromAddr $addr
+                    if ($place -eq '' -and $e.latitude -and $e.longitude) { $place = ("{0:N3}, {1:N3}" -f [double]$e.latitude, [double]$e.longitude) }
+                    if ($place -eq '') { continue }
+                    $stamp = EntryStamp $e
+                    $atISO = if ($stamp -ne [datetime]::MinValue) { $stamp.ToString('o') } else { $null }
+                    $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO }
+                    $locN++
+                    if ($locN -eq 1) { Write-Output "  -> Fleetio location sample ($key): place='$place' addr='$addr' at='$atISO'" }
+                } catch {}
+                Start-Sleep -Milliseconds 100
+            }
+            Write-Output "  -> Fleetio: located $locN unit(s) with GPS."
+        } catch { Write-Output "  -> Fleetio location pull failed: $($_.Exception.Message)" }
+
         $fleetio = [PSCustomObject]@{
             generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt')
-            issues = @($fIssues); workOrders = @($fWos); service = @($fSvc)
+            issues = @($fIssues); workOrders = @($fWos); service = @($fSvc); locations = $fLoc
         }
         $issAssigned = (@($fIssues | Where-Object { @($_.assignees).Count -gt 0 })).Count
         Write-Output "  -> Fleetio: $($fIssues.Count) issues ($issAssigned with assignees), $($fWos.Count) work orders, $($fSvc.Count) service due/overdue"
