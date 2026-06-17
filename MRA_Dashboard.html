@@ -342,6 +342,9 @@
   .g-bar{position:absolute; top:5px; height:16px; border-radius:5px; border:1px solid;
     display:flex; align-items:center; overflow:hidden; z-index:2}
   .g-fill{position:absolute; left:0; top:0; bottom:0; opacity:.85}
+  .g-hl{position:absolute; top:1px; bottom:1px; background:rgba(245,158,11,.20); border-radius:4px; pointer-events:none; z-index:3}
+  .expandbtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
+  .rb.mraHlBtn.active, .rb.mraHlBtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
   .g-barlabel{position:relative; z-index:2; padding:0 7px; font-size:10px; font-weight:600;
     color:#fff; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.6)}
   .g-pct{position:absolute; right:5px; font-size:9.5px; color:#fff; opacity:.85; z-index:2}
@@ -577,6 +580,7 @@
           <div class="rb" data-m="6" onclick="setRange(6)">6 mo</div>
           <div class="rb" data-m="all" onclick="setRange('all')">All</div>
         </div>
+        <button class="expandbtn mraHlBtn" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects — spot over-scheduling. Click to toggle.">🟧 MRA Shop load</button>
         <button class="expandbtn" onclick="openGantt('projects')" title="Full-screen detailed view">⛶ Expand</button>
       </h2>
       <div class="gantt" id="projGantt"></div>
@@ -997,6 +1001,8 @@ let GFS=null;              // full-screen gantt: 'floor' | 'projects' | null
 let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
+let MRASHOP_HL=false; try{ MRASHOP_HL = localStorage.getItem('mra_hl_mrashop')==='1'; }catch(e){}  // Projects Gantt: highlight MRA Shop load
+const HL_ASSIGNEE='MRA Shop';   // resource highlighted by the toggle (future: dropdown for others)
 const BARPOP={}, KPIPOP={}, GFS_PKEY={};       // popover content (click bars / hover tiles) + key->project-name map
 function localISO(ms){ const d=new Date(ms); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
@@ -1091,6 +1097,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.6", date:"2026-06-17", title:"MRA Shop load highlight on the Projects Gantt", items:[
+    "New 🟧 MRA Shop load toggle above the Projects Gantt (and in ⛶ Expand) — turns on a light highlight over the date spans where MRA Shop is assigned, across every project, so you can spot resource crunches at a glance. Click to toggle on/off; the choice is remembered.",
+    "Works in every range (1/3/6 mo, All) and the full-screen view. More resources can be added to the highlighter later." ] },
   { rev:"3.5", date:"2026-06-16", title:"Collapsible phases + milestone shading in the Project editor", items:[
     "✎ Edit Project Tasks now opens with each phase collapsed for a clean overview — click a phase header (▸) to expand just the tasks you want, with a per-phase task/done count.",
     "⊟ Collapse all / ⊞ Expand all buttons; a single-phase project opens expanded automatically.",
@@ -1804,6 +1813,18 @@ function barGeom(sIso,eIso,win){
 function msPos(iso,win){ const d=parseISO(iso); if(!d) return null;
   const p=(d.getTime()-win.startMs)/(win.days*DAY)*100; return (p>=0&&p<=100)?p:null; }
 
+/* ---------- Projects Gantt: MRA Shop resource-load highlight (on/off toggle) ---------- */
+function isHlAssignee(who){ return (who||'').trim().toLowerCase()===HL_ASSIGNEE.toLowerCase(); }
+function mraShopSegs(p){
+  if(!MRASHOP_HL) return [];
+  return ((p&&p.tasks)||[]).filter(t=>isHlAssignee(t.who) && (t.startISO||t.finISO) && !t.done)
+    .map(t=>({startISO:t.startISO||t.finISO, endISO:t.finISO||t.startISO}));
+}
+function syncMraHlBtns(){ document.querySelectorAll('.mraHlBtn').forEach(b=>{ b.classList.toggle('on',MRASHOP_HL);
+  if(b.tagName==='BUTTON') b.textContent=MRASHOP_HL?'🟧 MRA Shop: ON':'🟧 MRA Shop load'; }); }
+function toggleMraHl(){ MRASHOP_HL=!MRASHOP_HL; try{localStorage.setItem('mra_hl_mrashop',MRASHOP_HL?'1':'0');}catch(e){}
+  if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); } syncMraHlBtns(); }
+
 function renderGantt(el, rows, win){
   const bands = (win.weekends||[]).map(w=>`<div class="g-weekend" style="left:${w.pos}%;width:${w.width}%"></div>`).join('')
     + (win.curWeek?`<div class="g-curweek" style="left:${win.curWeek.pos}%;width:${win.curWeek.width}%"></div>`:'');
@@ -1827,9 +1848,11 @@ function renderGantt(el, rows, win){
     const ms=(r.milestones||[]).map(m=>{const p=msPos(m.dateISO,win);
       return p==null?'':`<div class="g-ms" style="left:${p}%" title="${esc(m.name)} · ${fmtMDY(m.dateISO)}"></div>`;}).join('');
     const rowClick = r.onclick ? ` onclick="${r.onclick}"` : '';
+    const hl=(MRASHOP_HL&&r.hlSegs&&r.hlSegs.length)?r.hlSegs.map(s=>{const gg=barGeom(s.startISO,s.endISO,win);
+      return gg?`<div class="g-hl" style="left:${gg.left}%;width:${gg.width}%" title="MRA Shop assigned"></div>`:'';}).join(''):'';
     html+=`<div class="g-row${r.cls?' '+r.cls:''}"${rowClick}><div class="g-gutter"><div class="g-lbl">${esc(r.label)}</div>`
       +`<div class="g-sub">${esc(r.sub||'')}</div></div>`
-      +`<div class="g-track">${grid}${bar}${ms}</div></div>`;
+      +`<div class="g-track">${grid}${bar}${hl}${ms}</div></div>`;
   });
   el.innerHTML=html;
 }
@@ -2165,11 +2188,12 @@ function renderProjects(D){
   const rows=dated.map(p=>({_p:p})).map(({_p:p})=>({
     label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
     startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
-    barLabel:"", milestones:p.milestones,
+    barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p),
     _has:!!barGeom(p.startISO,p.finishISO,win)
   })).filter(r=>r._has)
     .sort((a,b)=>(a.startISO||"").localeCompare(b.startISO||""));
   renderGantt(document.getElementById('projGantt'), rows, win);
+  syncMraHlBtns();
   const undated=projects.filter(p=>!p.startISO||!p.finishISO).map(p=>p.name);
   document.getElementById('projGanttNote').textContent=
     (RANGE==='all'?"Showing full timeline. ":`Showing ~${RANGE} month window from `+mStart.toLocaleString('en',{month:'short',year:'numeric'})+". ")
@@ -2915,7 +2939,8 @@ function renderGanttFS(){
     const withMs=(D.projects||[]).filter(p=>(p.milestones||[]).length);
     const allExp=withMs.length>0 && withMs.every(p=>expandedProjects.has(p.name));
     levelEl.innerHTML=`<div class="rb${expandedProjects.size===0?' active':''}" onclick="setGfsLevel(1)" title="Projects only">1 · Projects</div>`
-      +`<div class="rb${allExp?' active':''}" onclick="setGfsLevel(2)" title="Projects + milestone gates">2 · + Milestones</div>`;
+      +`<div class="rb${allExp?' active':''}" onclick="setGfsLevel(2)" title="Projects + milestone gates">2 · + Milestones</div>`
+      +`<div class="rb mraHlBtn${MRASHOP_HL?' active':''}" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects">🟧 MRA Shop</div>`;
     rangeEl.innerHTML=[['1 mo',1],['3 mo',3],['6 mo',6],['All','all']].map(([lbl,v])=>
       `<div class="rb${(v==='all'?'all':+v)===RANGE?' active':''}" onclick="setRange(${v==='all'?"'all'":v});renderGanttFS()">${lbl}</div>`).join('');
     const projects=(D.projects||[]).slice(); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
@@ -2935,7 +2960,7 @@ function renderGanttFS(){
       rows.push({label:(hasMs?(exp?'▾ ':'▸ '):'   ')+p.name,
         sub:(p.pm||'—')+' · '+p.taskCount+' tasks'+(hasMs?' · '+p.milestones.length+' gates':''),
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct, barLabel:'',
-        milestones:p.milestones, done, popKey:key, cls:hasMs?'clickable':'', onclick:hasMs?`toggleGfsProject('${key}')`:''});
+        milestones:p.milestones, hlSegs:mraShopSegs(p), done, popKey:key, cls:hasMs?'clickable':'', onclick:hasMs?`toggleGfsProject('${key}')`:''});
       if(exp) (p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')).forEach(m=>{
         rows.push({label:'◆ '+m.name, sub:fmtMDY(m.dateISO), startISO:null, endISO:null, color:p._color, milestones:[m], noBar:true, cls:'g-subrow'}); });
     });
