@@ -433,7 +433,7 @@
   .fltbar input,.fltbar select{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:10px; padding:10px 13px; font-size:13px; font-family:inherit}
   .fltbar input{flex:1; min-width:220px; max-width:360px}
   .fltwrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px}
-  table.flt{width:100%; border-collapse:collapse; font-size:12.5px; min-width:920px}
+  table.flt{width:100%; border-collapse:collapse; font-size:12.5px; min-width:1180px}
   table.flt thead th{position:sticky; top:0; background:var(--panel); color:var(--muted); text-align:left; font-size:10px; letter-spacing:.5px; text-transform:uppercase; font-weight:700; padding:10px 12px; border-bottom:1px solid var(--line); white-space:nowrap}
   table.flt td{padding:9px 12px; border-bottom:1px solid var(--line); white-space:nowrap}
   table.flt tbody tr:last-child td{border-bottom:none}
@@ -446,6 +446,13 @@
   .ch-soon{background:#3a2e12; color:var(--amber)}
   .ch-ok{background:#14321e; color:#86efac}
   .ch-na{color:var(--faint)}
+  .fstat{display:inline-block; font-size:10px; font-weight:700; padding:2px 9px; border-radius:20px; white-space:nowrap}
+  .fs-act{background:#14321e; color:#86efac}
+  .fs-off{background:#2a2f37; color:#94a3b8}
+  .fs-shop{background:#3a2e12; color:var(--amber)}
+  table.flt .obadge{display:inline-block; min-width:18px; text-align:center; font-size:10px; font-weight:800; padding:2px 7px; border-radius:20px; background:#243042; color:#cdd8e6}
+  table.flt .fmi{font-variant-numeric:tabular-nums}
+  table.flt tbody tr.fleet-off{opacity:.5}
   .linksmenu{position:relative; display:inline-block}
   .linksmenu-pop{position:absolute; top:calc(100% + 6px); right:0; min-width:230px; background:var(--panel);
     border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.5); padding:6px; display:none; z-index:120}
@@ -707,7 +714,7 @@
   <div id="fleetView" class="hidden">
     <div class="panel">
       <h2>🚛 Fleet &amp; Compliance <span class="count" id="fleetCount"></span>
-        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">all owned/operated units · expiration <span style="color:#fca5a5">red = expired</span>, <span style="color:var(--amber)">amber = ≤45 days</span> · 📍 Location is live from Fleetio (GPS-equipped units only)</span>
+        <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">live roster from Fleetio · 📍 location live from Samsara GPS (equipped units) · compliance <span style="color:#fca5a5">red = expired/overdue</span>, <span style="color:var(--amber)">amber = due soon</span> · IFTA from the office list</span>
       </h2>
       <div class="fltbar">
         <input id="fleetSearch" type="search" placeholder="Find unit, job, driver, plate…" oninput="renderFleet()" />
@@ -717,7 +724,7 @@
       <div class="fltwrap">
         <table class="flt">
           <thead><tr>
-            <th>Fleet #</th><th>Type</th><th>Year</th><th>Make</th><th>Job / Tour</th><th>Location</th><th>DOT</th><th>Reg</th><th>Ins</th><th>IFTA</th>
+            <th>Fleet #</th><th>Type</th><th>Year</th><th>Make</th><th>Job / Tour</th><th>Location</th><th>Status</th><th>Miles</th><th>Open</th><th>DOT</th><th>Reg</th><th>Ins</th><th>IFTA</th>
           </tr></thead>
           <tbody id="fleetBody"></tbody>
         </table>
@@ -1109,7 +1116,7 @@ const GENERAL_HELP = `
     <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs and staff on leave.
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, PM load and team capacity.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
-    <span class="k">EQUIPMENT</span> = searchable list of equipment and their Job #s. <span class="k">FLEET</span> = the physical fleet + compliance, with a live <b>📍 Location</b> column (last known GPS from Fleetio — City, ST · time ago; hover for the full address). Only GPS-equipped units report a location; trailers/PODs show —.
+    <span class="k">EQUIPMENT</span> = searchable list of equipment and their Job #s. <span class="k">FLEET</span> = the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon; hover for the exact date — IFTA stays from the office list). The <b>📍 Location</b> column is live GPS from Samsara (City, ST or yard · time ago; hover for the full address) — only GPS-equipped units report one; trailers/PODs show —. Use <b>⚠ Compliance issues only</b> to see just the units with something expired or due soon.
     <span class="k">HISTORY</span> = search the whole board — any job, person, Job # or task (open <b>and</b> completed), with a time filter. The floor only keeps shipped jobs for ~2 weeks; everything older lives here.</p></div>
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
@@ -1201,6 +1208,12 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.23", date:"2026-06-17", title:"FLEET tab rebuilt live from Fleetio", items:[
+    "The FLEET tab is now built live from Fleetio (merged over the office list) — every unit's Type, Year, Make/Model and Job/Tour come straight from Fleetio, so the roster keeps itself current.",
+    "New columns: Status (Active / In Shop / Inactive), Miles (current odometer / engine hours) and Open (a badge of open Fleetio issues + work orders — hover for the breakdown).",
+    "Compliance now shows the real next-due DATE for DOT/Inspection, Registration and Insurance (red = expired/overdue, amber = due soon, green = OK; hover for the exact date). IFTA stays from the office list — Fleetio doesn't track it.",
+    "Tour comes from the Fleetio Group first, falling back to the office list; units Fleetio doesn't carry still show from the office list, so nothing is lost.",
+    "Needs the updated Export-Data.ps1 running to feed the live roster + Samsara GPS locations." ] },
   { rev:"3.22", date:"2026-06-17", title:"Wall mode: Parking Lot column scrolls right", items:[
     "In 📺 Wall mode the Parking Lot and Next Up / On Hold tiles now each auto-scroll on their own, so a tall Parking Lot no longer hides the Next Up / On Hold list (it wasn't scrolling before)." ] },
   { rev:"3.21", date:"2026-06-17", title:"Fleet tab shows live location", items:[
@@ -3004,27 +3017,91 @@ function fleetAgo(iso){ if(!iso) return ''; const d=new Date(iso); if(isNaN(d)) 
   if(s<90) return 'just now'; const m=s/60; if(m<60) return Math.round(m)+'m ago';
   const h=m/60; if(h<24) return Math.round(h)+'h ago'; const dd=h/24;
   if(dd<30) return Math.round(dd)+'d ago'; return Math.round(dd/30)+'mo ago'; }
+/* ---------- FLEET tab: Fleetio roster (live) merged over the built-in list ----------
+   Roster (type/year/make/tour/status/mileage/open items/compliance dates) comes from
+   MRA_DATA.fleetio.fleet[]; the built-in FLEET array is the fallback/seed for Tour, IFTA,
+   and any unit Fleetio doesn't carry. Location is from Samsara (MRA_DATA.fleetio.locations). */
+function fmtDue(iso){ if(!iso) return ''; const p=String(iso).slice(0,10).split('-'); if(p.length<3) return String(iso);
+  return (+p[1])+'/'+(+p[2])+'/'+p[0].slice(2); }
+function fmtMiles(mi,mu){ const n=parseFloat(mi); if(!isFinite(n)||n<=0) return '<span class="mut">—</span>';
+  return esc(Math.round(n).toLocaleString())+' <span class="mut">'+esc(mu||'mi')+'</span>'; }
+function fleetCompMap(v){ const m={dot:null,reg:null,ins:null};
+  (v.comp||[]).forEach(c=>{ const n=(c.ty||'').toLowerCase();
+    const k = n.indexOf('inspect')>=0?'dot':(n.indexOf('regist')>=0?'reg':(n.indexOf('insur')>=0?'ins':null));
+    if(!k) return; if(!m[k]||String(c.due||'9999')<String(m[k].due||'9999')) m[k]={due:c.due,s:c.s,ty:c.ty}; });
+  return m; }
+function compCell(c,flag){
+  if(c&&c.due){ const cls=c.s==='overdue'?'ch-exp':(c.s==='due_soon'?'ch-soon':'ch-ok');
+    return `<td><span class="ch ${cls}" title="${escA((c.ty||'')+' · due '+c.due+' · '+(c.s||''))}">${esc(fmtDue(c.due))}</span></td>`; }
+  if(flag==='exp') return '<td><span class="ch ch-exp">Exp</span></td>';
+  if(flag==='soon') return '<td><span class="ch ch-soon">Soon</span></td>';
+  if(flag==='ok') return '<td><span class="ch ch-ok">OK</span></td>';
+  return '<td><span class="ch-na">—</span></td>'; }
+function effSt(c,flag){ if(c&&c.due) return c.s==='overdue'?'exp':(c.s==='due_soon'?'soon':'ok'); return flag||''; }
+function fleetStatPill(s){ if(!s) return '<span class="mut">—</span>';
+  const k=s.toLowerCase(); const cls=k.indexOf('inactive')>=0?'fs-off':(k.indexOf('shop')>=0?'fs-shop':'fs-act');
+  return `<span class="fstat ${cls}">${esc(s)}</span>`; }
+function fleetOpenBadge(r){ const n=(+r.oi||0)+(+r.ow||0);
+  if(n<=0) return '<span class="mut">—</span>';
+  const t=`${(+r.oi||0)} open issue(s) · ${(+r.ow||0)} work order(s)`+((+r.os||0)?` · ${r.os} service due`:'');
+  return `<span class="obadge" title="${escA(t)}">${n}</span>`; }
+
 function renderFleet(){
   const tb=document.getElementById('fleetBody'); if(!tb) return;
+  const RO=(window.MRA_DATA&&window.MRA_DATA.fleetio&&window.MRA_DATA.fleetio.fleet)||[];
+  const LOC=(window.MRA_DATA&&window.MRA_DATA.fleetio&&window.MRA_DATA.fleetio.locations)||{};
+  const useRoster=RO.length>0;
+  // Built-in list keyed by fleet # — supplies Tour/IFTA fallback + any unit Fleetio lacks.
+  const handByKey={}; FLEET.forEach(a=>{ const k=fleetKey(a.f); if(k&&!(k in handByKey)) handByKey[k]=a; });
+  const mk=(f,t,y,m,j,stat,mi,mu,oi,ow,os,plate,vin,cD,cR,cI,hD,hR,hI,hF)=>(
+    {f,t,y,m,j,stat,mi,mu,oi,ow,os,plate,vin,cDot:cD,cReg:cR,cIns:cI,hDot:hD,hReg:hR,hIns:hI,hIft:hF});
+  let rows;
+  if(useRoster){
+    const rkeys=new Set(RO.map(v=>fleetKey(v.f)));
+    const fromR=RO.map(v=>{ const h=handByKey[fleetKey(v.f)]||{}; const cm=fleetCompMap(v);
+      return mk(v.f, v.t||h.t||'', v.y||h.y||'', v.mk||h.m||'',
+        (v.tour&&String(v.tour).trim())?v.tour:(h.j||''),
+        v.stat||'', v.mi, v.mu, v.oi, v.ow, v.os, v.plate||'', v.vin||'',
+        cm.dot,cm.reg,cm.ins, h.dot||'',h.reg||'',h.ins||'',h.ift||''); });
+    const fromH=FLEET.filter(a=>!rkeys.has(fleetKey(a.f)))
+      .map(a=>mk(a.f,a.t||'',a.y||'',a.m||'',a.j||'','','','',0,0,0,'','',null,null,null,a.dot||'',a.reg||'',a.ins||'',a.ift||''));
+    rows=fromR.concat(fromH);
+  } else {
+    rows=FLEET.map(a=>mk(a.f,a.t||'',a.y||'',a.m||'',a.j||'','','','',0,0,0,'','',null,null,null,a.dot||'',a.reg||'',a.ins||'',a.ift||''));
+  }
+  const locOf=r=>LOC[fleetKey(r.f)]||null;
   const ty=document.getElementById('fleetType');
-  if(ty && ty.options.length===0){ const types=Array.from(new Set(FLEET.map(a=>a.t).filter(Boolean))).sort(); ty.innerHTML='<option value="">All types</option>'+types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join(''); }
+  if(ty){ const types=Array.from(new Set(rows.map(a=>a.t).filter(Boolean))).sort(); const sig=types.join('|');
+    if(ty.getAttribute('data-sig')!==sig){ const cur=ty.value;
+      ty.innerHTML='<option value="">All types</option>'+types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+      ty.setAttribute('data-sig',sig); if(cur===''||types.indexOf(cur)>=0) ty.value=cur; } }
   const se=document.getElementById('fleetSearch'); const q=(se?se.value:'').trim().toLowerCase();
   const tf=ty?ty.value:'';
   const issuesEl=document.getElementById('fleetIssues'); const issuesOnly=issuesEl&&issuesEl.classList.contains('on');
-  const flag=a=>['dot','reg','ins','ift'].some(k=>a[k]==='exp'||a[k]==='soon');
-  const LOC=(window.MRA_DATA&&window.MRA_DATA.fleetio&&window.MRA_DATA.fleetio.locations)||{};
-  const locOf=a=>LOC[fleetKey(a.f)]||null;
-  const list=FLEET.filter(a=>(!tf||a.t===tf)&&(!q||[a.f,a.t,a.m,a.j,(locOf(a)?locOf(a).place:'')].join(' ').toLowerCase().indexOf(q)>=0)&&(!issuesOnly||flag(a)));
-  tb.innerHTML = list.length ? list.map(a=>{
-    const l=locOf(a);
-    const locCell = l ? `${esc(l.place)}${l.atISO?` <span class="mut">· ${esc(fleetAgo(l.atISO))}</span>`:''}` : `<span class="mut">—</span>`;
-    return `<tr><td class="fnum">${esc(a.f||'—')}</td><td><span class="typ">${esc(a.t||'?')}</span></td>`+
-    `<td class="mut">${esc(a.y)}</td><td>${esc(a.m)}</td><td>${esc(a.j||'—')}</td>`+
-    `<td class="loc"${l&&l.full?` title="${escA(l.full)}"`:''}>${locCell}</td>`+
-    fltExp(a.dot)+fltExp(a.reg)+fltExp(a.ins)+fltExp(a.ift)+`</tr>`;
-  }).join('') : `<tr><td colspan="10" style="padding:16px;color:var(--faint);font-style:italic">No matching units</td></tr>`;
-  const expN=FLEET.filter(a=>['dot','reg','ins','ift'].some(k=>a[k]==='exp')).length;
-  const c=document.getElementById('fleetCount'); if(c) c.textContent=`${list.length} of ${FLEET.length} units · ${expN} with an expired item`;
+  const flagged=r=>[effSt(r.cDot,r.hDot),effSt(r.cReg,r.hReg),effSt(r.cIns,r.hIns),r.hIft].some(s=>s==='exp'||s==='soon');
+  const list=rows.filter(r=>(!tf||r.t===tf)
+    &&(!q||[r.f,r.t,r.m,r.j,r.stat,r.plate,r.vin,(locOf(r)?locOf(r).place:'')].join(' ').toLowerCase().indexOf(q)>=0)
+    &&(!issuesOnly||flagged(r)));
+  tb.innerHTML = list.length ? list.map(r=>{
+    const l=locOf(r);
+    const locTxt = l ? `${esc(l.yard||l.place)}${l.atISO?` <span class="mut">· ${esc(fleetAgo(l.atISO))}</span>`:''}` : `<span class="mut">—</span>`;
+    const locTitle = l ? escA((l.yard&&l.place&&l.yard!==l.place?l.yard+' — ':'')+(l.full||l.place||'')) : '';
+    const off = r.stat && r.stat.toLowerCase().indexOf('inactive')>=0;
+    return `<tr${off?' class="fleet-off"':''}>`+
+      `<td class="fnum">${esc(r.f||'—')}</td>`+
+      `<td><span class="typ">${esc(r.t||'?')}</span></td>`+
+      `<td class="mut">${esc(r.y||'')}</td>`+
+      `<td>${esc(r.m||'')}</td>`+
+      `<td>${esc(r.j||'—')}</td>`+
+      `<td class="loc"${l?` title="${locTitle}"`:''}>${locTxt}</td>`+
+      `<td>${fleetStatPill(r.stat)}</td>`+
+      `<td class="fmi">${fmtMiles(r.mi,r.mu)}</td>`+
+      `<td>${fleetOpenBadge(r)}</td>`+
+      compCell(r.cDot,r.hDot)+compCell(r.cReg,r.hReg)+compCell(r.cIns,r.hIns)+compCell(null,r.hIft)+
+      `</tr>`;
+  }).join('') : `<tr><td colspan="13" style="padding:16px;color:var(--faint);font-style:italic">No matching units</td></tr>`;
+  const expN=rows.filter(r=>[effSt(r.cDot,r.hDot),effSt(r.cReg,r.hReg),effSt(r.cIns,r.hIns),r.hIft].some(s=>s==='exp')).length;
+  const c=document.getElementById('fleetCount'); if(c) c.textContent=`${list.length} of ${rows.length} units · ${expN} with an expired item`;
 }
 
 
@@ -3475,7 +3552,7 @@ function renderGanttFS(){
 function renderAll(){
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
-  renderFloor(D); renderProjects(D); renderFleetio(D);
+  renderFloor(D); renderProjects(D); renderFleetio(D); renderFleet();
   if(VIEW==='history') renderHistory();
   if(GFS) renderGanttFS();
   setView(VIEW);
