@@ -1104,6 +1104,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.9", date:"2026-06-17", title:"Readable dates on the Gantts", items:[
+    "All Gantt charts now show dated gridlines on the 1st and 15th of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. Very long (All) views stay monthly to avoid clutter." ] },
   { rev:"3.8", date:"2026-06-17", title:"Fleetio: trailer-only on cards, ➕ add as task, auto-close on resolve", items:[
     "Bay cards now show only the TRAILER's Fleetio issues — tractor issues stay on the FLEETIO tab (Doug's domain).",
     "Each Fleetio issue has a ➕ to add it as a real, assignable Shop Task (code-gated). Once added it drops out of the live list and behaves like any task.",
@@ -1809,10 +1811,17 @@ function buildWindow(startDate, days){
   if(days<=35){
     for(let t=0;t<=days;t+=7){ const dt=new Date(startMs+t*DAY); ticks.push({pos:t/days*100, label:(dt.getMonth()+1)+"/"+dt.getDate()}); }
   } else {
-    let d=new Date(startDate.getFullYear(),startDate.getMonth(),1);
-    if(d.getTime()<startMs) d=new Date(startDate.getFullYear(),startDate.getMonth()+1,1);
-    while(d.getTime()<=endMs){ ticks.push({pos:(d.getTime()-startMs)/(days*DAY)*100,
-      label:d.toLocaleString('en',{month:'short'})}); d=new Date(d.getFullYear(),d.getMonth()+1,1); }
+    // Longer windows: tick the 1st and 15th of each month with dated labels (Jul 1 / Jul 15)
+    // so you can read where a bar falls. Very long windows fall back to month labels only.
+    const monthly = days>210;
+    const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const add=(dt,lbl)=>{ const t=dt.getTime(); if(t>=startMs && t<=endMs) ticks.push({pos:(t-startMs)/(days*DAY)*100, label:lbl}); };
+    let mo=new Date(startDate.getFullYear(),startDate.getMonth(),1);
+    while(mo.getTime()<=endMs){
+      add(mo, monthly?MON[mo.getMonth()]:(MON[mo.getMonth()]+' 1'));
+      if(!monthly) add(new Date(mo.getFullYear(),mo.getMonth(),15), MON[mo.getMonth()]+' 15');
+      mo=new Date(mo.getFullYear(),mo.getMonth()+1,1);
+    }
   }
   // weekend bands (only when the window is short enough for them to read)
   const weekends=[];
