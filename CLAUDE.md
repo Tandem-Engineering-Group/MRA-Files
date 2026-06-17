@@ -78,6 +78,22 @@ Treat help + rev as PART OF the feature, not an afterthought.
 
 ## Pending / requested (not yet built — remind Rich)
 
+- **Projects-tab "next tier" — PARKED 2026-06-17 (Rich: "hold for now but log on to-do").**
+  After the rev 3.19 at-risk/status work, these were the agreed next candidates:
+  1. **Resource highlighter dropdown** — extend the `🟧 MRA Shop load` toggle into a dropdown
+     to highlight *any* assignee's date spans across all projects (today it's MRA Shop only).
+     Reuse `mraShopSegs(p)` generalized to a chosen `who`.
+  2. **PM / project filter (or search)** on the Projects tab — a PM dropdown or search box that
+     filters the Gantt + the PM Load / Milestones / Progress / Team lists to one PM or project.
+  3. **Assignee-mismatch flagger** — treat a canonical assignee list as truth and flag typos /
+     unknown names (ties into the "Assigned-To dropdowns" cleanup below). Surface as a small
+     "⚠ unrecognized assignees: …" note on the Team Capacity panel.
+  - Also from the same brainstorm, lower priority: per-project read-only detail card,
+    data-gap nudges (no dates / TBD PM / single-task stubs), and task-level Gantt bars +
+    predecessor/critical-path links (the latter overlaps the parked "Task-level Gantt bars").
+- **DATA FIX Rich owns:** `Siemens DI Pedestal` shows 27% complete but its **start date is in the
+  future**, so the dashboard reads it as "upcoming". Correct the start in the workbook.
+
 - **Replace-by-project import** (deferred 2026-06-11, Rich said "hold for now but
   keep reminding me"). Today `Import-Intake.ps1` is **append-only** — re-uploading
   an edited intake template ADDS duplicate rows. Requested behavior: when a file
