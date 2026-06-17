@@ -101,6 +101,7 @@
   .gwinslider{width:120px; accent-color:var(--blue); vertical-align:middle}
   .gwinlab{min-width:34px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums}
   .projsearch{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 10px; font-size:12px; font-family:inherit; margin-left:12px; width:210px; font-weight:400}
+  .mitten{font-size:14px; vertical-align:middle; line-height:1}
   .authpill{margin-left:10px; background:rgba(34,197,94,.15); border:1px solid var(--green); color:#86efac; border-radius:20px; padding:7px 13px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap}
   .authpill:hover{background:rgba(34,197,94,.3); color:#bbf7d0}
   .rb{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
@@ -1146,7 +1147,7 @@ const GENERAL_HELP = `
     <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs and staff on leave.
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, PM load and team capacity.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
-    <span class="k">EQUIPMENT</span> = searchable list of equipment and their Job #s. <span class="k">FLEET</span> = the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon; hover for the exact date — IFTA stays from the office list). The <b>📍 Location</b> column is live GPS from Samsara (City, ST or yard · time ago; hover for the full address) — only GPS-equipped units report one; trailers/PODs show —. Use <b>⚠ Compliance issues only</b> to see just the units with something expired or due soon. <b>Canadian assets</b> show a 🍁 by the fleet # (type "canada" in the search to list them).
+    <span class="k">EQUIPMENT</span> = searchable list of equipment and their Job #s. <span class="k">FLEET</span> = the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon; hover for the exact date — IFTA stays from the office list). The <b>📍 Location</b> column is live GPS from Samsara (City, ST or yard · time ago; hover for the full address) — only GPS-equipped units report one; trailers/PODs show —. Use <b>⚠ Compliance issues only</b> to see just the units with something expired or due soon. <b>Canadian assets</b> show a 🍁 by the fleet # (type "canada" in the search to list them); a <b>🧤</b> means the unit is currently at the MRA plant (Madison Heights) — from GPS or a spot in a bay / parking lot on the shop board.
     <span class="k">HISTORY</span> = search the whole board — any job, person, Job # or task (open <b>and</b> completed), with a time filter. The floor only keeps shipped jobs for ~2 weeks; everything older lives here.</p></div>
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
@@ -1238,6 +1239,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.40", date:"2026-06-17", title:"🧤 \"At the MRA plant\" flag", items:[
+    "Units at the MRA plant now get a 🧤 (Michigan = the mitten state!) on the FLEET, FLEETIO and EQUIPMENT tabs — so you can tell what's home without opening the shop board. It's set from live GPS (yard = MRA / city = Madison Heights) OR a unit parked in a bay / parking lot on the shop floor." ] },
   { rev:"3.39", date:"2026-06-17", title:"Gantt: show which bay a job/project is in", items:[
     "Gantt bars (Projects + the shop Floor schedule) now show a green bay chip when that job/project is currently in a physical shop bay (e.g. Oakland Schools → Bay 3 Back) — linked automatically from the floor. Anything parked / on-hold / not in a bay shows nothing." ] },
   { rev:"3.38", date:"2026-06-17", title:"Edit sign-in: a visible Log out", items:[
@@ -3041,7 +3044,7 @@ function renderFleetio(D){
             : s.c.soon?`<span class="badge amber">${(s.c.days!=null&&s.c.days>=0)?'due '+s.c.days+'d':'due soon'}</span>`
             : (s.dueISO?`<span class="badge grey">${fmtMD(s.dueISO)}</span>`:`<span class="badge grey">${esc(s.meterDue?('@ '+s.meterDue):'—')}</span>`);
     return `<div class="row"><div><div class="lead">${esc(s.service||'Service')}</div>`+
-      `<div class="meta">${esc(s.asset||'')}${canFlag(s.asset)}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
+      `<div class="meta">${esc(s.asset||'')}${canFlag(s.asset)}${plantFlag(s.asset)}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
   }).join('') : `<div class="empty">No service ${FFILTER==='svc_over'?'overdue':FFILTER==='svc_soon'?'due soon':'reminders due'}</div>`);
   document.getElementById('fSvcCount').textContent=svcSorted.length;
 
@@ -3062,7 +3065,7 @@ function renderFleetio(D){
     const wa=fAsg(i); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = i.reporter?` · ✍ ${esc(i.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${esc(i.summary||('Issue '+(i.num||'')))}</div>`+
-      `<div class="meta">${esc(i.asset||'')}${canFlag(i.asset)}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
+      `<div class="meta">${esc(i.asset||'')}${canFlag(i.asset)}${plantFlag(i.asset)}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
       `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${pr} ${b}</div></div>`;
   }).join('') : `<div class="empty">${issEmpty}</div>`);
   document.getElementById('fIssueCount').textContent=issues.length;
@@ -3076,7 +3079,7 @@ function renderFleetio(D){
     const wa=fAsg(w); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = w.reporter?` · ✍ ${esc(w.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${esc(w.summary||('WO '+(w.num||'')))}</div>`+
-      `<div class="meta">${esc(w.asset||'')}${canFlag(w.asset)}${w.jobNum?' · '+esc(w.jobNum):''}${who}${rby}</div>`+
+      `<div class="meta">${esc(w.asset||'')}${canFlag(w.asset)}${plantFlag(w.asset)}${w.jobNum?' · '+esc(w.jobNum):''}${who}${rby}</div>`+
       `${w.detail?`<div class="det" title="${escA(w.detail)}">${esc(w.detail)}</div>`:''}</div>`+
       `<div class="right">${st}${age!=null?` <span class="badge grey">${age}d</span>`:''}</div></div>`;
   }).join('') : `<div class="empty">No ${(FASSIGN||FREPORT)?'matching work orders':'open work orders'}</div>`);
@@ -3105,7 +3108,7 @@ function renderTrailerCards(){
   grid.innerHTML = arr.length ? arr.map((t,idx)=>{
     const edge = t.svcOver?'#ef4444' : (t.iss?'#f59e0b' : (t.wo?'#3b82f6' : '#22c55e'));
     const key='ft'+idx; BARPOP[key]=trailerPop(t);
-    return `<div class="teamcard" style="border-left-color:${edge}" onclick="showBarPop(event,'${key}')"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}${canFlag((t.name||'')+' '+(t.jobNum||''))}</span>`+
+    return `<div class="teamcard" style="border-left-color:${edge}" onclick="showBarPop(event,'${key}')"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}${canFlag((t.name||'')+' '+(t.jobNum||''))}${plantFlag(t.name||t.jobNum)}</span>`+
     `<span class="tc">${t.iss+t.wo+t.svc}</span></div><div class="tmeta">`+
       (t.iss?`<span class="badge amber">${t.iss} issue${t.iss>1?'s':''}</span>`:'')+
       (t.wo?`<span class="badge blue">${t.wo} WO</span>`:'')+
@@ -3137,7 +3140,7 @@ function renderEquipment(){
   const se=document.getElementById('eqSearch'); const q=(se?se.value:'').trim().toLowerCase();
   const list = q ? JOB_BOARD.filter(e=>(e.n+' '+e.j+' '+(e.d||'')).toLowerCase().indexOf(q)>=0) : JOB_BOARD;
   grid.innerHTML = list.length
-    ? list.map(e=>`<div class="eqcard"><div><div class="nm">${esc(e.n)}${canFlag(e.n+' '+e.j+' '+(e.d||''))}</div>${e.d?`<div class="ds" title="${escA(e.d)}">${esc(e.d)}</div>`:''}</div><span class="jb">${esc(e.j)}</span></div>`).join('')
+    ? list.map(e=>`<div class="eqcard"><div><div class="nm">${esc(e.n)}${canFlag(e.n+' '+e.j+' '+(e.d||''))}${plantFlag(e.n+' '+e.j)}</div>${e.d?`<div class="ds" title="${escA(e.d)}">${esc(e.d)}</div>`:''}</div><span class="jb">${esc(e.j)}</span></div>`).join('')
     : `<div class="empty">No equipment matches “${esc(q)}”</div>`;
   const c=document.getElementById('eqCount'); if(c) c.textContent = q ? (list.length+' of '+JOB_BOARD.length) : (JOB_BOARD.length+' jobs');
 }
@@ -3199,6 +3202,24 @@ function canKeySet(){ const D=window.MRA_DATA, g=D&&D.generatedAt;
 function canAsset(s){ if(!s) return false; s=String(s);
   if(canKeySet().has(fleetKey(s))) return true; return /\bCAN\b|CANADA/i.test(s); }
 function canFlag(s){ return canAsset(s)?' <span title="Canadian asset">🍁</span>':''; }
+// "At the MRA plant?" 🧤 (Michigan = the mitten state). True if GPS puts it at MRA / Madison Heights,
+// OR the unit is parked in a bay / parking lot on the shop floor (so non-shop-tab viewers can tell).
+function _normKey(s){ let t=String(s||'').trim().split(/\s+/)[0]||''; const m=t.match(/^(\d+)G$/i);
+  if(m) return String(parseInt(m[1],10)); return /^\d+$/.test(t)?String(parseInt(t,10)):t.toUpperCase(); }
+function _isMraLoc(loc){ if(!loc) return false; const y=(loc.yard||'').toLowerCase(), pl=((loc.place||'')+' '+(loc.full||'')).toLowerCase();
+  return y.indexOf('mra')>=0 || pl.indexOf('madison heights')>=0; }
+let _plantGen=null,_plantKeys=new Set();
+function plantKeys(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_plantGen) return _plantKeys;
+  _plantGen=g; _plantKeys=new Set();
+  const roster=new Set(); ((D&&D.fleetio&&D.fleetio.fleet)||[]).forEach(v=>roster.add(_normKey(v.f)));
+  if(typeof FLEET!=='undefined') FLEET.forEach(a=>roster.add(_normKey(a.f)));
+  const locs=(D&&D.fleetio&&D.fleetio.locations)||{};
+  Object.keys(locs).forEach(k=>{ if(_isMraLoc(locs[k])) _plantKeys.add(_normKey(k)); });
+  ((D&&D.jobs)||[]).forEach(j=>{ const b=String(j.bay||''); if(!(/^bay\s/i.test(b)||/parking/i.test(b))) return;
+    (String(j.project||'').match(/\b\d{2,5}\b/g)||[]).forEach(n=>{ const k=_normKey(n); if(roster.has(k)) _plantKeys.add(k); }); });
+  return _plantKeys; }
+function atPlant(s){ if(!s) return false; return plantKeys().has(_normKey(s)); }
+function plantFlag(s){ return atPlant(s)?' <span class="mitten" title="At the MRA plant — back home in the mitten 🧤 (Madison Heights, MI)">🧤</span>':''; }
 
 function renderFleet(){
   const tb=document.getElementById('fleetBody'); if(!tb) return;
@@ -3242,7 +3263,7 @@ function renderFleet(){
     const locTitle = l ? escA((l.yard&&l.place&&l.yard!==l.place?l.yard+' — ':'')+(l.full||l.place||'')) : '';
     const off = r.stat && r.stat.toLowerCase().indexOf('inactive')>=0;
     return `<tr${off?' class="fleet-off"':''}>`+
-      `<td class="fnum">${esc(r.f||'—')}${isCanadian(r)?' <span title="Canadian asset">🍁</span>':''}</td>`+
+      `<td class="fnum">${esc(r.f||'—')}${isCanadian(r)?' <span title="Canadian asset">🍁</span>':''}${plantFlag(r.f)}</td>`+
       `<td><span class="typ">${esc(r.t||'?')}</span></td>`+
       `<td class="mut">${esc(r.y||'')}</td>`+
       `<td>${esc(r.m||'')}</td>`+
