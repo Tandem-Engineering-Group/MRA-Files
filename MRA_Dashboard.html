@@ -343,13 +343,7 @@
     display:flex; align-items:center; overflow:hidden; z-index:2}
   .g-fill{position:absolute; left:0; top:0; bottom:0; opacity:.85}
   .g-hl{position:absolute; top:1px; bottom:1px; border-radius:4px; pointer-events:none; z-index:4}
-  .g-hl.hl-yellow{background:rgba(250,204,21,.30); border:1px solid rgba(250,204,21,.7)}
-  .g-hl.hl-pink{background:rgba(236,72,153,.34); border:1px solid rgba(236,72,153,.78)}
-  .g-hl.hl-cyan{background:rgba(34,211,238,.30); border:1px solid rgba(34,211,238,.72)}
-  .g-hl.hl-lime{background:rgba(163,230,53,.32); border:1px solid rgba(163,230,53,.72)}
-  .g-hl.hl-red{background:rgba(244,63,94,.32); border:1px solid rgba(244,63,94,.78)}
   .g-hl.hl-white{background:rgba(255,255,255,.12); border:2px solid rgba(255,255,255,.9)}
-  .hlcolor{background:var(--panel2); border:1px solid var(--line); color:var(--muted); border-radius:7px; font-size:11px; padding:2px 5px; margin-left:5px; cursor:pointer}
   .pill.fleet{background:rgba(56,189,248,.16); color:#7dd3fc; border-color:rgba(56,189,248,.45)}
   .taskline.fleet{color:#bae6fd}
   .fladd{display:inline-block; cursor:pointer; color:#7dd3fc; font-weight:700; font-size:10px; line-height:1;
@@ -594,7 +588,6 @@
           <div class="rb" data-m="all" onclick="setRange('all')">All</div>
         </div>
         <button class="expandbtn mraHlBtn" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects — spot over-scheduling. Click to toggle.">🟧 MRA Shop load</button>
-        <select class="hlcolor" title="Highlight color — pick what reads best" onchange="setMraHlStyle(this.value)"><option value="pink">Pink</option><option value="cyan">Cyan</option><option value="lime">Lime</option><option value="yellow">Yellow</option><option value="red">Red</option><option value="white">White outline</option></select>
         <button class="expandbtn" onclick="openGantt('projects')" title="Full-screen detailed view">⛶ Expand</button>
       </h2>
       <div class="gantt" id="projGantt"></div>
@@ -1016,7 +1009,7 @@ let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
 let MRASHOP_HL=false; try{ MRASHOP_HL = localStorage.getItem('mra_hl_mrashop')==='1'; }catch(e){}  // Projects Gantt: highlight MRA Shop load
-let MRA_HL_STYLE='pink'; try{ MRA_HL_STYLE = localStorage.getItem('mra_hl_style')||'pink'; }catch(e){}   // highlight color
+const MRA_HL_STYLE='white';   // highlight = white outline (picker removed 2026-06-17 per Rich)
 const HL_ASSIGNEE='MRA Shop';   // resource highlighted by the toggle (future: dropdown for others)
 const BARPOP={}, KPIPOP={}, GFS_PKEY={};       // popover content (click bars / hover tiles) + key->project-name map
 function localISO(ms){ const d=new Date(ms); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -1091,7 +1084,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
     <p>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
-    <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. Pick the highlight <b>color</b> from the little dropdown next to it (Pink / Cyan / Lime / Yellow / Red / White). Adjacent tasks merge into one clean band. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
+    <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. The highlight is a clean <b>white outline</b>; adjacent tasks merge into one continuous band so it reads over any bar color. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
     <p>Every Gantt shows dated gridlines on the <b>1st &amp; 15th</b> of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. <span style="color:var(--amber)">◆</span> = milestone gate, <span style="color:var(--red)">▏</span> = today, <span style="color:#93c5fd">blue band</span> = this week.</p></div>
   <div class="hsec"><h4>⑲ 🔧 Fleetio issues on a bay card (FLOOR)</h4>
@@ -1122,6 +1115,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.12", date:"2026-06-17", title:"MRA Shop load = white outline", items:[
+    "Locked the MRA Shop load highlight to a clean white outline and removed the color picker — the outline reads over any bar color, so the extra dropdown was just clutter. Toggle still remembers on/off per device." ] },
   { rev:"3.11", date:"2026-06-17", title:"Pick your MRA Shop highlight color", items:[
     "Added a color dropdown next to the MRA Shop load toggle — choose Pink / Cyan / Lime / Yellow / Red / White outline so the highlight reads how you like it over the bars. Remembered per device." ] },
   { rev:"3.10", date:"2026-06-17", title:"Cleaner MRA Shop load highlight", items:[
@@ -1887,13 +1882,9 @@ function mraShopSegs(p){
   return merged.map(m=>({startISO:localISO(m.s), endISO:localISO(m.e)}));
 }
 function syncMraHlBtns(){ document.querySelectorAll('.mraHlBtn').forEach(b=>{ b.classList.toggle('on',MRASHOP_HL);
-    if(b.tagName==='BUTTON') b.textContent=MRASHOP_HL?'🟧 MRA Shop: ON':'🟧 MRA Shop load'; });
-  document.querySelectorAll('.hlcolor').forEach(s=>{ s.value=MRA_HL_STYLE; }); }
+    if(b.tagName==='BUTTON') b.textContent=MRASHOP_HL?'🟧 MRA Shop: ON':'🟧 MRA Shop load'; }); }
 function toggleMraHl(){ MRASHOP_HL=!MRASHOP_HL; try{localStorage.setItem('mra_hl_mrashop',MRASHOP_HL?'1':'0');}catch(e){}
   if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); } syncMraHlBtns(); }
-function setMraHlStyle(v){ MRA_HL_STYLE=v; try{localStorage.setItem('mra_hl_style',v);}catch(e){}
-  if(!MRASHOP_HL){ toggleMraHl(); }   // turn it on so you can see the color
-  else { if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); } syncMraHlBtns(); } }
 
 function renderGantt(el, rows, win){
   const bands = (win.weekends||[]).map(w=>`<div class="g-weekend" style="left:${w.pos}%;width:${w.width}%"></div>`).join('')
