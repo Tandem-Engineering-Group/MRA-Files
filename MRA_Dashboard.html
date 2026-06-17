@@ -201,8 +201,8 @@
   .asgbody{padding:10px; display:flex; flex-direction:column; gap:10px; overflow-y:auto}
   @media(max-width:1100px){ .assignees{grid-template-columns:1fr} }
   /* Wall (TV) mode: bound heights + scroll so bays + assignees fit one screen */
-  body.wall .baycol{max-height:44vh; overflow-y:auto; justify-content:flex-start}
-  body.wall .baycol>*{flex:0 0 auto}   /* keep full card heights so a tall column OVERFLOWS and auto-scrolls, instead of squashing the cards to fit (which clipped Bay 5 Back) */
+  body.wall .baycol{max-height:44vh; overflow:hidden}
+  body.wall .baycol:not(.parkcol) .bay-body{max-height:17vh; overflow-y:auto}   /* scroll each card's task list with its title PINNED (like the Parking Lot card) — don't scroll the whole column */
   body.wall .bay-body.autoscroll{max-height:30vh; overflow-y:auto}   /* combined Next Up / On Hold tile scrolls on its own */
   body.wall .baycol.parkcol{max-height:none; overflow:visible}                /* Parking Lot column: don't scroll the column… */
   body.wall .baycol.parkcol .bay-body.autoscroll{max-height:19vh}            /* …each card (Parking Lot + Next Up/On Hold) auto-scrolls itself */
@@ -1220,6 +1220,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.28", date:"2026-06-17", title:"Wall mode: card titles stay put while task lists scroll", items:[
+    "In 📺 Wall mode each bay card now scrolls its OWN task list with the card title pinned (just like the Parking Lot card) — instead of scrolling the whole column and sliding the Bay X Front/Back titles off-screen." ] },
   { rev:"3.27", date:"2026-06-17", title:"Wall mode: bay columns actually scroll now", items:[
     "Fixed the real cause of tall bay columns getting cut off in 📺 Wall mode — the bay cards were being squashed to fit the column height instead of overflowing, so there was nothing to auto-scroll. Cards now keep full height and the column scrolls all the way through to its bottom card (e.g. Bay 5 Back)." ] },
   { rev:"3.26", date:"2026-06-17", title:"Wall mode: tall bay columns keep scrolling", items:[
@@ -1410,8 +1412,8 @@ function setWallZoom(z){ z=parseInt(z,10)||100; WALL_ZOOM=Math.max(50,Math.min(2
   try{ localStorage.setItem('mra_wall_zoom', String(WALL_ZOOM)); }catch(e){}
   applyWallZoom();
 }
-// Every tall tile that should auto-scroll in wall mode (bay columns, crew/assignee panels, the Next Up tile).
-const WSEL='body.wall .baycol, body.wall .asgbody, body.wall .autoscroll';
+// Every tall tile that should auto-scroll in wall mode — each card's BODY (title stays pinned) + assignee panels.
+const WSEL='body.wall .bay-body, body.wall .asgbody';
 // A re-render (every refresh) rebuilds these elements and resets scrollTop to 0 — snapshot before, restore after,
 // so a tall column keeps cycling instead of snapping back to the top each time.
 function snapWallScroll(){ if(!WALL) return null; const s=[];
