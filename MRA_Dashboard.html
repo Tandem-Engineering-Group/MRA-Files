@@ -346,6 +346,9 @@
     border:2px solid #38bdf8; background:rgba(56,189,248,.12)}
   .pill.fleet{background:rgba(56,189,248,.16); color:#7dd3fc; border-color:rgba(56,189,248,.45)}
   .taskline.fleet{color:#bae6fd}
+  .fladd{display:inline-block; cursor:pointer; color:#7dd3fc; font-weight:700; font-size:10px; line-height:1;
+    border:1px solid rgba(56,189,248,.45); border-radius:4px; padding:1px 4px; margin-right:5px; user-select:none}
+  .fladd:hover{background:rgba(56,189,248,.18); border-color:#38bdf8}
   .tasklist.fleetlist{margin-top:4px; border-top:1px dashed rgba(56,189,248,.3); padding-top:3px}
   .expandbtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
   .rb.mraHlBtn.active, .rb.mraHlBtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
@@ -1101,6 +1104,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.8", date:"2026-06-17", title:"Fleetio: trailer-only on cards, ➕ add as task, auto-close on resolve", items:[
+    "Bay cards now show only the TRAILER's Fleetio issues — tractor issues stay on the FLEETIO tab (Doug's domain).",
+    "Each Fleetio issue has a ➕ to add it as a real, assignable Shop Task (code-gated). Once added it drops out of the live list and behaves like any task.",
+    "When an issue is resolved in Fleetio it auto-closes the matching task here (when the feed's healthy and you're signed in); you can also close it manually anytime." ] },
   { rev:"3.7", date:"2026-06-17", title:"Fleetio issues live on bay cards + cleaner MRA Shop highlight", items:[
     "Bay Status: each trailer's open Fleetio maintenance issues now show right on its bay card — a 🔧 N Fleetio pill, click to expand the issue list (with overdue flags). Fully automatic, refreshes every cycle, no manual sync needed.",
     "MRA Shop load highlight recolored to a crisp sky-blue outline so it reads cleanly over any bar color (no more amber-on-amber glow)." ] },
@@ -1259,6 +1266,7 @@ let CURRENT_USER = "";      // current signed-in person's name (display + attrib
 // Tasks closed from the dashboard this session — kept greyed until the next export confirms
 // them (so they don't visually "bounce" back to open before data.js catches up).
 let CLOSED_LOCAL = new Set(); try{ CLOSED_LOCAL = new Set(JSON.parse(localStorage.getItem('mra_closed')||'[]')); }catch(e){}
+const FLEETIO_AUTOCLOSED = new Set();   // Fleetio-derived tasks auto-closed this session (fire-once guard)
 function closedKey(p,t){ return (p||'')+''+(t||''); }
 function rememberClosed(p,t){ CLOSED_LOCAL.add(closedKey(p,t)); try{ localStorage.setItem('mra_closed', JSON.stringify([...CLOSED_LOCAL])); }catch(e){} }
 function isPendingClosed(p,t){ return t && CLOSED_LOCAL.has(closedKey(p,t)); }
@@ -1310,6 +1318,21 @@ function closeTaskBtn(el){
 /* ---------- Per-task tools (edit / delete / reopen) — shown in Edit mode ---------- */
 function ensurePin(action){ return ensureAuth(action); }
 function shopWrite(payload){ return fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
+
+/* ---------- Fleetio: add an open issue as an assignable Shop Task (trailer issues only) ---------- */
+function addFleetioTask(row,num){
+  if(!ensureAuth("add a Fleetio issue as a task")) return;
+  const D=window.MRA_DATA||{}; const j=(D.jobs||[]).find(x=>x.row===row); if(!j){ return; }
+  const it=(((D.fleetio&&D.fleetio.issues)||[]).find(x=>String(x.num)===String(num)));
+  const task="🔧 #"+num+" "+((it&&it.summary)||("Issue "+num));
+  const payload={ action:"addTask", project:j.project, jobNum:j.jobNum||"", bay:j.bay||"", task:task,
+    assigned:"", milestone:"", comments:"Fleetio issue #"+num, pin:CLOSE_PIN, user:CURRENT_USER };
+  shopWrite(payload).then(()=>{
+    if(!j.tasks) j.tasks=[];
+    j.tasks.push({t:task, who:"", op:localISO(Date.now()), cl:null, st:"Open", done:false, ml:"", cm:payload.comments});
+    oRecompute(j); oApply();
+  }).catch(()=>alert("Couldn't reach the service — try again."));
+}
 
 /* ---------- Instant on-screen update: reflect a save immediately, and stop the
    30s poll from reverting it until the workbook's data.js actually regenerates. ---------- */
@@ -1869,7 +1892,8 @@ function renderFloor(D){
   const today=D.todayISO, jobs=D.jobs||[];
   // Open Fleetio issues indexed by Job# digits, to surface on the matching bay card.
   const flByJob={};
-  ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ const k=(((it.jobNum||"").match(/\d{3,}/)||[])[0]); if(k){(flByJob[k]=flByJob[k]||[]).push(it);} });
+  // Trailer issues only on the bay card — tractor issues (Doug's) stay on the FLEETIO tab.
+  ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(/tractor/i.test(it.asset||"")) return; const k=(((it.jobNum||"").match(/\d{3,}/)||[])[0]); if(k){(flByJob[k]=flByJob[k]||[]).push(it);} });
   const fleetioFor=j=>{ const out=[],seen={}; (((j.jobNum||"").match(/\d{3,}/g))||[]).forEach(k=>{(flByJob[k]||[]).forEach(it=>{ if(!seen[it.num]){seen[it.num]=1; out.push(it);} });}); return out; };
   const shortAsset=s=>{ s=(s||"").trim(); const m=s.match(/^(.*?)(?:19|20)\d\d/); return (m?m[1]:s).trim().slice(0,26); };
   // Prune locally-remembered closes the export has now confirmed (task no longer open).
@@ -1878,6 +1902,22 @@ function renderFloor(D){
     jobs.forEach(j=>{ (j.tasks||[]).forEach(t=>{ if(!t.done) _ok.add(closedKey(j.project,t.t)); }); });
     let _ch=false; CLOSED_LOCAL.forEach(k=>{ if(!_ok.has(k)){ CLOSED_LOCAL.delete(k); _ch=true; } });
     if(_ch){ try{ localStorage.setItem('mra_closed', JSON.stringify([...CLOSED_LOCAL])); }catch(e){} }
+  }
+  // Fleetio -> board close sync: when a tracked Fleetio task's issue is no longer open in
+  // Fleetio, close it here too. Guarded: only when the feed is healthy (issues present) and
+  // someone is signed in — so a transient empty feed never mass-closes tasks.
+  if(D.fleetio && ((D.fleetio.issues||[]).length>0) && CLOSE_PIN){
+    const openNums=new Set((D.fleetio.issues||[]).map(i=>String(i.num)));
+    const d2=new Date(), cd2=(d2.getMonth()+1)+"/"+d2.getDate()+"/"+d2.getFullYear();
+    jobs.forEach(j=>{ let ch=false; (j.tasks||[]).forEach(t=>{
+      if(t.done) return; const m=(t.t||'').match(/🔧\s*#(\d+)/); if(!m) return;
+      const key=j.project+'#'+m[1];
+      if(!openNums.has(m[1]) && !FLEETIO_AUTOCLOSED.has(key)){
+        FLEETIO_AUTOCLOSED.add(key);
+        fetch(CLOSE_FLOW_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({project:j.project,task:t.t,closedDate:cd2,pin:CLOSE_PIN,user:CURRENT_USER})});
+        t.done=true; t.st='Done'; t.cl=localISO(Date.now()); ch=true;
+      }
+    }); if(ch) oRecompute(j); });
   }
   const bayJobs=jobs.filter(j=>j.category==="bay");
   const pipeJobs=jobs.filter(j=>j.category==="pipeline");
@@ -1945,7 +1985,8 @@ function renderFloor(D){
     if(c.overdue) pills+=`<span class="pill due">${Math.abs(c.daysLeft)}d overdue</span>`;
     else if(c.dueSoon) pills+=`<span class="pill soon">due ${c.daysLeft}d</span>`;
     const jOpen=expandedJobs.has(j.row);
-    const fl=fleetioFor(j);
+    const _trk=new Set((j.tasks||[]).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
+    const fl=fleetioFor(j).filter(it=>!_trk.has(String(it.num)));  // hide issues already added as tasks
     if(j.openCount>0) pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
     if(fl.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Live Fleetio maintenance issues for this trailer">🔧 ${fl.length} Fleetio ${jOpen?"▾":"▸"}</span>`;
     let tl="";
@@ -1962,7 +2003,7 @@ function renderFloor(D){
       if(fl.length){
         tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
           const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
-          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}">🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}</div>`;
+          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}</div>`;
         }).join("")+`</div>`;
       }
     }
