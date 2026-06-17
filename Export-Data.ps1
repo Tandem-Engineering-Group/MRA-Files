@@ -531,50 +531,52 @@ if (Test-Path $FleetioTokenFile) {
         function EntryStamp($e){ foreach($p in @('located_at','created_at','recorded_at','updated_at')){ if($e.$p){ try { return [datetime]$e.$p } catch {} } } return [datetime]::MinValue }
         function GrabAddr($o){ foreach($p in @('geocoded_address','formatted_address','address','name','description','place_name')){ if($o.$p){ return [string]$o.$p } } return '' }
         $LocDbg = Join-Path $ScriptDir 'fleetio-loc-debug.txt'
+        # The vehicles endpoint uses Fleetio's cursor-paginated API: { records:[...], next_cursor }.
+        function Get-FleetioCursor($path, $headers) {
+            $all = New-Object System.Collections.ArrayList; $cursor = $null; $guard = 0
+            do { $guard++
+                $sep = if ($path -match '\?') { '&' } else { '?' }
+                $url = "https://secure.fleetio.com/api/v1/$path$sep" + "per_page=100"
+                if ($cursor) { $url += "&start_cursor=$([uri]::EscapeDataString([string]$cursor))" }
+                $resp = Invoke-WebRequest -Uri $url -Headers $headers -UseBasicParsing -Method GET -TimeoutSec 30
+                $obj = $resp.Content | ConvertFrom-Json
+                if ($null -ne $obj.records) { foreach ($x in $obj.records) { [void]$all.Add($x) }; $cursor = $obj.next_cursor }
+                else { foreach ($x in @($obj)) { [void]$all.Add($x) }; $cursor = $null }   # tolerate a bare array
+            } while ($cursor -and $guard -lt 25)
+            return $all
+        }
         try {
             "=== Fleetio location debug  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $LocDbg -Encoding utf8
-            $veh = @(Get-FleetioAll 'vehicles' $fhead)
+            $veh = @(Get-FleetioCursor 'vehicles' $fhead)
             "vehicles fetched: $($veh.Count)" | Out-File $LocDbg -Append -Encoding utf8
-            # raw dump of the first 2 vehicle records (shows if location is embedded + the name format)
-            ($veh | Select-Object -First 2 | ConvertTo-Json -Depth 6) | Out-File $LocDbg -Append -Encoding utf8
+            $withLoc = @($veh | Where-Object { $_.current_location_entry_id })   # only these have a GPS fix
+            "vehicles with a location: $($withLoc.Count)" | Out-File $LocDbg -Append -Encoding utf8
             $locN = 0; $tried = 0; $dumpedLE = $false
-            foreach ($v in $veh) {
+            foreach ($v in $withLoc) {
                 $key = NormFleet $v.name; if ($key -eq '') { continue }
+                if ($tried -ge 250) { break }   # safety cap
+                $tried++
                 $addr=''; $lat=$null; $lng=$null; $atISO=$null
-                # 1) location embedded on the vehicle record (some telematics integrations expose it here)
-                foreach ($lp in @('current_location','last_location','location','latest_location_entry','current_location_entry')) {
-                    $o = $v.$lp
-                    if ($o) { $addr = GrabAddr $o; if ($o.latitude) { $lat=$o.latitude; $lng=$o.longitude }
-                        foreach($tp in @('located_at','updated_at','created_at')){ if($o.$tp){ $atISO=[string]$o.$tp; break } }
-                        if ($addr -or $lat) { break } }
-                }
-                if (-not $addr -and -not $lat) {
-                    foreach ($ap in @('current_location_address','location_address','geocoded_address')) { if ($v.$ap) { $addr=[string]$v.$ap; break } }
-                    if ($v.latitude) { $lat=$v.latitude; $lng=$v.longitude }
-                }
-                # 2) fall back to the /location_entries endpoint (telematics logs entries here)
-                if (-not $addr -and -not $lat -and $tried -lt 80) {
-                    $tried++
-                    try {
-                        $leResp = Invoke-WebRequest -Uri "https://secure.fleetio.com/api/v1/vehicles/$($v.id)/location_entries?per_page=10" -Headers $fhead -UseBasicParsing -Method GET -TimeoutSec 20
-                        if (-not $dumpedLE) { $dumpedLE = $true; "--- first location_entries response (vehicle '$($v.name)' id $($v.id)) ---" | Out-File $LocDbg -Append -Encoding utf8; $leResp.Content | Out-File $LocDbg -Append -Encoding utf8 }
-                        $le = @($leResp.Content | ConvertFrom-Json)
-                        if ($le.Count -gt 0) {
-                            $e = $le | Sort-Object { EntryStamp $_ } -Descending | Select-Object -First 1
-                            $addr = GrabAddr $e; if ($e.latitude) { $lat=$e.latitude; $lng=$e.longitude }
-                            $st = EntryStamp $e; if ($st -ne [datetime]::MinValue) { $atISO = $st.ToString('o') }
-                        }
-                    } catch { "loc_entries error '$($v.name)': $($_.Exception.Message)" | Out-File $LocDbg -Append -Encoding utf8 }
-                    Start-Sleep -Milliseconds 80
-                }
+                try {
+                    $leResp = Invoke-WebRequest -Uri "https://secure.fleetio.com/api/v1/vehicles/$($v.id)/location_entries?per_page=5" -Headers $fhead -UseBasicParsing -Method GET -TimeoutSec 20
+                    if (-not $dumpedLE) { $dumpedLE = $true; "--- first location_entries response (vehicle '$($v.name)' id $($v.id)) ---" | Out-File $LocDbg -Append -Encoding utf8; $leResp.Content | Out-File $LocDbg -Append -Encoding utf8 }
+                    $o = $leResp.Content | ConvertFrom-Json
+                    $entries = if ($null -ne $o.records) { @($o.records) } else { @($o) }
+                    if ($entries.Count -gt 0) {
+                        $e = $entries | Sort-Object { EntryStamp $_ } -Descending | Select-Object -First 1
+                        $addr = GrabAddr $e; if ($e.latitude) { $lat=$e.latitude; $lng=$e.longitude }
+                        $st = EntryStamp $e; if ($st -ne [datetime]::MinValue) { $atISO = $st.ToString('o') }
+                    }
+                } catch { "loc_entries error '$($v.name)': $($_.Exception.Message)" | Out-File $LocDbg -Append -Encoding utf8 }
                 $place = PlaceFromAddr $addr
                 if ($place -eq '' -and $lat -and $lng) { $place = ("{0:N3}, {1:N3}" -f [double]$lat, [double]$lng) }
                 if ($place -eq '') { continue }
                 $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO }
                 $locN++
-                if ($locN -le 5) { "LOCATED $key -> '$place'  (addr='$addr' at='$atISO')" | Out-File $LocDbg -Append -Encoding utf8 }
+                if ($locN -le 8) { "LOCATED $key -> '$place'  (addr='$addr' at='$atISO')" | Out-File $LocDbg -Append -Encoding utf8 }
+                Start-Sleep -Milliseconds 200
             }
-            "located total: $locN  (location_entries queried: $tried)" | Out-File $LocDbg -Append -Encoding utf8
+            "located total: $locN  (queried: $tried)" | Out-File $LocDbg -Append -Encoding utf8
             Write-Output "  -> Fleetio: located $locN unit(s); debug -> fleetio-loc-debug.txt"
         } catch { "FATAL: $($_.Exception.Message)" | Out-File $LocDbg -Append -Encoding utf8; Write-Output "  -> Fleetio location pull failed: $($_.Exception.Message)" }
 
