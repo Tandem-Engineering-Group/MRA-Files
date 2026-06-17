@@ -101,7 +101,7 @@
   .gwinslider{width:120px; accent-color:var(--blue); vertical-align:middle}
   .gwinlab{min-width:34px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums}
   .projsearch{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 10px; font-size:12px; font-family:inherit; margin-left:12px; width:210px; font-weight:400}
-  .mitten{font-size:14px; vertical-align:middle; line-height:1}
+  .mitten{display:inline-block; vertical-align:-2px; line-height:1}
   .mappin{text-decoration:none; cursor:pointer; opacity:.8}
   .mappin:hover{opacity:1}
   .barpop .pp-line{font-size:11.5px; margin:5px 0 3px}
@@ -1248,6 +1248,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.48", date:"2026-06-17", title:"🧤 mitten is now Michigan blue", items:[
+    "Swapped the tan mitten emoji for a clean University-of-Michigan-blue mitten (with a maize cuff) on the FLEET / FLEETIO / EQUIPMENT tabs." ] },
   { rev:"3.47", date:"2026-06-17", title:"Equipment: click an item for details", items:[
     "Click any item on the EQUIPMENT tab to open a detail card — where it is on the floor (bay / status), the project (PM · dates · %), and the fleet units on that job with their live location (+📍), open Fleetio items, compliance and 🧤/🍁 flags. All cross-referenced by job #; info-only items just show name / J# / description." ] },
   { rev:"3.46", date:"2026-06-17", title:"Click-to-map 📍 + more hover help", items:[
@@ -3256,7 +3258,10 @@ function plantKeys(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_plantG
     (String(j.project||'').match(/\b\d{2,5}\b/g)||[]).forEach(n=>{ const k=_normKey(n); if(roster.has(k) && !located.has(k)) _plantKeys.add(k); }); });
   return _plantKeys; }
 function atPlant(s){ if(!s) return false; return plantKeys().has(_normKey(s)); }
-function plantFlag(s){ return atPlant(s)?' <span class="mitten" title="In Michigan 🧤 — the mitten state">🧤</span>':''; }
+// 🧤 Michigan badge — drawn as a University-of-Michigan-blue mitten with a maize cuff (not the tan emoji).
+const MITTEN_ICON='<svg viewBox="0 0 32 32" width="13" height="13" style="vertical-align:-2px"><rect x="11" y="3" width="13" height="23" rx="6.5" fill="#00274C"/><rect x="3" y="11" width="9" height="11" rx="4.5" fill="#00274C"/><rect x="6" y="24" width="19" height="4.5" rx="2.2" fill="#FFCB05"/></svg>';
+function mittenTag(){ return ' <span class="mitten" title="In Michigan — the mitten state">'+MITTEN_ICON+'</span>'; }
+function plantFlag(s){ return atPlant(s)?mittenTag():''; }
 // EQUIPMENT items link by JOB # (e.g. J1557), not fleet #. Build job#→flag indexes: a job is "at the
 // plant" if a floor job with that # is in a work bay OR a fleet unit working that # is at MRA; it's
 // Canadian if a fleet unit working that # is Canadian. So equipment inherits the right flag.
@@ -3271,7 +3276,7 @@ function _equipJobIndex(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_e
 function _ejnums(e){ return (String(e&&e.j||'').match(/\d{3,5}/g)||[]); }
 function atPlantEquip(e){ _equipJobIndex(); if(_ejnums(e).some(n=>_plantJobs.has(n))) return true; return atPlant((e&&e.n||'')+' '+(e&&e.j||'')); }
 function canEquip(e){ _equipJobIndex(); if(_ejnums(e).some(n=>_canJobs.has(n))) return true; return canAsset((e&&e.n||'')+' '+(e&&e.j||'')+' '+(e&&e.d||'')); }
-function plantFlagEquip(e){ return atPlantEquip(e)?' <span class="mitten" title="In Michigan 🧤 — the mitten state">🧤</span>':''; }
+function plantFlagEquip(e){ return atPlantEquip(e)?mittenTag():''; }
 function canFlagEquip(e){ return canEquip(e)?' <span title="Canadian asset">🍁</span>':''; }
 // Flag picker (FLEETIO): '' = any, 'plant' = 🧤 at MRA, 'can' = 🍁 Canadian. Reads the dropdown live.
 function fioFlagOK(name){ const fg=(document.getElementById('fioFlag')||{}).value||''; if(!fg) return true; return fg==='can'?canAsset(name):atPlant(name); }
@@ -3302,7 +3307,7 @@ function eqPop(e){ _eqIndex();
   const us={}; units=units.filter(v=>{ const k=_normKey(v.f); if(us[k])return false; us[k]=1; return true; });
   if(units.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">UNITS ON THIS JOB (${units.length})</div>`
     + units.slice(0,12).map(v=>{ const loc=LOC[_normKey(v.f)], open=(+v.oi||0)+(+v.ow||0), comp=(v.comp||[]).filter(c=>c.s==='overdue'||c.s==='due_soon');
-        return `<div>• <b>${esc(v.f)}</b> ${esc(v.t||'')} ${esc(v.mk||'')}${isCanadian({rs:v.rs,nm:v.nm,m:v.mk})?' 🍁':''}${atPlant(v.f)?' 🧤':''}</div>`
+        return `<div>• <b>${esc(v.f)}</b> ${esc(v.t||'')} ${esc(v.mk||'')}${isCanadian({rs:v.rs,nm:v.nm,m:v.mk})?' 🍁':''}${atPlant(v.f)?(' '+MITTEN_ICON):''}</div>`
           + (loc?`<div class="pp-det">📍 ${esc(loc.yard||loc.place)}${loc.atISO?' · '+esc(fleetAgo(loc.atISO)):''}${mapPin(loc)}</div>`:'')
           + (open?`<div class="pp-det">${open} open Fleetio item(s)</div>`:'')
           + (comp.length?`<div class="pp-det">⚠ ${comp.map(c=>esc((c.ty||'')+' '+(c.s==='overdue'?'overdue':'due soon'))).join(', ')}</div>`:'');
