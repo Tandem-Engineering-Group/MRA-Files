@@ -98,6 +98,7 @@
   .gwinwrap{display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); margin-right:4px}
   .gwinslider{width:120px; accent-color:var(--blue); vertical-align:middle}
   .gwinlab{min-width:34px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums}
+  .projsearch{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 10px; font-size:12px; font-family:inherit; margin-left:12px; width:210px; font-weight:400}
   .rb{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
     font-size:11px; font-weight:700; padding:3px 11px; border-radius:7px; cursor:pointer; letter-spacing:.5px}
   .rb.active{background:var(--blue); border-color:var(--blue); color:#fff}
@@ -623,7 +624,7 @@
     </div>
 
     <div class="panel">
-      <h2>Project Schedules — Gantt
+      <h2>Project Schedules — Gantt <input id="projSearch" type="search" placeholder="Find project or job #…" oninput="setPFilter(this.value)" class="projsearch">
         <div class="rangebtns" id="rangeBtns">
           <span class="gwinwrap" title="Zoom the timeline — drag from 1 week to 1 year">🔍<input id="gwinSlider" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider"><span id="gwinLab" class="gwinlab"></span></span>
           <div class="rb" data-m="1" onclick="setRange(1)">1 mo</div>
@@ -1103,6 +1104,7 @@ let RANGE = 'all';           // projects gantt range (months or 'all')
 let VIEW = 'floor';
 try{ VIEW = localStorage.getItem('mra_view')||'floor'; RANGE = JSON.parse(localStorage.getItem('mra_range'))||3; }catch(e){ RANGE=3; }
 let GWIN_DAYS=null; try{ const _gw=parseInt(localStorage.getItem('mra_gwin'),10); if(_gw>=7&&_gw<=365) GWIN_DAYS=_gw; }catch(e){}  // gantt zoom: continuous window length (days); overrides RANGE presets when set
+let PFILTER='';   // projects tab: filter by project name / PM / job # (matches task text)
 let TEAMFILTER='all';
 try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
 let GFS=null;              // full-screen gantt: 'floor' | 'projects' | null
@@ -1228,6 +1230,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.31", date:"2026-06-17", title:"Projects: filter by project / job #", items:[
+    "New search box on the Projects Gantt — type a project name, PM, or a job # (e.g. 1543) to filter the Gantt and the Project Progress list down to the matching build(s). Clear it to see everything again." ] },
   { rev:"3.30", date:"2026-06-17", title:"Projects Gantt: dates on bars + zoom slider", items:[
     "Each Gantt bar now shows its Start and Finish dates — on the bar when there's room, and always in the hover tooltip (which also shows PM, task count and % complete). Milestone ◆ already show name + date on hover.",
     "New 🔍 zoom slider on the Projects Gantt — drag smoothly from a 1-week view out to a full year; the 1 / 3 / 6-mo buttons still work as quick jumps, and your zoom level is remembered per screen.",
@@ -2756,7 +2760,7 @@ function renderProjects(D){
   const win=buildWindow(mStart,days);
   { const sl=document.getElementById('gwinSlider'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(days); }
 
-  const dated=projects.filter(p=>p.startISO&&p.finishISO);
+  const dated=projects.filter(p=>p.startISO&&p.finishISO&&projMatch(p));
   const rows=dated.map(p=>({_p:p})).map(({_p:p})=>({
     label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
     startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
@@ -2808,7 +2812,7 @@ function renderProjects(D){
   document.getElementById('msCount').textContent = upMs.length + (missed.length?` · ${missed.length} missed`:'');
 
   // Project progress list — at-risk first, with health chip + expected-progress tick
-  const prog=projects.filter(p=>projStatus(p,today)!=="done").map(p=>({p,h:health.get(p)}))
+  const prog=projects.filter(p=>projStatus(p,today)!=="done"&&projMatch(p)).map(p=>({p,h:health.get(p)}))
     .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||"9999").localeCompare(b.p.finishISO||"9999")));
   document.getElementById('progress').innerHTML=prog.map(({p,h})=>{
     const chip = h.state==='late'?`<span class="hchip late">⚠ past due</span>`
@@ -3480,6 +3484,13 @@ function setGwin(d){ GWIN_DAYS=Math.max(7,Math.min(365,Math.round(d))); try{loca
   const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(GWIN_DAYS);
   if(window.MRA_DATA) renderProjects(window.MRA_DATA); if(GFS) renderGanttFS();
 }
+// Projects filter: match project name, PM, or a job # found in any of its tasks.
+function projMatch(p){ if(!PFILTER) return true; const q=PFILTER;
+  if((p.name||'').toLowerCase().indexOf(q)>=0) return true;
+  if((p.pm||'').toLowerCase().indexOf(q)>=0) return true;
+  if((p.tasks||[]).some(t=>(t.t||'').toLowerCase().indexOf(q)>=0)) return true;
+  return false; }
+function setPFilter(v){ PFILTER=(v||'').trim().toLowerCase(); if(window.MRA_DATA) renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); }
 
 /* ---------- Full-screen Gantt + conflict detection ---------- */
 function isoOverlap(a,b){ return a.startISO<=b.completionISO && b.startISO<=a.completionISO; }
@@ -3631,7 +3642,7 @@ function renderGanttFS(){
       days=Math.max(31,Math.ceil((maxFin-mStart.getTime())/DAY)+20); }
     else days=Math.round(RANGE*30.4);
     const win=buildWindow(mStart,days);
-    const dated=projects.filter(p=>p.startISO&&p.finishISO && barGeom(p.startISO,p.finishISO,win))
+    const dated=projects.filter(p=>p.startISO&&p.finishISO && barGeom(p.startISO,p.finishISO,win) && projMatch(p))
       .sort((a,b)=>(a.startISO||'').localeCompare(b.startISO||''));
     const rows=[];
     dated.forEach((p,i)=>{
