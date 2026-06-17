@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """Build the standard MRA Project Intake Template (.xlsx).
 
-Layout (2026-06-17): a letterhead + a one-time info block (Project / Job # / PM),
-then a task table that MIRRORS the master 'Project Tasks' sheet — same columns AND
-the same look (dark header, gold milestone rows) so an upload/paste is an easy match.
+Slim header (logo + title) + a tiny info block (Project / Job # / PM), then a task
+table that MIRRORS the master 'Project Tasks' sheet — same columns AND the same look
+(dark header, gold milestone rows) so an upload/paste is an easy match.
 
 Task table = master cols A..N:
     A=Project  B=Phase  C=Type  D=Task  E=Start  F=Finish  G=Duration
     H=Assigned To  I=Status  J=PM  K=Milestone  L=Comments  M=Task ID  N=Predecessor
 
-Project (A) and PM (J) auto-fill down from the info-block boxes via formula (type once).
-M=Task ID is assigned by the system on import (leave blank); N=Predecessor is by Task ID,
-so it's system-managed too — both are shown greyed to match the sheet. The template ships
-with 10 gold-shaded milestone rows (Milestone 1..10) as a ready scaffold.
+Only Project / Client and Project Manager are functionally required (Project & PM
+auto-fill down columns A & J; the importer also falls back to these). MRA Job # is
+optional (appended to the project name). Task ID (M) is system-assigned on import;
+Predecessor (N) is by Task ID — both shown greyed. Ships with 10 gold milestone rows
+(Milestone 1..10) each followed by 5 blank task rows.
 
-Import-Intake.ps1 reads this sheet back (MIRROR layout: header A="Project" & D="Task").
+Import-Intake.ps1 reads this back (MIRROR layout: header A="Project" & D="Task").
 Change a label/column here -> update the matching reader in Import-Intake.ps1.
 """
 import os
@@ -30,7 +31,7 @@ GOLD = "FFE699"    # milestone row shading — matches the master
 DARK = "1F2430"
 GREY = "6B7280"
 FIELD = "FFF7F4"   # very light orange tint for fill-in cells
-AUTO = "F3F4F6"    # light grey for auto-filled / system columns (Project, PM, Task ID, Predecessor)
+AUTO = "F3F4F6"    # light grey for auto-filled / system columns
 
 wb = openpyxl.Workbook()
 ws = wb.active
@@ -46,15 +47,12 @@ LISTS = {
     "C": ("Type", ["Meeting", "Hard Date", "Design Task", "Materials",
                    "Production Task", "Client", "Logistics", "QA",
                    "Milestone"]),
-    # Status MUST match the dashboard editor (PROJ_STATUS_OPTIONS).
     "D": ("Status", ["Not Started", "In Progress", "Completed", "On Hold"]),
     "E": ("Milestone", ["Yes", "No"]),
     "F": ("PM", ["Megan Fraser", "Al Karloff", "Stephanie Hardie", "Alex Karam",
                  "Luciana Giglio", "Frank Mancina", "Mark St Jean",
                  "Sherri Washington", "Sherrill Buchan", "Cindy Irland",
                  "Mitch Schirr", "Heather Maloney", "TBD"]),
-    # Assigned To = canonical project assignees (orgs/groups + key people).
-    # Editable here on the hidden Lists sheet; the column also accepts free text.
     "G": ("Assigned", ["MRA", "MRA Shop", "Combined Effort", "Megan Fraser",
                        "Al Karloff", "Gino Bitonti", "Sal", "Doug",
                        "MasterWraps", "Electricians", "Vendor", "Medtronic",
@@ -77,36 +75,28 @@ thin = Side(style="thin", color="D1D5DB")
 box = Border(left=thin, right=thin, top=thin, bottom=thin)
 bottom = Border(bottom=Side(style="thin", color="C9CDD3"))
 
-# ---- Letterhead -------------------------------------------------------------
+# ---- Slim letterhead (logo + title only) -----------------------------------
 logo_path = os.path.join(HERE, "logo.png")
 if os.path.exists(logo_path):
     img = XLImage(logo_path)
-    img.width = 104
-    img.height = 104
+    img.width = 74
+    img.height = 74
     ws.add_image(img, "A1")
 
-for r, h in {1: 26, 2: 24, 3: 16, 4: 20, 5: 8}.items():
+for r, h in {1: 22, 2: 20, 3: 6}.items():
     ws.row_dimensions[r].height = h
 
-ws.merge_cells("C1:N2")
+ws.merge_cells("C1:N1")
 t = ws["C1"]
 t.value = "PROJECT INTAKE  —  TASK SCHEDULE"
-t.font = Font(bold=True, size=20, color=ORANGE)
+t.font = Font(bold=True, size=18, color=ORANGE)
 t.alignment = Alignment(vertical="center")
-
-ws.merge_cells("C3:N3")
-a = ws["C3"]
-a.value = "950 E Whitcomb Ave  ·  Madison Heights, MI 48071  ·  p 248.629.2929 / f 248.629.2921"
+ws.merge_cells("C2:N2")
+a = ws["C2"]
+a.value = "950 E Whitcomb Ave  ·  Madison Heights, MI 48071  ·  248.629.2929"
 a.font = Font(size=9, color=GREY)
 
-ws.merge_cells("C4:N4")
-d = ws["C4"]
-d.value = ("Fill this out, then upload it on the dashboard (Projects ▸ ⬆ Upload Filled Template) "
-           "or drop it in the Intake Inbox folder — or copy the task rows and Paste → Values into "
-           "the master Project Tasks sheet.")
-d.font = Font(size=9, italic=True, color=GREY)
-
-# ---- Info block (one-time header fields) ------------------------------------
+# ---- Tiny info block: Project / Job # / PM only ----------------------------
 def label(ref, text):
     c = ws[ref]
     c.value = text
@@ -127,13 +117,13 @@ def field(top_left, span_to, prompt=None, title=None):
         dv.add(top_left)
     return c
 
-INFO0 = 6   # Project field = B6, PM field = B7 (referenced by the autofill formulas)
-for i, rr in enumerate((INFO0, INFO0 + 1, INFO0 + 2)):
+INFO0 = 4   # Project field = B4, PM field = B5 (referenced by the autofill formulas)
+for rr in (INFO0, INFO0 + 1):
     ws.row_dimensions[rr].height = 20
 
 label(f"A{INFO0}", "Project / Client:")
 field(f"B{INFO0}", f"D{INFO0}", title="Project / Client",
-      prompt="Type the project name. Brand-new jobs are welcome - just type it. It auto-fills down column A.")
+      prompt="Type the project name (new jobs welcome). It auto-fills down column A.")
 label(f"F{INFO0}", "MRA Job #:")
 field(f"G{INFO0}", f"H{INFO0}", title="MRA Job #",
       prompt='Job number if you have one, or type "NEW".')
@@ -141,16 +131,9 @@ field(f"G{INFO0}", f"H{INFO0}", title="MRA Job #",
 label(f"A{INFO0+1}", "Project Manager:")
 field(f"B{INFO0+1}", f"D{INFO0+1}", title="Project Manager",
       prompt="The PM for this project — auto-fills down column J.")
-label(f"F{INFO0+1}", "Issue Date:")
-field(f"G{INFO0+1}", f"H{INFO0+1}")
-
-label(f"A{INFO0+2}", "Prepared By:")
-field(f"B{INFO0+2}", f"D{INFO0+2}")
-label(f"F{INFO0+2}", "Attn / Client Contact:")
-field(f"G{INFO0+2}", f"H{INFO0+2}")
 
 # ---- Task table header (dark band, like the master sheet) -------------------
-HDR = INFO0 + 4
+HDR = INFO0 + 3
 ws.row_dimensions[HDR - 1].height = 8
 heads = ["Project", "Phase", "Type", "Task", "Start", "Finish", "Duration",
          "Assigned To", "Status", "PM", "Milestone", "Comments", "Task ID", "Predecessor"]
@@ -165,26 +148,28 @@ for c, h in enumerate(heads, start=1):
     cell.border = box
 ws.row_dimensions[HDR].height = 24
 
-# ---- Body ------------------------------------------------------------------
+# ---- Body: 10 gold milestone rows, each followed by 5 blank task rows -------
 DATA0 = HDR + 1
-NMILE = 10                      # ship 10 gold milestone scaffold rows
-LASTROW = DATA0 + 300
+NMILE, GAP = 10, 5
+STEP = GAP + 1
+mile_at = {DATA0 + i * STEP: i + 1 for i in range(NMILE)}
+LASTROW = DATA0 + NMILE * STEP + 60
 auto_fill = PatternFill("solid", fgColor=AUTO)
 gold_fill = PatternFill("solid", fgColor=GOLD)
 projF = '=IF($B$%d="","",$B$%d)' % (INFO0, INFO0)
 pmF = '=IF($B$%d="","",$B$%d)' % (INFO0 + 1, INFO0 + 1)
 
-for idx, r in enumerate(range(DATA0, LASTROW)):
-    is_mile = idx < NMILE
+for r in range(DATA0, LASTROW):
     for c in range(1, 15):     # A..N
         ws.cell(row=r, column=c).border = box
     ws.cell(row=r, column=1, value=projF)      # A Project (autofill)
     ws.cell(row=r, column=10, value=pmF)       # J PM (autofill)
     ws.cell(row=r, column=5).number_format = "m/d/yyyy"   # Start
     ws.cell(row=r, column=6).number_format = "m/d/yyyy"   # Finish
-    if is_mile:
+    if r in mile_at:
+        n = mile_at[r]
         ws.cell(row=r, column=3, value="Milestone")        # C Type
-        ws.cell(row=r, column=4, value="Milestone %d" % (idx + 1))  # D Task
+        ws.cell(row=r, column=4, value="Milestone %d" % n) # D Task
         ws.cell(row=r, column=9, value="Not Started")      # I Status
         ws.cell(row=r, column=11, value="Yes")             # K Milestone
         for c in range(1, 15):
@@ -195,7 +180,7 @@ for idx, r in enumerate(range(DATA0, LASTROW)):
         ws.cell(row=r, column=13).fill = auto_fill         # M Task ID (system)
         ws.cell(row=r, column=14).fill = auto_fill         # N Predecessor (system)
 
-# ---- Dropdowns (Project/PM auto-filled; Task ID/Predecessor system) ---------
+# ---- Dropdowns -------------------------------------------------------------
 def add_dv(col_letter, src, last=LASTROW - 1):
     dv = DataValidation(type="list", formula1=src, allow_blank=True,
                         showErrorMessage=False, showDropDown=False)
@@ -225,4 +210,5 @@ ws.page_margins.top = ws.page_margins.bottom = 0.5
 
 out = os.path.join(HERE, "MRA_Project_Intake_Template.xlsx")
 wb.save(out)
-print("wrote", out, "| header row", HDR, "| data starts", DATA0, "| milestone rows", NMILE)
+print("wrote", out, "| header row", HDR, "| data starts", DATA0,
+      "| milestones at rows", sorted(mile_at.keys()))
