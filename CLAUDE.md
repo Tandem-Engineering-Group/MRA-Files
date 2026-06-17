@@ -123,6 +123,34 @@ See `INSTRUCTIONS.md` for the complete Azure deployment runbook.
   NOTE: write-back itself WORKS (edits save); only the `Who` column is cosmetically blank, so
   the log is a usable audit trail (action / time / project) minus the name. Parked at Rich's request.
 
+## In progress / queued (2026-06-17)
+
+- **Siemens DI Pedestal import** (from Rich's PDF "SIEMENS DI Preliminary Hard Date Schedule
+  v1.06.10.2026"). Parsed to **15 tasks** across 5 phases (Project Planning / Creative Design /
+  Production / Post Production / Launch). Decisions confirmed: fix spelling **Seimans → Siemens
+  DI Pedestal** and **replace** its 2 existing rows (currently rows 318–319, Task IDs 317–318);
+  PM=Megan Fraser; party → Assigned To (MRA / Siemens DI / Heitek / Combined); dates 2026 → Finish
+  (two ranges get Start+Finish); Completed→`Completed`, Upcoming/Future→`Not Started`; milestones
+  ◆ = "Pedestal Completion" (Jul 31) + "Upcoming Event · Boston, MA" (Aug 5). NOT yet written.
+- **Medtronic import** (from "Medtronic_Production_Schedule_v4.06.05.2026.xlsx", sheet `2026`).
+  GREEN-LIT by Rich: **wipe all ~101 old Medtronic rows, replace** with this schedule. Structure:
+  **bold col-A items = Phases** (Contract Items, Scope of Work & Schedule, Budget, Conceptual
+  Exhibit & Display Design, Interior Graphic Design, Exterior Graphic Design, … more below row 80),
+  tasks in col B, **Start=col I, Finish=col J**, PM=Megan Fraser. **Assigned To = best-effort from
+  the color legend** (Rich will correct via dropdowns): Copper=MRA · Blue=Medtronic · Green=Learning
+  Undefeated · Red=IXL/TSS · Yellow=Brinkbit · Purple=Combined Effort · Grey=Other. CAUTION: the bar
+  colors are theme-based and don't extract cleanly via openpyxl — needs raw-XML/theme resolution or
+  a best guess. NOT yet written. Plan: build both imports into the workbook in one pass and send the
+  file to Rich to review before he saves (the safe pattern; avoid mass raw-XML row deletion risk).
+- **Assigned-To dropdowns** (Rich doing offline): he's standardizing the Assigned-To values via Excel
+  data-validation dropdowns and will rename assignees. Job: treat one canonical assignee list as truth
+  and **flag mismatches** (typos, a color/name with no home). Canonical names seen so far: MRA, MRA Shop,
+  Medtronic, Learning Undefeated, IXL/TSS, Brinkbit, Combined Effort, Siemens DI, Heitek, Sal,
+  MasterWraps, Electricians, Doug, Vendor + people (Megan Fraser, Al Karloff, Gino Bitonti…). Ask Rich
+  where the master dropdown list lives (a tab, or the validation on the Assigned-To column).
+- **MRA Shop load highlight = DONE** (rev 3.6, see below). Future: a dropdown to highlight *other*
+  resources too (Rich asked to start with MRA Shop only).
+
 ## Shipped 2026-06-16 (evening) — Projects editor
 
 - **In-dashboard Project Tasks editor is LIVE** (rev 3.5): PROJECTS tab → **✎ Edit Project Tasks**
