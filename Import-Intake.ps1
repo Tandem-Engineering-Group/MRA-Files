@@ -129,10 +129,12 @@ function Close-Zip($z) {
 }
 
 # Read the 'Enter Here' sheet -> array of object[12] (Project..Comments);
-# $null if the sheet is missing. Handles two layouts:
+# $null if the sheet is missing. Handles three layouts:
 #   LEGACY  : header "Project" in A1, data A:L straight down from row 2.
-#   BRANDED : letterhead + info block (Project / Job # / PM filled once), then
-#             a task table whose header row is A="Phase" .. J="Comments".
+#   MIRROR  : current template — letterhead + info block, then a task table whose
+#             header is A="Project" .. L="Comments" (1:1 with the master sheet).
+#   BRANDED : older template — info block + a task table A="Phase" .. J="Comments";
+#             Project & PM are taken from the info block.
 function Read-IntakeRows($path) {
     $z = Open-Zip $path
     try {
@@ -182,30 +184,76 @@ function Read-IntakeRows($path) {
             return $rows
         }
 
-        # ----- BRANDED layout -----------------------------------------------
+        # ----- read the one-time info block (Project / Job # / PM) ----------
+        # Used as a fallback by both the MIRROR and the older BRANDED layouts.
+        # NOTE: match 'project / client' (the real label) NOT a bare 'project',
+        # so the MIRROR task header cell A="Project" can't be mistaken for it.
         $proj = ''; $pm = ''; $job = ''
         for ($r = 1; $r -le $maxRow; $r++) {
             foreach ($col in @('A','B','C','D','E','F','G','H','I','J')) {
                 $t = GVal $grid $col $r
                 if ($t -eq '') { continue }
                 $key = ($t -replace '[:\s]+$','').ToLower()
-                if     ($key -in @('project / client','project/client','project','project / client name')) { $proj = Next-Val $grid $r $col }
+                if     ($key -in @('project / client','project/client','project / client name')) { $proj = Next-Val $grid $r $col }
                 elseif ($key -eq 'project manager') { $pm = Next-Val $grid $r $col }
                 elseif ($key -in @('mra job #','mra job#','job #','job#')) { $job = Next-Val $grid $r $col }
             }
         }
-        $hdr = -1
+
+        # ----- find the task header row & decide the layout -----------------
+        #   MIRROR  (current template): A="Project" .. L="Comments", 1:1 with the
+        #           master 'Project Tasks' sheet (a paste lands straight across).
+        #   BRANDED (older template):   A="Phase" .. J="Comments"; Project & PM
+        #           come from the info block above.
+        $hdr = -1; $layout = ''
         for ($r = 1; $r -le $maxRow; $r++) {
-            if ((GVal $grid 'A' $r) -eq 'Phase' -and (GVal $grid 'C' $r) -eq 'Task') { $hdr = $r; break }
+            $hA = GVal $grid 'A' $r
+            if ($hA -eq 'Project' -and (GVal $grid 'D' $r) -eq 'Task') { $hdr = $r; $layout = 'mirror'; break }
+            if ($hA -eq 'Phase'   -and (GVal $grid 'C' $r) -eq 'Task') { $hdr = $r; $layout = 'branded'; break }
         }
         if ($hdr -lt 1) {
-            Log "SKIP '$([IO.Path]::GetFileName($path))' - 'Enter Here' present but no task header (Phase/Task) found."
+            Log "SKIP '$([IO.Path]::GetFileName($path))' - 'Enter Here' present but no task header (Project/Task or Phase/Task) found."
             return $null
         }
+
         $projOut = $proj
         if ($job -ne '' -and $job.ToUpper() -ne 'NEW' -and $projOut -notmatch [regex]::Escape($job)) {
             $projOut = if ($projOut -ne '') { "$projOut ($job)" } else { $job }
         }
+
+        # ----- MIRROR layout: columns are 1:1 with the master ----------------
+        # Project (A) and PM (J) auto-fill from the info block via formula; if a
+        # cell is blank (formula not yet cached by Excel), fall back to the
+        # info-block value so the import is always populated.
+        if ($layout -eq 'mirror') {
+            for ($r = $hdr + 1; $r -le $maxRow; $r++) {
+                $task = GVal $grid 'D' $r
+                if ($task -eq '') { continue }
+                $aProj = GVal $grid 'A' $r
+                $jPm   = GVal $grid 'J' $r
+                # If Excel hasn't cached the autofill (cell still holds the raw
+                # =IF(...) formula text), treat it as blank and use the info block.
+                if ($aProj -like '=*') { $aProj = '' }
+                if ($jPm   -like '=*') { $jPm   = '' }
+                $line = New-Object 'object[]' $NCOLS
+                $line[0]  = $(if ($aProj -ne '') { $aProj } else { $projOut })   # Project
+                $line[1]  = GVal $grid 'B' $r                                     # Phase
+                $line[2]  = GVal $grid 'C' $r                                     # Type
+                $line[3]  = $task                                                # Task
+                $line[4]  = Coerce-Date (GRaw $grid 'E' $r)                       # Start
+                $line[5]  = Coerce-Date (GRaw $grid 'F' $r)                       # Finish
+                $line[6]  = GRaw $grid 'G' $r                                     # Duration
+                $line[7]  = GVal $grid 'H' $r                                     # Assigned To
+                $line[8]  = GVal $grid 'I' $r                                     # Status
+                $line[9]  = $(if ($jPm -ne '') { $jPm } else { $pm })            # PM
+                $line[10] = GVal $grid 'K' $r                                    # Milestone
+                $line[11] = GRaw $grid 'L' $r                                    # Comments
+                [void]$rows.Add($line)
+            }
+            return $rows
+        }
+
+        # ----- BRANDED layout (older template) -------------------------------
         for ($r = $hdr + 1; $r -le $maxRow; $r++) {
             $task = GVal $grid 'C' $r
             if ($task -eq '') { continue }            # skip skeleton phase rows w/ no task

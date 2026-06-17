@@ -132,6 +132,42 @@ Treat help + rev as PART OF the feature, not an afterthought.
   NOTE: write-back itself WORKS (edits save); only the `Who` column is cosmetically blank, so
   the log is a usable audit trail (action / time / project) minus the name. Parked at Rich's request.
 
+## Shipped 2026-06-17 (morning)
+
+- **MRA Shop load highlight = white outline, picker removed** (rev 3.12). Rich tried the color
+  picker, chose **white outline**, said remove the picker ("just adds more"). `MRA_HL_STYLE` is now
+  a const `'white'`; the `.hlcolor` select + `setMraHlStyle` + unused `.hl-*` CSS are gone.
+- **Added tasks persist on the device through a reload** (rev 3.13). New localStorage pending-adds
+  cache (`PENDING_KEY='mra_pending_adds_v1'`, 12h TTL): `pendAdd` on each add path (submitProjTask add,
+  submitAddTask, addFleetioTask), `mergePending(incoming)` re-applies in `refresh()`. Self-prunes once
+  the row appears in data.js (matched by normalized task text) or after TTL. Fixes Rich's iPad complaint
+  (Safari reloads backgrounded tabs → optimistic add was lost). **Adds only** — closes/edits/deletes
+  still reconcile on the next refresh (could extend later).
+- **Intake template rebuilt to MIRROR the master `Project Tasks` sheet** (rev 3.14). `build_template.py`
+  now emits task header **A=Project · B=Phase · C=Type · D=Task · E=Start · F=Finish · G=Duration ·
+  H=Assigned To · I=Status · J=PM · K=Milestone · L=Comments** (1:1 with master A–L; M/N are system).
+  **Project (A)** and **PM (J)** auto-fill down via formula `=IF($B$6...)`/`=IF($B$7...)` from the info
+  block. Status list matches the dashboard (`Not Started/In Progress/Completed/On Hold`); Assigned list =
+  canonical orgs+people on the hidden `Lists` sheet (editable; column also takes free text). `Import-Intake.ps1`
+  gained a **MIRROR** layout reader (header A="Project" & D="Task" → 1:1 map; falls back to info-block
+  Project/PM when the autofill formula isn't cached; guards `=*` formula text). LEGACY + old BRANDED still
+  read. Download link cache-buster bumped to `?v=20260617`. **Two load paths now work:** drop in Intake
+  Inbox (auto-import) OR Paste→Values into Excel.
+- **Assigned-To dropdown on the dashboard editor = ALREADY LIVE**: `ptAssigned` is a `<datalist>`
+  (`ptAssignList`) populated from `projAssignees()` (distinct `who` across all project tasks) — free text +
+  autocomplete (type "ELEC" → Electricians if present in data). Auto-learns from the workbook.
+
+### Still open from the morning queue
+- **Siemens DI + Medtronic imports** — NOT yet written (see below; the `/tmp/build_import.py` draft builds
+  both into the workbook in one pass to send to Rich; rerun against his LATEST uploaded master).
+- **Upload tab / mechanism + test** — Rich: "create the upload tab and test it." Needs a decision on the
+  mechanism (static dashboard has no backend): (a) a Projects-tab **intake panel** (download + the two load
+  paths above, test the import end-to-end) — recommended/no new backend; or (b) a **browser upload** that
+  parses the xlsx client-side and POSTs rows to the Power Automate flow (needs an Office Script bulk-import
+  action + ties into the parked replace-by-project). CONFIRM with Rich before building (b).
+- **MRA Shop lane preview** — Rich earlier asked for a preview of a dedicated aggregate "MRA Shop" lane row
+  before loading live (separate from the white-outline highlight, which is done).
+
 ## In progress / queued (2026-06-17)
 
 - **Siemens DI Pedestal import** (from Rich's PDF "SIEMENS DI Preliminary Hard Date Schedule
