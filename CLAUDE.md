@@ -210,10 +210,18 @@ Treat help + rev as PART OF the feature, not an afterthought.
     dashboard keeps its existing `FLEET=[…]` as the fallback/seed and merges the Fleetio roster over it
     by fleet# (so nothing is ever lost; trucks grouped in Fleetio go fully automatic). Fleetio "Group"
     looks tour-shaped already (saw `"Siemen's DBX 2 J1110-3005"` vs hand `"Seno Medical / 1454"`).
-  - **NEXT (STEP 2):** Rich runs the updated export → I read the LIVE `data.js` to confirm the
-    `fleetio.fleet` shape + the actual renewal-type NAMES (to finalize DOT/Reg/Ins/IFTA bucketing) →
-    build the FLEET-tab render from it (add **Status / Mileage / Open-items badge** columns + real
-    **compliance dates** + the **yard** location), then bump rev + `? help` + deploy `mode=live`.
+  - **STEP 2 DONE — shipped rev 3.23 (deployed `mode=live` from the feature branch).** FLEET tab now
+    renders from `MRA_DATA.fleetio.fleet[]` merged over the built-in `FLEET` array (Fleetio-first,
+    office list fallback so nothing is lost): new **Status / Miles / Open** columns + real **compliance
+    DATES** (Inspection→DOT, Registration, Insurance; **IFTA stays from the office list — Fleetio has
+    no IFTA renewal type**), tour = Fleetio Group first. Location cell prefers the Samsara **yard**
+    name, else City, ST. Renewal type names confirmed live: **Inspection 84 / Insurance 67 /
+    Registration 49 / Emission 2**. Merge vs live data = 149 Fleetio + 68 office-only = **217 rows**.
+    `renderFleet()` now also runs on every live refresh (was first-paint only) and falls back to the
+    old office-list render if `fleetio.fleet` is absent.
+  - **PENDING:** Rich must re-run the export with the NEW Samsara token in `samsara.txt` — the
+    failed-token 15:01 run left `fleetio.locations` empty, so locations show "—" until he re-runs
+    (roster/compliance already populate from that run). Then verify locations repopulate live.
   - **SECURITY:** Samsara token was pasted into chat (twice) then rotated by Rich; the live token lives
     only in `samsara.txt` on his machine. Never commit tokens.
 
