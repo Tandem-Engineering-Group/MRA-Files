@@ -101,6 +101,8 @@
   .gwinslider{width:120px; accent-color:var(--blue); vertical-align:middle}
   .gwinlab{min-width:34px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums}
   .projsearch{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 10px; font-size:12px; font-family:inherit; margin-left:12px; width:210px; font-weight:400}
+  .authpill{margin-left:10px; background:rgba(34,197,94,.15); border:1px solid var(--green); color:#86efac; border-radius:20px; padding:7px 13px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap}
+  .authpill:hover{background:rgba(34,197,94,.3); color:#bbf7d0}
   .rb{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
     font-size:11px; font-weight:700; padding:3px 11px; border-radius:7px; cursor:pointer; letter-spacing:.5px}
   .rb.active{background:var(--blue); border-color:var(--blue); color:#fff}
@@ -507,6 +509,7 @@
       <div class="tab" data-view="history" onclick="setView('history')">HISTORY</div>
     </div>
     <button class="helpbtn" onclick="openHelp()" style="margin-left:auto" title="How to use this dashboard">?</button>
+    <button class="authpill" id="authPill" onclick="signOut()" style="display:none" title="You're signed in for editing on this screen — click to log out. The next edit will ask for a code again (also auto-logs-out after 5 min idle).">🔓 <span id="authName"></span> · Log out</button>
     <div class="linksmenu" id="topMenu">
       <button class="editbtn" id="menuBtn" onclick="toggleDrop(event,'menuPop')" title="Tools &amp; links">☰ Menu ▾</button>
       <div class="linksmenu-pop" id="menuPop">
@@ -1184,7 +1187,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑬ 🚛 Fleetio issues become shop tasks</h4>
     <p>A trailer's open Fleetio issues are pulled in as editable <b>Shop Tasks</b> rows automatically, so you can assign them (Sal / MasterWraps / …) and track them like any other task. Resolve the issue in Fleetio and the task closes itself. Tractor issues stay on the FLEETIO tab only.</p></div>
   <div class="hsec"><h4>⑭ ➕ Add a task · ✎ Edit / move a job (from the board)</h4>
-    <p>Turn on <span class="k">🔒 Edit mode</span> (your code) and the editing tools appear — all write straight back to the workbook (~15 min to show):</p>
+    <p>Turn on <span class="k">🔒 Edit mode</span> (your code) and the editing tools appear — all write straight back to the workbook (~15 min to show). While you're signed in, a green <span class="k">🔓 your-name · Log out</span> pill shows in the top bar — click it when you're done so the screen goes back to view-only (it also auto-logs-out after 5 min idle):</p>
     <ul>
       <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule.</li>
       <li><span class="k">✎ edit</span> on a job card — move bay, change start/finish dates, tweak notes; <b>🗑 Delete job</b> is in that form too.</li>
@@ -1234,6 +1237,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.38", date:"2026-06-17", title:"Edit sign-in: a visible Log out", items:[
+    "When you enter your code to edit, a green 🔓 \"your-name · Log out\" pill now shows in the top bar — so it's obvious the screen is unlocked for editing (and who's signed in). Click it to log out; the next edit asks for a code again.",
+    "Shared screens also auto-log-out after 5 minutes idle, so a walked-away screen locks itself back to view-only." ] },
   { rev:"3.37", date:"2026-06-17", title:"MRA tab icon + slider hover-help", items:[
     "Added the MRA logo as the browser-tab icon (favicon).",
     "Clear hover help on the Projects Gantt controls — the 🔍 zoom slider, the ↔ scroll slider and the project / job # filter box each explain what they do; the 📺 Wall Size slider tooltip is clearer too." ] },
@@ -1533,8 +1539,20 @@ function ensureAuth(action){
   const code=(prompt("Enter your code to "+(action||"edit")+":")||"").trim(); if(!code) return false;
   const name=findUser(code);
   if(name===null){ alert("Code not recognized."); return false; }
-  CLOSE_PIN=code; CURRENT_USER=name; return true;
+  CLOSE_PIN=code; CURRENT_USER=name; syncAuthUI(); _resetIdle(); return true;
 }
+// Visible sign-in pill + Log out, so a shared screen never silently stays editable.
+function syncAuthUI(){ const p=document.getElementById('authPill'), n=document.getElementById('authName');
+  if(!p) return; if(CLOSE_PIN){ p.style.display=''; if(n) n.textContent=(CURRENT_USER||'Signed in'); } else { p.style.display='none'; } }
+function signOut(){ CLOSE_PIN=null; CURRENT_USER="";
+  document.body.classList.remove('closemode');
+  const cb=document.getElementById('btnCloseMode'); if(cb){ cb.classList.remove('on'); cb.textContent='🔒 Edit mode'; }
+  if(_idleT){ clearTimeout(_idleT); _idleT=null; }
+  syncAuthUI(); }
+// Auto-logout after 5 min idle (walk-away shop screens lock themselves).
+let _idleT=null;
+function _resetIdle(){ if(_idleT){ clearTimeout(_idleT); _idleT=null; } if(CLOSE_PIN) _idleT=setTimeout(()=>{ if(CLOSE_PIN) signOut(); }, 5*60*1000); }
+['mousemove','keydown','click','touchstart'].forEach(ev=>document.addEventListener(ev,_resetIdle,{passive:true}));
 function authLabel(){ return CURRENT_USER ? (' — '+CURRENT_USER) : ''; }
 function toggleCloseMode(btn){
   if(!document.body.classList.contains('closemode')){
