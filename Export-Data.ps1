@@ -766,7 +766,7 @@ $mraStatus = @()
 try { $mraStatus = Get-MraStatus $CalendarsDir $now $nsMain $nsRel $nsPkg } catch { Write-Output "  -> MRA logistics failed: $($_.Exception.Message)" }
 
 $payload = [PSCustomObject]@{
-    generatedAt   = $now.ToString('yyyy-MM-ddTHH:mm:ss')
+    generatedAt   = $now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')   # UTC; the dashboard renders it in each viewer's local timezone
     generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt')
     todayISO      = $now.ToString('yyyy-MM-dd')
     physicalBays  = $PhysicalBays
