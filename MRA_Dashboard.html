@@ -1242,6 +1242,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.42", date:"2026-06-17", title:"🧤 plant flag now trusts GPS over the board", items:[
+    "Fixed the 🧤 \"at the MRA plant\" flag appearing on units that are actually off-site (e.g. 9639 & 3005 in Hayward CA, 6160 in Wisconsin). Live GPS now wins, and it matches the MRA plant precisely — the MRA geofence / E. Whitcomb address, NOT just the city of Madison Heights (so a unit at another shop in town, like 11 Mile Truck & Axle, no longer counts). The shop-board fallback only applies to units with no GPS at all, and only for real work bays (the Parking Lot status no longer implies on-site)." ] },
   { rev:"3.41", date:"2026-06-17", title:"Shop board: Project vs Maintenance tags", items:[
     "Every shop item now shows whether it's a Project or Maintenance — a blue 'Project' / amber 'Maint' tag on each bay card, and a 📋 / 🔧 icon on the Floor Gantt. The rule: if it matches a project entered on the Projects tab it's a Project; if not, it's Maintenance." ] },
   { rev:"3.40", date:"2026-06-17", title:"🧤 \"At the MRA plant\" flag", items:[
@@ -3211,17 +3213,25 @@ function canFlag(s){ return canAsset(s)?' <span title="Canadian asset">🍁</spa
 // OR the unit is parked in a bay / parking lot on the shop floor (so non-shop-tab viewers can tell).
 function _normKey(s){ let t=String(s||'').trim().split(/\s+/)[0]||''; const m=t.match(/^(\d+)G$/i);
   if(m) return String(parseInt(m[1],10)); return /^\d+$/.test(t)?String(parseInt(t,10)):t.toUpperCase(); }
-function _isMraLoc(loc){ if(!loc) return false; const y=(loc.yard||'').toLowerCase(), pl=((loc.place||'')+' '+(loc.full||'')).toLowerCase();
-  return y.indexOf('mra')>=0 || pl.indexOf('madison heights')>=0; }
+function _isMraLoc(loc){ if(!loc) return false; const y=(loc.yard||'').toLowerCase(), f=(loc.full||'').toLowerCase();
+  // MRA plant = the "MRA" geofence OR the E. Whitcomb Ave address — NOT just the city of Madison
+  // Heights (other shops like 11 Mile Truck & Axle are in Madison Heights too).
+  return y.indexOf('mra')>=0 || f.indexOf('whitcomb')>=0; }
 let _plantGen=null,_plantKeys=new Set();
 function plantKeys(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_plantGen) return _plantKeys;
   _plantGen=g; _plantKeys=new Set();
   const roster=new Set(); ((D&&D.fleetio&&D.fleetio.fleet)||[]).forEach(v=>roster.add(_normKey(v.f)));
   if(typeof FLEET!=='undefined') FLEET.forEach(a=>roster.add(_normKey(a.f)));
   const locs=(D&&D.fleetio&&D.fleetio.locations)||{};
-  Object.keys(locs).forEach(k=>{ if(_isMraLoc(locs[k])) _plantKeys.add(_normKey(k)); });
-  ((D&&D.jobs)||[]).forEach(j=>{ const b=String(j.bay||''); if(!(/^bay\s/i.test(b)||/parking/i.test(b))) return;
-    (String(j.project||'').match(/\b\d{2,5}\b/g)||[]).forEach(n=>{ const k=_normKey(n); if(roster.has(k)) _plantKeys.add(k); }); });
+  // GPS is the source of truth: a unit with a live fix is "at the plant" ONLY if that fix is MRA /
+  // Madison Heights. Remember which units have ANY fix so the floor fallback can't override a real
+  // off-site location (e.g. a genset whose name is on a bay job but is actually in Hayward, CA).
+  const located=new Set();
+  Object.keys(locs).forEach(k=>{ const nk=_normKey(k); located.add(nk); if(_isMraLoc(locs[k])) _plantKeys.add(nk); });
+  // Floor fallback: a unit named in a real WORK BAY job (not the Parking Lot board status, which
+  // isn't a physical location) — and only when it has NO GPS fix to trust.
+  ((D&&D.jobs)||[]).forEach(j=>{ const b=String(j.bay||''); if(!/^bay\s/i.test(b)) return;
+    (String(j.project||'').match(/\b\d{2,5}\b/g)||[]).forEach(n=>{ const k=_normKey(n); if(roster.has(k) && !located.has(k)) _plantKeys.add(k); }); });
   return _plantKeys; }
 function atPlant(s){ if(!s) return false; return plantKeys().has(_normKey(s)); }
 function plantFlag(s){ return atPlant(s)?' <span class="mitten" title="At the MRA plant — back home in the mitten 🧤 (Madison Heights, MI)">🧤</span>':''; }
