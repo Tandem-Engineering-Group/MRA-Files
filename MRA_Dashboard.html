@@ -342,9 +342,11 @@
   .g-bar{position:absolute; top:5px; height:16px; border-radius:5px; border:1px solid;
     display:flex; align-items:center; overflow:hidden; z-index:2}
   .g-fill{position:absolute; left:0; top:0; bottom:0; opacity:.85}
-  .g-hl{position:absolute; top:1px; bottom:1px; border-radius:4px; pointer-events:none; z-index:3;
-    background:repeating-linear-gradient(45deg, rgba(255,255,255,.38) 0 4px, rgba(15,23,42,.34) 4px 8px);
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}
+  .g-hl{position:absolute; top:0; bottom:0; border-radius:3px; pointer-events:none; z-index:4;
+    border:2px solid #38bdf8; background:rgba(56,189,248,.12)}
+  .pill.fleet{background:rgba(56,189,248,.16); color:#7dd3fc; border-color:rgba(56,189,248,.45)}
+  .taskline.fleet{color:#bae6fd}
+  .tasklist.fleetlist{margin-top:4px; border-top:1px dashed rgba(56,189,248,.3); padding-top:3px}
   .expandbtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
   .rb.mraHlBtn.active, .rb.mraHlBtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
   .g-barlabel{position:relative; z-index:2; padding:0 7px; font-size:10px; font-weight:600;
@@ -1099,6 +1101,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.7", date:"2026-06-17", title:"Fleetio issues live on bay cards + cleaner MRA Shop highlight", items:[
+    "Bay Status: each trailer's open Fleetio maintenance issues now show right on its bay card — a 🔧 N Fleetio pill, click to expand the issue list (with overdue flags). Fully automatic, refreshes every cycle, no manual sync needed.",
+    "MRA Shop load highlight recolored to a crisp sky-blue outline so it reads cleanly over any bar color (no more amber-on-amber glow)." ] },
   { rev:"3.6", date:"2026-06-17", title:"MRA Shop load highlight on the Projects Gantt", items:[
     "New 🟧 MRA Shop load toggle above the Projects Gantt (and in ⛶ Expand) — turns on a light highlight over the date spans where MRA Shop is assigned, across every project, so you can spot resource crunches at a glance. Click to toggle on/off; the choice is remembered.",
     "Works in every range (1/3/6 mo, All) and the full-screen view. More resources can be added to the highlighter later." ] },
@@ -1940,7 +1945,9 @@ function renderFloor(D){
     if(c.overdue) pills+=`<span class="pill due">${Math.abs(c.daysLeft)}d overdue</span>`;
     else if(c.dueSoon) pills+=`<span class="pill soon">due ${c.daysLeft}d</span>`;
     const jOpen=expandedJobs.has(j.row);
+    const fl=fleetioFor(j);
     if(j.openCount>0) pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
+    if(fl.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Live Fleetio maintenance issues for this trailer">🔧 ${fl.length} Fleetio ${jOpen?"▾":"▸"}</span>`;
     let tl="";
     if(jOpen){
       if((j.openTasks||[]).length){
@@ -1950,6 +1957,12 @@ function renderFloor(D){
         tl+=`<div class="tasklist">`+opens.map(o=>{
           const pend=isPendingClosed(j.project,o.raw);
           return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`;
+        }).join("")+`</div>`;
+      }
+      if(fl.length){
+        tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
+          const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
+          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}">🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}</div>`;
         }).join("")+`</div>`;
       }
     }
