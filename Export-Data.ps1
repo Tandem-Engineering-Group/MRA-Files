@@ -609,9 +609,9 @@ if (Test-Path $FleetioTokenFile) {
 
 # --- Samsara (optional) — LIVE GPS location, reads samsara.txt: line1 = API token ---
 # Samsara is the upstream GPS source (Fleetio only mirrors it nightly). One paginated call
-# gets every tracked vehicle's current location + a reverse-geocoded address. Fills the shared
-# $fLoc (keyed by fleet #), which $fleetio.locations references. Matches by the leading token
-# of the Samsara vehicle name. Writes samsara-debug.txt.
+# gets every tracked vehicle AND trailer's current location + a reverse-geocoded address. Fills
+# the shared $fLoc (keyed by fleet #), which $fleetio.locations references. Matches by the leading
+# token of the Samsara name; keeps the freshest fix per unit. Writes samsara-debug.txt.
 $SamsaraTokenFile = Join-Path $ScriptDir 'samsara.txt'
 if (Test-Path $SamsaraTokenFile) {
     try {
@@ -620,33 +620,43 @@ if (Test-Path $SamsaraTokenFile) {
         $shead  = @{ 'Authorization' = "Bearer $stoken"; 'Accept' = 'application/json' }
         $SamDbg = Join-Path $ScriptDir 'samsara-debug.txt'
         "=== Samsara GPS  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $SamDbg -Encoding utf8
-        $cursor = $null; $guard = 0; $samN = 0; $dumped = $false; $hasNext = $false
-        do {
-            $guard++
-            $url = "https://api.samsara.com/fleet/vehicles/stats?types=gps"
-            if ($cursor) { $url += "&after=$([uri]::EscapeDataString([string]$cursor))" }
-            $resp = Invoke-WebRequest -Uri $url -Headers $shead -UseBasicParsing -Method GET -TimeoutSec 30
-            $obj  = $resp.Content | ConvertFrom-Json
-            if (-not $dumped) { $dumped = $true; "--- first page (first 3 vehicles) ---" | Out-File $SamDbg -Append -Encoding utf8; ($obj.data | Select-Object -First 3 | ConvertTo-Json -Depth 6) | Out-File $SamDbg -Append -Encoding utf8 }
-            foreach ($v in @($obj.data)) {
-                $key = NormFleet $v.name; if ($key -eq '') { continue }
-                $g = $v.gps; if (-not $g) { continue }
-                $addr = ''
-                if ($g.reverseGeo -and $g.reverseGeo.formattedLocation) { $addr = [string]$g.reverseGeo.formattedLocation }
-                $place = PlaceFromAddr $addr
-                if ($place -eq '' -and $g.latitude -and $g.longitude) { $place = ("{0:N3}, {1:N3}" -f [double]$g.latitude, [double]$g.longitude) }
-                if ($place -eq '') { continue }
-                $atISO = if ($g.time) { [string]$g.time } else { $null }
-                $yard = ''; if ($g.address -and $g.address.name) { $yard = [string]$g.address.name }
-                $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO; yard = $yard }
-                $samN++
-                if ($samN -le 8) { "SAM $key -> '$place'  (name='$($v.name)' addr='$addr')" | Out-File $SamDbg -Append -Encoding utf8 }
-            }
-            $cursor  = $obj.pagination.endCursor
-            $hasNext = [bool]$obj.pagination.hasNextPage
-        } while ($hasNext -and $guard -lt 20)
-        "samsara located: $samN" | Out-File $SamDbg -Append -Encoding utf8
-        Write-Output "  -> Samsara: located $samN unit(s); debug -> samsara-debug.txt"
+        # Pull BOTH vehicles (trucks/tractors) AND trailers — Samsara tracks trailers on a
+        # separate endpoint, so trailers (e.g. #54) were getting no location before.
+        $samV = 0; $samT = 0
+        foreach ($ep in @('vehicles','trailers')) {
+            $cursor = $null; $guard = 0; $dumped = $false; $hasNext = $false; $n = 0
+            do {
+                $guard++
+                $url = "https://api.samsara.com/fleet/$ep/stats?types=gps"
+                if ($cursor) { $url += "&after=$([uri]::EscapeDataString([string]$cursor))" }
+                $resp = Invoke-WebRequest -Uri $url -Headers $shead -UseBasicParsing -Method GET -TimeoutSec 30
+                $obj  = $resp.Content | ConvertFrom-Json
+                if (-not $dumped) { $dumped = $true; "--- $ep (first 3) ---" | Out-File $SamDbg -Append -Encoding utf8; ($obj.data | Select-Object -First 3 | ConvertTo-Json -Depth 6) | Out-File $SamDbg -Append -Encoding utf8 }
+                foreach ($v in @($obj.data)) {
+                    $key = NormFleet $v.name; if ($key -eq '') { continue }
+                    $g = $v.gps; if (-not $g) { continue }
+                    $addr = ''
+                    if ($g.reverseGeo -and $g.reverseGeo.formattedLocation) { $addr = [string]$g.reverseGeo.formattedLocation }
+                    $place = PlaceFromAddr $addr
+                    if ($place -eq '' -and $g.latitude -and $g.longitude) { $place = ("{0:N3}, {1:N3}" -f [double]$g.latitude, [double]$g.longitude) }
+                    if ($place -eq '') { continue }
+                    $atISO = if ($g.time) { [string]$g.time } else { $null }
+                    $yard = ''; if ($g.address -and $g.address.name) { $yard = [string]$g.address.name }
+                    # Some names appear more than once (and a few report stale fixes) — keep the FRESHEST.
+                    $ex = $fLoc[$key]
+                    if ($ex -and $ex.atISO -and $atISO -and ([string]$atISO -lt [string]$ex.atISO)) { continue }
+                    $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO; yard = $yard }
+                    $n++
+                }
+                $cursor  = $obj.pagination.endCursor
+                $hasNext = [bool]$obj.pagination.hasNextPage
+            } while ($hasNext -and $guard -lt 20)
+            if ($ep -eq 'vehicles') { $samV = $n } else { $samT = $n }
+            "samsara $ep set: $n" | Out-File $SamDbg -Append -Encoding utf8
+        }
+        $samN = $fLoc.Count
+        "samsara TOTAL located keys: $samN  (vehicles $samV, trailers $samT)" | Out-File $SamDbg -Append -Encoding utf8
+        Write-Output "  -> Samsara: located $samN unit(s) [veh $samV, trl $samT]; debug -> samsara-debug.txt"
         if ($null -eq $fleetio) { $fleetio = [PSCustomObject]@{ generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt'); issues=@(); workOrders=@(); service=@(); locations=$fLoc; fleet=@() } }
     } catch { Write-Output "  -> Samsara fetch failed: $($_.Exception.Message)" }
 }
