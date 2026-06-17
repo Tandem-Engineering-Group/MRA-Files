@@ -392,6 +392,9 @@
   .g-d0{left:6px} .g-d1{right:6px}
   .g-mid{position:absolute; left:0; right:0; text-align:center; font-size:9.5px; color:#fff; opacity:.92; z-index:2; pointer-events:none}
   .g-bay{align-self:flex-start; margin-top:3px; font-size:9px; font-weight:700; background:rgba(34,197,94,.16); color:#86efac; border:1px solid rgba(34,197,94,.5); border-radius:10px; padding:1px 7px; white-space:nowrap}
+  .ktag{font-size:9px; font-weight:700; padding:1px 6px; border-radius:10px; margin-left:5px; vertical-align:middle; white-space:nowrap}
+  .kproj{background:rgba(59,130,246,.18); color:#93c5fd; border:1px solid rgba(59,130,246,.5)}
+  .kmaint{background:rgba(245,158,11,.16); color:#fcd34d; border:1px solid rgba(245,158,11,.5)}
   .g-ms{position:absolute; top:8px; width:10px; height:10px; background:var(--amber);
     transform:translateX(-5px) rotate(45deg); border:1px solid #1a1206; z-index:4}
   .g-out{position:absolute; left:8px; top:6px; font-size:10px; color:var(--faint); font-style:italic}
@@ -590,7 +593,7 @@
     </div>
 
     <div class="panel" id="floorGanttPanel">
-      <h2>Next 2 Weeks — Floor Schedule <span class="count" id="floorGanttCount"></span><button class="expandbtn" onclick="openGantt('floor')" title="Full-screen detailed view">⛶ Expand</button></h2>
+      <h2>Next 2 Weeks — Floor Schedule <span class="count" id="floorGanttCount"></span><span style="margin-left:8px;font-size:10px;color:var(--faint);font-weight:400;letter-spacing:0;text-transform:none">📋 project · 🔧 maintenance</span><button class="expandbtn" onclick="openGantt('floor')" title="Full-screen detailed view">⛶ Expand</button></h2>
       <div class="gantt" id="floorGantt"></div>
       <div class="legend">
         <span class="lg-a">Active</span><span class="lg-s">Scheduled</span>
@@ -1239,6 +1242,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.41", date:"2026-06-17", title:"Shop board: Project vs Maintenance tags", items:[
+    "Every shop item now shows whether it's a Project or Maintenance — a blue 'Project' / amber 'Maint' tag on each bay card, and a 📋 / 🔧 icon on the Floor Gantt. The rule: if it matches a project entered on the Projects tab it's a Project; if not, it's Maintenance." ] },
   { rev:"3.40", date:"2026-06-17", title:"🧤 \"At the MRA plant\" flag", items:[
     "Units at the MRA plant now get a 🧤 (Michigan = the mitten state!) on the FLEET, FLEETIO and EQUIPMENT tabs — so you can tell what's home without opening the shop board. It's set from live GPS (yard = MRA / city = Madison Heights) OR a unit parked in a bay / parking lot on the shop floor." ] },
   { rev:"3.39", date:"2026-06-17", title:"Gantt: show which bay a job/project is in", items:[
@@ -2475,7 +2480,7 @@ function renderFloor(D){
     .filter(x=>barGeom(x.j.startISO,x.j.completionISO,win))
     .sort((a,b)=>{const ai=order.indexOf(a.j.bay),bi=order.indexOf(b.j.bay);
       return (ai<0?99:ai)-(bi<0?99:bi) || (a.j.startISO||"").localeCompare(b.j.startISO||"");})
-    .map(x=>({label:x.j.project,
+    .map(x=>({label:kindIcon(x.j)+x.j.project,
       sub:(/^bay\s/i.test(x.j.bay||'') ? (x.j.jobNum||"—") : ((x.j.bay||'')+" · "+(x.j.jobNum||"—"))),
       bay:(/^bay\s/i.test(x.j.bay||'')?x.j.bay:''),
       startISO:x.j.startISO, endISO:x.j.completionISO, color:stColor[x.c.state]||'#64748b',
@@ -2530,7 +2535,7 @@ function renderFloor(D){
         tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
     }
     const jc=c.state==="done"?" done":"";
-    return `<div class="job${jc}"><div class="pj">${esc(j.project)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
+    return `<div class="job${jc}"><div class="pj">${esc(j.project)} ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
@@ -3584,6 +3589,16 @@ function projectBay(name){ if(!name) return ''; const jobs=((window.MRA_DATA||{}
   for(const j of jobs){ const b=String(j.bay||''); if(!/^bay\s/i.test(b)) continue;
     if(String(j.project||'').toLowerCase().indexOf(q)>=0) return b; }
   return ''; }
+// Maintenance vs Project: a shop item is a PROJECT if it matches something entered on the Projects
+// tab (by name); if not, it's Maintenance (Rich's rule). Returns 'project' | 'maint'.
+function jobKind(job){ const jp=String(job&&job.project||'').toLowerCase().trim(); if(!jp) return 'maint';
+  const ps=((window.MRA_DATA||{}).projects)||[];
+  for(const p of ps){ const n=String(p.name||'').toLowerCase().trim(); if(n && jp.indexOf(n)>=0) return 'project'; }
+  return 'maint'; }
+function kindTag(job){ return jobKind(job)==='project'
+  ? '<span class="ktag kproj" title="Matches a project on the Projects tab">Project</span>'
+  : '<span class="ktag kmaint" title="Not on the Projects tab — treated as maintenance">Maint</span>'; }
+function kindIcon(job){ return jobKind(job)==='project' ? '📋 ' : '🔧 '; }
 
 /* ---------- Full-screen Gantt + conflict detection ---------- */
 function isoOverlap(a,b){ return a.startISO<=b.completionISO && b.startISO<=a.completionISO; }
