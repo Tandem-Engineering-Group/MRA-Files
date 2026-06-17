@@ -1233,6 +1233,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.34", date:"2026-06-17", title:"Canadian 🍁 flag now on FLEETIO + Equipment too", items:[
+    "The 🍁 Canadian marker now also shows on the FLEETIO tab (issue / work-order / service rows and the By-Trailer cards) and the EQUIPMENT list — matched by fleet # against the Canadian roster, or \"CAN\" / \"Canada\" in the name." ] },
   { rev:"3.33", date:"2026-06-17", title:"FLEET: Canadian assets flagged 🍁", items:[
     "Canadian units now show a 🍁 next to the fleet # on the FLEET tab — detected from the Fleetio registration state (ON / QC / AB …) or \"CAN\" / \"Canada\" in the asset name or job. Type \"canada\" in the FLEET search to list just those." ] },
   { rev:"3.32", date:"2026-06-17", title:"Timestamps shown in your timezone (UTC under the hood)", items:[
@@ -3001,7 +3003,7 @@ function renderFleetio(D){
             : s.c.soon?`<span class="badge amber">${(s.c.days!=null&&s.c.days>=0)?'due '+s.c.days+'d':'due soon'}</span>`
             : (s.dueISO?`<span class="badge grey">${fmtMD(s.dueISO)}</span>`:`<span class="badge grey">${esc(s.meterDue?('@ '+s.meterDue):'—')}</span>`);
     return `<div class="row"><div><div class="lead">${esc(s.service||'Service')}</div>`+
-      `<div class="meta">${esc(s.asset||'')}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
+      `<div class="meta">${esc(s.asset||'')}${canFlag(s.asset)}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
   }).join('') : `<div class="empty">No service ${FFILTER==='svc_over'?'overdue':FFILTER==='svc_soon'?'due soon':'reminders due'}</div>`);
   document.getElementById('fSvcCount').textContent=svcSorted.length;
 
@@ -3022,7 +3024,7 @@ function renderFleetio(D){
     const wa=fAsg(i); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = i.reporter?` · ✍ ${esc(i.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${esc(i.summary||('Issue '+(i.num||'')))}</div>`+
-      `<div class="meta">${esc(i.asset||'')}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
+      `<div class="meta">${esc(i.asset||'')}${canFlag(i.asset)}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
       `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${pr} ${b}</div></div>`;
   }).join('') : `<div class="empty">${issEmpty}</div>`);
   document.getElementById('fIssueCount').textContent=issues.length;
@@ -3036,7 +3038,7 @@ function renderFleetio(D){
     const wa=fAsg(w); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = w.reporter?` · ✍ ${esc(w.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${esc(w.summary||('WO '+(w.num||'')))}</div>`+
-      `<div class="meta">${esc(w.asset||'')}${w.jobNum?' · '+esc(w.jobNum):''}${who}${rby}</div>`+
+      `<div class="meta">${esc(w.asset||'')}${canFlag(w.asset)}${w.jobNum?' · '+esc(w.jobNum):''}${who}${rby}</div>`+
       `${w.detail?`<div class="det" title="${escA(w.detail)}">${esc(w.detail)}</div>`:''}</div>`+
       `<div class="right">${st}${age!=null?` <span class="badge grey">${age}d</span>`:''}</div></div>`;
   }).join('') : `<div class="empty">No ${(FASSIGN||FREPORT)?'matching work orders':'open work orders'}</div>`);
@@ -3065,7 +3067,7 @@ function renderTrailerCards(){
   grid.innerHTML = arr.length ? arr.map((t,idx)=>{
     const edge = t.svcOver?'#ef4444' : (t.iss?'#f59e0b' : (t.wo?'#3b82f6' : '#22c55e'));
     const key='ft'+idx; BARPOP[key]=trailerPop(t);
-    return `<div class="teamcard" style="border-left-color:${edge}" onclick="showBarPop(event,'${key}')"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}</span>`+
+    return `<div class="teamcard" style="border-left-color:${edge}" onclick="showBarPop(event,'${key}')"><div class="th"><span class="tn">${esc(t.jobNum||t.name)}${canFlag((t.name||'')+' '+(t.jobNum||''))}</span>`+
     `<span class="tc">${t.iss+t.wo+t.svc}</span></div><div class="tmeta">`+
       (t.iss?`<span class="badge amber">${t.iss} issue${t.iss>1?'s':''}</span>`:'')+
       (t.wo?`<span class="badge blue">${t.wo} WO</span>`:'')+
@@ -3097,7 +3099,7 @@ function renderEquipment(){
   const se=document.getElementById('eqSearch'); const q=(se?se.value:'').trim().toLowerCase();
   const list = q ? JOB_BOARD.filter(e=>(e.n+' '+e.j+' '+(e.d||'')).toLowerCase().indexOf(q)>=0) : JOB_BOARD;
   grid.innerHTML = list.length
-    ? list.map(e=>`<div class="eqcard"><div><div class="nm">${esc(e.n)}</div>${e.d?`<div class="ds" title="${escA(e.d)}">${esc(e.d)}</div>`:''}</div><span class="jb">${esc(e.j)}</span></div>`).join('')
+    ? list.map(e=>`<div class="eqcard"><div><div class="nm">${esc(e.n)}${canFlag(e.n+' '+e.j+' '+(e.d||''))}</div>${e.d?`<div class="ds" title="${escA(e.d)}">${esc(e.d)}</div>`:''}</div><span class="jb">${esc(e.j)}</span></div>`).join('')
     : `<div class="empty">No equipment matches “${esc(q)}”</div>`;
   const c=document.getElementById('eqCount'); if(c) c.textContent = q ? (list.length+' of '+JOB_BOARD.length) : (JOB_BOARD.length+' jobs');
 }
@@ -3149,6 +3151,16 @@ function fleetOpenBadge(r){ const n=(+r.oi||0)+(+r.ow||0);
 const CAN_PROV=new Set(['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','YT','NU','ONT','PQ']);
 function isCanadian(r){ const rs=(r.rs||'').trim().toUpperCase(); if(CAN_PROV.has(rs)) return true;
   return /\bCAN\b|\bCANADA\b/.test(((r.nm||'')+' '+(r.m||'')+' '+(r.j||'')).toUpperCase()); }
+// Canadian fleet #s (from the roster) so FLEETIO/EQUIPMENT can flag by asset name/number too.
+let _ckGen=null,_ck=new Set();
+function canKeySet(){ const D=window.MRA_DATA, g=D&&D.generatedAt;
+  if(g===_ckGen) return _ck; _ckGen=g; _ck=new Set();
+  ((D&&D.fleetio&&D.fleetio.fleet)||[]).forEach(v=>{ const rs=(v.rs||'').trim().toUpperCase();
+    if(CAN_PROV.has(rs)||/\bCAN\b|CANADA/.test(((v.nm||'')+' '+(v.mk||'')).toUpperCase())) _ck.add(fleetKey(v.f)); });
+  return _ck; }
+function canAsset(s){ if(!s) return false; s=String(s);
+  if(canKeySet().has(fleetKey(s))) return true; return /\bCAN\b|CANADA/i.test(s); }
+function canFlag(s){ return canAsset(s)?' <span title="Canadian asset">🍁</span>':''; }
 
 function renderFleet(){
   const tb=document.getElementById('fleetBody'); if(!tb) return;
