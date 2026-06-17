@@ -1078,7 +1078,7 @@ const GENERAL_HELP = `
       <li><span class="k">✎ edit</span> on a job card — move bay, change start/finish dates, tweak notes; <b>🗑 Delete job</b> is in that form too.</li>
       <li>On each task line: <span class="k">✓ close</span>, <span class="k">✎</span> edit (text, assignee, status, milestone, comments), <span class="k">🗑</span> delete. Turn on <span class="k">Show closed</span> and closed tasks get <span class="k">↩</span> reopen + 🗑 delete.</li>
     </ul>
-    <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time.</div></div>
+    <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. A task you <b>add</b> now also sticks on <b>your</b> device through a page reload (handy on an iPad, which reloads tabs on its own) until the workbook catches up — so it won't appear to vanish.</div></div>
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule built from that project's milestones &amp; dates — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
@@ -1115,6 +1115,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.13", date:"2026-06-17", title:"Added tasks stick on your device", items:[
+    "When you add a task, it now stays on screen on the device you added it on — even if the page reloads (iPad tabs reload themselves in the background). It holds your add until the workbook's data.js catches up on the next refresh, then quietly hands off to the real data. No more 'I added it but it vanished'. (Adds only; closing/editing still reconciles on the next refresh.)" ] },
   { rev:"3.12", date:"2026-06-17", title:"MRA Shop load = white outline", items:[
     "Locked the MRA Shop load highlight to a clean white outline and removed the color picker — the outline reads over any bar color, so the extra dropdown was just clutter. Toggle still remembers on/off per device." ] },
   { rev:"3.11", date:"2026-06-17", title:"Pick your MRA Shop highlight color", items:[
@@ -1348,7 +1350,8 @@ function addFleetioTask(row,num){
     assigned:"", milestone:"", comments:"Fleetio issue #"+num, pin:CLOSE_PIN, user:CURRENT_USER };
   shopWrite(payload).then(()=>{
     if(!j.tasks) j.tasks=[];
-    j.tasks.push({t:task, who:"", op:localISO(Date.now()), cl:null, st:"Open", done:false, ml:"", cm:payload.comments});
+    const tobj={t:task, who:"", op:localISO(Date.now()), cl:null, st:"Open", done:false, ml:"", cm:payload.comments};
+    j.tasks.push(tobj); pendAdd({kind:'jobTask', project:j.project, obj:tobj});
     oRecompute(j); oApply();
   }).catch(()=>alert("Couldn't reach the service — try again."));
 }
@@ -1358,6 +1361,41 @@ function addFleetioTask(row,num){
 let EDIT_PENDING=false, EDIT_BASE_GEN=null;
 function markPending(){ const D=window.MRA_DATA; EDIT_BASE_GEN=(D&&D.generatedAt)||null; EDIT_PENDING=true; }
 function oApply(){ markPending(); if(window.MRA_DATA) renderAll(); }
+
+/* ---------- Pending adds: keep a just-added task on THIS device through a page
+   reload until the workbook's data.js actually catches up (iPad especially
+   reloads/discards tabs in the background). Adds only — closes/edits/deletes
+   still reconcile on the next refresh. Each entry self-prunes once the row
+   shows up in data.js, or after a safety TTL so nothing lingers as a ghost. ---------- */
+const PENDING_KEY='mra_pending_adds_v1', PENDING_TTL=12*3600*1000;   // 12h
+function pendLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_KEY)||'[]'); }catch(e){ return []; } }
+function pendSave(a){ try{ localStorage.setItem(PENDING_KEY, JSON.stringify(a)); }catch(e){} }
+function pendAdd(entry){ entry.ts=Date.now(); const a=pendLoad(); a.push(entry); pendSave(a); }
+function pendNorm(s){ return String(s==null?'':s).trim().toLowerCase(); }
+function mergePending(D){
+  if(!D) return;
+  const a=pendLoad(); if(!a.length) return;
+  const now=Date.now(), keep=[];
+  for(const e of a){
+    if(now-(e.ts||0) > PENDING_TTL) continue;                 // too old — give up, avoid ghosts
+    if(e.kind==='projTask'){
+      const p=(D.projects||[]).find(x=>x.name===e.project); if(!p){ keep.push(e); continue; }
+      if(!p.tasks) p.tasks=[];
+      if(p.tasks.some(t=>pendNorm(t.t)===pendNorm(e.obj.t))) continue;   // landed — prune
+      p.tasks.push(Object.assign({}, e.obj, {_pending:true}));
+      if(typeof oRecomputeProject==='function') oRecomputeProject(p);
+      keep.push(e);
+    } else if(e.kind==='jobTask'){
+      const j=(D.jobs||[]).find(x=>x.project===e.project); if(!j){ keep.push(e); continue; }
+      if(!j.tasks) j.tasks=[];
+      if(j.tasks.some(t=>pendNorm(t.t)===pendNorm(e.obj.t))) continue;   // landed — prune
+      j.tasks.push(Object.assign({}, e.obj, {_pending:true}));
+      oRecompute(j);
+      keep.push(e);
+    }
+  }
+  pendSave(keep);
+}
 function oJob(project){ return (window.MRA_DATA&&window.MRA_DATA.jobs||[]).find(j=>j.project===project); }
 function oJobRow(row){ return (window.MRA_DATA&&window.MRA_DATA.jobs||[]).find(j=>j.row===row); }
 function oRecompute(j){ if(j&&j.tasks){ const op=j.tasks.filter(t=>!t.done), dn=j.tasks.filter(t=>t.done);
@@ -1483,9 +1521,9 @@ function submitAddTask(){
   msg.style.color='var(--muted)'; msg.textContent='Sending…';
   fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
     .then(()=>{
-      const j=oJob(proj); if(j){ if(!j.tasks) j.tasks=[];
-        j.tasks.push({t:payload.task, who:payload.assigned, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:payload.milestone, cm:payload.comments});
-        oRecompute(j); }
+      const tobj={t:payload.task, who:payload.assigned, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:payload.milestone, cm:payload.comments};
+      const j=oJob(proj); if(j){ if(!j.tasks) j.tasks=[]; j.tasks.push(tobj); oRecompute(j); }
+      pendAdd({kind:'jobTask', project:proj, obj:tobj});
       oApply();
       msg.style.color='var(--green)'; msg.textContent='✓ Added.'; btn.textContent="Add task";
       setTimeout(()=>{ document.getElementById('addModal').classList.remove('show'); }, 1100); })
@@ -1753,7 +1791,7 @@ function submitProjTask(){
         startISO:f.start||null, finISO:f.finish||null, st:f.status, ml:f.milestone, cm:f.comments, pred:f.pred,
         done:/^completed$/i.test(f.status) };
       if(editing){ const i=p.tasks.findIndex(t=>String(t.id)===String(window._ptId)); if(i>=0) p.tasks[i]=Object.assign(p.tasks[i],obj); }
-      else { p.tasks.push(obj); }
+      else { p.tasks.push(obj); pendAdd({kind:'projTask', project:name, obj:obj}); }
       oRecomputeProject(p);
     }
     renderProjTaskList(); oApply();
@@ -3089,6 +3127,7 @@ async function refresh(){
     }
     EDIT_PENDING=false;
     window.MRA_DATA=incoming;
+    mergePending(incoming);   // re-apply any just-added tasks this device hasn't seen land yet
     renderAll();
     return true;
   }catch(e){ return false; /* file:// or server down — keep showing current data */ }
