@@ -1161,7 +1161,7 @@ const GENERAL_HELP = `
     </ul>
     <div class="tip">Keep <b>one file per project</b> with a stable name (e.g. <i>SWC MMOT.xlsx</i>), and give it that project's <b>complete</b> task list each time — re-dropping <b>replaces</b> the project, it doesn't merge. A project already in the master workbook should live in <b>one</b> place, not both.</div></div>
   <div class="hsec"><h4>⑩ 📺 Wall / TV mode</h4>
-    <p>The <span class="k">📺 Wall</span> button (top right) packs the bays and the three crew queues onto one screen for the shop TV, auto-expands every task, and auto-scrolls anything too tall to fit — including the <b>Next Up / On Hold</b> tile and each assignee panel. <b>Hover a panel</b> to take over and scroll it yourself; it resumes on its own. A <span class="k">📺 Size</span> control appears bottom-right — use the slider, the <b>S / M / L</b> presets, or type an exact <b>%</b> to scale the whole board for that screen's size and viewing distance, and <b>each monitor remembers its own size</b> independently of the others. Click <span class="k">📺 Wall: ON</span> again to exit. The TV remembers the mode.</p></div>
+    <p>The <span class="k">📺 Wall</span> button (top right) packs the bays and the three crew queues onto one screen for the shop TV, auto-expands every task, and auto-scrolls anything too tall to fit — including tall <b>bay columns</b>, the <b>Next Up / On Hold</b> tile and each assignee panel (each keeps its place across refreshes so it cycles all the way through). <b>Hover a panel</b> to take over and scroll it yourself; it resumes on its own. A <span class="k">📺 Size</span> control appears bottom-right — use the slider, the <b>S / M / L</b> presets, or type an exact <b>%</b> to scale the whole board for that screen's size and viewing distance, and <b>each monitor remembers its own size</b> independently of the others. Click <span class="k">📺 Wall: ON</span> again to exit. The TV remembers the mode.</p></div>
   <div class="hsec"><h4>⑪ 🗂️ Shop Tasks tab — how tasks work now</h4>
     <p>Shop-floor tasks live on the <b>Shop Tasks</b> tab of the workbook — <b>one row per task</b>, with dropdowns for <span class="k">Bay</span>, <span class="k">Assigned</span> and <span class="k">Status</span>, plus <span class="k">Opened</span> / <span class="k">Closed</span> dates. The sheet is sortable and color-banded by project, and each row flows onto the matching bay card and crew queue automatically. (No row yet for a job? The old <b>Notes</b> cell on Input still works as a fallback.)</p></div>
   <div class="hsec"><h4>⑫ ✅ Close a task from the dashboard</h4>
@@ -1219,6 +1219,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.26", date:"2026-06-17", title:"Wall mode: tall bay columns keep scrolling", items:[
+    "Fixed tall tiles snapping back to the top on every 30-second refresh in 📺 Wall mode — bay columns, crew/assignee panels and the Next Up tile now keep their scroll position so they actually cycle all the way down (e.g. to Bay 5 Back) instead of getting stuck near the top." ] },
   { rev:"3.25", date:"2026-06-17", title:"Wall size: type an exact %", items:[
     "The 📺 Size control now has an editable % box — type an exact zoom (e.g. 135) on top of the slider and S / M / L presets; it stays in sync with both." ] },
   { rev:"3.24", date:"2026-06-17", title:"Wall mode: per-screen size control", items:[
@@ -1405,12 +1407,21 @@ function setWallZoom(z){ z=parseInt(z,10)||100; WALL_ZOOM=Math.max(50,Math.min(2
   try{ localStorage.setItem('mra_wall_zoom', String(WALL_ZOOM)); }catch(e){}
   applyWallZoom();
 }
+// Every tall tile that should auto-scroll in wall mode (bay columns, crew/assignee panels, the Next Up tile).
+const WSEL='body.wall .baycol, body.wall .asgbody, body.wall .autoscroll';
+// A re-render (every refresh) rebuilds these elements and resets scrollTop to 0 — snapshot before, restore after,
+// so a tall column keeps cycling instead of snapping back to the top each time.
+function snapWallScroll(){ if(!WALL) return null; const s=[];
+  document.querySelectorAll(WSEL).forEach(el=>s.push({top:el.scrollTop,pos:el._pos,dir:el._dir,dwell:el._dwell})); return s; }
+function restoreWallScroll(s){ if(!WALL||!s) return;
+  document.querySelectorAll(WSEL).forEach((el,i)=>{ const o=s[i]; if(!o) return;
+    el._pos=o.pos; el._dir=o.dir; el._dwell=o.dwell; if(typeof o.top==='number') el.scrollTop=o.top; }); }
 function startAutoScroll(){
   stopAutoScroll();
   let last=performance.now();
   AS_TIMER=setInterval(()=>{
     const now=performance.now(); const dt=Math.min(0.1,(now-last)/1000); last=now;
-    document.querySelectorAll('body.wall .autoscroll, body.wall .baycol, body.wall .asgbody').forEach(el=>{
+    document.querySelectorAll(WSEL).forEach(el=>{
       if(el.matches(':hover')) return;                       // manual override on hover
       const max=el.scrollHeight-el.clientHeight;
       if(max<8){ el.scrollTop=0; return; }                   // nothing to scroll
@@ -3602,10 +3613,12 @@ function renderGanttFS(){
 function renderAll(){
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
+  const _wsnap=snapWallScroll();
   renderFloor(D); renderProjects(D); renderFleetio(D); renderFleet();
   if(VIEW==='history') renderHistory();
   if(GFS) renderGanttFS();
   setView(VIEW);
+  restoreWallScroll(_wsnap);
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===RANGE));
   document.getElementById('refreshInfo').textContent="data as of "+(D.generatedText||"—");
   document.getElementById('footerText').innerHTML=
