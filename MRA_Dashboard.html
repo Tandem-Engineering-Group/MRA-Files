@@ -104,6 +104,7 @@
   .mitten{font-size:14px; vertical-align:middle; line-height:1}
   .mappin{text-decoration:none; cursor:pointer; opacity:.8}
   .mappin:hover{opacity:1}
+  .barpop .pp-line{font-size:11.5px; margin:5px 0 3px}
   .authpill{margin-left:10px; background:rgba(34,197,94,.15); border:1px solid var(--green); color:#86efac; border-radius:20px; padding:7px 13px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap}
   .authpill:hover{background:rgba(34,197,94,.3); color:#bbf7d0}
   .rb{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
@@ -1247,6 +1248,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.47", date:"2026-06-17", title:"Equipment: click an item for details", items:[
+    "Click any item on the EQUIPMENT tab to open a detail card — where it is on the floor (bay / status), the project (PM · dates · %), and the fleet units on that job with their live location (+📍), open Fleetio items, compliance and 🧤/🍁 flags. All cross-referenced by job #; info-only items just show name / J# / description." ] },
   { rev:"3.46", date:"2026-06-17", title:"Click-to-map 📍 + more hover help", items:[
     "Every located unit now has a 📍 — click it to open that unit's spot in Google Maps (on FLEET, plus the FLEETIO issue / work-order / service rows and the By-Trailer cards). Exact pin once the updated export runs; address-level until then.",
     "Added hover help across FLEET / FLEETIO / EQUIPMENT — the column headers (Status, Miles, Open, DOT/Reg/Ins/IFTA, Location), the search boxes, the flag pickers and the trailer cards now explain what they are on hover." ] },
@@ -3165,8 +3168,9 @@ function renderEquipment(){
   const se=document.getElementById('eqSearch'); const q=(se?se.value:'').trim().toLowerCase();
   const fg=(document.getElementById('eqFlag')||{}).value||'';
   const list = JOB_BOARD.filter(e=>(!q||(e.n+' '+e.j+' '+(e.d||'')).toLowerCase().indexOf(q)>=0) && (!fg||(fg==='can'?canEquip(e):atPlantEquip(e))));
+  _eqList=list;
   grid.innerHTML = list.length
-    ? list.map(e=>`<div class="eqcard"><div><div class="nm">${esc(e.n)}${canFlagEquip(e)}${plantFlagEquip(e)}</div>${e.d?`<div class="ds" title="${escA(e.d)}">${esc(e.d)}</div>`:''}</div><span class="jb">${esc(e.j)}</span></div>`).join('')
+    ? list.map((e,i)=>`<div class="eqcard" onclick="showEqDetail(${i},event)" style="cursor:pointer" title="Click for details — where it is + the units on this job"><div><div class="nm">${esc(e.n)}${canFlagEquip(e)}${plantFlagEquip(e)}</div>${e.d?`<div class="ds" title="${escA(e.d)}">${esc(e.d)}</div>`:''}</div><span class="jb">${esc(e.j)}</span></div>`).join('')
     : `<div class="empty">No equipment matches the current filter</div>`;
   const c=document.getElementById('eqCount'); if(c) c.textContent = (q||fg) ? (list.length+' of '+JOB_BOARD.length) : (JOB_BOARD.length+' jobs');
 }
@@ -3278,6 +3282,35 @@ function mapHref(l){ if(!l) return ''; if(l.lat!=null&&l.lng!=null) return 'http
   const a=l.full||l.place; return a?('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a)):''; }
 function mapPin(l){ const h=mapHref(l); return h?` <a class="mappin" href="${h}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open this location in Google Maps">📍</a>`:''; }
 function mapPinFor(name){ const LOC=(window.MRA_DATA&&window.MRA_DATA.fleetio&&window.MRA_DATA.fleetio.locations)||{}; return mapPin(LOC[_normKey(name)]); }
+// EQUIPMENT click-to-detail: cross-reference an item by its job # to the floor, projects and fleet.
+let _eqIdxGen=null,_floorByJob={},_unitsByJob={},_eqList=[];
+function _eqIndex(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_eqIdxGen) return; _eqIdxGen=g; _floorByJob={}; _unitsByJob={};
+  ((D&&D.jobs)||[]).forEach(j=>{ (String(j.jobNum||'').match(/\d{3,5}/g)||[]).forEach(n=>{ (_floorByJob[n]=_floorByJob[n]||[]).push(j); }); });
+  ((D&&D.fleetio&&D.fleetio.fleet)||[]).forEach(v=>{ (String(v.tour||'').match(/\d{3,5}/g)||[]).forEach(n=>{ (_unitsByJob[n]=_unitsByJob[n]||[]).push(v); }); }); }
+function eqPop(e){ _eqIndex();
+  const LOC=(window.MRA_DATA&&window.MRA_DATA.fleetio&&window.MRA_DATA.fleetio.locations)||{};
+  const projects=(window.MRA_DATA&&window.MRA_DATA.projects)||[];
+  const jnums=(String(e.j||'').match(/\d{3,5}/g)||[]);
+  let h=`<h4>${esc(e.n||'Equipment')}${canFlagEquip(e)}${plantFlagEquip(e)}</h4>`;
+  if(e.j||e.d) h+=`<div class="pp-sub">${esc(e.j||'')}${e.d?' · '+esc(e.d):''}</div>`;
+  let floor=[]; jnums.forEach(n=>floor=floor.concat(_floorByJob[n]||[]));
+  const seen={}; floor=floor.filter(j=>{ if(seen[j.row])return false; seen[j.row]=1; return true; });
+  if(floor.length){ const f=floor[0]; h+=`<div class="pp-line"><b>On the board:</b> ${esc(f.bay||'—')}${f.status?' · '+esc(f.status):''}${f.pm?' · PM '+esc(f.pm):''}</div>`; }
+  const pr=projects.find(p=> p.name && ((e.n+' '+(e.d||'')).toLowerCase().indexOf(p.name.toLowerCase())>=0 || floor.some(j=>String(j.project||'').toLowerCase().indexOf(p.name.toLowerCase())>=0)));
+  if(pr) h+=`<div class="pp-line"><b>Project:</b> ${esc(pr.name)} · ${esc(pr.pm||'—')} · ${pr.pct}%${pr.finishISO?' · due '+fmtMDY(pr.finishISO):''}</div>`;
+  let units=[]; jnums.forEach(n=>units=units.concat(_unitsByJob[n]||[]));
+  const us={}; units=units.filter(v=>{ const k=_normKey(v.f); if(us[k])return false; us[k]=1; return true; });
+  if(units.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">UNITS ON THIS JOB (${units.length})</div>`
+    + units.slice(0,12).map(v=>{ const loc=LOC[_normKey(v.f)], open=(+v.oi||0)+(+v.ow||0), comp=(v.comp||[]).filter(c=>c.s==='overdue'||c.s==='due_soon');
+        return `<div>• <b>${esc(v.f)}</b> ${esc(v.t||'')} ${esc(v.mk||'')}${isCanadian({rs:v.rs,nm:v.nm,m:v.mk})?' 🍁':''}${atPlant(v.f)?' 🧤':''}</div>`
+          + (loc?`<div class="pp-det">📍 ${esc(loc.yard||loc.place)}${loc.atISO?' · '+esc(fleetAgo(loc.atISO)):''}${mapPin(loc)}</div>`:'')
+          + (open?`<div class="pp-det">${open} open Fleetio item(s)</div>`:'')
+          + (comp.length?`<div class="pp-det">⚠ ${comp.map(c=>esc((c.ty||'')+' '+(c.s==='overdue'?'overdue':'due soon'))).join(', ')}</div>`:'');
+      }).join('') + `</div>`; }
+  if(!floor.length && !units.length && !pr) h+=`<div class="pp-det">No live job / unit link for this item — info only.</div>`;
+  return h; }
+function showEqDetail(i,ev){ const e=_eqList[i]; const pop=document.getElementById('barPop'); if(!e||!pop) return;
+  pop.innerHTML=eqPop(e); pop.classList.add('show'); positionPop(ev); ev.stopPropagation(); }
 
 function renderFleet(){
   const tb=document.getElementById('fleetBody'); if(!tb) return;
