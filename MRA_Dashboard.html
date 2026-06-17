@@ -215,7 +215,8 @@
     padding:5px 10px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; line-height:1}
   #wallCtl button:hover{border-color:#93c5fd; color:#93c5fd}
   #wallCtl input[type=range]{width:120px; accent-color:#93c5fd}
-  #wallCtl #wallZoomVal{min-width:42px; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums}
+  #wallCtl input[type=number]{width:56px; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 6px; font-size:12px; font-family:inherit; text-align:right; font-variant-numeric:tabular-nums}
+  #wallCtl .wc-pct{color:var(--muted); margin-left:-2px}
   .bay-head .name .count{margin-left:6px}
   body.wall #floorView .grid, body.wall #floorGanttPanel{display:none}
   .asgbody::-webkit-scrollbar, .baycol::-webkit-scrollbar{width:8px}
@@ -1160,7 +1161,7 @@ const GENERAL_HELP = `
     </ul>
     <div class="tip">Keep <b>one file per project</b> with a stable name (e.g. <i>SWC MMOT.xlsx</i>), and give it that project's <b>complete</b> task list each time — re-dropping <b>replaces</b> the project, it doesn't merge. A project already in the master workbook should live in <b>one</b> place, not both.</div></div>
   <div class="hsec"><h4>⑩ 📺 Wall / TV mode</h4>
-    <p>The <span class="k">📺 Wall</span> button (top right) packs the bays and the three crew queues onto one screen for the shop TV, auto-expands every task, and auto-scrolls anything too tall to fit — including the <b>Next Up / On Hold</b> tile and each assignee panel. <b>Hover a panel</b> to take over and scroll it yourself; it resumes on its own. A <span class="k">📺 Size</span> control appears bottom-right — use the slider or the <b>S / M / L</b> presets to scale the whole board for that screen's size and viewing distance, and <b>each monitor remembers its own size</b> independently of the others. Click <span class="k">📺 Wall: ON</span> again to exit. The TV remembers the mode.</p></div>
+    <p>The <span class="k">📺 Wall</span> button (top right) packs the bays and the three crew queues onto one screen for the shop TV, auto-expands every task, and auto-scrolls anything too tall to fit — including the <b>Next Up / On Hold</b> tile and each assignee panel. <b>Hover a panel</b> to take over and scroll it yourself; it resumes on its own. A <span class="k">📺 Size</span> control appears bottom-right — use the slider, the <b>S / M / L</b> presets, or type an exact <b>%</b> to scale the whole board for that screen's size and viewing distance, and <b>each monitor remembers its own size</b> independently of the others. Click <span class="k">📺 Wall: ON</span> again to exit. The TV remembers the mode.</p></div>
   <div class="hsec"><h4>⑪ 🗂️ Shop Tasks tab — how tasks work now</h4>
     <p>Shop-floor tasks live on the <b>Shop Tasks</b> tab of the workbook — <b>one row per task</b>, with dropdowns for <span class="k">Bay</span>, <span class="k">Assigned</span> and <span class="k">Status</span>, plus <span class="k">Opened</span> / <span class="k">Closed</span> dates. The sheet is sortable and color-banded by project, and each row flows onto the matching bay card and crew queue automatically. (No row yet for a job? The old <b>Notes</b> cell on Input still works as a fallback.)</p></div>
   <div class="hsec"><h4>⑫ ✅ Close a task from the dashboard</h4>
@@ -1218,6 +1219,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.25", date:"2026-06-17", title:"Wall size: type an exact %", items:[
+    "The 📺 Size control now has an editable % box — type an exact zoom (e.g. 135) on top of the slider and S / M / L presets; it stays in sync with both." ] },
   { rev:"3.24", date:"2026-06-17", title:"Wall mode: per-screen size control", items:[
     "📺 Wall mode now has a Size control (bottom-right): a zoom slider plus S / M / L presets that scale the whole board — text and layout together — to suit each monitor's size and viewing distance.",
     "Each screen remembers its own size independently (saved on that device, like Light/Dark and Wall on/off) — set the big bay TV large and the office monitor smaller without one affecting the other.",
@@ -1387,7 +1390,7 @@ function ensureWallCtl(){
     +'<button type="button" onclick="setWallZoom(115)" title="Medium">M</button>'
     +'<button type="button" onclick="setWallZoom(140)" title="Large">L</button>'
     +'<input id="wallZoom" type="range" min="60" max="200" step="5" oninput="setWallZoom(this.value)" title="Board size on this screen">'
-    +'<span id="wallZoomVal">100%</span>'
+    +'<input id="wallZoomNum" type="number" min="50" max="250" step="5" onchange="setWallZoom(this.value)" onkeydown="if(event.key===\'Enter\'){setWallZoom(this.value);this.blur();}" title="Type an exact %"><span class="wc-pct">%</span>'
     +'<button type="button" onclick="setWallZoom(100)" title="Reset to 100%">↺</button>';
   document.body.appendChild(d);
 }
@@ -1396,7 +1399,7 @@ function applyWallZoom(){
   document.body.style.zoom = WALL ? (WALL_ZOOM/100) : '';
   const ctl=document.getElementById('wallCtl'); if(ctl) ctl.style.display = WALL?'flex':'none';
   const s=document.getElementById('wallZoom'); if(s) s.value=WALL_ZOOM;
-  const v=document.getElementById('wallZoomVal'); if(v) v.textContent=WALL_ZOOM+'%';
+  const v=document.getElementById('wallZoomNum'); if(v && document.activeElement!==v) v.value=WALL_ZOOM;
 }
 function setWallZoom(z){ z=parseInt(z,10)||100; WALL_ZOOM=Math.max(50,Math.min(250,z));
   try{ localStorage.setItem('mra_wall_zoom', String(WALL_ZOOM)); }catch(e){}
