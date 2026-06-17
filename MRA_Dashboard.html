@@ -627,6 +627,7 @@
       <h2>Project Schedules — Gantt <input id="projSearch" type="search" placeholder="Find project or job #…" oninput="setPFilter(this.value)" class="projsearch">
         <div class="rangebtns" id="rangeBtns">
           <span class="gwinwrap" title="Zoom the timeline — drag from 1 week to 1 year">🔍<input id="gwinSlider" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider"><span id="gwinLab" class="gwinlab"></span></span>
+          <span class="gwinwrap" title="Scroll the timeline left / right at the same zoom">↔<input id="gpanSlider" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider"></span>
           <div class="rb" data-m="1" onclick="setRange(1)">1 mo</div>
           <div class="rb active" data-m="3" onclick="setRange(3)">3 mo</div>
           <div class="rb" data-m="6" onclick="setRange(6)">6 mo</div>
@@ -1105,6 +1106,7 @@ let VIEW = 'floor';
 try{ VIEW = localStorage.getItem('mra_view')||'floor'; RANGE = JSON.parse(localStorage.getItem('mra_range'))||3; }catch(e){ RANGE=3; }
 let GWIN_DAYS=null; try{ const _gw=parseInt(localStorage.getItem('mra_gwin'),10); if(_gw>=7&&_gw<=365) GWIN_DAYS=_gw; }catch(e){}  // gantt zoom: continuous window length (days); overrides RANGE presets when set
 let PFILTER='';   // projects tab: filter by project name / PM / job # (matches task text)
+let GPAN=null, _panT0=0, _panT1=0, _panDays=91;   // projects gantt horizontal pan — scroll the window without changing zoom
 let TEAMFILTER='all';
 try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
 let GFS=null;              // full-screen gantt: 'floor' | 'projects' | null
@@ -1233,6 +1235,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.35", date:"2026-06-17", title:"Projects Gantt: scroll the timeline (pan slider)", items:[
+    "Added a ↔ scroll slider beside the 🔍 zoom on the Projects Gantt — drag it to slide the visible window left/right across the whole timeline (past ↔ future) WITHOUT changing the zoom. Zoom sets how much time you see; this just moves the window. Clicking a 1/3/6-mo/All preset resets the scroll to the default 'last week + ahead' view." ] },
   { rev:"3.34", date:"2026-06-17", title:"Canadian 🍁 flag now on FLEETIO + Equipment too", items:[
     "The 🍁 Canadian marker now also shows on the FLEETIO tab (issue / work-order / service rows and the By-Trailer cards) and the EQUIPMENT list — matched by fleet # against the Canadian roster, or \"CAN\" / \"Canada\" in the name." ] },
   { rev:"3.33", date:"2026-06-17", title:"FLEET: Canadian assets flagged 🍁", items:[
@@ -2757,17 +2761,24 @@ function renderProjects(D){
     return `<div class="kpi pop ${k.c}" onmouseenter="popHoverIn(event,'${key}')" onmouseleave="popHoverOut()" title="Hover for the list"><div class="n">${k.n}</div><div class="l">${k.l}</div><div class="kgo">hover for detail</div></div>`;
   }).join("");
 
-  // Gantt window: always start 7 days before today (so you always see the last week + forward)
-  const mStart=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7);
-  let days;
+  // Gantt window. Zoom (GWIN_DAYS / RANGE) sets the window LENGTH; the pan slider (GPAN) scrolls it
+  // left/right along the full timeline WITHOUT changing the zoom. Default start = 7 days before today.
+  const defStartMs=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime();
+  let tlo=defStartMs, thi=defStartMs;
+  projects.forEach(p=>{ const s=parseISO(p.startISO), f=parseISO(p.finishISO);
+    if(s&&s.getTime()<tlo) tlo=s.getTime(); if(f&&f.getTime()>thi) thi=f.getTime(); });
+  thi+=10*DAY;
+  let days, fullView=false;
   if(GWIN_DAYS!=null) days=GWIN_DAYS;
-  else if(RANGE==='all'){
-    let maxFin=mStart.getTime();
-    projects.forEach(p=>{const f=parseISO(p.finishISO); if(f&&f.getTime()>maxFin)maxFin=f.getTime();});
-    days=Math.max(31,Math.ceil((maxFin-mStart.getTime())/DAY)+20);
-  } else days=Math.round(RANGE*30.4);
+  else if(RANGE==='all'){ days=Math.max(31,Math.ceil((thi-tlo)/DAY)); fullView=true; }
+  else days=Math.round(RANGE*30.4);
+  const maxStart=Math.max(tlo, thi-days*DAY);
+  const startMs = fullView ? tlo : (GPAN!=null ? Math.max(tlo,Math.min(GPAN,maxStart)) : Math.max(tlo,Math.min(defStartMs,maxStart)));
+  const mStart=new Date(startMs);
   const win=buildWindow(mStart,days);
-  { const sl=document.getElementById('gwinSlider'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(days); }
+  _panT0=tlo; _panT1=thi; _panDays=days;
+  { const sl=document.getElementById('gwinSlider'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(days);
+    const ps=document.getElementById('gpanSlider'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
 
   const dated=projects.filter(p=>p.startISO&&p.finishISO&&projMatch(p));
   const rows=dated.map(p=>({_p:p})).map(({_p:p})=>({
@@ -3494,6 +3505,7 @@ function setView(v){
 function setRange(m){
   RANGE=m; try{localStorage.setItem('mra_range',JSON.stringify(m));}catch(e){}
   GWIN_DAYS=null; try{localStorage.removeItem('mra_gwin');}catch(e){}   // a preset overrides the zoom slider
+  GPAN=null;   // and resets the horizontal scroll back to the default (today-7) view
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===m));
   if(window.MRA_DATA) renderProjects(window.MRA_DATA);
   if(GFS) renderGanttFS();
@@ -3507,6 +3519,10 @@ function setGwin(d){ GWIN_DAYS=Math.max(7,Math.min(365,Math.round(d))); try{loca
   const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(GWIN_DAYS);
   if(window.MRA_DATA) renderProjects(window.MRA_DATA); if(GFS) renderGanttFS();
 }
+// Horizontal pan: scroll the visible window across the timeline at the SAME zoom (doesn't touch GWIN_DAYS).
+function setGpan(v){ const span=_panT1-_panDays*DAY-_panT0; if(span<=0) return;
+  GPAN=_panT0 + (Math.max(0,Math.min(100,+v))/100)*span;
+  if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
 // Projects filter: match project name, PM, or a job # found in any of its tasks.
 function projMatch(p){ if(!PFILTER) return true; const q=PFILTER;
   if((p.name||'').toLowerCase().indexOf(q)>=0) return true;
