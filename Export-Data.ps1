@@ -543,31 +543,62 @@ if (Test-Path $FleetioTokenFile) {
             } while ($cursor -and $guard -lt 25)
             return $all
         }
+        $fleetRoster = @()
         try {
             "=== Fleetio roster/compliance probe  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $FleetDbg -Encoding utf8
             $veh = @(Get-FleetioCursor 'vehicles' $fhead)
             "vehicles fetched: $($veh.Count)" | Out-File $FleetDbg -Append -Encoding utf8
-            "with a Fleetio location entry: $((@($veh | Where-Object { $_.current_location_entry_id })).Count)" | Out-File $FleetDbg -Append -Encoding utf8
             "with renewal reminders: $((@($veh | Where-Object { $_.vehicle_renewal_reminders_count -gt 0 })).Count)" | Out-File $FleetDbg -Append -Encoding utf8
-            ($veh | Select-Object -First 1 -Property id,name,vehicle_type_name,vehicle_status_name,year,make,model,license_plate,registration_state,primary_meter_value,primary_meter_unit,group_name,issues_count,work_orders_count,service_reminders_count,vehicle_renewal_reminders_count | ConvertTo-Json -Depth 4) | Out-File $FleetDbg -Append -Encoding utf8
+
+            # Renewal TYPE id -> name, so each reminder can be labeled (DOT / Reg / Ins / IFTA / ...).
+            $rtName = @{}
+            try { foreach ($rt in @(Get-FleetioCursor 'vehicle_renewal_types' $fhead)) { if ($null -ne $rt.id) { $rtName[[string]$rt.id] = [string]$rt.name } } } catch {}
+            "renewal types: $((@($rtName.Values | Sort-Object -Unique)) -join ' | ')" | Out-File $FleetDbg -Append -Encoding utf8
+
+            # All renewal reminders -> grouped by vehicle id as [{ ty, due, s }].
+            $remByVeh = @{}; $typeCount = @{}
             foreach ($ep in @('vehicle_renewal_reminders','renewal_reminders')) {
                 try {
                     $rr = @(Get-FleetioCursor $ep $fhead)
-                    "[$ep] fetched: $($rr.Count)" | Out-File $FleetDbg -Append -Encoding utf8
                     if ($rr.Count -gt 0) {
-                        $types = @($rr | ForEach-Object { $_.vehicle_renewal_type_name } | Where-Object { $_ } | Sort-Object -Unique)
-                        "[$ep] types: $($types -join ' | ')" | Out-File $FleetDbg -Append -Encoding utf8
-                        ($rr | Select-Object -First 5 | ConvertTo-Json -Depth 5) | Out-File $FleetDbg -Append -Encoding utf8
+                        "[$ep] fetched: $($rr.Count)" | Out-File $FleetDbg -Append -Encoding utf8
+                        foreach ($r in $rr) {
+                            $vid = [string]$r.vehicle_id; if ($vid -eq '') { continue }
+                            $tn  = $rtName[[string]$r.vehicle_renewal_type_id]; if (-not $tn) { $tn = "type $($r.vehicle_renewal_type_id)" }
+                            if (-not $remByVeh.ContainsKey($vid)) { $remByVeh[$vid] = New-Object System.Collections.ArrayList }
+                            [void]$remByVeh[$vid].Add([PSCustomObject]@{ ty = $tn; due = (FleetD10 $r.next_due_at); s = [string]$r.vehicle_renewal_reminder_status })
+                            if ($typeCount.ContainsKey($tn)) { $typeCount[$tn]++ } else { $typeCount[$tn] = 1 }
+                        }
                         break
                     }
                 } catch { "[$ep] error: $($_.Exception.Message)" | Out-File $FleetDbg -Append -Encoding utf8 }
             }
-            Write-Output "  -> Fleetio: $($veh.Count) vehicles; roster/compliance probe -> fleetio-debug.txt"
-        } catch { "FATAL: $($_.Exception.Message)" | Out-File $FleetDbg -Append -Encoding utf8; Write-Output "  -> Fleetio roster probe failed: $($_.Exception.Message)" }
+            ("reminders by type: " + ((@($typeCount.GetEnumerator() | Sort-Object Name | ForEach-Object { '{0}={1}' -f $_.Name, $_.Value })) -join ' | ')) | Out-File $FleetDbg -Append -Encoding utf8
+
+            # Build the roster: one entry per Fleetio vehicle (tour = Fleetio group; the dashboard
+            # falls back to its built-in list when this is blank). Keyed by fleet # via NormFleet.
+            foreach ($v in $veh) {
+                $key = NormFleet $v.name; if ($key -eq '') { continue }
+                $comp = @(); if ($remByVeh.ContainsKey([string]$v.id)) { $comp = @($remByVeh[[string]$v.id]) }
+                $fleetRoster += [PSCustomObject]@{
+                    f = $key; nm = [string]$v.name; t = [string]$v.vehicle_type_name
+                    y = $(if ($v.year) { [string]$v.year } else { '' })
+                    mk = (('{0} {1}' -f [string]$v.make, [string]$v.model)).Trim()
+                    tour = [string]$v.group_name; stat = [string]$v.vehicle_status_name
+                    mi = $(if ($null -ne $v.primary_meter_value) { [string]$v.primary_meter_value } else { '' }); mu = [string]$v.primary_meter_unit
+                    oi = [int]$v.issues_count; ow = [int]$v.work_orders_count; os = [int]$v.service_reminders_count
+                    plate = [string]$v.license_plate; rs = [string]$v.registration_state; vin = [string]$v.vin
+                    comp = $comp
+                }
+            }
+            "roster built: $($fleetRoster.Count)" | Out-File $FleetDbg -Append -Encoding utf8
+            ($veh | Select-Object -First 1 -Property id,name,vehicle_type_name,vehicle_status_name,year,make,model,license_plate,registration_state,vin,primary_meter_value,primary_meter_unit,group_name,issues_count,work_orders_count,service_reminders_count,vehicle_renewal_reminders_count | ConvertTo-Json -Depth 4) | Out-File $FleetDbg -Append -Encoding utf8
+            Write-Output "  -> Fleetio: $($veh.Count) vehicles; roster built ($($fleetRoster.Count)) -> fleetio-debug.txt"
+        } catch { "FATAL: $($_.Exception.Message)" | Out-File $FleetDbg -Append -Encoding utf8; Write-Output "  -> Fleetio roster build failed: $($_.Exception.Message)" }
 
         $fleetio = [PSCustomObject]@{
             generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt')
-            issues = @($fIssues); workOrders = @($fWos); service = @($fSvc); locations = $fLoc
+            issues = @($fIssues); workOrders = @($fWos); service = @($fSvc); locations = $fLoc; fleet = @($fleetRoster)
         }
         $issAssigned = (@($fIssues | Where-Object { @($_.assignees).Count -gt 0 })).Count
         Write-Output "  -> Fleetio: $($fIssues.Count) issues ($issAssigned with assignees), $($fWos.Count) work orders, $($fSvc.Count) service due/overdue"
@@ -606,7 +637,8 @@ if (Test-Path $SamsaraTokenFile) {
                 if ($place -eq '' -and $g.latitude -and $g.longitude) { $place = ("{0:N3}, {1:N3}" -f [double]$g.latitude, [double]$g.longitude) }
                 if ($place -eq '') { continue }
                 $atISO = if ($g.time) { [string]$g.time } else { $null }
-                $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO }
+                $yard = ''; if ($g.address -and $g.address.name) { $yard = [string]$g.address.name }
+                $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO; yard = $yard }
                 $samN++
                 if ($samN -le 8) { "SAM $key -> '$place'  (name='$($v.name)' addr='$addr')" | Out-File $SamDbg -Append -Encoding utf8 }
             }
@@ -615,7 +647,7 @@ if (Test-Path $SamsaraTokenFile) {
         } while ($hasNext -and $guard -lt 20)
         "samsara located: $samN" | Out-File $SamDbg -Append -Encoding utf8
         Write-Output "  -> Samsara: located $samN unit(s); debug -> samsara-debug.txt"
-        if ($null -eq $fleetio) { $fleetio = [PSCustomObject]@{ generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt'); issues=@(); workOrders=@(); service=@(); locations=$fLoc } }
+        if ($null -eq $fleetio) { $fleetio = [PSCustomObject]@{ generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt'); issues=@(); workOrders=@(); service=@(); locations=$fLoc; fleet=@() } }
     } catch { Write-Output "  -> Samsara fetch failed: $($_.Exception.Message)" }
 }
 

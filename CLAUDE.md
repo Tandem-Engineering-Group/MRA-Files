@@ -189,6 +189,34 @@ Treat help + rev as PART OF the feature, not an afterthought.
 
 ## In progress / queued (2026-06-17)
 
+- **FLEET tab rebuild from Fleetio + Samsara (IN PROGRESS 2026-06-17 PM).** Replacing the hand-typed
+  `FLEET=[…]` array (164 rows baked into `MRA_Dashboard.html`: f, t=type, y, m=make, j=Job/Tour,
+  dot/ins/reg/ift flags) with a LIVE roster sourced from Fleetio + Samsara.
+  - **Samsara = live GPS location.** Token in `samsara.txt` next to `Export-Data.ps1` (one paginated
+    read-only `/fleet/vehicles/stats?types=gps`; ~89 tracked units, Samsara vehicle `name` = the bare
+    fleet #, so matching is clean — **71 of 82 located units match the hand list**, up from 7). `$fLoc`
+    (keyed by fleet# via `NormFleet`) now also carries `yard` (Samsara geofence name, e.g. "MRA Madison
+    Heights" / "Warren Penske Yard") + `atISO` (GPS fix time → can flag stale, e.g. unit 1214 last
+    reported 2025-05). NOTE Samsara has NO tour/job field; Fleetio likewise nightly-mirrors GPS so
+    Samsara is the upstream truth — Export pulls location from Samsara, not Fleetio.
+  - **Fleetio = roster + compliance.** Export STEP 1 (done, this commit) now EMITS
+    `MRA_DATA.fleetio.fleet[]` = `{f, nm, t, y, mk(make+model), tour(=group_name), stat(status),
+    mi/mu(primary meter+unit), oi/ow/os(open issues/WOs/service counts), plate, rs, vin,
+    comp:[{ty,due,s}]}`. `comp` = the vehicle's renewal reminders, each labeled via the
+    `vehicle_renewal_types` id→name lookup (the earlier probe showed reminders carry only
+    `vehicle_renewal_type_id`, not a name — hence the lookup). Fleetio confirmed: 149 vehicles, 202
+    renewal reminders / 89 vehicles, each with a real `next_due_at` + `vehicle_renewal_reminder_status`.
+  - **Tour rule (Rich chose 2026-06-17): Fleetio Group FIRST, hand-typed Excel list as FALLBACK.** The
+    dashboard keeps its existing `FLEET=[…]` as the fallback/seed and merges the Fleetio roster over it
+    by fleet# (so nothing is ever lost; trucks grouped in Fleetio go fully automatic). Fleetio "Group"
+    looks tour-shaped already (saw `"Siemen's DBX 2 J1110-3005"` vs hand `"Seno Medical / 1454"`).
+  - **NEXT (STEP 2):** Rich runs the updated export → I read the LIVE `data.js` to confirm the
+    `fleetio.fleet` shape + the actual renewal-type NAMES (to finalize DOT/Reg/Ins/IFTA bucketing) →
+    build the FLEET-tab render from it (add **Status / Mileage / Open-items badge** columns + real
+    **compliance dates** + the **yard** location), then bump rev + `? help` + deploy `mode=live`.
+  - **SECURITY:** Samsara token was pasted into chat (twice) then rotated by Rich; the live token lives
+    only in `samsara.txt` on his machine. Never commit tokens.
+
 - **Siemens DI + Medtronic imports = DONE / LIVE** (verified 2026-06-17 against live `data.js`,
   generated 8:22 AM): **Siemens DI Pedestal = 15 tasks** (renamed from "Seimans", old 2 rows replaced),
   **Medtronic = 160 tasks** (old ~101 wiped + replaced with the new schedule + milestones). Rich saved
