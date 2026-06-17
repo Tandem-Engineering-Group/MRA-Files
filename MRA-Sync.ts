@@ -7,6 +7,13 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         row?: number; status?: string; start?: string; completion?: string; notes?: string;
         id?: string | number; phase?: string; type?: string; finish?: string; pred?: string;
         pin?: string; user?: string;
+        // bulk upload of a whole project (action "importProject")
+        replace?: boolean;
+        tasks?: {
+            task?: string; phase?: string; type?: string; start?: string; finish?: string;
+            duration?: string; assigned?: string; status?: string; milestone?: string;
+            comments?: string; predecessor?: string;
+        }[];
     } = {};
     try { p = JSON.parse(payload); } catch (e) { console.log("Bad payload"); return; }
 
@@ -198,6 +205,52 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
             if (p.finish !== undefined) setPDate(rowAbs, FINISH, p.finish);
             logIt("Edit project task", p.project || "", String(p.task || wantId)); return;
         }
+        return;
+    }
+
+    // ===== BULK IMPORT a whole project from the dashboard Upload tab =====
+    // Appends the uploaded tasks. If replace=true (project name matched an existing
+    // one), the old rows are CLEARED IN PLACE (contents only) rather than deleted, so
+    // the Project Gantt's absolute-row mirror formulas are never shifted/broken.
+    if (p.action === "importProject") {
+        const pws = workbook.getWorksheet("Project Tasks");
+        if (!pws || !p.project || !p.tasks || !p.tasks.length) { console.log("Missing import data"); return; }
+        const used = pws.getUsedRange(); const vals = used.getValues();
+        const base = used.getRowIndex(), cnt = used.getRowCount();
+        const PROJECT = 0, PHASE = 1, TYPE = 2, TASK = 3, START = 4, FINISH = 5, DURATION = 6,
+            ASSIGNED = 7, STATUS = 8, PM = 9, MILE = 10, COMMENTS = 11, ID = 12, PRED = 13;
+        const pr = String(p.project).trim().toLowerCase();
+        let maxId = 0;
+        for (let i = 1; i < vals.length; i++) { const n = parseInt(String(vals[i][ID]).trim(), 10); if (!isNaN(n) && n > maxId) maxId = n; }
+
+        let cleared = 0;
+        if (p.replace) {
+            for (let i = 1; i < vals.length; i++) {
+                if (String(vals[i][PROJECT]).trim().toLowerCase() === pr) {
+                    pws.getRangeByIndexes(base + i, 0, 1, 14).clear(ExcelScript.ClearApplyTo.Contents);
+                    cleared++;
+                }
+            }
+        }
+
+        const startRow = base + cnt;   // append safely below everything
+        const block: (string | number)[][] = [];
+        for (const t of p.tasks) {
+            maxId++;
+            const row: (string | number)[] = new Array(14).fill("");
+            row[PROJECT] = p.project; row[PHASE] = t.phase || ""; row[TYPE] = t.type || ""; row[TASK] = t.task || "";
+            row[START] = serialOf(t.start || ""); row[FINISH] = serialOf(t.finish || "");
+            row[DURATION] = t.duration || ""; row[ASSIGNED] = t.assigned || ""; row[STATUS] = t.status || "Not Started";
+            row[PM] = p.pm || ""; row[MILE] = (t.milestone === "Yes" ? "Yes" : "No"); row[COMMENTS] = t.comments || "";
+            row[ID] = maxId; row[PRED] = t.predecessor || "";
+            block.push(row);
+        }
+        pws.getRangeByIndexes(startRow, 0, block.length, 14).setValues(block);
+        // date format on the new Start/Finish cells
+        const fmt: string[][] = []; for (let i = 0; i < block.length; i++) fmt.push(["m/d/yyyy"]);
+        pws.getRangeByIndexes(startRow, START, block.length, 1).setNumberFormatLocal(fmt);
+        pws.getRangeByIndexes(startRow, FINISH, block.length, 1).setNumberFormatLocal(fmt);
+        logIt("Import project", p.project, (p.replace ? ("replaced " + cleared + " row(s) → ") : "added ") + block.length + " task(s)");
         return;
     }
 

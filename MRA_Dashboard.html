@@ -576,6 +576,7 @@
       <span style="margin-left:auto; align-self:center; font-size:12px; color:var(--muted); font-weight:600">📄 Hard-Date Schedule:</span>
       <button class="editbtn" onclick="openTplPicker()" title="Build a print-ready Hard-Date schedule for one of your projects (pick project + style)">📄 Build Schedule</button>
       <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260617" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx) — columns match the schedule, so you can drop it in the Intake Inbox or paste straight into Excel">⬇ Download Intake Template</a>
+      <button class="editbtn" onclick="openUpload()" title="Upload a filled intake template right here — it loads into the schedule on the next ~15-min cycle">⬆ Upload Filled Template</button>
       <button class="helpbtn" style="width:24px;height:24px;font-size:13px" onclick="openHelp('help-intake')" title="How adding a project works">?</button>
     </div>
 
@@ -964,6 +965,27 @@
     </div>
   </div>
 
+  <!-- ===================== UPLOAD FILLED TEMPLATE ===================== -->
+  <div class="modal-overlay" id="uploadModal" onclick="closeUpload(event)">
+    <div class="modal" style="max-width:760px">
+      <button class="modal-close" onclick="closeUpload()" title="Close">×</button>
+      <h3>⬆ Upload Filled Intake Template</h3>
+      <div class="msub">Pick your filled-in template (the <b>⬇ Download Intake Template</b> file). It's read right here in your browser — review the tasks, then send them to the schedule. They show up on the next ~15-min cycle.</div>
+      <div class="addform">
+        <div><label>Filled template (.xlsx)</label>
+          <input type="file" id="upFile" accept=".xlsx" onchange="parseUploadFile(this.files[0])"
+                 style="padding:8px; border:1px dashed var(--line); border-radius:8px; width:100%; background:var(--panel2); color:var(--text)"></div>
+      </div>
+      <div id="upMsg" style="font-size:12px; min-height:16px; margin:6px 0; color:var(--muted)"></div>
+      <div id="upSummary" style="display:none; font-size:13px; margin:4px 0 8px"></div>
+      <div id="upPreview" style="max-height:42vh; overflow:auto; margin:0 -2px"></div>
+      <div class="addbtns" style="margin-top:10px">
+        <button class="btn-ghost" onclick="closeUpload()">Cancel</button>
+        <button class="btn-primary" id="upSubmit" onclick="submitUpload()" disabled>Send to schedule</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== HARD-DATE TEMPLATE PICKER ===================== -->
   <div class="modal-overlay" id="tplModal" onclick="closeTpl(event)">
     <div class="modal" style="max-width:480px">
@@ -1055,8 +1077,9 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑧ How it stays live</h4>
     <div class="tip">Edit the workbook (<b>Input</b> = shop floor, <b>Project Tasks</b> = projects) and <b>save</b>. It pushes up <b>every 15 minutes</b> during the day — or run <b>dashboard.bat</b> for an instant update. <b>Never edit the dashboard or data.js by hand</b> — only the workbook.</div></div>
   <div class="hsec" id="help-intake"><h4>⑨ 📋 Add a project — anyone can, no Excel needed</h4>
-    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">⬇ Download Intake Template</span> and fill it in <b>offline</b> (one row per task — dropdowns are already set up). Type the <b>Project</b> and <b>PM</b> once in the boxes at the top; they auto-fill down every row. The template's columns now match the schedule exactly (<i>Project · Phase · Type · Task · Start · Finish · Duration · Assigned To · Status · PM · Milestone · Comments</i>), so you have two ways to load it:</p>
+    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">⬇ Download Intake Template</span> and fill it in <b>offline</b> (one row per task — dropdowns are already set up). Type the <b>Project</b> and <b>PM</b> once in the boxes at the top; they auto-fill down every row. The template's columns now match the schedule exactly (<i>Project · Phase · Type · Task · Start · Finish · Duration · Assigned To · Status · PM · Milestone · Comments</i>), so you have three ways to load it:</p>
     <ul>
+      <li><b>⬆ Upload Filled Template</b> (right on this tab) — pick your filled file; it's read in your browser, you see a preview, then send it. It lands on the board within ~15 minutes. <b>Name the project exactly the same as an existing one and it replaces that project</b> (a clean merge); a new name adds a new project.</li>
       <li><b>Drop it in the Intake Inbox folder</b> — it imports automatically and shows up here within ~15 minutes. No Excel, no IT.</li>
       <li><b>Or paste straight into Excel</b> — select your filled task rows and <b>Paste → Values</b> into the master <span class="k">Project Tasks</span> sheet; the columns line up 1:1.</li>
     </ul>
@@ -1119,6 +1142,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.15", date:"2026-06-17", title:"Upload a filled template right on the dashboard", items:[
+    "New ⬆ Upload Filled Template button on the PROJECTS tab: pick your filled intake template, it's read right in your browser (no IT, no folder), you get a preview of the tasks, then send them to the schedule — they land on the board within ~15 minutes.",
+    "Name the project exactly the same as an existing one and the upload REPLACES that project (a clean merge); a new name adds a new project." ] },
   { rev:"3.14", date:"2026-06-17", title:"Intake template matches the schedule", items:[
     "The ⬇ Download Intake Template now mirrors the Project Tasks schedule column-for-column (Project · Phase · Type · Task · Start · Finish · Duration · Assigned To · Status · PM · Milestone · Comments). Type the Project and PM once at the top and they auto-fill down every row. Load it either way: drop it in the Intake Inbox (auto-imports) or Paste → Values straight into Excel — the columns line up 1:1." ] },
   { rev:"3.13", date:"2026-06-17", title:"Added tasks stick on your device", items:[
@@ -1848,6 +1874,130 @@ function reopenProjTaskBtn(el){
     r.t.done=false; r.t.st='In Progress'; oRecomputeProject(r.p);
     renderProjTaskList(); oApply();
   }).catch(()=>{ el.textContent="↩"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
+}
+
+/* ===================== Upload a filled intake template (parsed in-browser) =====================
+   Download template -> fill -> Upload here. We read the .xlsx in the browser (no server),
+   show a preview, then POST the rows to the Power Automate flow (action "importProject").
+   If the project name matches an existing one EXACTLY, it's flagged to REPLACE that project;
+   otherwise it's added as a new one. The rows land on the board on the next ~15-min cycle. */
+let UP_DATA=null;
+function openUpload(){
+  if(!ensureAuth("upload a project template")) return;
+  UP_DATA=null;
+  const f=document.getElementById('upFile'); if(f) f.value="";
+  document.getElementById('upMsg').textContent="";
+  document.getElementById('upSummary').style.display="none";
+  document.getElementById('upPreview').innerHTML="";
+  document.getElementById('upSubmit').disabled=true;
+  document.getElementById('uploadModal').classList.add('show');
+}
+function closeUpload(ev){ if(ev && ev.target!==ev.currentTarget) return; document.getElementById('uploadModal').classList.remove('show'); }
+// Lazy-load the spreadsheet reader only when someone actually uploads.
+function ensureXLSX(cb){
+  if(window.XLSX){ cb(); return; }
+  const s=document.createElement('script');
+  s.src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+  s.onload=()=>cb(); s.onerror=()=>cb(new Error("reader-failed"));
+  document.head.appendChild(s);
+}
+function upNorm(s){ return String(s==null?'':s).trim(); }
+function upDateISO(v){
+  if(v==null||v==='') return "";
+  if(v instanceof Date && !isNaN(v)){ const z=n=>String(n).padStart(2,'0'); return v.getFullYear()+"-"+z(v.getMonth()+1)+"-"+z(v.getDate()); }
+  const s=upNorm(v); let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return m[1]+"-"+String(+m[2]).padStart(2,'0')+"-"+String(+m[3]).padStart(2,'0');
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(m){ let y=+m[3]; if(y<100)y+=2000; return y+"-"+String(+m[1]).padStart(2,'0')+"-"+String(+m[2]).padStart(2,'0'); }
+  return s;
+}
+function parseUploadFile(file){
+  if(!file) return;
+  const msg=document.getElementById('upMsg');
+  document.getElementById('upSubmit').disabled=true;
+  document.getElementById('upSummary').style.display="none";
+  document.getElementById('upPreview').innerHTML="";
+  msg.style.color="var(--muted)"; msg.textContent="Reading "+file.name+"…";
+  ensureXLSX(err=>{
+    if(err){ msg.style.color="var(--red)"; msg.innerHTML="Couldn't load the spreadsheet reader (network blocked?). You can still <b>drop the file in the Intake Inbox folder</b>, or paste the rows into Excel."; return; }
+    const rd=new FileReader();
+    rd.onload=e=>{ try{ upParse(new Uint8Array(e.target.result)); }catch(ex){ msg.style.color="var(--red)"; msg.textContent="Couldn't read that file: "+((ex&&ex.message)||ex); } };
+    rd.onerror=()=>{ msg.style.color="var(--red)"; msg.textContent="Couldn't read that file."; };
+    rd.readAsArrayBuffer(file);
+  });
+}
+function upParse(bytes){
+  const msg=document.getElementById('upMsg');
+  const wb=XLSX.read(bytes,{type:'array', cellDates:true});
+  const ws=wb.Sheets['Enter Here']||wb.Sheets[wb.SheetNames[0]];
+  if(!ws){ msg.style.color="var(--red)"; msg.textContent="No 'Enter Here' sheet — is this the intake template?"; return; }
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1, raw:true, defval:''});
+  let infoProj="", infoPM="";
+  const nextVal=(r,c)=>{ for(let k=c+1;k<r.length;k++){ const v=upNorm(r[k]); if(v && !v.endsWith(':')) return v; } return ""; };
+  for(const r of rows){ for(let c=0;c<r.length;c++){ const t=upNorm(r[c]).replace(/[:\s]+$/,'').toLowerCase();
+    if(['project / client','project/client','project / client name'].indexOf(t)>=0){ if(!infoProj) infoProj=nextVal(r,c); }
+    else if(t==='project manager'){ if(!infoPM) infoPM=nextVal(r,c); } } }
+  let hdr=-1, mirror=true;
+  for(let i=0;i<rows.length;i++){ const r=rows[i];
+    if(upNorm(r[0])==='Project' && upNorm(r[3])==='Task'){ hdr=i; mirror=true; break; }
+    if(upNorm(r[0])==='Phase' && upNorm(r[2])==='Task'){ hdr=i; mirror=false; break; } }
+  if(hdr<0){ msg.style.color="var(--red)"; msg.textContent="Couldn't find the task header (Project / Task). Please use the current Download Intake Template."; return; }
+  const tasks=[]; let projName=infoProj, pmName=infoPM;
+  for(let i=hdr+1;i<rows.length;i++){ const r=rows[i];
+    const task=upNorm(mirror? r[3] : r[2]); if(!task) continue;
+    let proj, phase, type, start, finish, dur, who, status, pm, ml, cm;
+    if(mirror){ proj=upNorm(r[0]); phase=upNorm(r[1]); type=upNorm(r[2]); start=r[4]; finish=r[5]; dur=upNorm(r[6]); who=upNorm(r[7]); status=upNorm(r[8]); pm=upNorm(r[9]); ml=upNorm(r[10]); cm=upNorm(r[11]); }
+    else { phase=upNorm(r[0]); type=upNorm(r[1]); start=r[3]; finish=r[4]; dur=upNorm(r[5]); who=upNorm(r[6]); status=upNorm(r[7]); ml=upNorm(r[8]); cm=upNorm(r[9]); proj=""; pm=""; }
+    if(/^=/.test(proj)) proj=""; if(/^=/.test(pm)) pm="";
+    if(proj && !projName) projName=proj;
+    if(pm && !pmName) pmName=pm;
+    tasks.push({ task, phase, type, start:upDateISO(start), finish:upDateISO(finish), duration:dur,
+      assigned:who, status:status||"Not Started", milestone:/^y/i.test(ml)?"Yes":"", comments:cm, predecessor:"" });
+  }
+  if(!projName){ msg.style.color="var(--red)"; msg.textContent="No project name found — fill the 'Project / Client' box at the top."; return; }
+  if(!tasks.length){ msg.style.color="var(--red)"; msg.textContent="No task rows found in the file."; return; }
+  // Exact-name match against existing projects -> replace; else add as new.
+  const existing=(((window.MRA_DATA||{}).projects)||[]);
+  const match=existing.find(p=>(p.name||'').trim().toLowerCase()===projName.trim().toLowerCase());
+  const replace=!!match; const finalName=match?match.name:projName;
+  UP_DATA={ project:finalName, pm:pmName, replace, tasks };
+  msg.textContent="";
+  const sum=document.getElementById('upSummary'); sum.style.display="block";
+  sum.innerHTML = (replace
+      ? `<span style="color:var(--amber);font-weight:700">↻ Replaces</span> the existing project <b>${esc(finalName)}</b>`
+        + ((match&&match.tasks)?` (${match.tasks.length} task${match.tasks.length===1?'':'s'} now → ${tasks.length} from this file)`:'')
+      : `<span style="color:var(--green);font-weight:700">＋ New project</span> <b>${esc(finalName)}</b> — ${tasks.length} task${tasks.length===1?'':'s'}`)
+    + (pmName?` · PM ${esc(pmName)}`:'');
+  const show=tasks.slice(0,12);
+  document.getElementById('upPreview').innerHTML =
+    `<table style="width:100%;border-collapse:collapse;font-size:12px">`
+    + `<tr style="color:var(--muted);text-align:left"><th style="padding:3px 6px">Task</th><th>Phase</th><th>Assigned</th><th>Status</th><th>Start</th><th>Finish</th><th>◆</th></tr>`
+    + show.map(t=>`<tr style="border-top:1px solid var(--line)"><td style="padding:3px 6px">${esc(t.task)}</td><td>${esc(t.phase)}</td><td>${esc(t.assigned)}</td><td>${esc(t.status)}</td><td>${esc(t.start)}</td><td>${esc(t.finish)}</td><td>${t.milestone?'◆':''}</td></tr>`).join('')
+    + `</table>` + (tasks.length>show.length?`<div style="color:var(--muted);font-size:12px;padding:6px">…and ${tasks.length-show.length} more</div>`:'');
+  document.getElementById('upSubmit').disabled=false;
+}
+function submitUpload(){
+  if(!UP_DATA){ return; }
+  if(!ensureAuth("upload a project template")) return;
+  const btn=document.getElementById('upSubmit'), msg=document.getElementById('upMsg');
+  btn.disabled=true; btn.textContent="Sending…"; msg.style.color="var(--muted)"; msg.textContent="Sending "+UP_DATA.tasks.length+" task(s)…";
+  const payload={ action:"importProject", project:UP_DATA.project, pm:UP_DATA.pm,
+    replace:UP_DATA.replace, tasks:UP_DATA.tasks, pin:CLOSE_PIN, user:CURRENT_USER };
+  shopWrite(payload).then(()=>{
+    // Keep the new tasks visible on THIS device until data.js catches up.
+    const p=(((window.MRA_DATA||{}).projects)||[]).find(x=>(x.name||'')===UP_DATA.project);
+    UP_DATA.tasks.forEach((t,i)=>{ const obj={ id:'up'+Date.now()+'_'+i, t:t.task, phase:t.phase, type:t.type,
+        who:t.assigned, startISO:t.start||null, finISO:t.finish||null, st:t.status, ml:t.milestone, cm:t.comments,
+        pred:'', done:/^completed$/i.test(t.status) };
+      pendAdd({kind:'projTask', project:UP_DATA.project, obj:obj});
+      if(p && !UP_DATA.replace){ if(!p.tasks) p.tasks=[]; p.tasks.push(obj); } });
+    if(p){ if(typeof oRecomputeProject==='function') oRecomputeProject(p); }
+    oApply();
+    msg.style.color="var(--green)";
+    msg.innerHTML="✓ Sent. <b>"+UP_DATA.tasks.length+"</b> task(s) for <b>"+esc(UP_DATA.project)+"</b> are queued — they'll show on the board within ~15 minutes.";
+    btn.textContent="Send to schedule";
+    setTimeout(()=>document.getElementById('uploadModal').classList.remove('show'),1600);
+  }).catch(()=>{ msg.style.color="var(--red)"; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Send to schedule"; btn.disabled=false; });
 }
 
 function classify(job, today){

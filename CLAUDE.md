@@ -160,24 +160,33 @@ Treat help + rev as PART OF the feature, not an afterthought.
 ### Still open from the morning queue
 - **Siemens DI + Medtronic imports** — NOT yet written (see below; the `/tmp/build_import.py` draft builds
   both into the workbook in one pass to send to Rich; rerun against his LATEST uploaded master).
-- **Upload tab / mechanism + test** — Rich: "create the upload tab and test it." Needs a decision on the
-  mechanism (static dashboard has no backend): (a) a Projects-tab **intake panel** (download + the two load
-  paths above, test the import end-to-end) — recommended/no new backend; or (b) a **browser upload** that
-  parses the xlsx client-side and POSTs rows to the Power Automate flow (needs an Office Script bulk-import
-  action + ties into the parked replace-by-project). CONFIRM with Rich before building (b).
+- **Upload tab — CONFIRMED design (Rich 2026-06-17):** in-browser upload on the Projects tab. Flow:
+  download the MIRROR template → fill new project data → **upload via the new Upload tab** → dashboard
+  parses the xlsx client-side → POSTs rows to the Power Automate flow → shows on the next 15-min cycle.
+  **Replace-by-project MERGE:** if the uploaded Project name matches an existing project EXACTLY, replace
+  that project's rows with the upload (else append a new project). IMPLEMENTATION NOTE: the Project Gantt
+  (sheet6) mirrors Project Tasks by ABSOLUTE row, so the Office Script must do replace SAFELY = append new
+  rows + **clear-contents** of the old project's rows (do NOT delete rows / shift them) to avoid breaking
+  the mirror. New flow/script action: `importProject` {project, pm, tasks[], replace, pin, user}.
 - **MRA Shop lane preview** — Rich earlier asked for a preview of a dedicated aggregate "MRA Shop" lane row
   before loading live (separate from the white-outline highlight, which is done).
 
 ## In progress / queued (2026-06-17)
 
-- **Siemens DI Pedestal import** (from Rich's PDF "SIEMENS DI Preliminary Hard Date Schedule
+- **Siemens DI + Medtronic imports = DONE / LIVE** (verified 2026-06-17 against live `data.js`,
+  generated 8:22 AM): **Siemens DI Pedestal = 15 tasks** (renamed from "Seimans", old 2 rows replaced),
+  **Medtronic = 160 tasks** (old ~101 wiped + replaced with the new schedule + milestones). Rich saved
+  the file I sent. The earlier "NOT yet written" note below was STALE and caused confusion — kept here
+  only for the import decisions/spec. Remaining polish Rich owns offline: Medtronic assignee colors +
+  assignee standardization (see Assigned-To dropdowns).
+- **Siemens DI Pedestal import** (spec, DONE — from Rich's PDF "SIEMENS DI Preliminary Hard Date Schedule
   v1.06.10.2026"). Parsed to **15 tasks** across 5 phases (Project Planning / Creative Design /
   Production / Post Production / Launch). Decisions confirmed: fix spelling **Seimans → Siemens
   DI Pedestal** and **replace** its 2 existing rows (currently rows 318–319, Task IDs 317–318);
   PM=Megan Fraser; party → Assigned To (MRA / Siemens DI / Heitek / Combined); dates 2026 → Finish
   (two ranges get Start+Finish); Completed→`Completed`, Upcoming/Future→`Not Started`; milestones
-  ◆ = "Pedestal Completion" (Jul 31) + "Upcoming Event · Boston, MA" (Aug 5). NOT yet written.
-- **Medtronic import** (from "Medtronic_Production_Schedule_v4.06.05.2026.xlsx", sheet `2026`).
+  ◆ = "Pedestal Completion" (Jul 31) + "Upcoming Event · Boston, MA" (Aug 5).
+- **Medtronic import** (spec, DONE — from "Medtronic_Production_Schedule_v4.06.05.2026.xlsx", sheet `2026`).
   GREEN-LIT by Rich: **wipe all ~101 old Medtronic rows, replace** with this schedule. Structure:
   **bold col-A items = Phases** (Contract Items, Scope of Work & Schedule, Budget, Conceptual
   Exhibit & Display Design, Interior Graphic Design, Exterior Graphic Design, … more below row 80),
