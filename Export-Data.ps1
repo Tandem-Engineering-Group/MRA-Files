@@ -645,7 +645,9 @@ if (Test-Path $SamsaraTokenFile) {
                     # Some names appear more than once (and a few report stale fixes) — keep the FRESHEST.
                     $ex = $fLoc[$key]
                     if ($ex -and $ex.atISO -and $atISO -and ([string]$atISO -lt [string]$ex.atISO)) { continue }
-                    $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO; yard = $yard }
+                    $lat = $null; $lng = $null
+                    if ($null -ne $g.latitude -and $null -ne $g.longitude) { $lat = [math]::Round([double]$g.latitude,5); $lng = [math]::Round([double]$g.longitude,5) }
+                    $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO; yard = $yard; lat = $lat; lng = $lng }
                     $n++
                 }
                 $cursor  = $obj.pagination.endCursor
