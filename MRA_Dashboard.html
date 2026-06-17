@@ -390,6 +390,7 @@
   .g-d{position:absolute; top:50%; transform:translateY(-50%); font-size:9px; color:#fff; opacity:.92; z-index:3; pointer-events:none; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.55)}
   .g-d0{left:6px} .g-d1{right:6px}
   .g-mid{position:absolute; left:0; right:0; text-align:center; font-size:9.5px; color:#fff; opacity:.92; z-index:2; pointer-events:none}
+  .g-bay{align-self:flex-start; margin-top:3px; font-size:9px; font-weight:700; background:rgba(34,197,94,.16); color:#86efac; border:1px solid rgba(34,197,94,.5); border-radius:10px; padding:1px 7px; white-space:nowrap}
   .g-ms{position:absolute; top:8px; width:10px; height:10px; background:var(--amber);
     transform:translateX(-5px) rotate(45deg); border:1px solid #1a1206; z-index:4}
   .g-out{position:absolute; left:8px; top:6px; font-size:10px; color:var(--faint); font-style:italic}
@@ -1237,6 +1238,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.39", date:"2026-06-17", title:"Gantt: show which bay a job/project is in", items:[
+    "Gantt bars (Projects + the shop Floor schedule) now show a green bay chip when that job/project is currently in a physical shop bay (e.g. Oakland Schools → Bay 3 Back) — linked automatically from the floor. Anything parked / on-hold / not in a bay shows nothing." ] },
   { rev:"3.38", date:"2026-06-17", title:"Edit sign-in: a visible Log out", items:[
     "When you enter your code to edit, a green 🔓 \"your-name · Log out\" pill now shows in the top bar — so it's obvious the screen is unlocked for editing (and who's signed in). Click it to log out; the next edit asks for a code again.",
     "Shared screens also auto-log-out after 5 minutes idle, so a walked-away screen locks itself back to view-only." ] },
@@ -2388,7 +2391,7 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
     const hl=(MRASHOP_HL&&r.hlSegs&&r.hlSegs.length)?r.hlSegs.map(s=>{const gg=barGeom(s.startISO,s.endISO,win);
       return gg?`<div class="g-hl hl-${MRA_HL_STYLE}" style="left:${gg.left}%;width:${gg.width}%" title="MRA Shop assigned"></div>`:'';}).join(''):'';
     html+=`<div class="g-row${r.cls?' '+r.cls:''}"${rowClick}><div class="g-gutter"><div class="g-lbl">${esc(r.label)}</div>`
-      +`<div class="g-sub">${esc(r.sub||'')}</div></div>`
+      +`<div class="g-sub">${esc(r.sub||'')}</div>${r.bay?`<div class="g-bay" title="Currently in ${escA(r.bay)} on the shop floor">${esc(r.bay)}</div>`:''}</div>`
       +`<div class="g-track">${grid}${bar}${hl}${ms}</div></div>`;
   });
   el.innerHTML=html;
@@ -2469,7 +2472,9 @@ function renderFloor(D){
     .filter(x=>barGeom(x.j.startISO,x.j.completionISO,win))
     .sort((a,b)=>{const ai=order.indexOf(a.j.bay),bi=order.indexOf(b.j.bay);
       return (ai<0?99:ai)-(bi<0?99:bi) || (a.j.startISO||"").localeCompare(b.j.startISO||"");})
-    .map(x=>({label:x.j.project, sub:x.j.bay+" · "+(x.j.jobNum||"—"),
+    .map(x=>({label:x.j.project,
+      sub:(/^bay\s/i.test(x.j.bay||'') ? (x.j.jobNum||"—") : ((x.j.bay||'')+" · "+(x.j.jobNum||"—"))),
+      bay:(/^bay\s/i.test(x.j.bay||'')?x.j.bay:''),
       startISO:x.j.startISO, endISO:x.j.completionISO, color:stColor[x.c.state]||'#64748b',
       barLabel:x.j.jobNum||"", milestones:[]}));
   renderGantt(document.getElementById('floorGantt'), floorRows, win);
@@ -2806,7 +2811,7 @@ function renderProjects(D){
   const rows=dated.map(p=>({_p:p})).map(({_p:p})=>({
     label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
     startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
-    barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p),
+    barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
     cls:'clickable', onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
     _has:!!barGeom(p.startISO,p.finishISO,win)
   })).filter(r=>r._has)
@@ -3552,6 +3557,12 @@ function projMatch(p){ if(!PFILTER) return true; const q=PFILTER;
   if((p.tasks||[]).some(t=>(t.t||'').toLowerCase().indexOf(q)>=0)) return true;
   return false; }
 function setPFilter(v){ PFILTER=(v||'').trim().toLowerCase(); if(window.MRA_DATA) renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); }
+// If a project is currently sitting in a physical shop bay (from the floor jobs), return that bay
+// (e.g. "Bay 3 Back"). Prefers a real bay; parking-lot / on-hold / off-site / none -> '' (not shown).
+function projectBay(name){ if(!name) return ''; const jobs=((window.MRA_DATA||{}).jobs)||[]; const q=String(name).toLowerCase();
+  for(const j of jobs){ const b=String(j.bay||''); if(!/^bay\s/i.test(b)) continue;
+    if(String(j.project||'').toLowerCase().indexOf(q)>=0) return b; }
+  return ''; }
 
 /* ---------- Full-screen Gantt + conflict detection ---------- */
 function isoOverlap(a,b){ return a.startISO<=b.completionISO && b.startISO<=a.completionISO; }
@@ -3712,7 +3723,7 @@ function renderGanttFS(){
       rows.push({label:(hasMs?(exp?'▾ ':'▸ '):'   ')+p.name,
         sub:(p.pm||'—')+' · '+p.taskCount+' tasks'+(hasMs?' · '+p.milestones.length+' gates':''),
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct, barLabel:'',
-        milestones:p.milestones, hlSegs:mraShopSegs(p), done, popKey:key, cls:hasMs?'clickable':'', onclick:hasMs?`toggleGfsProject('${key}')`:''});
+        milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name), done, popKey:key, cls:hasMs?'clickable':'', onclick:hasMs?`toggleGfsProject('${key}')`:''});
       if(exp) (p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')).forEach(m=>{
         rows.push({label:'◆ '+m.name, sub:fmtMDY(m.dateISO), startISO:null, endISO:null, color:p._color, milestones:[m], noBar:true, cls:'g-subrow'}); });
     });
