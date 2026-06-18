@@ -102,6 +102,8 @@
   .gwinlab{min-width:34px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums}
   .projsearch{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 10px; font-size:12px; font-family:inherit; margin-left:12px; width:210px; font-weight:400}
   .mitten{display:inline-block; line-height:1; vertical-align:middle}
+  /* Little orange "MRA" chip — shown only when a unit is physically AT the MRA facility (stronger than the Michigan mitten). */
+  .mrahome{display:inline-block; background:var(--brand); color:#fff; font-weight:800; font-size:8px; letter-spacing:.2px; line-height:1; padding:2px 3px; border-radius:3px; vertical-align:middle; margin-left:2px; font-family:Arial,Helvetica,sans-serif}
   .mappin{text-decoration:none; cursor:pointer; opacity:.8}
   .mappin:hover{opacity:1}
   .flagpick{display:inline-flex; gap:3px; align-items:center}
@@ -1069,6 +1071,7 @@
         <button class="btn-primary" onclick="openProjTaskNew()">➕ Add task</button>
         <span id="peCount" style="color:var(--muted); font-size:12px"></span>
         <span style="margin-left:auto; display:flex; gap:6px">
+          <button class="btn-ghost" id="peHideDoneBtn" style="padding:3px 9px; font-size:11px" onclick="peToggleHideDone()" title="Hide completed tasks to make scrolling easier">✓ Hide done</button>
           <button class="btn-ghost" style="padding:3px 9px; font-size:11px" onclick="peCollapseAll()" title="Collapse every phase">⊟ Collapse all</button>
           <button class="btn-ghost" style="padding:3px 9px; font-size:11px" onclick="peExpandAll()" title="Expand every phase">⊞ Expand all</button>
         </span>
@@ -1198,6 +1201,7 @@
             <label title="Milestones plus every top-level task — no subtasks"><input type="radio" name="tplScope" value="tasks"> + Tasks <span class="hint">(milestones &amp; every parent task, no subtasks)</span></label>
             <label title="The full task list including the indented subtasks"><input type="radio" name="tplScope" value="all"> + All tasks &amp; subtasks <span class="hint">(everything, children indented)</span></label>
           </div>
+          <label style="margin-top:6px; font-weight:normal" title="Leave out anything marked Complete — shorter schedule, just what's left"><input type="checkbox" id="tplHideDone"> Hide completed items <span class="hint">(only what's still open)</span></label>
         </div>
         <div>
           <label>Style — click to build</label>
@@ -1342,9 +1346,9 @@ const GENERAL_HELP = `
     </ul>
     <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. A task you <b>add</b> now also sticks on <b>your</b> device through a page reload (handy on an iPad, which reloads tabs on its own) until the workbook catches up — so it won't appear to vanish.</div></div>
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
-    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented).</p></div>
+    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented). Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule — handy for a "what's left" handout.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
-    <p>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. <b>Subtasks</b> (the <b>Sub</b> column in the workbook) sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly.</p></div>
+    <p>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. <b>Subtasks</b> (the <b>Sub</b> column in the workbook) sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide done</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show done</span>) and the Build Schedule (<span class="k">Hide completed items</span>).</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
     <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. The highlight is a clean <b>white outline</b>; adjacent tasks merge into one continuous band so it reads over any bar color. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
@@ -1382,12 +1386,18 @@ const FLEETIO_HELP = `
     <div class="tip">The <b>↗ Open in Fleetio</b> button (top right) jumps to the full Fleetio app for anything deeper — editing issues, work orders, costs, history, etc. This tab is the quick read; Fleetio is the system of record.</div></div>
   <div class="hsec"><h4>⑧ 🔧 Trailer issues on the FLOOR board</h4>
     <p>A trailer's open issues also appear on its <b>bay card</b> (FLOOR tab) — click the <span class="k">🔧 Fleetio</span> pill to see them, and <span class="k">➕</span> to make one an assignable Shop Task (it auto‑closes when resolved in Fleetio). <b>Tractor</b> issues stay here on the FLEETIO tab — Doug's domain, with a dedicated tractor screen possibly coming later.</p></div>
+  <div class="hsec"><h4>⑨ <span class="mrahome">MRA</span> = at the plant · 🧤 = in Michigan</h4>
+    <p>On the <span class="k">FLEET</span>, <span class="k">FLEETIO</span> and <span class="k">EQUIPMENT</span> tabs, a unit shows an orange <span class="mrahome">MRA</span> chip when it's <b>physically at the MRA facility</b> — its live GPS sits in an MRA yard (e.g. "MRA Madison Heights"), or it's parked in a work bay on the shop floor. If it's elsewhere <b>in Michigan</b> (the mitten state) but not at MRA, it shows the blue 🧤 mitten instead. Off-state units (e.g. a genset in California) get neither. The <span class="k">MRA</span> chip is the stronger, more specific "it's home" signal.</p></div>
 `;
 /* ---------- Rev / change log ----------
    Add a new rev at the TOP of this array after each batch of updates.
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.79", date:"2026-06-18", title:"MRA chip = a unit is at the plant", items:[
+    "On the FLEET, FLEETIO and EQUIPMENT tabs, a unit now shows an orange MRA chip when it's physically AT the MRA facility — live GPS in an MRA yard (e.g. \"MRA Madison Heights\") or parked in a work bay on the floor. The blue 🧤 mitten still marks units that are elsewhere in Michigan; the MRA chip is the stronger \"it's home\" signal and takes its place when the unit is actually at MRA. (Locations come from Samsara GPS — chips fill in once the export runs with a live token.)" ] },
+  { rev:"3.78", date:"2026-06-18", title:"Hide completed items when scrolling project data", items:[
+    "Added a Hide-completed option everywhere project tasks are listed, so you can scroll just what's left: ✓ Hide done in the Edit Project Tasks popup (also hides any fully-finished phase, remembered per device), and a Hide completed items checkbox on Build Schedule. The FLOOR (Show closed) and Crew/Resource Schedule (Show done) already hid done by default — now it's consistent across all of them." ] },
   { rev:"3.77", date:"2026-06-18", title:"Wall view: single row + hide KPI strip", items:[
     "Reverted the bay-wrap (two rows was too tall for a widescreen TV) — bays are back to one row. The top KPI strip (active / scheduled / overdue counts) is now hidden in 📺 wall view to free vertical space for the bays. Size slider / S·M·L still adjust per monitor." ] },
   { rev:"3.75", date:"2026-06-18", title:"Employee of the Month: change name / pause without code", items:[
@@ -2143,6 +2153,8 @@ function submitAddJob(){
 const PROJ_STATUS_OPTIONS = ['Not Started','In Progress','Completed','On Hold'];
 let PE_EXPANDED = new Set();   // phase sections currently expanded in the editor (default: all collapsed)
 let PE_SUBCLOSED = new Set();  // parent tasks whose subtasks are collapsed
+let PE_HIDEDONE = false; try{ PE_HIDEDONE = localStorage.getItem('mra_pe_hidedone')==='1'; }catch(e){}  // hide completed tasks in the editor
+function peToggleHideDone(){ PE_HIDEDONE=!PE_HIDEDONE; try{localStorage.setItem('mra_pe_hidedone',PE_HIDEDONE?'1':'0');}catch(e){} renderProjTaskList(); }
 function projIsDone(t){ return !!(t && (t.done || /^completed$/i.test(t.st||''))); }
 function oProj(name){ return (((window.MRA_DATA||{}).projects)||[]).find(p=>p.name===name); }
 function projAssignees(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.who) s.add(t.who.trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
@@ -2201,14 +2213,18 @@ function renderProjTaskList(){
     list.innerHTML=`<div class="empty">${name?('No tasks yet for '+esc(name)+' — click ➕ Add task.'):'Pick a project or name a new one, then ➕ Add task.'}</div>`;
     cnt.textContent = p?'0 tasks':''; return;
   }
-  cnt.textContent = tasks.length+" task"+(tasks.length===1?"":"s")+" · "+p.doneCount+" done ("+p.pct+"%)";
+  cnt.textContent = tasks.length+" task"+(tasks.length===1?"":"s")+" · "+p.doneCount+" done ("+p.pct+"%)"+(PE_HIDEDONE?" · hiding done":"");
+  const hb=document.getElementById('peHideDoneBtn'); if(hb){ hb.textContent=PE_HIDEDONE?'✓ Show done':'✓ Hide done'; hb.classList.toggle('on',PE_HIDEDONE); }
   const byId={}; tasks.forEach(t=>{ if(t.id!=null && t.id!=='') byId[String(t.id)]=t; });
   const order=[], groups={};
   tasks.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!groups[ph]){ groups[ph]=[]; order.push(ph); } groups[ph].push(t); });
   window._peOrder=order;
   if(PE_EXPANDED.size===0 && order.length===1) PE_EXPANDED.add(order[0]);   // a single phase opens by default
   list.innerHTML = order.map(ph=>{
-    const open=PE_EXPANDED.has(ph), g=groups[ph], doneN=g.filter(projIsDone).length;
+    const gAll=groups[ph], doneN=gAll.filter(projIsDone).length;
+    const g = PE_HIDEDONE ? gAll.filter(t=>!projIsDone(t)) : gAll;
+    if(!g.length) return '';   // phase fully completed -> hidden when "Hide done" is on
+    const open=PE_EXPANDED.has(ph);
     const peRow=(t,opt)=>{ opt=opt||{};
       const predT=(t.pred!=null&&t.pred!=='' && byId[String(t.pred)])?byId[String(t.pred)]:null;
       const dates=[t.startISO?('▸ '+fmtMD(t.startISO)):'', t.finISO?('⤇ '+fmtMD(t.finISO)):''].filter(Boolean).join('  ');
@@ -3727,22 +3743,44 @@ function atPlant(s){ if(!s) return false; return plantKeys().has(_normKey(s)); }
 // 🧤 Michigan badge — drawn as a University-of-Michigan-blue mitten with a maize cuff (not the tan emoji).
 const MITTEN_ICON='<span class="mitten" title="In Michigan — the mitten state"><svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:-3px"><path fill="#2f6fe0" d="M8 22 H17 Q20 22 20 19 V10 Q20 3 13.5 3 Q8 3 8 9 V11 Q3.5 11 3.5 14.5 Q3.5 18 8 17.5 V19 Q8 22 8 22 Z"/></svg></span>';
 function mittenTag(){ return ' '+MITTEN_ICON; }
-function plantFlag(s){ return atPlant(s)?mittenTag():''; }
+// "At the physical MRA facility?" — a stronger, more specific signal than the Michigan mitten. True if
+// the live GPS geofence (Samsara yard name) is an MRA yard (e.g. "MRA Madison Heights"), OR — when the
+// unit has NO GPS fix — it's parked in a work bay on the shop floor (so it's physically at the plant).
+function _isMraYard(loc){ if(!loc) return false; return /^\s*mra\b/i.test(loc.yard||''); }
+let _mraGen=null,_mraKeys=new Set();
+function mraKeys(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_mraGen) return _mraKeys;
+  _mraGen=g; _mraKeys=new Set();
+  const roster=new Set(); ((D&&D.fleetio&&D.fleetio.fleet)||[]).forEach(v=>roster.add(_normKey(v.f)));
+  if(typeof FLEET!=='undefined') FLEET.forEach(a=>roster.add(_normKey(a.f)));
+  const locs=(D&&D.fleetio&&D.fleetio.locations)||{};
+  const located=new Set();
+  Object.keys(locs).forEach(k=>{ const nk=_normKey(k); located.add(nk); if(_isMraYard(locs[k])) _mraKeys.add(nk); });
+  // Floor fallback (no GPS fix): a unit parked in a real WORK BAY is physically at the MRA shop.
+  ((D&&D.jobs)||[]).forEach(j=>{ const b=String(j.bay||''); if(!/^bay\s/i.test(b)) return;
+    (String(j.project||'').match(/\b\d{2,5}\b/g)||[]).forEach(n=>{ const k=_normKey(n); if(roster.has(k) && !located.has(k)) _mraKeys.add(k); }); });
+  return _mraKeys; }
+function atMra(s){ if(!s) return false; return mraKeys().has(_normKey(s)); }
+// Orange MRA chip (mirrors the header logo) — drawn instead of the mitten when a unit is AT the MRA address.
+const MRA_HOME_ICON='<span class="mrahome" title="At the MRA facility">MRA</span>';
+function mraTag(){ return ' '+MRA_HOME_ICON; }
+// At the MRA address → show the MRA chip; otherwise still in Michigan → show the mitten; else nothing.
+function plantFlag(s){ if(atMra(s)) return mraTag(); return atPlant(s)?mittenTag():''; }
 // EQUIPMENT items link by JOB # (e.g. J1557), not fleet #. Build job#→flag indexes: a job is "at the
 // plant" if a floor job with that # is in a work bay OR a fleet unit working that # is at MRA; it's
 // Canadian if a fleet unit working that # is Canadian. So equipment inherits the right flag.
-let _ejGen=null,_plantJobs=new Set(),_canJobs=new Set();
+let _ejGen=null,_plantJobs=new Set(),_canJobs=new Set(),_mraJobs=new Set();
 function _equipJobIndex(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_ejGen) return;
-  _ejGen=g; _plantJobs=new Set(); _canJobs=new Set();
+  _ejGen=g; _plantJobs=new Set(); _canJobs=new Set(); _mraJobs=new Set();
   ((D&&D.jobs)||[]).forEach(j=>{ if(!/^bay\s/i.test(String(j.bay||''))) return;
-    (String(j.jobNum||'').match(/\d{3,5}/g)||[]).forEach(n=>_plantJobs.add(n)); });
+    (String(j.jobNum||'').match(/\d{3,5}/g)||[]).forEach(n=>{ _plantJobs.add(n); _mraJobs.add(n); }); });
   ((D&&D.fleetio&&D.fleetio.fleet)||[]).forEach(v=>{ const jns=String(v.tour||'').match(/\d{3,5}/g)||[]; if(!jns.length) return;
-    const atp=atPlant(v.f), can=isCanadian({rs:v.rs,nm:v.nm,m:v.mk});
-    jns.forEach(n=>{ if(atp)_plantJobs.add(n); if(can)_canJobs.add(n); }); }); }
+    const atp=atPlant(v.f), atm=atMra(v.f), can=isCanadian({rs:v.rs,nm:v.nm,m:v.mk});
+    jns.forEach(n=>{ if(atp)_plantJobs.add(n); if(atm)_mraJobs.add(n); if(can)_canJobs.add(n); }); }); }
 function _ejnums(e){ return (String(e&&e.j||'').match(/\d{3,5}/g)||[]); }
 function atPlantEquip(e){ _equipJobIndex(); if(_ejnums(e).some(n=>_plantJobs.has(n))) return true; return atPlant((e&&e.n||'')+' '+(e&&e.j||'')); }
+function atMraEquip(e){ _equipJobIndex(); if(_ejnums(e).some(n=>_mraJobs.has(n))) return true; return atMra((e&&e.n||'')+' '+(e&&e.j||'')); }
 function canEquip(e){ _equipJobIndex(); if(_ejnums(e).some(n=>_canJobs.has(n))) return true; return canAsset((e&&e.n||'')+' '+(e&&e.j||'')+' '+(e&&e.d||'')); }
-function plantFlagEquip(e){ return atPlantEquip(e)?mittenTag():''; }
+function plantFlagEquip(e){ if(atMraEquip(e)) return mraTag(); return atPlantEquip(e)?mittenTag():''; }
 function canFlagEquip(e){ return canEquip(e)?' <span title="Canadian asset">🍁</span>':''; }
 // Flag picker (FLEETIO): '' = any, 'plant' = 🧤 at MRA, 'can' = 🍁 Canadian. Reads the dropdown live.
 function fioFlagOK(name){ const fg=(document.getElementById('fioFlag')||{}).value||''; if(!fg) return true; return fg==='can'?canAsset(name):atPlant(name); }
@@ -3775,7 +3813,7 @@ function eqPop(e){ _eqIndex();
   const us={}; units=units.filter(v=>{ const k=_normKey(v.f); if(us[k])return false; us[k]=1; return true; });
   if(units.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">UNITS ON THIS JOB (${units.length})</div>`
     + units.slice(0,12).map(v=>{ const loc=LOC[_normKey(v.f)], open=(+v.oi||0)+(+v.ow||0), comp=(v.comp||[]).filter(c=>c.s==='overdue'||c.s==='due_soon');
-        return `<div>• <b>${esc(v.f)}</b> ${esc(v.t||'')} ${esc(v.mk||'')}${isCanadian({rs:v.rs,nm:v.nm,m:v.mk})?' 🍁':''}${atPlant(v.f)?(' '+MITTEN_ICON):''}</div>`
+        return `<div>• <b>${esc(v.f)}</b> ${esc(v.t||'')} ${esc(v.mk||'')}${isCanadian({rs:v.rs,nm:v.nm,m:v.mk})?' 🍁':''}${atMra(v.f)?mraTag():(atPlant(v.f)?(' '+MITTEN_ICON):'')}</div>`
           + (loc?`<div class="pp-det">📍 ${esc(loc.yard||loc.place)}${loc.atISO?' · '+esc(fleetAgo(loc.atISO)):''}${mapPin(loc)}</div>`:'')
           + (open?`<div class="pp-det">${open} open Fleetio item(s)</div>`:'')
           + (comp.length?`<div class="pp-det">⚠ ${comp.map(c=>esc((c.ty||'')+' '+(c.s==='overdue'?'overdue':'due soon'))).join(', ')}</div>`:'');
@@ -3906,10 +3944,12 @@ function projectToHDS(p, opts){
   opts = opts || {};
   const incSubs = !!opts.subtasks;
   const useTasks = !!(opts.allTasks || opts.subtasks);
+  const hideDone = !!opts.hideDone;
+  const isDoneRow = x => (x.done || /^completed$/i.test(x.st||''));
   const order=[], byPhase={};
   let phases;
   if(useTasks){
-    const items=(p.tasks||[]).filter(t=> incSubs || !t.sub);
+    const items=(p.tasks||[]).filter(t=> (incSubs || !t.sub) && (!hideDone || !isDoneRow(t)));
     items.forEach(t=>{ const ph=(t.phase&&String(t.phase).trim())?String(t.phase).trim():'Tasks';
       if(!byPhase[ph]){ byPhase[ph]=[]; order.push(ph); } byPhase[ph].push(t); });
     phases=order.map(ph=>{ const rows=byPhase[ph];
@@ -3919,7 +3959,7 @@ function projectToHDS(p, opts){
         rows:rows.map(t=>[ ((incSubs&&t.sub)?'↳ ':'')+(t.t||''), hdOwner(t.who),
           hdDate(t.finISO||t.startISO), ((t.done||/^completed$/i.test(t.st||''))?'Complete':'') ]) }; });
   } else {
-    const ms=(p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'9999').localeCompare(b.dateISO||'9999'));
+    const ms=(p.milestones||[]).slice().filter(m=> !hideDone || !m.done).sort((a,b)=>(a.dateISO||'9999').localeCompare(b.dateISO||'9999'));
     // group by phase if the export carries one, else a single section
     ms.forEach(m=>{ const ph=(m.phase&&m.phase.trim())?m.phase.trim():'Milestones & Hard Dates';
       if(!byPhase[ph]){ byPhase[ph]=[]; order.push(ph); } byPhase[ph].push(m); });
@@ -3956,12 +3996,13 @@ function buildHDS(style, sample){
     const scope=(document.querySelector('input[name="tplScope"]:checked')||{}).value||'ms';
     const allTasks=(scope==='tasks'||scope==='all');
     const subtasks=(scope==='all');
+    const hideDone=!!(document.getElementById('tplHideDone')||{}).checked;
     if(allTasks){
       if(!(p.tasks||[]).length){ if(!confirm("This project has no tasks loaded yet — build an empty schedule anyway?")) return; }
     } else {
       if(!(p.milestones||[]).length){ if(!confirm("This project has no milestones flagged yet — build an empty schedule anyway?")) return; }
     }
-    S=projectToHDS(p,{allTasks,subtasks});
+    S=projectToHDS(p,{allTasks,subtasks,hideDone});
   }
   const w=window.open('','_blank');
   if(!w){ alert('Please allow pop-ups for this site to open the schedule.'); return; }
