@@ -1229,7 +1229,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · MasterWraps · Electricians</h4>
     <p>Three live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>MasterWraps</b> or <b>Electricians</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. In 📺 Wall mode each column auto-scrolls. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
-    <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show done</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). Names come straight from the project file.</p></div>
+    <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show done</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). Name variants are merged into one lane (e.g. <b>MasterWraps + Wrap Team → Wrap Team</b>, the <b>Electrician</b> spellings → <b>Electricians</b>), and a shared <b>A / B</b> assignment shows under both A's and B's lanes.</p></div>
   <div class="hsec"><h4>⑤ 👥 Team Capacity (Projects tab)</h4>
     <p>Groups every open <b>Project Task</b> by the person it's <i>assigned</i> to, most-loaded first, with a due-date chip
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
@@ -1318,6 +1318,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.61", date:"2026-06-18", title:"Resource Schedule: merge assignee name variants", items:[
+    "The 📅 Crew / Resource Schedule picker now folds name variants into one lane — <b>MasterWraps + Wrap Team → Wrap Team</b>, and all the <b>Electrician</b> spellings → <b>Electricians</b>. Shared assignments like \"Ted O'Malley / Electrician\" now show under BOTH people's lanes. Fixes Trumpf's MasterWraps tasks landing in a separate entry from the older Wrap Team one." ] },
   { rev:"3.60", date:"2026-06-18", title:"Intake template: how-to note up top", items:[
     "The ⬇ Download Template now has two plain-English note banners at the top — a gold one explaining MILESTONES (set Milestone = Yes for a key date / hard deadline) and a blue one explaining SUBTASKS (put an x in the Sub column to nest a row under the task above it). So whoever fills it in sees and understands the two special rows before they start." ] },
   { rev:"3.59", date:"2026-06-18", title:"Gantt dates on narrow bars + Resource Schedule full-screen", items:[
@@ -3866,18 +3868,30 @@ function setGpan(v){ const span=_panT1-_panDays*DAY-_panT0; if(span<=0) return;
 /* ---------- Crew / Resource Schedule (shop board): longer-term planning ----------
    Pulls each assignee's dated tasks from the project schedule, one bar per project
    (their booked span) + a full task list. Own zoom/pan, independent of the Projects tab. */
+// Assignee aliasing: merge name variants into one canonical lane. Keys are the
+// lower-cased assignee text; add to this map to fold more variants together.
+const CREW_ALIAS = {
+  'masterwraps':'Wrap Team', 'master wraps':'Wrap Team', 'wraps':'Wrap Team', 'wrap team':'Wrap Team',
+  'electrician':'Electricians', 'electricians':'Electricians'
+};
+function crewCanon(part){ const k=(part||'').trim().toLowerCase(); return CREW_ALIAS[k] || (part||'').trim(); }
+// A "who" can be a shared assignment ("Ted O'Malley / Electrician"); split on " / "
+// (keeps names that contain a slash, like IXL/TSS, intact) so a task lands in EACH
+// resource's lane. Each part is run through the alias map.
+function crewWhoList(who){ who=(who||'').trim(); if(!who) return [];
+  return [...new Set(who.split(/\s+\/\s+/).map(crewCanon).filter(Boolean))]; }
 // Shared crew computation (used by the inline shop-board panel AND the full-screen view).
 function crewData(D){
   const projects=(D.projects||[]).slice();
   const cnt={};
-  projects.forEach(p=>(p.tasks||[]).forEach(t=>{ const w=(t.who||'').trim();
-    if(w && t.startISO && t.finISO) cnt[w]=(cnt[w]||0)+1; }));
+  projects.forEach(p=>(p.tasks||[]).forEach(t=>{ if(!(t.startISO && t.finISO)) return;
+    crewWhoList(t.who).forEach(w=>cnt[w]=(cnt[w]||0)+1); }));
   const names=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||a.localeCompare(b));
   if(names.length && (!CREW_WHO || names.indexOf(CREW_WHO)<0)) CREW_WHO=names[0];
   projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
   const groups=[]; let tlo=Infinity, thi=-Infinity;
   projects.forEach(p=>{
-    const ts=(p.tasks||[]).filter(t=>(t.who||'').trim()===CREW_WHO && t.startISO && t.finISO && (CREW_DONE||!t.done));
+    const ts=(p.tasks||[]).filter(t=> t.startISO && t.finISO && (CREW_DONE||!t.done) && crewWhoList(t.who).includes(CREW_WHO));
     if(!ts.length) return;
     let s=Infinity,e=-Infinity;
     ts.forEach(t=>{ const a=parseISO(t.startISO).getTime(), b=parseISO(t.finISO).getTime(); if(a<s)s=a; if(b>e)e=b; });

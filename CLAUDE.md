@@ -78,6 +78,15 @@ Treat help + rev as PART OF the feature, not an afterthought.
 
 ## Pending / requested (not yet built — remind Rich)
 
+- **Standardize Assigned-To names in the workbook (Rich asked 2026-06-18: "go back and fix
+  them all the same").** The `Project Tasks` `Assigned To` column has variants for the same
+  resource — e.g. **Wrap Team / MasterWraps**, **Electrician / Electricians**, and shared
+  compounds like *Ted O'Malley / Electrician*. The dashboard's **Crew / Resource Schedule** now
+  alias-merges these at runtime (`CREW_ALIAS` in `MRA_Dashboard.html`; canonical wrap name =
+  **Wrap Team** per Rich), but the real fix is to clean the workbook so each crew/person is ONE
+  name (then the alias map can shrink). Tie into the Assignee-mismatch flagger + Assigned-To
+  dropdown cleanup below. Canonical so far: Wrap Team, Electricians, MRA Shop, + people.
+
 - **Projects-tab "next tier" — PARKED 2026-06-17 (Rich: "hold for now but log on to-do").**
   After the rev 3.19 at-risk/status work, these were the agreed next candidates:
   1. **Resource highlighter dropdown** — extend the `🟧 MRA Shop load` toggle into a dropdown
