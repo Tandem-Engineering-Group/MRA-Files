@@ -269,6 +269,10 @@
   .ttool.del{color:#fca5a5} .ttool.del:hover{border-color:var(--red)}
   .ttool.reopen{color:var(--amber)} .ttool.reopen:hover{border-color:var(--amber)}
   body.closemode .ttool{display:inline-block}
+  /* "Add leave" button — only visible in Edit mode (like the other edit affordances) */
+  .leaveadd{display:none; margin-left:8px; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:3px 9px; font-size:11px; font-weight:700; cursor:pointer; font-family:inherit}
+  .leaveadd:hover{border-color:#7aa2d6; color:#7aa2d6}
+  body.closemode .leaveadd{display:inline-block}
   /* Employee of the Month — centered celebratory card over a dimmed board (wall view) */
   .eotm{position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center;
     background:rgba(8,12,18,.84); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px)}
@@ -756,7 +760,7 @@
         <div id="flags"></div>
       </div>
       <div class="panel">
-        <h2>Staff on Leave <span class="count" id="leaveCount"></span></h2>
+        <h2>Staff on Leave <span class="count" id="leaveCount"></span><button class="leaveadd" onclick="openLeave()" title="Add a leave / time-off entry (turn on 🔒 Edit mode first)">➕ Add</button></h2>
         <div id="leave"></div>
       </div>
     </div>
@@ -1110,6 +1114,27 @@
         <div class="addbtns">
           <button class="btn-ghost" onclick="closeAddJob()">Cancel</button>
           <button class="btn-primary" id="ajSubmit" onclick="submitAddJob()">Add job</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== LEAVE MODAL (add / edit time-off) ===================== -->
+  <div class="modal-overlay" id="leaveModal" onclick="closeLeave(event)">
+    <div class="modal" style="max-width:440px">
+      <button class="modal-close" onclick="closeLeave()" title="Close">×</button>
+      <h3 id="lvTitle">➕ Add leave</h3>
+      <div class="msub">Saves to the Input schedule as a leave entry — it shows under <b>Staff on Leave</b> within ~15 min (and instantly on this screen).</div>
+      <div class="addform">
+        <div><label>Name</label><input id="lvName" placeholder="e.g. Doug Cooley" autocomplete="off"></div>
+        <div class="addrow2">
+          <div><label>Start date</label><input id="lvStart" type="date"></div>
+          <div><label>End date</label><input id="lvEnd" type="date"></div>
+        </div>
+        <div id="lvMsg" style="font-size:12px; min-height:16px"></div>
+        <div class="addbtns">
+          <button class="btn-ghost" onclick="closeLeave()">Cancel</button>
+          <button class="btn-primary" id="lvSubmit" onclick="submitLeave()">Add</button>
         </div>
       </div>
     </div>
@@ -1472,6 +1497,7 @@ const GENERAL_HELP = `
       <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule.</li>
       <li><span class="k">✎ edit</span> on a job card — move bay, change start/finish dates, tweak notes; <b>🗑 Delete job</b> is in that form too.</li>
       <li>On each task line: <span class="k">✓ close</span>, <span class="k">✎</span> edit (text, assignee, status, milestone, comments), <span class="k">🗑</span> delete. Turn on <span class="k">Show closed</span> and closed tasks get <span class="k">↩</span> reopen + 🗑 delete.</li>
+      <li><span class="k">Staff on Leave</span> — <span class="k">➕ Add</span> a leave/time-off entry (name + dates), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.)</li>
     </ul>
     <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. A task you <b>add</b> now also sticks on <b>your</b> device through a page reload (handy on an iPad, which reloads tabs on its own) until the workbook catches up — so it won't appear to vanish.</div></div>
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
@@ -1527,6 +1553,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.92", date:"2026-06-18", title:"Edit Staff on Leave from the board", items:[
+    "You can now add, edit and delete leave / time-off right from the Staff on Leave panel (turn on 🔒 Edit mode): ➕ Add gives a name + start/end form, and each entry gets ✎ edit and 🗑 delete. Writes straight to the schedule like the other edits (shows instantly on your screen, ~15 min for everyone). To rename someone, delete and re-add." ] },
   { rev:"3.91", date:"2026-06-18", title:"Wall view: slower end on the scroll slider", items:[
     "Extended the 🌀 Scroll slider's slow end — the slowest setting now takes ~120s per sweep (was ~60s), so you can crawl it for easy reading. Fast end unchanged." ] },
   { rev:"3.90", date:"2026-06-18", title:"Wall view: scroll-speed control", items:[
@@ -1788,6 +1816,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   document.getElementById('helpModal').classList.remove('show');
   const am=document.getElementById('addModal'); if(am) am.classList.remove('show');
   const ajm=document.getElementById('addJobModal'); if(ajm) ajm.classList.remove('show');
+  const lvm=document.getElementById('leaveModal'); if(lvm) lvm.classList.remove('show');
   const tm=document.getElementById('tplModal'); if(tm) tm.classList.remove('show');
   const em=document.getElementById('editModal'); if(em) em.classList.remove('show');
   const etm=document.getElementById('editTaskModal'); if(etm) etm.classList.remove('show');
@@ -2319,6 +2348,56 @@ function submitAddJob(){
       setTimeout(()=>document.getElementById('addJobModal').classList.remove('show'),1100); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Add job"; btn.disabled=false; });
 }
+
+/* ---------- Staff on Leave: add / edit / delete (writes to the Input sheet as a Leave row) ---------- */
+let _lvRow=null;
+function openLeave(){ if(!ensureAuth("add a leave entry")) return; _lvRow=null; window._lvJob=null;
+  document.getElementById('lvTitle').textContent='➕ Add leave';
+  const n=document.getElementById('lvName'); n.value=''; n.readOnly=false; n.style.opacity=''; n.title='';
+  document.getElementById('lvStart').value=''; document.getElementById('lvEnd').value='';
+  document.getElementById('lvMsg').textContent=''; const b=document.getElementById('lvSubmit'); b.disabled=false; b.textContent='Add';
+  document.getElementById('leaveModal').classList.add('show'); document.getElementById('lvName').focus(); }
+function openLeaveEdit(row){ if(!ensureAuth("edit a leave entry")) return;
+  const j=((window.MRA_DATA||{}).jobs||[]).find(x=>x.row===row); if(!j){ alert("Couldn't find that leave entry."); return; }
+  _lvRow=row; window._lvJob=j;
+  document.getElementById('lvTitle').textContent='✎ Edit leave';
+  const n=document.getElementById('lvName'); n.value=(j.project||'').replace(/\s*[–-]\s*APL.*$/i,''); n.readOnly=true; n.style.opacity='.6'; n.title='To rename, delete this entry and add a new one';
+  document.getElementById('lvStart').value=j.startISO||''; document.getElementById('lvEnd').value=j.completionISO||'';
+  document.getElementById('lvMsg').textContent=''; const b=document.getElementById('lvSubmit'); b.disabled=false; b.textContent='Save';
+  document.getElementById('leaveModal').classList.add('show'); }
+function closeLeave(e){ if(!e || e.target.id==='leaveModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('leaveModal').classList.remove('show'); }
+function submitLeave(){
+  const name=document.getElementById('lvName').value.trim();
+  const start=document.getElementById('lvStart').value, end=document.getElementById('lvEnd').value;
+  const msg=document.getElementById('lvMsg');
+  if(!name){ msg.style.color='var(--red)'; msg.textContent='Name is required.'; return; }
+  if(!start){ msg.style.color='var(--red)'; msg.textContent='A start date is required.'; return; }
+  const adding=!_lvRow; const btn=document.getElementById('lvSubmit'); btn.disabled=true; btn.textContent=adding?'Adding…':'Saving…';
+  msg.style.color='var(--muted)'; msg.textContent='Sending…';
+  let payload;
+  if(adding){ payload={ action:"addJob", project:name, bay:"APL/Holidays", status:"Leave",
+      start:start, completion:end||start, jobNum:"", client:"", pm:"", notes:"", pin:CLOSE_PIN, user:CURRENT_USER }; }
+  else { const j=window._lvJob||{}; payload={ action:"editJob", row:_lvRow, project:j.project||name,
+      bay:(j.bay||"APL/Holidays"), status:(j.status||"Leave"), start:start, completion:end||start, notes:(j.notesRaw||""), pin:CLOSE_PIN, user:CURRENT_USER }; }
+  fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
+    .then(()=>{
+      const D=window.MRA_DATA||{};
+      if(adding){ if(D.jobs){ const nj={ row:900000+Math.floor(Math.random()*90000), bay:"APL/Holidays", project:name, status:"Leave",
+          startISO:start||null, completionISO:end||start||null, notesRaw:"", openTasks:[], openCount:0, doneCount:0, doneTasks:[], salOpen:0, tasks:[] };
+          oRecat(nj); D.jobs.push(nj); } }
+      else { const j=oJobRow(_lvRow); if(j){ j.startISO=start||null; j.completionISO=end||start||null; oRecat(j); } }
+      oApply();
+      msg.style.color='var(--green)'; msg.textContent=adding?'✓ Leave added.':'✓ Saved.'; btn.textContent=adding?'Add':'Save';
+      setTimeout(()=>document.getElementById('leaveModal').classList.remove('show'),1000); })
+    .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.disabled=false; btn.textContent=adding?'Add':'Save'; });
+}
+function delLeaveBtn(row){ if(!ensureAuth("delete a leave entry")) return;
+  const j=((window.MRA_DATA||{}).jobs||[]).find(x=>x.row===row); const who=j?(j.project||'').replace(/\s*[–-]\s*APL.*$/i,''):'';
+  if(!confirm("Delete this leave entry?\n\n"+who)) return;
+  const payload={ action:"deleteJob", row:row, project:(j&&j.project)||"", pin:CLOSE_PIN, user:CURRENT_USER };
+  shopWrite(payload).then(()=>{ const D=window.MRA_DATA||{}; if(D.jobs) D.jobs=D.jobs.filter(x=>x.row!==row); oApply(); })
+    .catch(()=>alert("Couldn't reach the service — try again.")); }
 
 /* ===================== Projects editor — add / edit / delete / complete project tasks ===================== */
 const PROJ_STATUS_OPTIONS = ['Not Started','In Progress','Completed','On Hold'];
@@ -3207,7 +3286,7 @@ function renderFloor(D){
   document.getElementById('leave').innerHTML=leaveSorted.map(j=>{
     const who=esc(j.project.replace(/\s*[–-]\s*APL.*$/i,""));
     const range=j.startISO?(fmtMD(j.startISO)+(j.completionISO&&j.completionISO!==j.startISO?"–"+fmtMD(j.completionISO):"")):"";
-    return `<div class="row"><div><div class="lead">${who}</div></div><div class="right"><span class="badge grey">${range}</span></div></div>`;
+    return `<div class="row"><div><div class="lead">${who}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit these leave dates">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
   }).join("")||`<div class="empty">No upcoming leave</div>`;
   document.getElementById('leaveCount').textContent=leaveSorted.length;
 
