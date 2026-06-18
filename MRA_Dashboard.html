@@ -269,6 +269,14 @@
   .eotm-card img{max-width:34vw; max-height:56vh; border-radius:14px; border:3px solid #ffd24a; object-fit:cover; display:block; margin:0 auto}
   .eotm-cap{font-size:2.6vw; font-weight:800; color:#fff; margin-top:1.8vh}
   .eotm-cap b{color:var(--brand)}
+  /* Always-on EotM badge (wall view only, bottom-left so it clears the bottom-right size control) */
+  .eotm-badge{display:none}
+  body.wall .eotm-badge{display:flex; position:fixed; left:14px; bottom:14px; z-index:60; align-items:center; gap:10px;
+    background:rgba(20,26,36,.93); border:1.5px solid #ffd24a; border-radius:13px; padding:7px 13px 7px 8px; box-shadow:0 6px 26px rgba(0,0,0,.5)}
+  .eotm-badge img{width:44px; height:44px; border-radius:9px; object-fit:cover; border:1.5px solid #ffd24a}
+  .eotm-badge .eb-tx{display:flex; flex-direction:column; line-height:1.15}
+  .eotm-badge .eb-t{font-size:10px; font-weight:800; letter-spacing:.04em; color:#ffd24a; text-transform:uppercase}
+  .eotm-badge .eb-n{font-size:15px; font-weight:800; color:#fff}
   /* Bay-tile task groups (by assignee) */
   .tgrp-h{font-size:9.5px; font-weight:800; letter-spacing:.3px; color:var(--muted);
     margin:7px 0 1px; padding:3px 0 1px 2px; border-top:1px solid var(--line); text-transform:uppercase}
@@ -1206,9 +1214,15 @@
   <!-- Employee of the Month — pops up centered on the wall/TV view only -->
   <div id="eotm" class="eotm"><div class="eotm-card">
     <div class="eotm-banner">🏆 Employee of the Month</div>
-    <img id="eotmImg" alt="Employee of the Month" onerror="this.style.display='none'">
+    <img id="eotmImg" alt="Employee of the Month" onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src='eotm.jpg?v=20260618';}else{this.style.display='none';}">
     <div class="eotm-cap">Congratulations <b id="eotmName"></b>!</div>
   </div></div>
+
+  <!-- Always-on Employee-of-the-Month badge (wall view only, between pop-ups) -->
+  <div id="eotmBadge" class="eotm-badge" title="Employee of the Month">
+    <img id="eotmBadgeImg" alt="" onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src='eotm.jpg?v=20260618';}else{this.style.display='none';}">
+    <div class="eb-tx"><span class="eb-t">🏆 Employee of the Month</span><span class="eb-n" id="eotmBadgeName"></span></div>
+  </div>
 
   <footer>
     <img class="footlogo" src="logo-full-dark.png" alt="MRA — mobile.experiential" onerror="this.style.display='none'">
@@ -1373,6 +1387,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.74", date:"2026-06-18", title:"Employee of the Month: always-on badge + photo", items:[
+    "Added a small always-on 🏆 Employee of the Month badge (photo + name) in the corner of the wall view, between the every-5-min pop-ups. Photo uses eotm.png (falls back to eotm.jpg), so either format works." ] },
   { rev:"3.73", date:"2026-06-18", title:"Wall view: all tiles scroll in unison", items:[
     "On the 📺 wall/TV view, every auto-scrolling tile now moves together off one shared rhythm — they all glide down, pause at the bottom, then all glide back up — instead of each going its own direction. Much calmer to watch." ] },
   { rev:"3.72", date:"2026-06-18", title:"🏆 Employee of the Month on the wall view", items:[
@@ -1637,12 +1653,15 @@ function toggleWall(btn){
 }
 /* ---------- Employee of the Month: centered card on the wall/TV view, every 5 min ----------
    Swap monthly: change EOTM.name and replace the eotm.jpg image (bump ?v=). */
-const EOTM = { name: "John", photo: "eotm.jpg?v=20260618" };
+const EOTM = { name: "John", photo: "eotm.png?v=20260618" };
+function eotmSetup(){   // set photo + name on BOTH the pop-up card and the always-on badge
+  ['eotmImg','eotmBadgeImg'].forEach(id=>{ const im=document.getElementById(id); if(im && !im.getAttribute('src')) im.src=EOTM.photo; });
+  ['eotmName','eotmBadgeName'].forEach(id=>{ const n=document.getElementById(id); if(n) n.textContent=EOTM.name; });
+}
 function eotmShow(){
   if(!document.body.classList.contains('wall')) return;   // wall/TV view only
   const el=document.getElementById('eotm'); if(!el) return;
-  const img=document.getElementById('eotmImg'); if(img && img.getAttribute('src')!==EOTM.photo) img.src=EOTM.photo;
-  const nm=document.getElementById('eotmName'); if(nm) nm.textContent=EOTM.name;
+  eotmSetup();
   el.classList.add('show');
   clearTimeout(el._et); el._et=setTimeout(()=>el.classList.remove('show'), 10000);
 }
@@ -4554,6 +4573,7 @@ function renderAll(){
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
   const _wsnap=snapWallScroll();
   renderFloor(D); renderCrewSched(D); renderProjects(D); renderFleetio(D); renderFleet();
+  eotmSetup();
   if(VIEW==='history') renderHistory();
   if(GFS) renderGanttFS();
   setView(VIEW);
