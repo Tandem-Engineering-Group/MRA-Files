@@ -1242,7 +1242,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — see a trailer's tasks</h4>
-    <p>Click a <span class="k">"N tasks ▸"</span> button to drop down that trailer's open tasks. Click <span class="k">"+N more in this bay"</span> to reveal other jobs in that bay. (No pill = no open tasks yet.)</p></div>
+    <p>Click a <span class="k">"N tasks ▸"</span> button to drop down that trailer's open tasks. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). (No pill = no open tasks yet.)</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap Team · Electricians</h4>
     <p>Three live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b> or <b>Electricians</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. In 📺 Wall mode each column auto-scrolls. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
@@ -1337,6 +1337,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.68", date:"2026-06-18", title:"Floor bays show ALL jobs (no hidden collapse)", items:[
+    "Bay cards now list every job in the bay. They used to show 2 and tuck the rest behind \"+N more in this bay\" — so in busy lanes (Parking Lot, Next Up) jobs looked missing even though they were there. Nothing is hidden now." ] },
   { rev:"3.67", date:"2026-06-18", title:"Resource Schedule: 🖨 Print (Gantt + list, one page)", items:[
     "The 📅 Crew / Resource Schedule now has a 🖨 Print button — it lays the whole booked-range Gantt + the full task list onto a single Letter-landscape page (auto-shrinks to fit, verified to one page even for the busiest resource), ready to Save as PDF or hand out." ] },
   { rev:"3.66", date:"2026-06-18", title:"Resource Schedule: sub-resources (group › person)", items:[
@@ -2836,13 +2838,9 @@ function renderFloor(D){
     let body;
     if(!list.length) body=`<div class="empty">— ${opts.emptyTxt||"open"} —</div>`;
     else{
-      const bayOpen=opts.expandAll||expandedBays.has(bay);
-      const visible=bayOpen?list:list.slice(0,2);
-      const jobsHtml=visible.map(j=>jobTile(j,opts.showBay)).join("");
-      let moreHtml="";
-      if(!opts.expandAll && list.length>2) moreHtml=`<div class="more morebtn" onclick="toggleBay('${esc(bay)}')">`+
-        (bayOpen?"▴ show less":`+${list.length-2} more in this bay ▾`)+`</div>`;
-      body=jobsHtml+moreHtml;
+      // Show EVERY job in the bay — never hide jobs behind a "+N more" collapse
+      // (busy lanes like Parking Lot / Next Up were hiding jobs so they looked missing).
+      body=list.map(j=>jobTile(j,opts.showBay)).join("");
     }
     const cnt=opts.headCount&&list.length?` <span class="count">${list.length}</span>`:"";
     const bodyCls=opts.scroll?"bay-body autoscroll":"bay-body";

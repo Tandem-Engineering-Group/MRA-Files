@@ -79,16 +79,19 @@ function Parse-Tasks($text) {
 # the Input Notes cell -> fully backward-compatible, nothing changes until the
 # sheet exists.
 function Read-ShopTasks($zip, $wbXml, $relsXml, $shared, $nsMain, $nsRel, $nsPkg) {
-    $map = @{}
+    # Rows are matched to a job by Project (col A) OR Job# (col B) — case-insensitive —
+    # so a small project-name mismatch doesn't silently drop the task. Returns lookup
+    # maps plus a flat list (for unmatched-row logging).
+    $byProj = @{}; $byJob = @{}; $all = New-Object System.Collections.ArrayList
     $sx = Get-SheetXml $zip $wbXml $relsXml 'Shop Tasks' $nsMain $nsRel $nsPkg
-    if (-not $sx) { return $map }
+    if (-not $sx) { return [PSCustomObject]@{ byProj = $byProj; byJob = $byJob; all = $all } }
     foreach ($row in $sx.worksheet.sheetData.row) {
         if ([int]$row.r -lt 2) { continue }
         $c = Get-RowCells $row
         $key  = ([string](Resolve-Cell $c['A'] $shared)).Trim()   # Project (match key)
-        $job  = ([string](Resolve-Cell $c['B'] $shared)).Trim()   # Job # (info only)
+        $jobn = ([string](Resolve-Cell $c['B'] $shared)).Trim()   # Job # (also a match key)
         $task = ([string](Resolve-Cell $c['D'] $shared)).Trim()
-        if ($key -eq '' -or $task -eq '') { continue }
+        if ($task -eq '') { continue }                            # only a Task is required
         $assigned = ([string](Resolve-Cell $c['E'] $shared)).Trim()
         $od = Get-CellDate $c['F']
         $cl = Get-CellDate $c['G']
@@ -101,11 +104,13 @@ function Read-ShopTasks($zip, $wbXml, $relsXml, $shared, $nsMain, $nsRel, $nsPkg
             opened = $(if ($od) { $od.ToString('yyyy-MM-dd') } else { $null })
             closed = $(if ($cl) { $cl.ToString('yyyy-MM-dd') } else { $null })
             status = $status; milestone = $mile; comments = $cmt; done = $isDone
+            proj = $key; jobNum = $jobn; matched = $false
         }
-        if (-not $map.ContainsKey($key)) { $map[$key] = New-Object System.Collections.ArrayList }
-        [void]$map[$key].Add($obj)
+        [void]$all.Add($obj)
+        if ($key -ne '')  { $pk = $key.ToLower();  if (-not $byProj.ContainsKey($pk)) { $byProj[$pk] = New-Object System.Collections.ArrayList }; [void]$byProj[$pk].Add($obj) }
+        if ($jobn -ne '') { $jk = $jobn.ToLower(); if (-not $byJob.ContainsKey($jk))  { $byJob[$jk]  = New-Object System.Collections.ArrayList }; [void]$byJob[$jk].Add($obj) }
     }
-    return $map
+    return [PSCustomObject]@{ byProj = $byProj; byJob = $byJob; all = $all }
 }
 
 # Match the dashboard's pinHash exactly:  h = (h*31 + charCode) >>> 0  (per char).
@@ -321,10 +326,16 @@ try {
         $startTxt = if ($sd) { $sd.ToString('MM/dd/yy') } else { '' }
         $compTxt  = if ($cd) { $cd.ToString('MM/dd/yy') } else { '' }
 
-        # Prefer structured 'Shop Tasks' rows for this job (matched by Project,
-        # since Job#s aren't unique); else parse the Notes cell.
-        if ($proj -ne '' -and $shopTasks.ContainsKey($proj) -and $shopTasks[$proj].Count -gt 0) {
-            $t = Build-TasksFromRows $shopTasks[$proj]
+        # Prefer structured 'Shop Tasks' rows for this job — match by Project name,
+        # then fall back to Job# (so a project-name typo/prefix doesn't drop the task);
+        # else parse the Notes cell.
+        $stRows = $null
+        $pk = $proj.ToLower(); $jk = $job.ToLower()
+        if ($proj -ne '' -and $shopTasks.byProj.ContainsKey($pk)) { $stRows = $shopTasks.byProj[$pk] }
+        elseif ($job -ne '' -and $shopTasks.byJob.ContainsKey($jk)) { $stRows = $shopTasks.byJob[$jk] }
+        if ($stRows -and $stRows.Count -gt 0) {
+            foreach ($r in $stRows) { $r.matched = $true }
+            $t = Build-TasksFromRows $stRows
         } else {
             $t = Parse-Tasks $notes
         }
@@ -340,6 +351,19 @@ try {
             notesRaw = $notes
             openTasks = $t.open; openCount = $t.openCount; doneCount = $t.doneCount; salOpen = $t.salOpen; doneTasks = $t.done; tasks = $t.tasks
         })
+    }
+
+    # Surface any 'Shop Tasks' rows that matched NO job — so a mismatch is never silent.
+    $stOrphans = @($shopTasks.all | Where-Object { -not $_.matched })
+    $stLog = Join-Path $ScriptDir 'shoptasks-unmatched.txt'
+    if ($stOrphans.Count -gt 0) {
+        $stMsg = @("=== Shop Tasks rows with NO matching job  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===",
+                   "These did NOT appear on the dashboard. Fix col A (Project) or col B (Job#) to match an Input job, then re-export.","")
+        $stMsg += $stOrphans | ForEach-Object { "  Project='$($_.proj)'   Job#='$($_.jobNum)'   Task='$($_.task)'" }
+        $stMsg | Out-File $stLog -Encoding utf8
+        Write-Output "  -> WARNING: $($stOrphans.Count) Shop Tasks row(s) matched no job - see shoptasks-unmatched.txt"
+    } elseif (Test-Path $stLog) {
+        Remove-Item $stLog -ErrorAction SilentlyContinue
     }
 
     # ===== Project Tasks sheet -> long-term project portfolio ===============
