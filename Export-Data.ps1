@@ -835,6 +835,18 @@ if (Test-Path $azExe) {
         --auth-mode key `
         --only-show-errors 2>$null | Out-Null
     $code = $LASTEXITCODE
+    # Employee-of-the-Month photo: push eotm.png / eotm.jpg if present in this folder
+    # (wall-view feature). Swap monthly — drop a new eotm.png here and re-export.
+    foreach ($img in @(@{f='eotm.png'; ct='image/png'}, @{f='eotm.jpg'; ct='image/jpeg'})) {
+        $imgPath = Join-Path $ScriptDir $img.f
+        if (Test-Path $imgPath) {
+            & $azExe storage blob upload `
+                --account-name $AzureStorageAccount --container-name '$web' `
+                --name $img.f --file $imgPath --content-type $img.ct `
+                --overwrite --auth-mode key --only-show-errors 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { Write-Output "  -> Pushed $($img.f) to Azure" }
+        }
+    }
     $ErrorActionPreference = $saved
     if ($code -eq 0) {
         Write-Output "  -> Pushed data.js to Azure ($AzureStorageAccount)"
