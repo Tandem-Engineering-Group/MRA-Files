@@ -71,9 +71,10 @@ for col, (head, vals) in LISTS.items():
         lst[f"{col}{i+2}"] = v
 lst.sheet_state = "veryHidden"
 
-# ---- Column widths (task table mirrors master A..O) -------------------------
+# ---- Column widths (task table mirrors master A..P) -------------------------
 widths = {"A": 26, "B": 18, "C": 13, "D": 42, "E": 11, "F": 11, "G": 9,
-          "H": 20, "I": 13, "J": 15, "K": 10, "L": 26, "M": 9, "N": 12, "O": 7}
+          "H": 20, "I": 13, "J": 15, "K": 10, "L": 26, "M": 9, "N": 12, "O": 7,
+          "P": 18}
 for c, w in widths.items():
     ws.column_dimensions[c].width = w
 
@@ -92,12 +93,12 @@ if os.path.exists(logo_path):
 for r, h in {1: 22, 2: 20, 3: 6}.items():
     ws.row_dimensions[r].height = h
 
-ws.merge_cells("C1:O1")
+ws.merge_cells("C1:P1")
 t = ws["C1"]
 t.value = "PROJECT INTAKE  —  TASK SCHEDULE"
 t.font = Font(bold=True, size=18, color=ORANGE)
 t.alignment = Alignment(vertical="center")
-ws.merge_cells("C2:O2")
+ws.merge_cells("C2:P2")
 a = ws["C2"]
 a.value = "950 E Whitcomb Ave  ·  Madison Heights, MI 48071  ·  248.629.2929"
 a.font = Font(size=9, color=GREY)
@@ -140,12 +141,12 @@ field(f"B{INFO0+1}", f"D{INFO0+1}", title="Project Manager",
 
 # ---- "How to" note banners (so people SEE & understand the two special rows) -
 def note_banner(r, text, fill):
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=15)
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=16)
     c = ws.cell(row=r, column=1, value=text)
     c.fill = PatternFill("solid", fgColor=fill)
     c.font = Font(size=10, bold=True, color=DARK)
     c.alignment = Alignment(vertical="center", wrap_text=True, indent=1)
-    for cc in range(1, 16):
+    for cc in range(1, 17):
         ws.cell(row=r, column=cc).border = box
     ws.row_dimensions[r].height = 26
 
@@ -164,8 +165,8 @@ HDR = INFO0 + 5   # rows: 4-5 info · 6 milestone note · 7 subtask note · 8 sp
 ws.row_dimensions[HDR - 1].height = 8
 heads = ["Project", "Phase", "Type", "Task", "Start", "Finish", "Duration",
          "Assigned To", "Status", "PM", "Milestone", "Comments", "Task ID",
-         "Predecessor", "Sub"]
-LEFT_COLS = {1, 2, 4, 8, 10, 12}
+         "Predecessor", "Sub", "Sub-Resource"]
+LEFT_COLS = {1, 2, 4, 8, 10, 12, 16}
 for c, h in enumerate(heads, start=1):
     cell = ws.cell(row=HDR, column=c, value=h)
     cell.font = Font(bold=True, color="FFFFFF", size=11)
@@ -203,7 +204,7 @@ sub_dv = DataValidation(allow_blank=True, showInputMessage=True,
 ws.add_data_validation(sub_dv)
 
 for r in range(DATA0, LASTROW):
-    for c in range(1, 16):     # A..O
+    for c in range(1, 17):     # A..P
         ws.cell(row=r, column=c).border = box
     ws.cell(row=r, column=1, value=projF)      # A Project (autofill)
     ws.cell(row=r, column=10, value=pmF)       # J PM (autofill)
@@ -215,7 +216,7 @@ for r in range(DATA0, LASTROW):
         ws.cell(row=r, column=4, value="Milestone %d" % n) # D Task
         ws.cell(row=r, column=9, value="Not Started")      # I Status
         ws.cell(row=r, column=11, value="Yes")             # K Milestone
-        for c in range(1, 16):
+        for c in range(1, 17):
             ws.cell(row=r, column=c).fill = gold_fill
     else:
         ws.cell(row=r, column=1).fill = auto_fill          # A grey (autofill)
@@ -242,6 +243,14 @@ add_dv("H", "=Lists!$G$2:$G$19")   # Assigned To
 add_dv("I", "=Lists!$D$2:$D$5")    # Status
 add_dv("K", "=Lists!$E$2:$E$3")    # Milestone
 add_dv("O", "=Lists!$H$2:$H$2")    # Sub (x / blank)
+# Sub-Resource (P): free text — the person within the Assigned-To group.
+subres_dv = DataValidation(allow_blank=True, showInputMessage=True, showErrorMessage=False,
+    prompt=('Optional — the person within the Assigned-To GROUP. e.g. Assigned To = '
+            '"MRA Design", Sub-Resource = "Steve K". The dashboard rolls members up '
+            'under their group, and lets you view just that person.'),
+    promptTitle="Sub-Resource")
+ws.add_data_validation(subres_dv)
+subres_dv.add(f"P{DATA0}:P{LASTROW-1}")
 dv_pm = DataValidation(type="list", formula1="=Lists!$F$2:$F$14",
                        allow_blank=True, showErrorMessage=False, showDropDown=False)
 ws.add_data_validation(dv_pm)

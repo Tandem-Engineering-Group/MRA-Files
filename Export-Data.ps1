@@ -205,6 +205,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     $pTaskId   = ([string](Resolve-Cell $pc['M'] $shared)).Trim()   # Task ID  (col M)
     $pPred     = ([string](Resolve-Cell $pc['N'] $shared)).Trim()   # Predecessor (col N)
     $pSub      = ([string](Resolve-Cell $pc['O'] $shared)).Trim()   # Sub (col O) — 'x' = subtask of the task above
+    $pSubRes   = ([string](Resolve-Cell $pc['P'] $shared)).Trim()   # Sub-Resource (col P) — person within the Assigned-To group
     if ($pTaskId -match '^\d+\.0+$')  { $pTaskId  = $pTaskId  -replace '\.0+$','' }   # numeric cell safety
     if ($pDur -match '^\d+\.0+$') { $pDur = $pDur -replace '\.0+$','' }
     $psd = Get-CellDate $pc['E']
@@ -255,6 +256,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
         cm    = $pComments
         pred  = $pPred
         sub   = ($pSub -match '^[xX]')
+        subRes = $pSubRes
         done  = ($pStatus -eq 'Completed')
     })
 }
