@@ -304,6 +304,12 @@
   #fleetioKpis .kpi.tasks{box-shadow:0 0 18px rgba(245,158,11,.15)}
   #fleetioView .teamcard{transition:transform .09s ease; cursor:pointer}
   #fleetioView .teamcard:hover{transform:translateY(-2px)}
+  /* In-the-shop Fleetio cards: not whole-card clickable (the ➕ is the action) */
+  #fInBay .teamcard{cursor:default}
+  #fInBay .teamcard:hover{transform:none}
+  #fInBay .teamcard .bayt{color:var(--brand); font-weight:700; font-size:11px}
+  #fInBay .teamcard .tn .jn{color:var(--muted); font-weight:600; font-size:11px}
+  .teamcard .fitasks{margin-top:9px; display:flex; flex-direction:column; gap:1px}
   /* hero KPIs */
   #fleetioKpis .kpi{padding:16px 18px 14px}
   #fleetioKpis .kpi .n{font-size:46px}
@@ -710,6 +716,12 @@
         <div id="fIssueChart"></div>
       </div>
     </div>
+    <div class="panel" id="fp-inbay">
+      <h2>🔧 In the Shop — Open Fleetio Items <span class="count" id="fInBayCount"></span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">units on the floor right now, grouped by job · ➕ adds an issue as an assignable shop task</span>
+      </h2>
+      <div class="teamgrid" id="fInBay"></div>
+    </div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="panel" id="fp-issues">
         <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span></h2>
@@ -1091,9 +1103,16 @@
     <div class="modal" style="max-width:480px">
       <button class="modal-close" onclick="closeTpl()" title="Close">×</button>
       <h3>📄 Build a Hard-Date Schedule</h3>
-      <div class="msub">Pick a project and a style — it builds a print-ready schedule from that project's milestones &amp; dates (opens in a new tab; <b>Save as PDF</b> there).</div>
+      <div class="msub">Pick a project, choose what to include, and a style — it builds a print-ready schedule (opens in a new tab; <b>Save as PDF</b> there). By default it shows just milestones &amp; hard dates; tick <b>All tasks</b> for the full list, and <b>Subtasks</b> to nest the indented children.</div>
       <div class="addform">
         <div><label>Project</label><select id="tplProject"></select></div>
+        <div>
+          <label>Include</label>
+          <div style="display:flex; flex-direction:column; gap:5px; font-size:12.5px; color:var(--txt)">
+            <label style="display:flex; gap:7px; align-items:center; cursor:pointer; font-weight:400; text-transform:none; letter-spacing:0"><input type="checkbox" id="tplAllTasks" onchange="if(!this.checked)document.getElementById('tplSubtasks').checked=false" title="List every project task, not just milestones & hard dates"> All tasks <span style="color:var(--faint)">(not just milestones &amp; hard dates)</span></label>
+            <label style="display:flex; gap:7px; align-items:center; cursor:pointer; font-weight:400; text-transform:none; letter-spacing:0"><input type="checkbox" id="tplSubtasks" onchange="if(this.checked)document.getElementById('tplAllTasks').checked=true" title="Also include subtasks, indented under their parent task"> Subtasks <span style="color:var(--faint)">(indented under their parent)</span></label>
+          </div>
+        </div>
         <div>
           <label>Style — click to build</label>
           <div style="display:flex; gap:8px; flex-wrap:wrap">
@@ -1215,7 +1234,7 @@ const GENERAL_HELP = `
     </ul>
     <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. A task you <b>add</b> now also sticks on <b>your</b> device through a page reload (handy on an iPad, which reloads tabs on its own) until the workbook catches up — so it won't appear to vanish.</div></div>
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
-    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule built from that project's milestones &amp; dates — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand.</p></div>
+    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Choose what it lists with two tick-boxes: leave them off for the classic <b>milestones &amp; hard dates</b> only; tick <span class="k">All tasks</span> for the project's full task list; tick <span class="k">Subtasks</span> to also nest the indented children under their parent.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
     <p>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. <b>Subtasks</b> (the <b>Sub</b> column in the workbook) sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
@@ -1243,13 +1262,15 @@ const FLEETIO_HELP = `
     <p><b>Service Backlog</b> donut = overdue (red) vs due-soon (amber). <b>Open Issues by Type</b> = your Fleetio issue labels, ranked.</p></div>
   <div class="hsec"><h4>③ Open Issues & Work Orders</h4>
     <p>Live open issues and active/pending work orders, each showing the <b>trailer + job #</b>, with overdue/priority chips and how long they've been open.</p></div>
-  <div class="hsec"><h4>④ 🚛 By Trailer — click to drill in</h4>
+  <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
+    <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio). Honors the 🧤/🍁 flag picker up top.</p></div>
+  <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
     <p>One card per trailer (matched to the shop by <b>J#</b>), color-coded by urgency: <span style="color:var(--red)">red</span> = service overdue, <span style="color:var(--amber)">amber</span> = open issues, <span style="color:var(--blue)">blue</span> = work orders, <span style="color:var(--green)">green</span> = clear. Worst-first. <b>Click a card</b> to see that trailer's exact issues, work orders and service items.</p></div>
-  <div class="hsec"><h4>⑤ 🔧 Service — Due & Overdue</h4>
+  <div class="hsec"><h4>⑥ 🔧 Service — Due & Overdue</h4>
     <p>Every service reminder that's overdue or due soon, overdue first, with the trailer and the due date. <span style="color:#fca5a5">Red</span> = overdue, <span style="color:var(--amber)">amber</span> = due soon.</p></div>
-  <div class="hsec"><h4>⑥ ↗ Open in Fleetio</h4>
+  <div class="hsec"><h4>⑦ ↗ Open in Fleetio</h4>
     <div class="tip">The <b>↗ Open in Fleetio</b> button (top right) jumps to the full Fleetio app for anything deeper — editing issues, work orders, costs, history, etc. This tab is the quick read; Fleetio is the system of record.</div></div>
-  <div class="hsec"><h4>⑦ 🔧 Trailer issues on the FLOOR board</h4>
+  <div class="hsec"><h4>⑧ 🔧 Trailer issues on the FLOOR board</h4>
     <p>A trailer's open issues also appear on its <b>bay card</b> (FLOOR tab) — click the <span class="k">🔧 Fleetio</span> pill to see them, and <span class="k">➕</span> to make one an assignable Shop Task (it auto‑closes when resolved in Fleetio). <b>Tractor</b> issues stay here on the FLEETIO tab — Doug's domain, with a dedicated tractor screen possibly coming later.</p></div>
 `;
 /* ---------- Rev / change log ----------
@@ -1257,6 +1278,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.56", date:"2026-06-18", title:"Schedule builder: tasks/subtasks · Fleetio “In the Shop” panel", items:[
+    "📄 Build a Hard-Date Schedule now has two tick-boxes: <b>All tasks</b> (the full task list, not just milestones &amp; hard dates) and <b>Subtasks</b> (the indented children, nested under their parent). Leave both off for the classic milestones-only schedule.",
+    "FLEETIO tab: a new <b>🔧 In the Shop — Open Fleetio Items</b> panel (right under Service Backlog) lists every unit currently on the floor (in a bay or the lot) grouped by job, with its open Fleetio issues / work orders / service underneath. ➕ drops an issue straight into the crew queues as an assignable, closeable Shop Task." ] },
   { rev:"3.55", date:"2026-06-18", title:"Intake template now supports subtasks", items:[
     "The ⬇ Download Template now has a Sub column (mirrors the master) plus ready-made indented subtask slots — put an \"x\" in Sub and that row nests under the task above it (collapsible, MS-Project style). Upload, Intake-Inbox auto-import, and Paste→Values all carry the subtask flag through to the schedule." ] },
   { rev:"3.54", date:"2026-06-18", title:"Full-screen Gantt: same zoom + scroll sliders", items:[
@@ -3030,8 +3054,8 @@ function renderFleetio(D){
     const empty=`<div class="empty">No Fleetio data yet — once the Fleetio export feeds <b>data.js</b> this fills in automatically. Use "↗ Open in Fleetio" above in the meantime.</div>`;
     document.getElementById('fleetioKpis').innerHTML='';
     ['fService','fIssues','fWorkOrders'].forEach(id=>document.getElementById(id).innerHTML=empty);
-    ['fByTrailer','fSvcChart','fIssueChart'].forEach(id=>document.getElementById(id).innerHTML='');
-    ['fSvcCount','fIssueCount','fWoCount','fTrailerCount','fLabelCount'].forEach(id=>document.getElementById(id).textContent='');
+    ['fByTrailer','fSvcChart','fIssueChart','fInBay'].forEach(id=>document.getElementById(id).innerHTML='');
+    ['fSvcCount','fIssueCount','fWoCount','fTrailerCount','fLabelCount','fInBayCount'].forEach(id=>document.getElementById(id).textContent='');
     return;
   }
 
@@ -3158,6 +3182,7 @@ function renderFleetio(D){
   svcC.forEach(s=>{ const t=bucket(s); t.svc++; if(s.c.overdue) t.svcOver++; t._s.push(s); });
   FTRAILERS=Object.values(tmap);
   renderTrailerCards();
+  renderInBayFleetio(D);
 }
 
 // Renders the By-Trailer cards from FTRAILERS, honoring the search box + sort.
@@ -3183,6 +3208,53 @@ function renderTrailerCards(){
     ((t.jobNum&&t.name&&t.name!==t.jobNum)?`<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.3">${esc(t.name)}</div>`:'')+
     `</div>`; }).join('') : `<div class="empty">${q?('No trailers match “'+esc(q)+'”'):'—'}</div>`;
   document.getElementById('fTrailerCount').textContent = q ? (arr.length+' of '+FTRAILERS.length) : (FTRAILERS.length+' trailers');
+}
+
+/* In the Shop — open Fleetio items for the units physically on the floor (in a
+   bay or the lot), grouped by job like the shop board. Issues get a ➕ to drop
+   them into the crew queues as an assignable / closeable Shop Task. */
+function renderInBayFleetio(D){
+  const grid=document.getElementById('fInBay'); if(!grid) return;
+  const F=(D&&D.fleetio)||{}, today=D&&D.todayISO;
+  const issues=(F.issues||[]), wos=(F.workOrders||[]), svc=(F.service||[]);
+  const isHeldB=b=>/next\s*up|on\s*hold|off.?site/i.test(b||"");
+  const njob=s=>String(s||'').toUpperCase().replace(/[^0-9]/g,'');
+  const order=(D.physicalBays||[]);
+  const oIdx=b=>{const i=order.indexOf(b); return i<0?99:i;};
+  // On-site floor jobs (in a bay or the lot), with a usable job number.
+  const jobs=(D.jobs||[]).filter(j=> j.category!=='leave' && j.bay && !isHeldB(j.bay)
+      && (j.status||'').toLowerCase()!=='shipped' && njob(j.jobNum));
+  const idx={};
+  jobs.forEach(j=>{ const k=njob(j.jobNum); if(k && !idx[k]) idx[k]={job:j, iss:[], wo:[], svc:[]}; });
+  const match=item=>{ const k=njob(item.jobNum); if(k && idx[k]) return idx[k];
+    const m=String(item.asset||'').toUpperCase().match(/\d{3,5}/g);   // fallback: a J# in the asset name
+    if(m){ for(const tok of m){ if(idx[tok]) return idx[tok]; } }
+    return null; };
+  issues.forEach(i=>{ if(!fioFlagOK(i.asset)) return; const b=match(i); if(b) b.iss.push(i); });
+  wos.forEach(w=>{ if(!fioFlagOK(w.asset)) return; const b=match(w); if(b) b.wo.push(w); });
+  svc.forEach(s=>{ if(!fioFlagOK(s.asset)) return; const b=match(s); if(b) b.svc.push(s); });
+  let cards=Object.values(idx).filter(b=>b.iss.length||b.wo.length||b.svc.length);
+  cards.sort((a,b)=> oIdx(a.job.bay)-oIdx(b.job.bay)
+    || (b.iss.length+b.wo.length+b.svc.length)-(a.iss.length+a.wo.length+a.svc.length));
+  const totalItems=cards.reduce((s,b)=>s+b.iss.length+b.wo.length+b.svc.length,0);
+  grid.innerHTML = cards.length ? cards.map(b=>{
+    const j=b.job;
+    const edge = b.iss.some(i=>i.overdue)?'#ef4444' : (b.iss.length?'#f59e0b' : (b.wo.length?'#3b82f6' : '#22c55e'));
+    let lines='';
+    b.iss.forEach(i=>{ const ov=i.overdue?' <span class="badge red">overdue</span>':'';
+      lines+=`<div class="taskline fleet" title="${escA((i.detail||i.summary||'').slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(i.num))}')" title="Add as an assignable Shop Task">➕</span>⚠ ${esc(i.summary||('Issue #'+i.num))}${ov}</div>`; });
+    b.wo.forEach(w=>{ const st=w.status?` <span class="badge ${/pend/i.test(w.status)?'amber':'blue'}">${esc(w.status)}</span>`:'';
+      lines+=`<div class="taskline fleet" title="${escA((w.detail||w.summary||'').slice(0,300))}">📋 ${esc(w.summary||('WO '+(w.num||'')))}${st}</div>`; });
+    b.svc.forEach(s=>{ const fs=fleetState(s.dueISO,today);
+      const bd=fs.overdue?` <span class="badge red">overdue</span>`:(fs.soon?` <span class="badge amber">due soon</span>`:(s.dueISO?` <span class="badge grey">${fmtMD(s.dueISO)}</span>`:''));
+      lines+=`<div class="taskline fleet" title="${escA(s.service||'Service')}">🔧 ${esc(s.service||'Service')}${bd}</div>`; });
+    const cnt=b.iss.length+b.wo.length+b.svc.length;
+    return `<div class="teamcard" style="border-left-color:${edge}"><div class="th"><span class="tn">${esc(j.project||j.jobNum)} <span class="jn">${esc(j.jobNum||'')}</span></span><span class="tc">${cnt}</span></div>`+
+      `<div class="tmeta"><span class="bayt">${esc(j.bay)}</span></div>`+
+      `<div class="fitasks">${lines}</div></div>`;
+  }).join('') : `<div class="empty">No open Fleetio items for units currently on the floor.</div>`;
+  const c=document.getElementById('fInBayCount');
+  if(c) c.textContent = cards.length ? (totalItems+' open · '+cards.length+' unit'+(cards.length===1?'':'s')) : '';
 }
 
 // Clickable KPI tiles: jump to the relevant list (and filter it for the overdue/soon tiles).
@@ -3469,22 +3541,42 @@ function hdShort(iso){ const d=parseISO(iso); return d?`${HD_MO[d.getMonth()]} $
 function hdOwner(o){ o=(o||'').trim(); if(!o) return '—';
   if(/^mra\b|^sal$|^doug$|shop|tech|electric|fab/i.test(o)) return 'MRA';
   if(/client/i.test(o)) return 'Client'; return o; }
-function projectToHDS(p){
-  const ms=(p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'9999').localeCompare(b.dateISO||'9999'));
-  // group by phase if the export carries one, else a single section
+// opts: {allTasks:bool, subtasks:bool}. Default = milestones/hard-dates only.
+// allTasks (or subtasks) switches to the full task list; subtasks adds the
+// indented child rows (otherwise they're filtered out).
+function projectToHDS(p, opts){
+  opts = opts || {};
+  const incSubs = !!opts.subtasks;
+  const useTasks = !!(opts.allTasks || opts.subtasks);
   const order=[], byPhase={};
-  ms.forEach(m=>{ const ph=(m.phase&&m.phase.trim())?m.phase.trim():'Milestones & Hard Dates';
-    if(!byPhase[ph]){ byPhase[ph]=[]; order.push(ph); } byPhase[ph].push(m); });
-  const phases=order.map(ph=>{ const rows=byPhase[ph];
-    const ds=rows.map(m=>m.dateISO).filter(Boolean).sort();
-    const span=ds.length?(hdShort(ds[0])+(ds.length>1&&ds[ds.length-1]!==ds[0]?' – '+hdShort(ds[ds.length-1]):'')):'';
-    return { name:ph, span,
-      rows:rows.map(m=>[ m.name, hdOwner(m.owner), hdDate(m.dateISO), (m.done?'Complete':'') ]) }; });
+  let phases;
+  if(useTasks){
+    const items=(p.tasks||[]).filter(t=> incSubs || !t.sub);
+    items.forEach(t=>{ const ph=(t.phase&&String(t.phase).trim())?String(t.phase).trim():'Tasks';
+      if(!byPhase[ph]){ byPhase[ph]=[]; order.push(ph); } byPhase[ph].push(t); });
+    phases=order.map(ph=>{ const rows=byPhase[ph];
+      const ds=rows.map(t=>t.finISO||t.startISO).filter(Boolean).sort();
+      const span=ds.length?(hdShort(ds[0])+(ds.length>1&&ds[ds.length-1]!==ds[0]?' – '+hdShort(ds[ds.length-1]):'')):'';
+      return { name:ph, span,
+        rows:rows.map(t=>[ ((incSubs&&t.sub)?'↳ ':'')+(t.t||''), hdOwner(t.who),
+          hdDate(t.finISO||t.startISO), ((t.done||/^completed$/i.test(t.st||''))?'Complete':'') ]) }; });
+  } else {
+    const ms=(p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'9999').localeCompare(b.dateISO||'9999'));
+    // group by phase if the export carries one, else a single section
+    ms.forEach(m=>{ const ph=(m.phase&&m.phase.trim())?m.phase.trim():'Milestones & Hard Dates';
+      if(!byPhase[ph]){ byPhase[ph]=[]; order.push(ph); } byPhase[ph].push(m); });
+    phases=order.map(ph=>{ const rows=byPhase[ph];
+      const ds=rows.map(m=>m.dateISO).filter(Boolean).sort();
+      const span=ds.length?(hdShort(ds[0])+(ds.length>1&&ds[ds.length-1]!==ds[0]?' – '+hdShort(ds[ds.length-1]):'')):'';
+      return { name:ph, span,
+        rows:rows.map(m=>[ m.name, hdOwner(m.owner), hdDate(m.dateISO), (m.done?'Complete':'') ]) }; });
+  }
   const today=new Date(), iss=`${HD_MO[today.getMonth()]} ${today.getDate()}, ${today.getFullYear()}`;
   const dot=`${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}.${today.getFullYear()}`;
+  const emptyName = useTasks ? 'Tasks' : 'Milestones & Hard Dates';
   return { project:p.name, client:'—', attn:'—', job:'—', pm:p.pm||'TBD',
     issue:iss, version:'Rev 1 · '+dot, launch:hdDate(p.finishISO), launchLabel:'Program Launch',
-    window:hdShort(p.startISO)+' – '+hdDate(p.finishISO), phases:phases.length?phases:[{name:'Milestones & Hard Dates',span:'',rows:[]}] };
+    window:hdShort(p.startISO)+' – '+hdDate(p.finishISO), phases:phases.length?phases:[{name:emptyName,span:'',rows:[]}] };
 }
 function openTplPicker(){
   const D=window.MRA_DATA||{};
@@ -3503,8 +3595,14 @@ function buildHDS(style, sample){
     const D=window.MRA_DATA||{}, name=(document.getElementById('tplProject')||{}).value;
     const p=(D.projects||[]).find(x=>x.name===name);
     if(!p){ alert("Pick a project first."); return; }
-    if(!(p.milestones||[]).length){ if(!confirm("This project has no milestones flagged yet — build an empty schedule anyway?")) return; }
-    S=projectToHDS(p);
+    const allTasks=!!(document.getElementById('tplAllTasks')||{}).checked;
+    const subtasks=!!(document.getElementById('tplSubtasks')||{}).checked;
+    if(allTasks||subtasks){
+      if(!(p.tasks||[]).length){ if(!confirm("This project has no tasks loaded yet — build an empty schedule anyway?")) return; }
+    } else {
+      if(!(p.milestones||[]).length){ if(!confirm("This project has no milestones flagged yet — build an empty schedule anyway?")) return; }
+    }
+    S=projectToHDS(p,{allTasks,subtasks});
   }
   const w=window.open('','_blank');
   if(!w){ alert('Please allow pop-ups for this site to open the schedule.'); return; }
