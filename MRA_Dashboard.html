@@ -242,6 +242,7 @@
   #wallCtl input[type=range]{width:120px; accent-color:#93c5fd}
   #wallCtl input[type=number]{width:56px; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 6px; font-size:12px; font-family:inherit; text-align:right; font-variant-numeric:tabular-nums}
   #wallCtl .wc-pct{color:var(--muted); margin-left:-2px}
+  #wallCtl .wc-sep{width:1px; align-self:stretch; background:var(--line); margin:0 4px}
   .bay-head .name .count{margin-left:6px}
   body.wall #floorView .grid, body.wall #floorGanttPanel, body.wall #crewSchedPanel{display:none}
   body.wall #kpis{display:none}   /* hide the KPI strip on the TV — frees vertical room for the bays */
@@ -1526,6 +1527,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.90", date:"2026-06-18", title:"Wall view: scroll-speed control", items:[
+    "Added a 🌀 Scroll slider to the wall control (bottom-right, next to 📺 Size) — drag 🐢→🐇 to set the auto-scroll speed yourself, remembered per screen. No need to ask for a tweak." ] },
   { rev:"3.89", date:"2026-06-18", title:"Wall view: slower auto-scroll", items:[
     "Slowed the 📺 Wall/TV auto-scroll (one full sweep now takes ~34s instead of ~22s) so it's easier to read across the room." ] },
   { rev:"3.88", date:"2026-06-18", title:"ASSETS: one search + live job list", items:[
@@ -1859,15 +1862,25 @@ function ensureWallCtl(){
     +'<button type="button" onclick="setWallZoom(140)" title="Large">L</button>'
     +'<input id="wallZoom" type="range" min="60" max="200" step="5" oninput="setWallZoom(this.value)" title="Board size on THIS screen — drag to scale the whole board bigger or smaller (remembered per monitor)">'
     +'<input id="wallZoomNum" type="number" min="50" max="250" step="5" onchange="setWallZoom(this.value)" onkeydown="if(event.key===\'Enter\'){setWallZoom(this.value);this.blur();}" title="Type an exact %"><span class="wc-pct">%</span>'
-    +'<button type="button" onclick="setWallZoom(100)" title="Reset to 100%">↺</button>';
+    +'<button type="button" onclick="setWallZoom(100)" title="Reset to 100%">↺</button>'
+    +'<span class="wc-sep"></span>'
+    +'<span class="wc-lbl">🌀 Scroll</span><span class="wc-pct">🐢</span>'
+    +'<input id="wallSpeed" type="range" min="0" max="100" step="5" style="width:90px" oninput="setWallSpeed(this.value)" title="Wall auto-scroll speed on THIS screen — left = slower, right = faster (remembered per monitor)">'
+    +'<span class="wc-pct">🐇</span>';
   document.body.appendChild(d);
 }
+// Slider 0..100 (slow→fast) ↔ WALL_CYCLE seconds (60 slow … 12 fast).
+function setWallSpeed(v){ v=parseInt(v,10); if(isNaN(v)) v=50; v=Math.max(0,Math.min(100,v));
+  WALL_CYCLE=Math.round(60-(v/100)*(60-12));
+  try{ localStorage.setItem('mra_wall_cycle', String(WALL_CYCLE)); }catch(e){}
+  const s=document.getElementById('wallSpeed'); if(s) s.value=v; }
 function applyWallZoom(){
   ensureWallCtl();
   document.body.style.zoom = WALL ? (WALL_ZOOM/100) : '';
   const ctl=document.getElementById('wallCtl'); if(ctl) ctl.style.display = WALL?'flex':'none';
   const s=document.getElementById('wallZoom'); if(s) s.value=WALL_ZOOM;
   const v=document.getElementById('wallZoomNum'); if(v && document.activeElement!==v) v.value=WALL_ZOOM;
+  const sp=document.getElementById('wallSpeed'); if(sp) sp.value=Math.round((60-WALL_CYCLE)/(60-12)*100);
 }
 function setWallZoom(z){ z=parseInt(z,10)||100; WALL_ZOOM=Math.max(50,Math.min(250,z));
   try{ localStorage.setItem('mra_wall_zoom', String(WALL_ZOOM)); }catch(e){}
@@ -1882,7 +1895,8 @@ const WSEL='body.wall .bay-body, body.wall .asgbody';
 // going-its-own-way. Each tile maps scrollTop = phase × its own scrollable height, so
 // they all hit top/bottom at the same instant regardless of how tall they are.
 let AS_PHASE=0, AS_DIR=1, AS_DWELL=0;
-const AS_CYCLE=34;   // seconds for one top→bottom sweep (higher = slower)
+// Seconds for one top→bottom sweep (higher = slower). Adjustable per screen from the wall control.
+let WALL_CYCLE=34; try{ const _wc=parseInt(localStorage.getItem('mra_wall_cycle'),10); if(_wc>=12&&_wc<=60) WALL_CYCLE=_wc; }catch(e){}
 function snapWallScroll(){ return WALL; }
 function restoreWallScroll(){ if(!WALL) return;   // after a re-render, re-apply the shared phase
   document.querySelectorAll(WSEL).forEach(el=>{ const max=el.scrollHeight-el.clientHeight;
@@ -1895,7 +1909,7 @@ function startAutoScroll(){
     const now=performance.now(); const dt=Math.min(0.1,(now-last)/1000); last=now;
     if(AS_DWELL>0){ AS_DWELL-=dt; }
     else {
-      AS_PHASE += AS_DIR*(dt/AS_CYCLE);
+      AS_PHASE += AS_DIR*(dt/WALL_CYCLE);
       if(AS_PHASE>=1){ AS_PHASE=1; AS_DIR=-1; AS_DWELL=2.8; }        // all at bottom — pause, then up
       else if(AS_PHASE<=0){ AS_PHASE=0; AS_DIR=1; AS_DWELL=2.8; }    // all at top — pause, then down
     }
