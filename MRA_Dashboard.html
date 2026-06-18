@@ -1387,6 +1387,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.75", date:"2026-06-18", title:"Employee of the Month: change name / pause without code", items:[
+    "You can now change the Employee-of-the-Month name or pause it yourself — no code change. An optional eotm.txt (pushed next to data.js): first line = the winner's name (sets the caption), or the word \"off\" pauses it. Push-Photo.bat now sends eotm.png (photo) + eotm.txt (name/on-off) together." ] },
   { rev:"3.74", date:"2026-06-18", title:"Employee of the Month: always-on badge + photo", items:[
     "Added a small always-on 🏆 Employee of the Month badge (photo + name) in the corner of the wall view, between the every-5-min pop-ups. Photo uses eotm.png (falls back to eotm.jpg), so either format works." ] },
   { rev:"3.73", date:"2026-06-18", title:"Wall view: all tiles scroll in unison", items:[
@@ -1653,19 +1655,32 @@ function toggleWall(btn){
 }
 /* ---------- Employee of the Month: centered card on the wall/TV view, every 5 min ----------
    Swap monthly: change EOTM.name and replace the eotm.jpg image (bump ?v=). */
-const EOTM = { name: "John", photo: "eotm.png?v=20260618" };
-function eotmSetup(){   // set photo + name on BOTH the pop-up card and the always-on badge
+const EOTM = { name: "John", photo: "eotm.png?v=20260618", on: true };
+// Optional eotm.txt (pushed up next to data.js) controls the name + on/off with NO
+// code change: first line = the winner's name (turns it ON); the word "off" (or an
+// empty file) PAUSES it. If eotm.txt is absent, the defaults above are used.
+function eotmLoadConfig(){
+  return fetch('eotm.txt?cb='+Date.now()).then(r=>{ if(!r.ok) throw 0; return r.text(); }).then(t=>{
+    t=(t||'').trim(); const low=t.toLowerCase();
+    if(!t || ['off','none','pause','paused','hide','no','disable','disabled'].indexOf(low)>=0){ EOTM.on=false; }
+    else { EOTM.on=true; EOTM.name=(t.split(/[\r\n]+/)[0]||'').trim()||EOTM.name; }
+  }).catch(()=>{}).then(()=>eotmSetup());
+}
+function eotmSetup(){   // set photo + name on BOTH the pop-up card and the always-on badge (or hide when paused)
+  const b=document.getElementById('eotmBadge'); if(b) b.style.display = EOTM.on ? '' : 'none';
+  if(!EOTM.on){ const el=document.getElementById('eotm'); if(el) el.classList.remove('show'); return; }
   ['eotmImg','eotmBadgeImg'].forEach(id=>{ const im=document.getElementById(id); if(im && !im.getAttribute('src')) im.src=EOTM.photo; });
   ['eotmName','eotmBadgeName'].forEach(id=>{ const n=document.getElementById(id); if(n) n.textContent=EOTM.name; });
 }
 function eotmShow(){
-  if(!document.body.classList.contains('wall')) return;   // wall/TV view only
+  if(!document.body.classList.contains('wall') || !EOTM.on) return;   // wall/TV view only, and not paused
   const el=document.getElementById('eotm'); if(!el) return;
   eotmSetup();
   el.classList.add('show');
   clearTimeout(el._et); el._et=setTimeout(()=>el.classList.remove('show'), 10000);
 }
-setInterval(eotmShow, 5*60*1000);
+setInterval(()=>{ eotmLoadConfig().then(eotmShow); }, 5*60*1000);   // refresh name/on-off, then show
+eotmLoadConfig();   // initial: apply name/on-off + populate the badge
 // Per-screen size control: a zoom slider + S/M/L presets, remembered per device (like the theme).
 function ensureWallCtl(){
   if(document.getElementById('wallCtl')) return;
