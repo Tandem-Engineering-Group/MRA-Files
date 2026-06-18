@@ -6,6 +6,12 @@
 <title>MRA Shop Floor — Live Dashboard</title>
 <link rel="icon" type="image/png" href="logo.png">
 <link rel="apple-touch-icon" href="logo.png">
+<!-- Leaflet (unit map). Loaded from CDN; if it can't load, the map degrades gracefully and the rest of the dashboard is unaffected. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
   :root{
     --bg:#0b0e13; --panel:#161c26; --panel2:#1d2632; --line:#2a3543;
@@ -558,6 +564,17 @@
   @media(max-width:1500px){ .kpis{grid-template-columns:repeat(4,1fr)} }
   @media(max-width:1100px){ .grid{grid-template-columns:1fr} .g-gutter{width:130px;flex-basis:130px} }
 
+  /* ----------  Unit map (Leaflet)  ---------- */
+  .mappanel h2{ margin-bottom:10px }
+  .maplegend{ font-size:10px; color:var(--faint); font-weight:400; letter-spacing:0; text-transform:none; margin-left:8px }
+  .maplegend .dot{ display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:middle; margin:0 2px 0 8px; border:1px solid rgba(0,0,0,.4) }
+  .unitmap{ width:100%; height:230px; border-radius:12px; overflow:hidden; background:var(--panel2); border:1px solid var(--line) }
+  .unitmap-fallback{ display:flex; align-items:center; justify-content:center; height:100%; color:var(--muted); font-size:12.5px; text-align:center; padding:0 22px }
+  .leaflet-container{ background:#0b0e13; font:inherit }
+  #mapModal .mapmodal-inner{ background:var(--panel); border:1px solid var(--line); border-radius:16px; width:94vw; max-width:1400px; height:90vh; padding:14px 16px 16px; position:relative; display:flex; flex-direction:column }
+  #mapModal .mapmodal-inner h3{ font-size:18px; font-weight:800; margin:0 0 10px }
+  .unitmap-big{ flex:1; width:100%; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--panel2) }
+
   /* ----------  Phone pass — auto-reflow on small screens (no device detection; width-based)  ---------- */
   @media(max-width:760px){
     /* Header: compact; the tab row becomes a full-width horizontal scroll strip */
@@ -588,6 +605,9 @@
     .gwinslider{ width:92px }
     .gantt{ overflow-x:auto }
     .g-gutter{ width:108px; flex-basis:108px }
+    /* Map: shorter strip + near-full-screen modal on a phone */
+    .unitmap{ height:180px }
+    #mapModal .mapmodal-inner{ width:calc(100vw - 12px); height:94vh; padding:12px 10px }
     /* Modals fill the screen (override the inline max-widths) */
     .modal{ max-width:none !important; width:calc(100vw - 18px) !important; padding:18px 16px; max-height:90vh }
     .modal h3{ font-size:17px }
@@ -822,6 +842,13 @@
       <span class="flagpick" title="Filter by flag"><input type="hidden" id="fioFlag"><button type="button" class="fp on" onclick="document.getElementById('fioFlag').value='';selFP(this);setFioFlag()" title="Any flag">All</button><button type="button" class="fp" onclick="document.getElementById('fioFlag').value='mra';selFP(this);setFioFlag()" title="At the MRA facility"><span class="mrahome" style="margin-left:0">MRA</span></button><button type="button" class="fp" onclick="document.getElementById('fioFlag').value='plant';selFP(this);setFioFlag()" title="In Michigan"><svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-3px"><path fill="#2f6fe0" d="M8 22 H17 Q20 22 20 19 V10 Q20 3 13.5 3 Q8 3 8 9 V11 Q3.5 11 3.5 14.5 Q3.5 18 8 17.5 V19 Q8 22 8 22 Z"/></svg></button><button type="button" class="fp" onclick="document.getElementById('fioFlag').value='can';selFP(this);setFioFlag()" title="Canadian asset">🍁</button></span>
       <a class="editbtn" href="https://secure.fleetio.com/8cf2193b5d/dashboard" target="_blank" rel="noopener" title="Open the full Fleetio app">↗ Open in Fleetio</a>
     </div>
+    <div class="panel mappanel">
+      <h2>🗺 Unit Map
+        <span class="maplegend"><span class="dot" style="background:#e04826"></span>at MRA<span class="dot" style="background:#2f6fe0"></span>in Michigan<span class="dot" style="background:#7b8794"></span>elsewhere · <span id="mapMiniFleetioCount"></span></span>
+        <button class="expandbtn" style="margin-left:auto" onclick="openUnitMap()" title="Open the full interactive map — zoom, pan, click a unit">⛶ Expand map</button>
+      </h2>
+      <div class="unitmap" id="mapMiniFleetio"></div>
+    </div>
     <div class="kpis" id="fleetioKpis"></div>
     <div class="panel" id="fp-search">
       <h2>🔎 Find Open Fleetio Items <span class="count" id="fSearchCount"></span>
@@ -882,6 +909,13 @@
         <input id="eqSearch" class="eqsearch" type="search" placeholder="Find equipment or J#…" oninput="renderEquipment()" title="Search equipment by name, description or job # (e.g. J1557)" />
         <span class="flagpick" title="Filter by flag"><input type="hidden" id="eqFlag"><button type="button" class="fp on" onclick="document.getElementById('eqFlag').value='';selFP(this);renderEquipment()" title="All equipment">All</button><button type="button" class="fp" onclick="document.getElementById('eqFlag').value='mra';selFP(this);renderEquipment()" title="At the MRA facility"><span class="mrahome" style="margin-left:0">MRA</span></button><button type="button" class="fp" onclick="document.getElementById('eqFlag').value='plant';selFP(this);renderEquipment()" title="In Michigan"><svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-3px"><path fill="#2f6fe0" d="M8 22 H17 Q20 22 20 19 V10 Q20 3 13.5 3 Q8 3 8 9 V11 Q3.5 11 3.5 14.5 Q3.5 18 8 17.5 V19 Q8 22 8 22 Z"/></svg></button><button type="button" class="fp" onclick="document.getElementById('eqFlag').value='can';selFP(this);renderEquipment()" title="Canadian asset">🍁</button></span>
       </div>
+      <div style="margin:2px 0 16px">
+        <div style="display:flex; align-items:center; margin-bottom:8px; font-size:13px; letter-spacing:1.4px; color:var(--muted); font-weight:700">🗺 UNIT MAP
+          <span class="maplegend"><span class="dot" style="background:#e04826"></span>at MRA<span class="dot" style="background:#2f6fe0"></span>in Michigan<span class="dot" style="background:#7b8794"></span>elsewhere · <span id="mapMiniEquipCount"></span></span>
+          <button class="expandbtn" style="margin-left:auto" onclick="openUnitMap()" title="Open the full interactive map — equipment is placed at the location of the unit(s) on its job">⛶ Expand map</button>
+        </div>
+        <div class="unitmap" id="mapMiniEquip"></div>
+      </div>
       <div class="eqgrid" id="eqGrid"></div>
     </div>
   </div>
@@ -897,6 +931,13 @@
         <select id="fleetType" onchange="renderFleet()"></select>
         <span class="flagpick" title="Filter by flag"><input type="hidden" id="fleetFlag"><button type="button" class="fp on" onclick="document.getElementById('fleetFlag').value='';selFP(this);renderFleet()" title="All units">All</button><button type="button" class="fp" onclick="document.getElementById('fleetFlag').value='mra';selFP(this);renderFleet()" title="At the MRA facility"><span class="mrahome" style="margin-left:0">MRA</span></button><button type="button" class="fp" onclick="document.getElementById('fleetFlag').value='plant';selFP(this);renderFleet()" title="In Michigan"><svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-3px"><path fill="#2f6fe0" d="M8 22 H17 Q20 22 20 19 V10 Q20 3 13.5 3 Q8 3 8 9 V11 Q3.5 11 3.5 14.5 Q3.5 18 8 17.5 V19 Q8 22 8 22 Z"/></svg></button><button type="button" class="fp" onclick="document.getElementById('fleetFlag').value='can';selFP(this);renderFleet()" title="Canadian asset">🍁</button></span>
         <button class="expandbtn" id="fleetIssues" onclick="this.classList.toggle('on');renderFleet()" title="Show only units with expired or soon-expiring compliance">⚠ Compliance issues only</button>
+      </div>
+      <div style="margin:2px 0 14px">
+        <div style="display:flex; align-items:center; margin-bottom:8px; font-size:13px; letter-spacing:1.4px; color:var(--muted); font-weight:700">🗺 UNIT MAP
+          <span class="maplegend"><span class="dot" style="background:#e04826"></span>at MRA<span class="dot" style="background:#2f6fe0"></span>in Michigan<span class="dot" style="background:#7b8794"></span>elsewhere · <span id="mapMiniFleetCount"></span></span>
+          <button class="expandbtn" style="margin-left:auto" onclick="openUnitMap()" title="Open the full interactive map — zoom, pan, click a unit for details">⛶ Expand map</button>
+        </div>
+        <div class="unitmap" id="mapMiniFleet"></div>
       </div>
       <div class="fltwrap">
         <table class="flt">
@@ -974,6 +1015,16 @@
       <div id="gfsCap"></div>
       <div class="gantt" id="gfsGantt"></div>
       <div class="legend" id="gfsLegend" style="margin-top:12px"></div>
+    </div>
+  </div>
+  <!-- Big unit map (pops from the ⛶ Expand button on Fleet / Fleetio / Equipment) -->
+  <div class="modal-overlay" id="mapModal" onclick="closeUnitMap(event)">
+    <div class="mapmodal-inner">
+      <button class="modal-close" onclick="closeUnitMap()" title="Close (Esc)">×</button>
+      <h3>🗺 Unit Map
+        <span class="maplegend"><span class="dot" style="background:#e04826"></span>at MRA<span class="dot" style="background:#2f6fe0"></span>in Michigan<span class="dot" style="background:#7b8794"></span>elsewhere<span class="dot" style="background:#7b8794;opacity:.45"></span>stale fix · <span id="mapBigCount"></span></span>
+      </h3>
+      <div class="unitmap-big" id="mapBig"></div>
     </div>
   </div>
   <div class="barpop" id="barPop" onmouseenter="popHold()" onmouseleave="popHoverOut()"></div>
@@ -1436,6 +1487,8 @@ const GENERAL_HELP = `
     <p>The <span class="k">Rev … · What's new</span> button at the very bottom of the page opens the change log — every batch of updates, newest first. Check it after an update to see what changed.</p></div>
   <div class="hsec"><h4>㉒ 📱 On your phone</h4>
     <p>The dashboard reshapes itself for a phone automatically — no app, nothing to switch on. The tabs become a <b>swipeable strip</b>, the KPI cards go <b>two-across</b>, the Floor bays <b>stack</b> into one column, and the Projects search/sort go full-width with the Gantt scrolling sideways in its own box. Just open the same link in your phone's browser (tip: add it to your home screen for one-tap access). The TV/wall view and desktop look exactly as before.</p></div>
+  <div class="hsec"><h4>㉓ 🗺 Unit Map</h4>
+    <p>The <span class="k">FLEET</span>, <span class="k">FLEETIO</span> and <span class="k">EQUIPMENT</span> tabs each show a <b>live map</b> of where the units are (GPS from Samsara). A small map sits at the top; hit <span class="k">⛶ Expand map</span> to pop it full-screen to pan/zoom and click a pin for that unit's details (type, location, last fix, open Fleetio items). Pins are colored by location: <b style="color:#e04826">orange = at the MRA facility</b>, <b style="color:#2f6fe0">blue = elsewhere in Michigan</b>, grey = out of state; a faded pin means the GPS fix is <b>stale</b> (no recent report). Units that pack together (e.g. the MRA yard) <b>cluster</b> into a number that spreads apart as you zoom in. Equipment is placed at the location of the unit(s) on its job.</p></div>
 `;
 const FLEETIO_HELP = `
   <h3>The <span class="mra">FLEETIO</span> tab — fleet maintenance</h3>
@@ -1466,6 +1519,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.85", date:"2026-06-18", title:"🗺 Unit map on Fleet / Fleetio / Equipment", items:[
+    "New live map of where the units are (GPS from Samsara): a small map at the top of the FLEET, FLEETIO and EQUIPMENT tabs, plus an ⛶ Expand button that pops it full-screen to pan/zoom and click a pin for that unit's details. Pins are colored by location (orange = at MRA, blue = elsewhere in Michigan, grey = out of state; faded = stale GPS fix) and cluster together where units pack in. Built on a dark map that matches the dashboard." ] },
   { rev:"3.84", date:"2026-06-18", title:"Phone-friendly layout", items:[
     "The dashboard now auto-reflows on a phone (width-based, no app to install): the tabs become a swipeable strip, the KPI cards go two-across, Floor bays stack into one column, the Projects search/sort go full-width with the Gantt scrolling in its own box, and pop-ups fill the screen. Desktop and the TV/wall view are unchanged." ] },
   { rev:"3.83", date:"2026-06-18", title:"\"Program Development\" replaces \"PM\"", items:[
@@ -1715,6 +1770,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   const em=document.getElementById('editModal'); if(em) em.classList.remove('show');
   const etm=document.getElementById('editTaskModal'); if(etm) etm.classList.remove('show');
   document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop();
+  const mm=document.getElementById('mapModal'); if(mm) mm.classList.remove('show');
 } });
 document.addEventListener('click',e=>{ const p=document.getElementById('barPop');
   if(p && p.classList.contains('show') && !p.contains(e.target) && !(e.target.closest && e.target.closest('.g-bar'))) closeBarPop(); });
@@ -4255,6 +4311,85 @@ function renderHistory(){
   }).join('') + (results.length>80?`<div class="hist-hint">Showing first 80 of ${results.length} — refine your search to narrow.</div>`:'');
 }
 
+/* ====================== Unit Map (Leaflet) ======================
+   Small map strip at the top of Fleet / Fleetio / Equipment + a big pop-out (⛶ Expand).
+   Loads from a CDN; if Leaflet or the tiles can't load, it degrades to a friendly message
+   and the rest of the dashboard is unaffected. */
+// Paste your MapTiler key between the quotes to use MapTiler's dark map (restrict the key to the
+// mrashopdash domain in your MapTiler account — it's a public client key, safe to ship). Blank = Carto dark.
+const MAPTILER_KEY='';
+function mapTileLayer(){
+  if(MAPTILER_KEY){
+    return L.tileLayer('https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key='+MAPTILER_KEY,
+      { tileSize:512, zoomOffset:-1, minZoom:2, maxZoom:20, crossOrigin:true,
+        attribution:'© <a href="https://www.maptiler.com/">MapTiler</a> © OpenStreetMap contributors' });
+  }
+  return L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    { subdomains:'abcd', minZoom:2, maxZoom:19, attribution:'© OpenStreetMap, © CARTO' });
+}
+const MAP_COLORS={ mra:'#e04826', mi:'#2f6fe0', out:'#7b8794' };
+// Every located unit (has lat/lng), with display info + a location-status color key + stale flag.
+function locatedUnits(){
+  const D=window.MRA_DATA||{};
+  const locs=(D.fleetio&&D.fleetio.locations)||{};
+  const roster=(D.fleetio&&D.fleetio.fleet)||[];
+  const byKey={}; roster.forEach(v=>{ byKey[_normKey(v.f)]=v; });
+  const out=[];
+  Object.keys(locs).forEach(k=>{ const l=locs[k]; if(!l||l.lat==null||l.lng==null) return;
+    const lat=+l.lat, lng=+l.lng; if(!isFinite(lat)||!isFinite(lng)) return;
+    const v=byKey[_normKey(k)]||{};
+    const status = atMra(k) ? 'mra' : (atPlant(k) ? 'mi' : 'out');
+    const stale = l.atISO ? ((Date.now()-Date.parse(l.atISO)) > 45*86400000) : false;
+    out.push({ key:k, f:(v.f||k), t:(v.t||''), mk:(v.mk||''), tour:(v.tour||''),
+      lat, lng, yard:l.yard||'', place:l.place||'', atISO:l.atISO||null,
+      open:((+v.oi||0)+(+v.ow||0)), can:isCanadian({rs:v.rs,nm:v.nm,m:v.mk}), status, stale });
+  });
+  return out;
+}
+const _UMAPS={};   // container id -> {map, layer}
+function _mapFallback(id){ const el=document.getElementById(id); if(el && el.dataset.fb!=='1'){ el.dataset.fb='1';
+  el.innerHTML='<div class="unitmap-fallback">🗺 The map needs an internet connection to load its tiles. Everything else on the dashboard works without it.</div>'; } }
+function ensureUnitMap(id, big){
+  if(typeof L==='undefined' || !L.map){ _mapFallback(id); return null; }
+  if(_UMAPS[id]) return _UMAPS[id];
+  const el=document.getElementById(id); if(!el) return null;
+  const map=L.map(el, { center:[42.51,-83.10], zoom: big?9:8, scrollWheelZoom:true, worldCopyJump:true });
+  mapTileLayer().addTo(map);
+  const layer = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius:44, spiderfyOnMaxZoom:true }) : L.layerGroup());
+  layer.addTo(map);
+  _UMAPS[id]={ map, layer };
+  return _UMAPS[id];
+}
+function fillUnitMap(id, big){
+  const m=ensureUnitMap(id, big); if(!m) return 0;
+  m.layer.clearLayers();
+  const units=locatedUnits(), pts=[];
+  units.forEach(u=>{
+    const mk=L.circleMarker([u.lat,u.lng], { radius: big?7:5, weight:1, color:'#0b0e13',
+      fillColor:(MAP_COLORS[u.status]||MAP_COLORS.out), fillOpacity:(u.stale?0.45:0.95) });
+    const ago=u.atISO?fleetAgo(u.atISO):'';
+    mk.bindPopup('<div style="min-width:140px;font-size:12px;line-height:1.5">'
+      +'<b>'+esc(String(u.f))+'</b> '+esc(u.t||'')+(u.can?' 🍁':'')
+      +(u.mk?'<br>'+esc(u.mk):'')
+      +(u.tour?'<br><span style="color:#666">'+esc(u.tour)+'</span>':'')
+      +'<br>📍 '+esc(u.yard||u.place||'—')+(ago?' · '+esc(ago):'')+(u.stale?' <b style="color:#c2410c">(stale)</b>':'')
+      +(u.open?'<br>'+u.open+' open Fleetio item(s)':'')
+      +(u.status==='mra'?'<br><b style="color:#e04826">At the MRA facility</b>':'')
+      +'</div>');
+    m.layer.addLayer(mk); pts.push([u.lat,u.lng]);
+  });
+  if(big && pts.length){ try{ m.map.fitBounds(pts,{ padding:[30,30], maxZoom:11 }); }catch(e){} }
+  setTimeout(()=>{ try{ m.map.invalidateSize(); }catch(e){} }, 60);
+  const c=document.getElementById(id+'Count'); if(c) c.textContent=units.length+' located';
+  return units.length;
+}
+const _MINI_BY_VIEW={ fleet:'mapMiniFleet', fleetio:'mapMiniFleetio', equipment:'mapMiniEquip' };
+function refreshMiniMap(view){ const id=_MINI_BY_VIEW[view]; if(id) fillUnitMap(id, false); }
+function openUnitMap(){ const el=document.getElementById('mapModal'); if(!el) return; el.classList.add('show');
+  setTimeout(()=>fillUnitMap('mapBig', true), 90); }
+function closeUnitMap(e){ if(!e || (e.target && (e.target.id==='mapModal' || (e.target.classList&&e.target.classList.contains('modal-close'))))){
+  const el=document.getElementById('mapModal'); if(el) el.classList.remove('show'); } }
+
 function setView(v){
   VIEW=v; try{localStorage.setItem('mra_view',v);}catch(e){}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
@@ -4265,6 +4400,7 @@ function setView(v){
   document.getElementById('fleetView').classList.toggle('hidden',v!=='fleet');
   document.getElementById('historyView').classList.toggle('hidden',v!=='history');
   if(v==='history') renderHistory();
+  if(_MINI_BY_VIEW[v]) setTimeout(()=>refreshMiniMap(v), 40);   // mount/refresh the unit map once the tab is visible
 }
 function setRange(m){
   RANGE=m; try{localStorage.setItem('mra_range',JSON.stringify(m));}catch(e){}
