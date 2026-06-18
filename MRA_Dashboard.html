@@ -1247,7 +1247,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
     <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show done</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). Name variants are merged into one lane (e.g. <b>MasterWraps + Wrap Team → Wrap Team</b>, the <b>Electrician</b> spellings → <b>Electricians</b>), and a shared <b>A / B</b> assignment shows under both A's and B's lanes.</p></div>
   <div class="hsec"><h4>④ᶜ ✉ Daily Shop Letter</h4>
-    <p>In the FLOOR <span class="k">☰ Actions</span> menu, <span class="k">✉ Daily Letter</span> writes a clean end-of-day shop update — what's in the bays + open counts, open tasks per crew, trailers coming back to MRA in the next 14 days, projects at-risk + milestones due this week, and fleet service flags. Pick a <b>date</b>, then <b>📋 Copy text</b> to paste it into an email or <b>🖨 Print / PDF</b>. No login needed.</p></div>
+    <p>In the FLOOR <span class="k">☰ Actions</span> menu, <span class="k">✉ Daily Letter</span> writes a clean end-of-day shop update — each bay's job with its <b>open task lines</b>, a <b>Recently Completed (last 7 days)</b> list, open tasks per crew, trailers coming back to MRA in the next 14 days, projects at-risk + milestones due this week, and fleet service flags. Pick a <b>date</b>, then <b>📋 Copy text</b> to paste it into an email or <b>🖨 Print / PDF</b>. No login needed.</p></div>
   <div class="hsec"><h4>⑤ 👥 Team Capacity (Projects tab)</h4>
     <p>Groups every open <b>Project Task</b> by the person it's <i>assigned</i> to, most-loaded first, with a due-date chip
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
@@ -1336,6 +1336,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.65", date:"2026-06-18", title:"Daily Letter: open + completed task detail", items:[
+    "The ✉ Daily Letter now lists the actual <b>open tasks</b> under each bay (not just a count) and adds a <b>Recently Completed — last 7 days</b> section (tasks closed with a date, newest first, with who + close date). So it shows what got done and what's still open." ] },
   { rev:"3.64", date:"2026-06-18", title:"Resource Schedule: merge Maintenance + MRA Design", items:[
     "More assignee lanes merged in the Crew / Resource Schedule: <b>Doug / Doug Cooley + Maintenance → Maintenance</b>, and <b>Steve K + MRA Design → MRA Design</b>. (The matching workbook name cleanup is on the to-do list.)" ] },
   { rev:"3.63", date:"2026-06-18", title:"✉ Daily Shop Letter", items:[
@@ -2331,12 +2333,21 @@ function buildNightLetter(dateISO){
   const isHeld=b=>/next\s*up|on\s*hold|off.?site/i.test(b||"");
   const live=j=>j.category!=="leave" && (j.status||"").toLowerCase()!=="shipped";
   const jobs=(D.jobs||[]).filter(live);
-  const opensOf=j=>{ const arr=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>cleanTask(t.t,false)):(j.openTasks||[]).map(tk=>cleanTask(tk,false)); return arr.filter(Boolean); };
+  const openLinesOf=j=>{
+    if(j.tasks&&j.tasks.length) return j.tasks.filter(t=>!t.done).map(t=>{const d=cleanTask(t.t,false); return d?(d+(t.who?` — ${t.who}`:'')):'';}).filter(Boolean);
+    return (j.openTasks||[]).map(tk=>cleanTask(tk,false)).filter(Boolean);
+  };
   const order=(D.physicalBays||[]);
   const phys=order.filter(b=>!isParking(b)&&!isHeld(b));
-  // floor: jobs sitting in real bays, with their open-task counts
+  // floor: jobs sitting in real bays, with their open task lines
   let onFloor=[], totalOpen=0;
-  phys.forEach(b=>{ jobs.filter(j=>(j.bay||"")===b).forEach(j=>{ const o=opensOf(j); totalOpen+=o.length; onFloor.push({bay:b, j, open:o.length}); }); });
+  phys.forEach(b=>{ jobs.filter(j=>(j.bay||"")===b).forEach(j=>{ const o=openLinesOf(j); totalOpen+=o.length; onFloor.push({bay:b, j, openList:o}); }); });
+  // tasks completed in the last 7 days (only those with a logged close date)
+  const compRecent=[];
+  jobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done||!t.cl) return;
+    const age=Math.round((parseISO(today)-parseISO(t.cl))/DAY);
+    if(age>=0&&age<=7){ const d=cleanTask(t.t,false); if(d) compRecent.push({jobNum:j.jobNum,project:j.project,t:d,who:t.who,cl:t.cl}); } }));
+  compRecent.sort((a,b)=>(b.cl||'').localeCompare(a.cl||''));
   // open tasks per crew (same routing as the queues)
   const CREWS=[{label:'Sal',re:/\bsal\b/i},{label:'Wrap Team',re:/wrap|w2 graphic|\bw2\b/i},{label:'Electricians',re:/electr|beyer/i}];
   const KNOWN=new RegExp(CREWS.map(g=>g.re.source).join("|"),"i");
@@ -2370,12 +2381,18 @@ function buildNightLetter(dateISO){
   L.push(`Here's where the shop stands. We have ${onFloor.length} build${onFloor.length===1?'':'s'} in the bays with ${totalOpen} open task${totalOpen===1?'':'s'}.`);
   L.push('');
   L.push('ON THE FLOOR');
-  if(onFloor.length) onFloor.forEach(x=>{ const dt=(x.j.startISO||x.j.completionISO)?` (${fmtMDY(x.j.startISO)}–${fmtMDY(x.j.completionISO)})`:'';
-    L.push(`  • ${x.bay}: ${x.j.project}${x.j.jobNum?' ['+x.j.jobNum+']':''} — ${x.open} open${dt}`); });
+  if(onFloor.length) onFloor.forEach(x=>{ const dt=(x.j.startISO||x.j.completionISO)?`  (${fmtMDY(x.j.startISO)}–${fmtMDY(x.j.completionISO)})`:'';
+    L.push(`  ${x.bay} · ${x.j.project}${x.j.jobNum?' ['+x.j.jobNum+']':''}${dt} — ${x.openList.length} open`);
+    x.openList.slice(0,10).forEach(o=>L.push(`     • ${o}`));
+    if(x.openList.length>10) L.push(`     • …and ${x.openList.length-10} more`); });
   else L.push('  • No active builds in the bays.');
   const park=jobs.filter(j=>isParking(j.bay)), held=jobs.filter(j=>isHeld(j.bay));
   if(park.length) L.push(`  • Parking Lot: ${park.length} unit${park.length===1?'':'s'}`);
   if(held.length) L.push(`  • Next Up / On Hold: ${held.length}`);
+  L.push('');
+  L.push('RECENTLY COMPLETED — LAST 7 DAYS'+(compRecent.length?`  (${compRecent.length})`:''));
+  if(compRecent.length) compRecent.slice(0,30).forEach(c=>L.push(`  • ${c.project}${c.jobNum?' ['+c.jobNum+']':''}: ${c.t}${c.who?' — '+c.who:''}  (closed ${fmtMDY(c.cl)})`));
+  else L.push('  • Nothing logged closed in the last 7 days.');
   L.push('');
   L.push('OPEN TASKS BY CREW');
   CREWS.forEach(c=>L.push(`  • ${c.label} — ${crewCount[c.label]}`));
