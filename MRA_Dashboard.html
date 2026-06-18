@@ -407,6 +407,9 @@
   .g-d{position:absolute; top:50%; transform:translateY(-50%); font-size:9px; color:#fff; opacity:.92; z-index:3; pointer-events:none; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.55)}
   .g-d0{left:6px} .g-d1{right:6px}
   .g-mid{position:absolute; left:0; right:0; text-align:center; font-size:9.5px; color:#fff; opacity:.92; z-index:2; pointer-events:none}
+  /* dates rendered just OUTSIDE a too-narrow bar (so every bar still shows its range) */
+  .g-dout{position:absolute; top:50%; transform:translateY(-50%); font-size:9px; color:var(--muted); white-space:nowrap; padding-left:6px; z-index:3; pointer-events:none}
+  .g-dout-l{padding-left:0; padding-right:6px; text-align:right}
   .g-bay{align-self:flex-start; margin-top:3px; font-size:9px; font-weight:700; background:rgba(34,197,94,.16); color:#86efac; border:1px solid rgba(34,197,94,.5); border-radius:10px; padding:1px 7px; white-space:nowrap}
   .ktag{font-size:9px; font-weight:700; padding:1px 6px; border-radius:10px; margin-left:5px; vertical-align:middle; white-space:nowrap}
   .kproj{background:rgba(59,130,246,.18); color:#93c5fd; border:1px solid rgba(59,130,246,.5)}
@@ -626,6 +629,7 @@
           <button class="expandbtn" id="crewDoneBtn" onclick="toggleCrewDone(this)" title="Include completed tasks too">Show done</button>
           <span class="gwinwrap" title="Zoom — how much time the schedule shows at once">🔍<input id="crewWinSlider" type="range" min="0" max="100" value="50" oninput="setCrewWin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year at once"><span id="crewWinLab" class="gwinlab"></span></span>
           <span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="crewPanSlider" type="range" min="0" max="100" value="50" oninput="setCrewPan(this.value)" class="gwinslider" title="Scroll the window left (earlier) or right (later) — zoom stays the same"></span>
+          <button class="expandbtn" onclick="openGantt('crew')" title="Full-screen detailed view">⛶ Expand</button>
         </div>
       </h2>
       <div class="gantt" id="crewGantt"></div>
@@ -1182,7 +1186,7 @@ let CREW_PAN=null, _cwT0=0, _cwT1=0, _cwDays=120;
 let CREW_DONE=false; try{ CREW_DONE=localStorage.getItem('mra_crew_done')==='1'; }catch(e){}
 let TEAMFILTER='all';
 try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
-let GFS=null;              // full-screen gantt: 'floor' | 'projects' | null
+let GFS=null;              // full-screen gantt: 'floor' | 'projects' | 'crew' | null
 let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
@@ -1314,6 +1318,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.59", date:"2026-06-18", title:"Gantt dates on narrow bars + Resource Schedule full-screen", items:[
+    "Every Gantt now shows a bar's date range even when the bar is too narrow to fit it inside — the dates render just outside the bar instead of disappearing. Applies everywhere (Projects, full-screen, Crew / Resource Schedule).",
+    "The new 📅 Crew / Resource Schedule (shop board) now has a ⛶ Expand to full-screen, with the same resource picker, Show-done, and zoom/scroll controls." ] },
   { rev:"3.58", date:"2026-06-18", title:"Shop board: Crew / Resource Schedule (longer-term plan)", items:[
     "New <b>📅 Crew / Resource Schedule</b> panel on the FLOOR board, under the crew queues. Pick <b>any</b> resource (MRA Shop, Electrician, Wrap Team, a person…) from the dropdown and see every project they're booked on as a Gantt (one bar per project = their booked span, standard zoom/scroll + today line) plus a full <b>dated task list</b> below (soonest first, active / upcoming / past-due). Pulls from the project schedule's Assigned-To + Start/Finish dates — a longer-term planning view to complement the short-term queues. <i>Tip: names come straight from the project file, so standardizing assignees (Electrician→Electricians, Wrap Team→MasterWraps) will tidy the picker.</i>" ] },
   { rev:"3.57", date:"2026-06-18", title:"Schedule builder: pick one of three detail levels", items:[
@@ -2506,13 +2513,20 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
       const ttl = escA(`${r.label||''}${r.sub?' — '+r.sub:''}\n${fmtMDY(r.startISO)} – ${fmtMDY(r.endISO)}${r.pct!=null?'  ·  '+r.pct+'% complete':''}`);
       const showPct = (r.pct!=null && g.width>9);
       let inner = (r.pct!=null?`<div class="g-fill" style="width:${r.pct}%;background:${r.color}"></div>`:'');
-      if(opts.dates && g.width>18){   // overlay start/end dates on wide enough bars; pct/label centered
+      let outside='';
+      if(opts.dates && g.width>18){   // wide bar: dates inside (start left, end right)
         inner += `<span class="g-d g-d0">${esc(fmtMDY(r.startISO))}</span><span class="g-d g-d1">${esc(fmtMDY(r.endISO))}</span>`
               + (showPct ? `<span class="g-mid">${r.pct}%</span>` : (r.barLabel?`<span class="g-mid">${esc(r.barLabel)}</span>`:''));
+      } else if(opts.dates){          // narrow bar: dates won't fit inside -> show the range just OUTSIDE, so EVERY bar shows its dates
+        inner += `<span class="g-barlabel">${esc(r.barLabel||'')}</span>` + (showPct?`<span class="g-pct">${r.pct}%</span>`:'');
+        const lbl = esc(fmtMDY(r.startISO))+' – '+esc(fmtMDY(r.endISO));
+        outside = ((g.left+g.width)>78)   // near the right edge? put the label to the LEFT of the bar instead
+          ? `<span class="g-dout g-dout-l" style="right:${(100-g.left).toFixed(2)}%">${lbl}</span>`
+          : `<span class="g-dout" style="left:${(g.left+g.width).toFixed(2)}%">${lbl}</span>`;
       } else {
         inner += `<span class="g-barlabel">${esc(r.barLabel||'')}</span>` + (showPct?`<span class="g-pct">${r.pct}%</span>`:'');
       }
-      bar=`<div class="g-bar${r.conflict?' conflict':''}${r.done?' done':''}"${onclk} style="${styleAttr}" title="${ttl}">${inner}</div>`;
+      bar=`<div class="g-bar${r.conflict?' conflict':''}${r.done?' done':''}"${onclk} style="${styleAttr}" title="${ttl}">${inner}</div>${outside}`;
     } else bar=`<div class="g-out">— outside range —</div>`;
     const ms=(r.milestones||[]).map(m=>{const p=msPos(m.dateISO,win);
       return p==null?'':`<div class="g-ms" style="left:${p}%" title="${esc(m.name)} · ${fmtMDY(m.dateISO)}"></div>`;}).join('');
@@ -3850,33 +3864,15 @@ function setGpan(v){ const span=_panT1-_panDays*DAY-_panT0; if(span<=0) return;
 /* ---------- Crew / Resource Schedule (shop board): longer-term planning ----------
    Pulls each assignee's dated tasks from the project schedule, one bar per project
    (their booked span) + a full task list. Own zoom/pan, independent of the Projects tab. */
-function setCrewWho(v){ CREW_WHO=v||null; try{localStorage.setItem('mra_crew_who',CREW_WHO||'');}catch(e){}
-  CREW_PAN=null; if(window.MRA_DATA) renderCrewSched(window.MRA_DATA); }
-function setCrewWin(d){ CREW_WIN_DAYS=Math.max(7,Math.min(365,Math.round(d))); try{localStorage.setItem('mra_crew_win',String(CREW_WIN_DAYS));}catch(e){}
-  const gl=document.getElementById('crewWinLab'); if(gl) gl.textContent=gwinLabel(CREW_WIN_DAYS);
-  if(window.MRA_DATA) renderCrewSched(window.MRA_DATA); }
-function setCrewPan(v){ const span=_cwT1-_cwDays*DAY-_cwT0; if(span<=0) return;
-  CREW_PAN=_cwT0 + (Math.max(0,Math.min(100,+v))/100)*span;
-  if(window.MRA_DATA) renderCrewSched(window.MRA_DATA); }
-function toggleCrewDone(btn){ CREW_DONE=!CREW_DONE; try{localStorage.setItem('mra_crew_done',CREW_DONE?'1':'0');}catch(e){}
-  if(btn) btn.classList.toggle('on',CREW_DONE); if(window.MRA_DATA) renderCrewSched(window.MRA_DATA); }
-function renderCrewSched(D){
-  const sel=document.getElementById('crewPick'); if(!sel) return;
-  const gEl=document.getElementById('crewGantt'), lEl=document.getElementById('crewList'), cEl=document.getElementById('crewCount');
+// Shared crew computation (used by the inline shop-board panel AND the full-screen view).
+function crewData(D){
   const projects=(D.projects||[]).slice();
-  // distinct assignees that actually carry dated project tasks, busiest first
   const cnt={};
   projects.forEach(p=>(p.tasks||[]).forEach(t=>{ const w=(t.who||'').trim();
     if(w && t.startISO && t.finISO) cnt[w]=(cnt[w]||0)+1; }));
   const names=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||a.localeCompare(b));
-  const doneBtn=document.getElementById('crewDoneBtn'); if(doneBtn) doneBtn.classList.toggle('on',CREW_DONE);
-  if(!names.length){ sel.innerHTML='<option value="">(no dated project tasks yet)</option>';
-    if(gEl) gEl.innerHTML=''; if(lEl) lEl.innerHTML='<div class="empty">No assignee dates in the project file yet — add Start/Finish + Assigned To on the Project Tasks sheet.</div>';
-    if(cEl) cEl.textContent=''; return; }
-  if(!CREW_WHO || names.indexOf(CREW_WHO)<0) CREW_WHO=names[0];
-  sel.innerHTML=names.map(n=>`<option value="${escA(n)}"${n===CREW_WHO?' selected':''}>${esc(n)} (${cnt[n]})</option>`).join('');
+  if(names.length && (!CREW_WHO || names.indexOf(CREW_WHO)<0)) CREW_WHO=names[0];
   projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
-  // group the selected resource's dated tasks by project
   const groups=[]; let tlo=Infinity, thi=-Infinity;
   projects.forEach(p=>{
     const ts=(p.tasks||[]).filter(t=>(t.who||'').trim()===CREW_WHO && t.startISO && t.finISO && (CREW_DONE||!t.done));
@@ -3885,27 +3881,29 @@ function renderCrewSched(D){
     ts.forEach(t=>{ const a=parseISO(t.startISO).getTime(), b=parseISO(t.finISO).getTime(); if(a<s)s=a; if(b>e)e=b; });
     groups.push({p, tasks:ts, s, e}); if(s<tlo)tlo=s; if(e>thi)thi=e;
   });
-  // window — standard rules: default start = 7 days before today; zoom = CREW_WIN_DAYS; pan = CREW_PAN
+  return {names, cnt, groups, tlo, thi};
+}
+// Window — standard rules: default start = 7 days before today; zoom = CREW_WIN_DAYS; pan = CREW_PAN.
+function crewWin(D, tlo, thi){
   const t=parseISO(D.todayISO), defStart=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime();
   if(!isFinite(tlo)){ tlo=defStart; thi=defStart; }
   tlo=Math.min(tlo,defStart); thi=Math.max(thi,defStart)+10*DAY;
   const days=CREW_WIN_DAYS, maxStart=Math.max(tlo, thi-days*DAY);
-  const startMs = (CREW_PAN!=null) ? Math.max(tlo,Math.min(CREW_PAN,maxStart)) : Math.max(tlo,Math.min(defStart,maxStart));
-  const win=buildWindow(new Date(startMs),days);
+  const startMs=(CREW_PAN!=null)?Math.max(tlo,Math.min(CREW_PAN,maxStart)):Math.max(tlo,Math.min(defStart,maxStart));
   _cwT0=tlo; _cwT1=thi; _cwDays=days;
-  { const zl=document.getElementById('crewWinSlider'); if(zl) zl.value=_d2s(days); const lab=document.getElementById('crewWinLab'); if(lab) lab.textContent=gwinLabel(days);
-    const ps=document.getElementById('crewPanSlider'); if(ps){ const span=maxStart-tlo; ps.disabled=(span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
-  // Gantt: one bar per project (their booked span there)
-  const rows=groups.map(g=>({label:g.p.name, sub:g.tasks.length+' task'+(g.tasks.length>1?'s':''),
+  return {win:buildWindow(new Date(startMs),days), maxStart, startMs, days, tlo};
+}
+function crewRows(groups, win){    // one bar per project (their booked span there)
+  return groups.map(g=>({label:g.p.name, sub:g.tasks.length+' task'+(g.tasks.length>1?'s':''),
       startISO:localISO(g.s), endISO:localISO(g.e), color:g.p._color, barLabel:''}))
     .filter(r=>barGeom(r.startISO,r.endISO,win))
     .sort((a,b)=>(a.startISO||'').localeCompare(b.startISO||''));
-  if(gEl) renderGantt(gEl, rows, win, {dates:true});
-  // List: every dated task, soonest first
-  const today=D.todayISO, items=[];
-  groups.forEach(g=>g.tasks.forEach(tk=>items.push({proj:g.p.name, t:tk})));
+}
+function crewListHTML(groups, today){   // every dated task, soonest first
+  const items=[]; groups.forEach(g=>g.tasks.forEach(tk=>items.push({proj:g.p.name, t:tk})));
   items.sort((a,b)=>(a.t.startISO||'').localeCompare(b.t.startISO||''));
-  if(lEl) lEl.innerHTML = items.length ? items.map(x=>{ const tk=x.t;
+  if(!items.length) return {html:`<div class="empty">No ${CREW_DONE?'':'open '}dated tasks for ${esc(CREW_WHO||'')}.</div>`, count:0};
+  const html=items.map(x=>{ const tk=x.t;
     const past=tk.finISO&&tk.finISO<today&&!tk.done;
     const badge = tk.done?'<span class="badge grey">done</span>'
       : past?'<span class="badge red">past due</span>'
@@ -3913,8 +3911,38 @@ function renderCrewSched(D){
     return `<div class="row${tk.done?' done':''}"><div><div class="lead">${esc(tk.t||'(task)')}${tk.ml==='Yes'?' <span style="color:var(--amber)">◆</span>':''}</div>`+
       `<div class="meta">${esc(x.proj)} · ${fmtMDY(tk.startISO)} → ${fmtMDY(tk.finISO)}${tk.st?' · '+esc(tk.st):''}</div></div>`+
       `<div class="right">${badge}</div></div>`;
-  }).join('') : `<div class="empty">No ${CREW_DONE?'':'open '}dated tasks for ${esc(CREW_WHO)}.</div>`;
-  if(cEl) cEl.textContent = CREW_WHO+' · '+items.length+' task'+(items.length===1?'':'s')+' · '+groups.length+' project'+(groups.length===1?'':'s');
+  }).join('');
+  return {html, count:items.length};
+}
+function crewPickHTML(id, names, cnt){
+  return `<select id="${id}" class="fassign" style="max-width:230px" onchange="setCrewWho(this.value)" title="Pick a crew or person — see every project they're booked on, with dates">`
+    + names.map(n=>`<option value="${escA(n)}"${n===CREW_WHO?' selected':''}>${esc(n)} (${cnt[n]})</option>`).join('') + `</select>`;
+}
+function setCrewWho(v){ CREW_WHO=v||null; try{localStorage.setItem('mra_crew_who',CREW_WHO||'');}catch(e){}
+  CREW_PAN=null; if(window.MRA_DATA){ renderCrewSched(window.MRA_DATA); if(GFS==='crew') renderGanttFS(); } }
+function setCrewWin(d){ CREW_WIN_DAYS=Math.max(7,Math.min(365,Math.round(d))); try{localStorage.setItem('mra_crew_win',String(CREW_WIN_DAYS));}catch(e){}
+  if(window.MRA_DATA){ renderCrewSched(window.MRA_DATA); if(GFS==='crew') renderGanttFS(); } }
+function setCrewPan(v){ const span=_cwT1-_cwDays*DAY-_cwT0; if(span<=0) return;
+  CREW_PAN=_cwT0 + (Math.max(0,Math.min(100,+v))/100)*span;
+  if(window.MRA_DATA){ renderCrewSched(window.MRA_DATA); if(GFS==='crew') renderGanttFS(); } }
+function toggleCrewDone(btn){ CREW_DONE=!CREW_DONE; try{localStorage.setItem('mra_crew_done',CREW_DONE?'1':'0');}catch(e){}
+  if(window.MRA_DATA){ renderCrewSched(window.MRA_DATA); if(GFS==='crew') renderGanttFS(); } }
+function renderCrewSched(D){
+  const sel=document.getElementById('crewPick'); if(!sel) return;
+  const gEl=document.getElementById('crewGantt'), lEl=document.getElementById('crewList'), cEl=document.getElementById('crewCount');
+  const doneBtn=document.getElementById('crewDoneBtn'); if(doneBtn) doneBtn.classList.toggle('on',CREW_DONE);
+  const {names, cnt, groups, tlo, thi}=crewData(D);
+  if(!names.length){ sel.innerHTML='<option value="">(no dated project tasks yet)</option>';
+    if(gEl) gEl.innerHTML=''; if(lEl) lEl.innerHTML='<div class="empty">No assignee dates in the project file yet — add Start/Finish + Assigned To on the Project Tasks sheet.</div>';
+    if(cEl) cEl.textContent=''; return; }
+  sel.innerHTML=names.map(n=>`<option value="${escA(n)}"${n===CREW_WHO?' selected':''}>${esc(n)} (${cnt[n]})</option>`).join('');
+  const cw=crewWin(D, tlo, thi);
+  { const zl=document.getElementById('crewWinSlider'); if(zl) zl.value=_d2s(cw.days); const lab=document.getElementById('crewWinLab'); if(lab) lab.textContent=gwinLabel(cw.days);
+    const ps=document.getElementById('crewPanSlider'); if(ps){ const span=cw.maxStart-cw.tlo; ps.disabled=(span<=0); ps.value=span<=0?0:Math.round(100*(cw.startMs-cw.tlo)/span); } }
+  if(gEl) renderGantt(gEl, crewRows(groups, cw.win), cw.win, {dates:true});
+  const lr=crewListHTML(groups, D.todayISO);
+  if(lEl) lEl.innerHTML=lr.html;
+  if(cEl) cEl.textContent = CREW_WHO+' · '+lr.count+' task'+(lr.count===1?'':'s')+' · '+groups.length+' project'+(groups.length===1?'':'s');
 }
 // Projects filter: match project name, PM, or a job # found in any of its tasks.
 function projMatch(p){ if(!PFILTER) return true; const q=PFILTER;
@@ -4072,6 +4100,21 @@ function renderGanttFS(){
       +`<span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">click a bar for details</span>`;
     warnEl.style.color = pairs.length?'#fca5a5':'#86efac';
     warnEl.textContent = pairs.length? '⚠ '+pairs.length+' bay conflict'+(pairs.length>1?'s':'')+' (same inside spot, Bays 3-5)' : '✓ No inside-spot conflicts';
+  } else if(GFS==='crew'){
+    const {names, cnt, groups, tlo, thi}=crewData(D);
+    titleEl.textContent='Crew / Resource Schedule'+(CREW_WHO?(' — '+CREW_WHO):'');
+    levelEl.innerHTML = crewPickHTML('crewPickFS', names, cnt)
+      + `<div class="rb${CREW_DONE?' active':''}" onclick="toggleCrewDone(this)" title="Include completed tasks too">Show done</div>`;
+    rangeEl.innerHTML=
+      `<span class="gwinwrap" title="Zoom — how much time the schedule shows at once">🔍<input id="crewWinSliderFS" type="range" min="0" max="100" value="50" oninput="setCrewWin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year at once"><span id="crewWinLabFS" class="gwinlab"></span></span>`
+      +`<span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="crewPanSliderFS" type="range" min="0" max="100" value="50" oninput="setCrewPan(this.value)" class="gwinslider" title="Scroll the window left (earlier) or right (later) — zoom stays the same"></span>`;
+    if(!names.length){ cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No dated project tasks yet.</div></div></div>'; legEl.innerHTML=''; return; }
+    const cw=crewWin(D, tlo, thi);
+    { const zl=document.getElementById('crewWinSliderFS'); if(zl) zl.value=_d2s(cw.days); const lab=document.getElementById('crewWinLabFS'); if(lab) lab.textContent=gwinLabel(cw.days);
+      const ps=document.getElementById('crewPanSliderFS'); if(ps){ const span=cw.maxStart-cw.tlo; ps.disabled=(span<=0); ps.value=span<=0?0:Math.round(100*(cw.startMs-cw.tlo)/span); } }
+    renderGantt(cont, crewRows(groups, cw.win), cw.win, {dates:true});
+    legEl.innerHTML=`<span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span>`
+      +`<span style="color:var(--muted)">one bar per project (their booked span) · pick a resource above · full task dates in the list on the board</span>`;
   } else {
     titleEl.textContent='Project Schedules — Detailed';
     const withMs=(D.projects||[]).filter(p=>(p.milestones||[]).length);
