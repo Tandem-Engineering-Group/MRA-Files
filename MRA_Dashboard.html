@@ -216,8 +216,6 @@
   .asgbody{padding:10px; display:flex; flex-direction:column; gap:10px; overflow-y:auto}
   @media(max-width:1100px){ .assignees{grid-template-columns:1fr} }
   /* Wall (TV) mode: bound heights + scroll so bays + assignees fit one screen */
-  body.wall .bays{flex-wrap:wrap; align-items:flex-start}   /* wrap bay columns into rows -> each wider/bigger, uses the empty space */
-  body.wall .baycol{flex:1 1 31%; min-width:0}              /* ~3 columns per row; Front/Back stay stacked inside each */
   body.wall .baycol{max-height:44vh; overflow:hidden}
   body.wall .baycol:not(.parkcol) .bay-body{max-height:17vh; overflow-y:auto}   /* scroll each card's task list with its title PINNED (like the Parking Lot card) — don't scroll the whole column */
   body.wall .bay-body.autoscroll{max-height:30vh; overflow-y:auto}   /* combined Next Up / On Hold tile scrolls on its own */
@@ -237,6 +235,7 @@
   #wallCtl .wc-pct{color:var(--muted); margin-left:-2px}
   .bay-head .name .count{margin-left:6px}
   body.wall #floorView .grid, body.wall #floorGanttPanel, body.wall #crewSchedPanel{display:none}
+  body.wall #kpis{display:none}   /* hide the KPI strip on the TV — frees vertical room for the bays */
   .asgbody::-webkit-scrollbar, .baycol::-webkit-scrollbar{width:8px}
   .asgbody::-webkit-scrollbar-thumb, .baycol::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px}
   .salcard{background:var(--panel2); border:1px solid var(--line); border-radius:10px;
@@ -1389,8 +1388,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"3.76", date:"2026-06-18", title:"Wall view: bays wrap to rows + Auto-Fit", items:[
-    "📺 Wall view now wraps the bay columns into rows (Front/Back stay stacked per bay) so each column is wider and uses the empty bottom space — bigger, more readable. New ⤢ Fit button in the Size control sizes the whole board to fill the screen in one tap; the slider / S·M·L still fine-tune (remembered per monitor)." ] },
+  { rev:"3.77", date:"2026-06-18", title:"Wall view: single row + hide KPI strip", items:[
+    "Reverted the bay-wrap (two rows was too tall for a widescreen TV) — bays are back to one row. The top KPI strip (active / scheduled / overdue counts) is now hidden in 📺 wall view to free vertical space for the bays. Size slider / S·M·L still adjust per monitor." ] },
   { rev:"3.75", date:"2026-06-18", title:"Employee of the Month: change name / pause without code", items:[
     "You can now change the Employee-of-the-Month name or pause it yourself — no code change. An optional eotm.txt (pushed next to data.js): first line = the winner's name (sets the caption), or the word \"off\" pauses it. Push-Photo.bat now sends eotm.png (photo) + eotm.txt (name/on-off) together." ] },
   { rev:"3.74", date:"2026-06-18", title:"Employee of the Month: always-on badge + photo", items:[
@@ -1693,7 +1692,6 @@ function ensureWallCtl(){
     +'<button type="button" onclick="setWallZoom(90)" title="Small">S</button>'
     +'<button type="button" onclick="setWallZoom(115)" title="Medium">M</button>'
     +'<button type="button" onclick="setWallZoom(140)" title="Large">L</button>'
-    +'<button type="button" onclick="wallAutoFit()" title="Auto-Fit — size the whole board to fill THIS screen in one tap">⤢ Fit</button>'
     +'<input id="wallZoom" type="range" min="60" max="200" step="5" oninput="setWallZoom(this.value)" title="Board size on THIS screen — drag to scale the whole board bigger or smaller (remembered per monitor)">'
     +'<input id="wallZoomNum" type="number" min="50" max="250" step="5" onchange="setWallZoom(this.value)" onkeydown="if(event.key===\'Enter\'){setWallZoom(this.value);this.blur();}" title="Type an exact %"><span class="wc-pct">%</span>'
     +'<button type="button" onclick="setWallZoom(100)" title="Reset to 100%">↺</button>';
@@ -1705,18 +1703,6 @@ function applyWallZoom(){
   const ctl=document.getElementById('wallCtl'); if(ctl) ctl.style.display = WALL?'flex':'none';
   const s=document.getElementById('wallZoom'); if(s) s.value=WALL_ZOOM;
   const v=document.getElementById('wallZoomNum'); if(v && document.activeElement!==v) v.value=WALL_ZOOM;
-}
-// Auto-Fit: size the whole board so it fills this screen's height (biggest text that
-// still fits everything). Measures natural height at 100%, then sets the zoom.
-function wallAutoFit(){
-  if(!WALL) return;
-  document.body.style.zoom = 1;                      // measure at 100%
-  const need = document.body.scrollHeight, have = window.innerHeight;
-  let z = (need>0) ? (have/need)*0.98 : 1;           // fill height, tiny safety margin
-  // never shrink below 100% (the complaint is it's too small) — enlarge to fill; if there's
-  // more than one screen of content it stays big and the tiles scroll together.
-  z = Math.max(100, Math.min(220, Math.round(z*100/5)*5));
-  setWallZoom(z);
 }
 function setWallZoom(z){ z=parseInt(z,10)||100; WALL_ZOOM=Math.max(50,Math.min(250,z));
   try{ localStorage.setItem('mra_wall_zoom', String(WALL_ZOOM)); }catch(e){}
