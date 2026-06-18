@@ -101,6 +101,7 @@
   .gwinslider{width:120px; accent-color:var(--blue); vertical-align:middle}
   .gwinlab{min-width:34px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums}
   .projsearch{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 10px; font-size:12px; font-family:inherit; margin-left:12px; width:210px; font-weight:400}
+  .projsort{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:5px 8px; font-size:12px; font-family:inherit; margin-left:8px; font-weight:400}
   .mitten{display:inline-block; line-height:1; vertical-align:middle}
   /* Little orange "MRA" chip — shown only when a unit is physically AT the MRA facility (stronger than the Michigan mitten). */
   .mrahome{display:inline-block; background:var(--brand); color:#fff; font-weight:800; font-size:8px; letter-spacing:.2px; line-height:1; padding:2px 3px; border-radius:3px; vertical-align:middle; margin-left:2px; font-family:Arial,Helvetica,sans-serif}
@@ -716,6 +717,15 @@
 
     <div class="panel">
       <h2>Project Schedules — Gantt <input id="projSearch" type="search" placeholder="Find project or job #…" oninput="setPFilter(this.value)" class="projsearch" title="Filter the Gantt + Project Progress to matching builds — type a project name, PM, or job # (e.g. 1543). Clear to show all.">
+        <select id="projSort" class="projsort" onchange="setProjSort(this.value)" title="Order the projects top-to-bottom on the Gantt">
+          <option value="start">Sort: Start date</option>
+          <option value="finish">Sort: Finish date</option>
+          <option value="risk">Sort: At risk first</option>
+          <option value="pct">Sort: % complete</option>
+          <option value="bay">Sort: Bay</option>
+          <option value="pm">Sort: PM</option>
+          <option value="name">Sort: A–Z name</option>
+        </select>
         <div class="rangebtns" id="rangeBtns">
           <span class="gwinwrap" title="Zoom — how much time the Gantt shows at once">🔍<input id="gwinSlider" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year of the schedule at once"><span id="gwinLab" class="gwinlab"></span></span>
           <span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="gpanSlider" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider" title="Scroll: slide the window left (earlier) or right (later) through the timeline — the zoom level stays the same"></span>
@@ -1248,6 +1258,22 @@ let VIEW = 'floor';
 try{ VIEW = localStorage.getItem('mra_view')||'floor'; RANGE = JSON.parse(localStorage.getItem('mra_range'))||3; }catch(e){ RANGE=3; }
 let GWIN_DAYS=null; try{ const _gw=parseInt(localStorage.getItem('mra_gwin'),10); if(_gw>=7&&_gw<=365) GWIN_DAYS=_gw; }catch(e){}  // gantt zoom: continuous window length (days); overrides RANGE presets when set
 let PFILTER='';   // projects tab: filter by project name / PM / job # (matches task text)
+let PROJ_SORT='start'; try{ const _ps=localStorage.getItem('mra_proj_sort'); if(_ps) PROJ_SORT=_ps; }catch(e){}  // projects Gantt row order
+function setProjSort(v){ PROJ_SORT=v||'start'; try{localStorage.setItem('mra_proj_sort',PROJ_SORT);}catch(e){} if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS==='projects') renderGanttFS(); } }
+// Row order for the Projects Gantt (operates on project objects). Start date is the default.
+function projSortCmp(a,b){
+  const today=(window.MRA_DATA&&window.MRA_DATA.todayISO)||'';
+  const sa=(a.startISO||''), sb=(b.startISO||'');
+  switch(PROJ_SORT){
+    case 'finish': return (a.finishISO||'9999').localeCompare(b.finishISO||'9999') || sa.localeCompare(sb);
+    case 'pct':    return ((a.pct||0)-(b.pct||0)) || sa.localeCompare(sb);   // least complete first
+    case 'risk':   return (HEALTH_RANK[projHealth(a,today).state]-HEALTH_RANK[projHealth(b,today).state]) || (a.finishISO||'9999').localeCompare(b.finishISO||'9999');
+    case 'bay':  { const ba=projectBay(a.name)||'', bb=projectBay(b.name)||''; if(!ba!==!bb) return ba?-1:1; return ba.localeCompare(bb) || sa.localeCompare(sb); }   // bays in order, bayless last
+    case 'pm':   { const pa=(a.pm||'').trim(), pb=(b.pm||'').trim(); if(!pa!==!pb) return pa?-1:1; return pa.toLowerCase().localeCompare(pb.toLowerCase()) || sa.localeCompare(sb); }   // group by PM, no-PM last
+    case 'name':   return ((a.name||'').toLowerCase()).localeCompare((b.name||'').toLowerCase());
+    default:       return sa.localeCompare(sb);   // 'start'
+  }
+}
 let GPAN=null, _panT0=0, _panT1=0, _panDays=91;   // projects gantt horizontal pan — scroll the window without changing zoom
 // Crew / Resource Schedule (shop board): independent zoom/pan + selected assignee.
 let CREW_WHO=null; try{ CREW_WHO=localStorage.getItem('mra_crew_who')||null; }catch(e){}
@@ -1310,6 +1336,8 @@ const GENERAL_HELP = `
     <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a bar for a detail popover. The full-screen Projects view has the <b>same</b> <span class="k">🔍 zoom</span> and <span class="k">↔ scroll</span> sliders as the inline Gantt (below) — they stay in sync. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p></div>
   <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
     <p>On the Project Schedules Gantt (inline or full-screen) the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom. <span class="k">All</span> snaps to the whole timeline. Your zoom is remembered per device.</p></div>
+  <div class="hsec"><h4>⑥ᶜ ↕ Sort the Gantt</h4>
+    <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>PM</b> (groups each manager's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p></div>
   <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
     <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp; <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
     On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone, solid fill = % complete, faded = completed, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:var(--red)">red line</span> = today.</p></div>
@@ -1394,6 +1422,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.82", date:"2026-06-18", title:"Sort the Projects Gantt", items:[
+    "New Sort: dropdown next to the Gantt search box — order projects top-to-bottom by Start date (default), Finish date, At risk first, % complete, Bay, PM, or A–Z name. Remembered per device and applies to the full-screen view too. (The Project Progress list stays attention-first as before.)" ] },
   { rev:"3.81", date:"2026-06-18", title:"Filter by the MRA flag", items:[
     "The flag buttons on FLEET / FLEETIO / EQUIPMENT now include an MRA button next to the 🧤 mitten and 🍁 maple leaf — click it to list only the units/equipment physically at the MRA facility. (All · MRA · 🧤 In Michigan · 🍁 Canadian.)" ] },
   { rev:"3.80", date:"2026-06-18", title:"Wording: \"Completed\" everywhere", items:[
@@ -3245,16 +3275,16 @@ function renderProjects(D){
   { const sl=document.getElementById('gwinSlider'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(days);
     const ps=document.getElementById('gpanSlider'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
 
-  const dated=projects.filter(p=>p.startISO&&p.finishISO&&projMatch(p));
+  const dated=projects.filter(p=>p.startISO&&p.finishISO&&projMatch(p)).sort(projSortCmp);
   const rows=dated.map(p=>({_p:p})).map(({_p:p})=>({
     label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
     startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
     barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
     cls:'clickable', onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
     _has:!!barGeom(p.startISO,p.finishISO,win)
-  })).filter(r=>r._has)
-    .sort((a,b)=>(a.startISO||"").localeCompare(b.startISO||""));
+  })).filter(r=>r._has);
   renderGantt(document.getElementById('projGantt'), rows, win, {dates:true});
+  { const ss=document.getElementById('projSort'); if(ss) ss.value=PROJ_SORT; }
   syncMraHlBtns();
   const undated=projects.filter(p=>!p.startISO||!p.finishISO).map(p=>p.name);
   document.getElementById('projGanttNote').textContent=
@@ -4613,7 +4643,7 @@ function renderGanttFS(){
     { const sl=document.getElementById('gwinSliderFS'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLabFS'); if(gl) gl.textContent=gwinLabel(days);
       const ps=document.getElementById('gpanSliderFS'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
     const dated=projects.filter(p=>p.startISO&&p.finishISO && barGeom(p.startISO,p.finishISO,win) && projMatch(p))
-      .sort((a,b)=>(a.startISO||'').localeCompare(b.startISO||''));
+      .sort(projSortCmp);
     const rows=[];
     dated.forEach((p,i)=>{
       const hasMs=(p.milestones||[]).length>0, exp=expandedProjects.has(p.name), done=projStatus(p,today)==='done';
