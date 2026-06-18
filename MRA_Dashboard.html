@@ -275,6 +275,10 @@
   .petask.ismile .petask-t::before{content:"◆ "; color:var(--amber)}
   .petask-r{display:flex; align-items:center; gap:8px; white-space:nowrap}
   .petask-tools .ttool{display:inline-block}
+  .petask.petask-sub{margin-left:24px; border-left:2px solid var(--line); padding-left:8px}
+  .pesubcaret{display:inline-block; width:15px; cursor:pointer; color:var(--muted); font-size:11px}
+  .pesubcaret:hover{color:var(--txt)}
+  .pesubtick{display:inline-block; width:13px; color:var(--faint)}
   @media(max-width:1100px){ .saltasks{grid-template-columns:1fr} }
 
   /* Team capacity panel */
@@ -1211,7 +1215,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule built from that project's milestones &amp; dates — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
-    <p>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly.</p></div>
+    <p>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. <b>Subtasks</b> (the <b>Sub</b> column in the workbook) sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
     <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. The highlight is a clean <b>white outline</b>; adjacent tasks merge into one continuous band so it reads over any bar color. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
@@ -1251,6 +1255,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.53", date:"2026-06-18", title:"Project editor: collapsible subtasks", items:[
+    "The ✎ Edit Project Tasks editor now nests subtasks under their parent task — indented, with a ▾/▸ caret to collapse or expand them (an outline, like MS Project). Driven by the new 'Sub' column in the workbook; needs the updated Export-Data.ps1 running to feed it." ] },
   { rev:"3.52", date:"2026-06-18", title:"Flag picker shows the blue mitten", items:[
     "Swapped the flag dropdowns on FLEET / FLEETIO / EQUIPMENT for little buttons — All · 🧤(blue mitten) · 🍁 — so the picker shows the actual icons (a plain dropdown can't display an image). Click to filter; same behavior as before." ] },
   { rev:"3.51", date:"2026-06-17", title:"Flag picker label tidy-up", items:[
@@ -1909,6 +1915,7 @@ function submitAddJob(){
 /* ===================== Projects editor — add / edit / delete / complete project tasks ===================== */
 const PROJ_STATUS_OPTIONS = ['Not Started','In Progress','Completed','On Hold'];
 let PE_EXPANDED = new Set();   // phase sections currently expanded in the editor (default: all collapsed)
+let PE_SUBCLOSED = new Set();  // parent tasks whose subtasks are collapsed
 function projIsDone(t){ return !!(t && (t.done || /^completed$/i.test(t.st||''))); }
 function oProj(name){ return (((window.MRA_DATA||{}).projects)||[]).find(p=>p.name===name); }
 function projAssignees(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.who) s.add(t.who.trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
@@ -1975,7 +1982,7 @@ function renderProjTaskList(){
   if(PE_EXPANDED.size===0 && order.length===1) PE_EXPANDED.add(order[0]);   // a single phase opens by default
   list.innerHTML = order.map(ph=>{
     const open=PE_EXPANDED.has(ph), g=groups[ph], doneN=g.filter(projIsDone).length;
-    const rows=g.map(t=>{
+    const peRow=(t,opt)=>{ opt=opt||{};
       const predT=(t.pred!=null&&t.pred!=='' && byId[String(t.pred)])?byId[String(t.pred)]:null;
       const dates=[t.startISO?('▸ '+fmtMD(t.startISO)):'', t.finISO?('⤇ '+fmtMD(t.finISO)):''].filter(Boolean).join('  ');
       const meta=[ t.who?esc(t.who):'', dates, predT?('after: '+esc(predT.t)):'', /yes/i.test(t.ml||'')?'◆ milestone':'' ].filter(Boolean).join(' · ');
@@ -1983,16 +1990,30 @@ function renderProjTaskList(){
       const tools=projIsDone(t)
         ? `<span class="ttool reopen" ${idA} onclick="reopenProjTaskBtn(this)" title="Reopen">↩</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`
         : `<span class="ttool done" ${idA} onclick="completeProjTaskBtn(this)" title="Mark complete" style="color:var(--green)">✓</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`;
-      return `<div class="petask${projIsDone(t)?' isdone':''}${/yes/i.test(t.ml||'')?' ismile':''}"><div class="petask-main"><div class="petask-t">${esc(t.t||'(task)')}</div>`+
+      const lead = (opt.caret!=null) ? `<span class="pesubcaret" onclick="togglePeSub(event,'${escA(opt.pkey)}')" title="Collapse / expand subtasks">${opt.caret}</span>` : (opt.sub?'<span class="pesubtick">›</span>':'');
+      return `<div class="petask${opt.sub?' petask-sub':''}${projIsDone(t)?' isdone':''}${/yes/i.test(t.ml||'')?' ismile':''}"><div class="petask-main"><div class="petask-t">${lead}${esc(t.t||'(task)')}</div>`+
         (meta?`<div class="petask-m">${meta}</div>`:'')+`</div>`+
         `<div class="petask-r">${projStatusBadge(t)}<span class="petask-tools">${tools}</span></div></div>`;
-    }).join("");
+    };
+    // Nest subtasks (sub:true) under the nearest non-sub task above them; parents get a collapse caret.
+    let rows='', i=0;
+    while(i<g.length){
+      const t=g[i];
+      if(t.sub){ rows+=peRow(t,{sub:true}); i++; continue; }          // orphan subtask → show flat
+      const subs=[]; let j=i+1; while(j<g.length && g[j].sub){ subs.push(g[j]); j++; }
+      if(subs.length){ const pkey=ph+'|'+(t.id!=null&&t.id!==''?t.id:t.t), closed=PE_SUBCLOSED.has(pkey);
+        rows+=peRow(t,{caret:(closed?'▸':'▾'), pkey});
+        rows+=`<div class="pesubs"${closed?' style="display:none"':''}>`+subs.map(s=>peRow(s,{sub:true})).join('')+`</div>`;
+        i=j;
+      } else { rows+=peRow(t,{}); i++; }
+    }
     return `<div class="pephase" data-ph="${escA(ph)}" onclick="togglePhase(this)" title="Click to ${open?'collapse':'expand'}">`+
       `<span class="pecaret">${open?'▾':'▸'}</span>${esc(ph)} <span class="pephase-n">${g.length}${doneN?(' · '+doneN+' done'):''}</span></div>`+
       `<div class="pephase-body"${open?'':' style="display:none"'}>${rows}</div>`;
   }).join("");
 }
 function togglePhase(el){ const ph=el.dataset.ph; if(PE_EXPANDED.has(ph)) PE_EXPANDED.delete(ph); else PE_EXPANDED.add(ph); renderProjTaskList(); }
+function togglePeSub(ev,pkey){ ev.stopPropagation(); if(PE_SUBCLOSED.has(pkey)) PE_SUBCLOSED.delete(pkey); else PE_SUBCLOSED.add(pkey); renderProjTaskList(); }
 function peExpandAll(){ (window._peOrder||[]).forEach(ph=>PE_EXPANDED.add(ph)); renderProjTaskList(); }
 function peCollapseAll(){ PE_EXPANDED.clear(); renderProjTaskList(); }
 
