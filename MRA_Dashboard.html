@@ -467,6 +467,10 @@
   .tplinc .hint{color:var(--faint)}
   /* Crew / Resource Schedule list (shop board) */
   .crewlist{margin-top:11px; max-height:360px; overflow:auto; display:flex; flex-direction:column; gap:1px}
+  /* Fleetio quick-search */
+  .fsearchbox{width:100%; background:var(--panel2); border:1px solid var(--line); border-radius:9px; color:var(--txt); font-size:14px; padding:10px 12px; margin:2px 0 6px}
+  .fsearchbox:focus{outline:none; border-color:var(--blue)}
+  #fSearchResults{max-height:320px; overflow:auto; display:flex; flex-direction:column; gap:1px}
   #crewSchedPanel .rangebtns{gap:8px}
   #crewSchedPanel #crewDoneBtn.on{background:var(--brand); color:#fff; border-color:var(--brand)}
   .addrow2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
@@ -740,6 +744,13 @@
       <a class="editbtn" href="https://secure.fleetio.com/8cf2193b5d/dashboard" target="_blank" rel="noopener" title="Open the full Fleetio app">↗ Open in Fleetio</a>
     </div>
     <div class="kpis" id="fleetioKpis"></div>
+    <div class="panel" id="fp-search">
+      <h2>🔎 Find Open Fleetio Items <span class="count" id="fSearchCount"></span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">type a job #, unit, or person — open issues / work orders / service</span>
+      </h2>
+      <input id="fSearch" type="search" class="fsearchbox" placeholder="Search open items — e.g. J1543, 6160, Siemens, a name…" oninput="renderFleetSearch()" autocomplete="off">
+      <div id="fSearchResults"></div>
+    </div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="panel">
         <h2>📊 Service Backlog</h2>
@@ -1317,6 +1328,8 @@ const FLEETIO_HELP = `
   <div class="msub">Pulled live from Fleetio every ~15 minutes. Focused on what's open and what's coming due.</div>
   <div class="hsec"><h4>① The top numbers</h4>
     <p>Open Issues, Issues Overdue, Open Work Orders, Service Due Soon (next 21 days) and Service Overdue — straight from Fleetio. The little sub-line gives quick context (e.g., % overdue).</p></div>
+  <div class="hsec"><h4>①ᵇ 🔎 Find Open Fleetio Items</h4>
+    <p>Right under the tiles: type a <b>job #</b> (J1543), a <b>unit</b> (6160), a <b>project</b>, or a <b>person</b> and it instantly lists every open <b>issue / work order / service</b> item that matches — overdue first. Quick way to answer "what's open on this one?" without scrolling.</p></div>
   <div class="hsec"><h4>② 📊 At-a-glance charts</h4>
     <p><b>Service Backlog</b> donut = overdue (red) vs due-soon (amber). <b>Open Issues by Type</b> = your Fleetio issue labels, ranked.</p></div>
   <div class="hsec"><h4>③ Open Issues & Work Orders</h4>
@@ -1337,6 +1350,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.70", date:"2026-06-18", title:"FLEETIO: quick search for open items", items:[
+    "New 🔎 Find Open Fleetio Items search at the top of the FLEETIO tab (under the KPI tiles): type a job # (J1543), a unit (6160), a project, or a person and it instantly lists every open issue / work order / service item for it — overdue first." ] },
+  { rev:"3.69", date:"2026-06-18", title:"Crew queues: full edit tools per task", items:[
+    "The Sal / Wrap Team / Electricians queues now have the same per-task tools as the bay tiles — in edit mode each task shows ✎ edit (text, assignee, status, milestone, comments) and 🗑 delete alongside ✓ close. (Edit/delete work on structured Shop Tasks rows.)" ] },
   { rev:"3.68", date:"2026-06-18", title:"Floor bays show ALL jobs (no hidden collapse)", items:[
     "Bay cards now list every job in the bay. They used to show 2 and tuck the rest behind \"+N more in this bay\" — so in busy lanes (Parking Lot, Next Up) jobs looked missing even though they were there. Nothing is hidden now." ] },
   { rev:"3.67", date:"2026-06-18", title:"Resource Schedule: 🖨 Print (Gantt + list, one page)", items:[
@@ -2930,7 +2947,7 @@ function renderSal(D){
   };
   const card=(s)=>`<div class="salcard"><div class="sh">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?" · "+esc(s.jobNum):""}</div>`+
-    `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw);return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)}${esc(o.disp)}</li>`;}).join("")}</ol></div>`;
+    `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw);return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}</li>`;}).join("")}</ol></div>`;
   GROUPS.forEach(g=>{
     const cards=build(g.re), el=document.getElementById(g.id); if(!el) return;
     el.innerHTML = cards.length ? cards.map(card).join("") : `<div class="empty">No open ${esc(g.label)} tasks</div>`;
@@ -3386,6 +3403,35 @@ function renderFleetio(D){
   FTRAILERS=Object.values(tmap);
   renderTrailerCards();
   renderInBayFleetio(D);
+  renderFleetSearch();
+}
+// Quick search across ALL open Fleetio items (issues + work orders + service) by
+// job #, unit/asset, summary, or person. Type-to-filter; empty = prompt.
+function renderFleetSearch(){
+  const box=document.getElementById('fSearchResults'); if(!box) return;
+  const cnt=document.getElementById('fSearchCount');
+  const D=window.MRA_DATA||{}, F=D.fleetio||{}, today=D.todayISO;
+  const q=((document.getElementById('fSearch')||{}).value||'').trim().toLowerCase();
+  if(!q){ box.innerHTML=`<div class="empty">Start typing — a job # (J1543), a unit (6160), a project (Siemens), or a person — to pull up every open issue, work order &amp; service item for it.</div>`; if(cnt) cnt.textContent=''; return; }
+  const toks=q.split(/\s+/).filter(Boolean);
+  const hit=s=>{ const hay=(s||'').toLowerCase(); return toks.every(t=>hay.indexOf(t)>=0); };
+  const res=[];
+  (F.issues||[]).forEach(i=>{ if(hit([i.summary,i.detail,i.asset,i.jobNum,i.reporter,(i.assignees||[]).join(' '),i.priority].filter(Boolean).join(' ')))
+    res.push({k:'issue', lab:i.summary||('Issue #'+i.num), asset:i.asset, jobNum:i.jobNum, who:(i.assignees||[]).join(', '),
+      badge:i.overdue?'<span class="badge red">overdue</span>':'', rank:i.overdue?0:1}); });
+  (F.workOrders||[]).forEach(w=>{ if(hit([w.summary,w.detail,w.asset,w.jobNum,w.reporter].filter(Boolean).join(' ')))
+    res.push({k:'wo', lab:w.summary||('WO '+(w.num||'')), asset:w.asset, jobNum:w.jobNum, who:'',
+      badge:w.status?`<span class="badge blue">${esc(w.status)}</span>`:'', rank:2}); });
+  (F.service||[]).forEach(s=>{ if(hit([s.service,s.asset,s.jobNum].filter(Boolean).join(' '))){ const fs=fleetState(s.dueISO,today);
+    res.push({k:'svc', lab:s.service||'Service', asset:s.asset, jobNum:s.jobNum, who:'',
+      badge:fs.overdue?'<span class="badge red">overdue</span>':fs.soon?'<span class="badge amber">due soon</span>':(s.dueISO?`<span class="badge grey">${fmtMD(s.dueISO)}</span>`:''), rank:fs.overdue?0:3}); } });
+  res.sort((a,b)=>a.rank-b.rank);
+  if(cnt) cnt.textContent=res.length+' open';
+  if(!res.length){ box.innerHTML=`<div class="empty">No open Fleetio items match “${esc(q)}”.</div>`; return; }
+  const icon={issue:'⚠',wo:'📋',svc:'🔧'};
+  box.innerHTML=res.slice(0,60).map(r=>`<div class="row"><div><div class="lead">${icon[r.k]} ${esc(r.lab)}</div>`+
+    `<div class="meta">${esc(r.asset||'')}${r.jobNum?' · '+esc(r.jobNum):''}${r.who?' · 👤 '+esc(r.who):''}</div></div><div class="right">${r.badge}</div></div>`).join('')
+    + (res.length>60?`<div class="empty">+${res.length-60} more — refine your search</div>`:'');
 }
 
 // Renders the By-Trailer cards from FTRAILERS, honoring the search box + sort.
