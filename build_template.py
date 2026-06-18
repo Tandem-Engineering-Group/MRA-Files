@@ -5,15 +5,19 @@ Slim header (logo + title) + a tiny info block (Project / Job # / PM), then a ta
 table that MIRRORS the master 'Project Tasks' sheet — same columns AND the same look
 (dark header, gold milestone rows) so an upload/paste is an easy match.
 
-Task table = master cols A..N:
+Task table = master cols A..O:
     A=Project  B=Phase  C=Type  D=Task  E=Start  F=Finish  G=Duration
     H=Assigned To  I=Status  J=PM  K=Milestone  L=Comments  M=Task ID  N=Predecessor
+    O=Sub
 
 Only Project / Client and Project Manager are functionally required (Project & PM
 auto-fill down columns A & J; the importer also falls back to these). MRA Job # is
 optional (appended to the project name). Task ID (M) is system-assigned on import;
-Predecessor (N) is by Task ID — both shown greyed. Ships with 10 gold milestone rows
-(Milestone 1..10) each followed by 5 blank task rows.
+Predecessor (N) is by Task ID — both shown greyed. Sub (O) marks a row as a SUBTASK
+of the task above it: put an "x" there and the dashboard nests it under its parent
+(MS-Project style, collapsible). Ships with 10 gold milestone rows (Milestone 1..10)
+each followed by 3 blank task rows + 2 indented blank subtask rows (Sub pre-set to
+"x") so the parent → subtask pattern is built in and ready to fill.
 
 Import-Intake.ps1 reads this back (MIRROR layout: header A="Project" & D="Task").
 Change a label/column here -> update the matching reader in Import-Intake.ps1.
@@ -58,6 +62,7 @@ LISTS = {
                        "MasterWraps", "Electricians", "Vendor", "Medtronic",
                        "Learning Undefeated", "IXL/TSS", "Brinkbit",
                        "Siemens DI", "Heitek", "Other"]),
+    "H": ("Sub", ["x"]),
 }
 for col, (head, vals) in LISTS.items():
     lst[f"{col}1"] = head
@@ -65,9 +70,9 @@ for col, (head, vals) in LISTS.items():
         lst[f"{col}{i+2}"] = v
 lst.sheet_state = "veryHidden"
 
-# ---- Column widths (task table mirrors master A..N) -------------------------
+# ---- Column widths (task table mirrors master A..O) -------------------------
 widths = {"A": 26, "B": 18, "C": 13, "D": 42, "E": 11, "F": 11, "G": 9,
-          "H": 20, "I": 13, "J": 15, "K": 10, "L": 26, "M": 9, "N": 12}
+          "H": 20, "I": 13, "J": 15, "K": 10, "L": 26, "M": 9, "N": 12, "O": 7}
 for c, w in widths.items():
     ws.column_dimensions[c].width = w
 
@@ -86,12 +91,12 @@ if os.path.exists(logo_path):
 for r, h in {1: 22, 2: 20, 3: 6}.items():
     ws.row_dimensions[r].height = h
 
-ws.merge_cells("C1:N1")
+ws.merge_cells("C1:O1")
 t = ws["C1"]
 t.value = "PROJECT INTAKE  —  TASK SCHEDULE"
 t.font = Font(bold=True, size=18, color=ORANGE)
 t.alignment = Alignment(vertical="center")
-ws.merge_cells("C2:N2")
+ws.merge_cells("C2:O2")
 a = ws["C2"]
 a.value = "950 E Whitcomb Ave  ·  Madison Heights, MI 48071  ·  248.629.2929"
 a.font = Font(size=9, color=GREY)
@@ -136,7 +141,8 @@ field(f"B{INFO0+1}", f"D{INFO0+1}", title="Project Manager",
 HDR = INFO0 + 3
 ws.row_dimensions[HDR - 1].height = 8
 heads = ["Project", "Phase", "Type", "Task", "Start", "Finish", "Duration",
-         "Assigned To", "Status", "PM", "Milestone", "Comments", "Task ID", "Predecessor"]
+         "Assigned To", "Status", "PM", "Milestone", "Comments", "Task ID",
+         "Predecessor", "Sub"]
 LEFT_COLS = {1, 2, 4, 8, 10, 12}
 for c, h in enumerate(heads, start=1):
     cell = ws.cell(row=HDR, column=c, value=h)
@@ -148,19 +154,35 @@ for c, h in enumerate(heads, start=1):
     cell.border = box
 ws.row_dimensions[HDR].height = 24
 
-# ---- Body: 10 gold milestone rows, each followed by 5 blank task rows -------
+# ---- Body: 10 gold milestone rows, each followed by 3 blank task rows + 2 ----
+#      indented blank SUBTASK rows (Sub pre-set to "x") so the parent → subtask
+#      pattern is built in. Within each block (offsets after the milestone):
+#         1,2,3 = normal task slots   ·   4,5 = subtask slots (indented, Sub=x)
+SUB_FILL = "EEF2F7"   # very light blue-grey — sets the subtask slots apart
 DATA0 = HDR + 1
 NMILE, GAP = 10, 5
 STEP = GAP + 1
 mile_at = {DATA0 + i * STEP: i + 1 for i in range(NMILE)}
+sub_rows = set()
+for i in range(NMILE):
+    base = DATA0 + i * STEP
+    sub_rows.add(base + 4); sub_rows.add(base + 5)     # last 2 of each block
 LASTROW = DATA0 + NMILE * STEP + 60
 auto_fill = PatternFill("solid", fgColor=AUTO)
 gold_fill = PatternFill("solid", fgColor=GOLD)
+sub_fill = PatternFill("solid", fgColor=SUB_FILL)
 projF = '=IF($B$%d="","",$B$%d)' % (INFO0, INFO0)
 pmF = '=IF($B$%d="","",$B$%d)' % (INFO0 + 1, INFO0 + 1)
+sub_prompt = ('Subtask of the task above. Type the subtask here and keep the '
+              '"x" in the Sub column — the dashboard nests it (collapsible) '
+              'under its parent. Clear the "x" to make it a normal task.')
+sub_dv = DataValidation(allow_blank=True, showInputMessage=True,
+                        showErrorMessage=False, prompt=sub_prompt,
+                        promptTitle="Subtask")
+ws.add_data_validation(sub_dv)
 
 for r in range(DATA0, LASTROW):
-    for c in range(1, 15):     # A..N
+    for c in range(1, 16):     # A..O
         ws.cell(row=r, column=c).border = box
     ws.cell(row=r, column=1, value=projF)      # A Project (autofill)
     ws.cell(row=r, column=10, value=pmF)       # J PM (autofill)
@@ -172,13 +194,19 @@ for r in range(DATA0, LASTROW):
         ws.cell(row=r, column=4, value="Milestone %d" % n) # D Task
         ws.cell(row=r, column=9, value="Not Started")      # I Status
         ws.cell(row=r, column=11, value="Yes")             # K Milestone
-        for c in range(1, 15):
+        for c in range(1, 16):
             ws.cell(row=r, column=c).fill = gold_fill
     else:
         ws.cell(row=r, column=1).fill = auto_fill          # A grey (autofill)
         ws.cell(row=r, column=10).fill = auto_fill         # J grey (autofill)
         ws.cell(row=r, column=13).fill = auto_fill         # M Task ID (system)
         ws.cell(row=r, column=14).fill = auto_fill         # N Predecessor (system)
+        if r in sub_rows:
+            ws.cell(row=r, column=4).alignment = Alignment(indent=3)   # D indent
+            ws.cell(row=r, column=15, value="x")           # O Sub = x (pre-set)
+            sub_dv.add(ws.cell(row=r, column=4))           # click-prompt on Task
+            for c in (4, 15):
+                ws.cell(row=r, column=c).fill = sub_fill
 
 # ---- Dropdowns -------------------------------------------------------------
 def add_dv(col_letter, src, last=LASTROW - 1):
@@ -192,6 +220,7 @@ add_dv("C", "=Lists!$C$2:$C$10")   # Type
 add_dv("H", "=Lists!$G$2:$G$19")   # Assigned To
 add_dv("I", "=Lists!$D$2:$D$5")    # Status
 add_dv("K", "=Lists!$E$2:$E$3")    # Milestone
+add_dv("O", "=Lists!$H$2:$H$2")    # Sub (x / blank)
 dv_pm = DataValidation(type="list", formula1="=Lists!$F$2:$F$14",
                        allow_blank=True, showErrorMessage=False, showDropDown=False)
 ws.add_data_validation(dv_pm)

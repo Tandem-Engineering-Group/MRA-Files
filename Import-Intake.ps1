@@ -32,7 +32,9 @@ $Rejected  = Join-Path $Inbox  'Rejected'
 $Log       = Join-Path $ScriptDir 'import-log.txt'
 $SrcSheet  = 'Enter Here'
 $DstSheet  = 'Project Tasks'
-$NCOLS     = 12                     # columns A:L (Project ... Comments)
+$NCOLS     = 12                     # columns A:L (Project ... Comments) written 1:1
+$SUBCOL    = 15                     # master 'Project Tasks' col O = Sub (subtask flag)
+$LINELEN   = 13                     # row buffer: A:L (0..11) + Sub flag (12)
 
 $nsMain = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 $nsRel  = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
@@ -166,7 +168,7 @@ function Read-IntakeRows($path) {
                 $A = GVal $grid 'A' $r
                 $D = GVal $grid 'D' $r
                 if ($A -eq '' -and $D -eq '') { continue }
-                $line = New-Object 'object[]' $NCOLS
+                $line = New-Object 'object[]' $LINELEN
                 $line[0]=$A
                 $line[1]=GVal $grid 'B' $r
                 $line[2]=GVal $grid 'C' $r
@@ -179,6 +181,7 @@ function Read-IntakeRows($path) {
                 $line[9]=GVal $grid 'J' $r
                 $line[10]=GVal $grid 'K' $r
                 $line[11]=GRaw $grid 'L' $r
+                $line[12]=''                    # LEGACY layout has no Sub column
                 [void]$rows.Add($line)
             }
             return $rows
@@ -235,7 +238,9 @@ function Read-IntakeRows($path) {
                 # =IF(...) formula text), treat it as blank and use the info block.
                 if ($aProj -like '=*') { $aProj = '' }
                 if ($jPm   -like '=*') { $jPm   = '' }
-                $line = New-Object 'object[]' $NCOLS
+                $sub = GVal $grid 'O' $r                                          # Sub flag
+                if ($sub -like '=*') { $sub = '' }
+                $line = New-Object 'object[]' $LINELEN
                 $line[0]  = $(if ($aProj -ne '') { $aProj } else { $projOut })   # Project
                 $line[1]  = GVal $grid 'B' $r                                     # Phase
                 $line[2]  = GVal $grid 'C' $r                                     # Type
@@ -248,6 +253,7 @@ function Read-IntakeRows($path) {
                 $line[9]  = $(if ($jPm -ne '') { $jPm } else { $pm })            # PM
                 $line[10] = GVal $grid 'K' $r                                    # Milestone
                 $line[11] = GRaw $grid 'L' $r                                    # Comments
+                $line[12] = $(if ($sub -match '^[xX]') { 'x' } else { '' })      # Sub (col O)
                 [void]$rows.Add($line)
             }
             return $rows
@@ -257,7 +263,7 @@ function Read-IntakeRows($path) {
         for ($r = $hdr + 1; $r -le $maxRow; $r++) {
             $task = GVal $grid 'C' $r
             if ($task -eq '') { continue }            # skip skeleton phase rows w/ no task
-            $line = New-Object 'object[]' $NCOLS
+            $line = New-Object 'object[]' $LINELEN
             $line[0]  = $projOut                       # Project (info block)
             $line[1]  = GVal $grid 'A' $r              # Phase
             $line[2]  = GVal $grid 'B' $r              # Type
@@ -270,6 +276,7 @@ function Read-IntakeRows($path) {
             $line[9]  = $pm                            # PM (info block)
             $line[10] = GVal $grid 'I' $r             # Milestone
             $line[11] = GRaw $grid 'J' $r             # Comments
+            $line[12] = ''                            # BRANDED layout has no Sub column
             [void]$rows.Add($line)
         }
         return $rows
@@ -383,6 +390,12 @@ try {
                 } else {
                     $cell.Value = "$val"
                 }
+            }
+            # Sub flag -> master col O (only when set; keeps non-subtask rows clean).
+            $sub = $line[12]
+            if ($null -ne $sub -and "$sub" -ne '') {
+                $phase = "write row $row Sub (col $SUBCOL)"
+                $dst.Cells.Item($row, $SUBCOL).Value = 'x'
             }
         }
     }

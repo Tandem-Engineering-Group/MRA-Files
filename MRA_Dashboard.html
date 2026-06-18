@@ -633,7 +633,7 @@
       <button class="editbtn" onclick="openStatus()" title="One-click portfolio status — every active project's %, health, next gate and overdue items. Copy it into an email or print to PDF.">📤 Status Report</button>
       <span class="tbgroup">
         <span class="tblabel">📋 Project Intake:</span>
-        <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260617c" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx) — same columns & look as the schedule, so you can upload it, drop it in the Intake Inbox, or paste straight into Excel">⬇ Download Template</a>
+        <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260618" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx) — same columns & look as the schedule (now with a Sub column for subtasks), so you can upload it, drop it in the Intake Inbox, or paste straight into Excel">⬇ Download Template</a>
         <button class="editbtn" onclick="openUpload()" title="Upload a filled intake template right here — it loads into the schedule on the next ~15-min cycle">⬆ Upload Filled</button>
         <button class="editbtn" onclick="openIntakeHow()" title="Step-by-step: how to download, fill, and load a project">ⓘ How to</button>
       </span>
@@ -1185,7 +1185,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑧ How it stays live</h4>
     <div class="tip">Edit the workbook (<b>Input</b> = shop floor, <b>Project Tasks</b> = projects) and <b>save</b>. It pushes up <b>every 15 minutes</b> during the day — or run <b>dashboard.bat</b> for an instant update. <b>Never edit the dashboard or data.js by hand</b> — only the workbook.</div></div>
   <div class="hsec" id="help-intake"><h4>⑨ 📋 Add a project — anyone can, no Excel needed</h4>
-    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">⬇ Download Intake Template</span> and fill it in <b>offline</b> (one row per task — dropdowns are already set up). Type the <b>Project</b> and <b>PM</b> once in the boxes at the top; they auto-fill down every row. The template's columns now match the schedule exactly (<i>Project · Phase · Type · Task · Start · Finish · Duration · Assigned To · Status · PM · Milestone · Comments</i>), so you have three ways to load it:</p>
+    <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">⬇ Download Intake Template</span> and fill it in <b>offline</b> (one row per task — dropdowns are already set up). Type the <b>Project</b> and <b>PM</b> once in the boxes at the top; they auto-fill down every row. The template's columns now match the schedule exactly (<i>Project · Phase · Type · Task · Start · Finish · Duration · Assigned To · Status · PM · Milestone · Comments</i>). It also has a <b>Sub</b> column (far right): put an <b>x</b> there to make a row a <b>subtask</b> of the task above it (the board nests it, collapsible). The template ships with a couple of indented blank subtask slots under each block so the pattern is ready to fill. Three ways to load it:</p>
     <ul>
       <li><b>⬆ Upload Filled Template</b> (right on this tab) — pick your filled file; it's read in your browser, you see a preview, then send it. It lands on the board within ~15 minutes. <b>Name the project exactly the same as an existing one and it replaces that project</b> (a clean merge); a new name adds a new project.</li>
       <li><b>Drop it in the Intake Inbox folder</b> — it imports automatically and shows up here within ~15 minutes. No Excel, no IT.</li>
@@ -1257,6 +1257,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.55", date:"2026-06-18", title:"Intake template now supports subtasks", items:[
+    "The ⬇ Download Template now has a Sub column (mirrors the master) plus ready-made indented subtask slots — put an \"x\" in Sub and that row nests under the task above it (collapsible, MS-Project style). Upload, Intake-Inbox auto-import, and Paste→Values all carry the subtask flag through to the schedule." ] },
   { rev:"3.54", date:"2026-06-18", title:"Full-screen Gantt: same zoom + scroll sliders", items:[
     "The ⛶ Expand (full-screen) Project Gantt now has the same controls as the inline one — a 🔍 zoom slider (1 week → 1 year) and a ↔ scroll slider to pan the timeline left/right at the same zoom, plus All. The old 1mo/3mo/6mo buttons are gone; both views now stay in sync." ] },
   { rev:"3.53", date:"2026-06-18", title:"Project editor: collapsible subtasks", items:[
@@ -2286,13 +2288,15 @@ function upParse(bytes){
   for(let i=hdr+1;i<rows.length;i++){ const r=rows[i];
     const task=upNorm(mirror? r[3] : r[2]); if(!task) continue;
     let proj, phase, type, start, finish, dur, who, status, pm, ml, cm;
-    if(mirror){ proj=upNorm(r[0]); phase=upNorm(r[1]); type=upNorm(r[2]); start=r[4]; finish=r[5]; dur=upNorm(r[6]); who=upNorm(r[7]); status=upNorm(r[8]); pm=upNorm(r[9]); ml=upNorm(r[10]); cm=upNorm(r[11]); }
+    let sub="";
+    if(mirror){ proj=upNorm(r[0]); phase=upNorm(r[1]); type=upNorm(r[2]); start=r[4]; finish=r[5]; dur=upNorm(r[6]); who=upNorm(r[7]); status=upNorm(r[8]); pm=upNorm(r[9]); ml=upNorm(r[10]); cm=upNorm(r[11]); sub=upNorm(r[14]); }
     else { phase=upNorm(r[0]); type=upNorm(r[1]); start=r[3]; finish=r[4]; dur=upNorm(r[5]); who=upNorm(r[6]); status=upNorm(r[7]); ml=upNorm(r[8]); cm=upNorm(r[9]); proj=""; pm=""; }
-    if(/^=/.test(proj)) proj=""; if(/^=/.test(pm)) pm="";
+    if(/^=/.test(proj)) proj=""; if(/^=/.test(pm)) pm=""; if(/^=/.test(sub)) sub="";
     if(proj && !projName) projName=proj;
     if(pm && !pmName) pmName=pm;
     tasks.push({ task, phase, type, start:upDateISO(start), finish:upDateISO(finish), duration:dur,
-      assigned:who, status:status||"Not Started", milestone:/^y/i.test(ml)?"Yes":"", comments:cm, predecessor:"" });
+      assigned:who, status:status||"Not Started", milestone:/^y/i.test(ml)?"Yes":"", comments:cm, predecessor:"",
+      sub:/^x/i.test(sub)?"x":"" });
   }
   if(!projName){ msg.style.color="var(--red)"; msg.textContent="No project name found — fill the 'Project / Client' box at the top."; return; }
   if(!tasks.length){ msg.style.color="var(--red)"; msg.textContent="No task rows found in the file."; return; }
@@ -2328,7 +2332,7 @@ function submitUpload(){
     const p=(((window.MRA_DATA||{}).projects)||[]).find(x=>(x.name||'')===UP_DATA.project);
     UP_DATA.tasks.forEach((t,i)=>{ const obj={ id:'up'+Date.now()+'_'+i, t:t.task, phase:t.phase, type:t.type,
         who:t.assigned, startISO:t.start||null, finISO:t.finish||null, st:t.status, ml:t.milestone, cm:t.comments,
-        pred:'', done:/^completed$/i.test(t.status) };
+        pred:'', sub:t.sub?'x':'', done:/^completed$/i.test(t.status) };
       pendAdd({kind:'projTask', project:UP_DATA.project, obj:obj});
       if(p && !UP_DATA.replace){ if(!p.tasks) p.tasks=[]; p.tasks.push(obj); } });
     if(p){ if(typeof oRecomputeProject==='function') oRecomputeProject(p); }
