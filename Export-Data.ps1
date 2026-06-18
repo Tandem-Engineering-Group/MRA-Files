@@ -204,6 +204,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     $pDur      = ([string](Resolve-Cell $pc['G'] $shared)).Trim()
     $pTaskId   = ([string](Resolve-Cell $pc['M'] $shared)).Trim()   # Task ID  (col M)
     $pPred     = ([string](Resolve-Cell $pc['N'] $shared)).Trim()   # Predecessor (col N)
+    $pSub      = ([string](Resolve-Cell $pc['O'] $shared)).Trim()   # Sub (col O) — 'x' = subtask of the task above
     if ($pTaskId -match '^\d+\.0+$')  { $pTaskId  = $pTaskId  -replace '\.0+$','' }   # numeric cell safety
     if ($pDur -match '^\d+\.0+$') { $pDur = $pDur -replace '\.0+$','' }
     $psd = Get-CellDate $pc['E']
@@ -253,6 +254,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
         ml    = $pMile
         cm    = $pComments
         pred  = $pPred
+        sub   = ($pSub -match '^[xX]')
         done  = ($pStatus -eq 'Completed')
     })
 }
