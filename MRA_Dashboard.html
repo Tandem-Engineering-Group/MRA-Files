@@ -1176,7 +1176,9 @@ const GENERAL_HELP = `
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
     <span class="k">Everyone / People only</span> toggle hides crews & vendors — your choice is remembered.</p></div>
   <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
-    <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a bar for a detail popover. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p></div>
+    <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a bar for a detail popover. The full-screen Projects view has the <b>same</b> <span class="k">🔍 zoom</span> and <span class="k">↔ scroll</span> sliders as the inline Gantt (below) — they stay in sync. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p></div>
+  <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
+    <p>On the Project Schedules Gantt (inline or full-screen) the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom. <span class="k">All</span> snaps to the whole timeline. Your zoom is remembered per device.</p></div>
   <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
     <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp; <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
     On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone, solid fill = % complete, faded = completed, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:var(--red)">red line</span> = today.</p></div>
@@ -1255,6 +1257,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.54", date:"2026-06-18", title:"Full-screen Gantt: same zoom + scroll sliders", items:[
+    "The ⛶ Expand (full-screen) Project Gantt now has the same controls as the inline one — a 🔍 zoom slider (1 week → 1 year) and a ↔ scroll slider to pan the timeline left/right at the same zoom, plus All. The old 1mo/3mo/6mo buttons are gone; both views now stay in sync." ] },
   { rev:"3.53", date:"2026-06-18", title:"Project editor: collapsible subtasks", items:[
     "The ✎ Edit Project Tasks editor now nests subtasks under their parent task — indented, with a ▾/▸ caret to collapse or expand them (an outline, like MS Project). Driven by the new 'Sub' column in the workbook; needs the updated Export-Data.ps1 running to feed it." ] },
   { rev:"3.52", date:"2026-06-18", title:"Flag picker shows the blue mitten", items:[
@@ -3698,7 +3702,7 @@ function setGwin(d){ GWIN_DAYS=Math.max(7,Math.min(365,Math.round(d))); try{loca
 // Horizontal pan: scroll the visible window across the timeline at the SAME zoom (doesn't touch GWIN_DAYS).
 function setGpan(v){ const span=_panT1-_panDays*DAY-_panT0; if(span<=0) return;
   GPAN=_panT0 + (Math.max(0,Math.min(100,+v))/100)*span;
-  if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
+  if(window.MRA_DATA) renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); }
 // Projects filter: match project name, PM, or a job # found in any of its tasks.
 function projMatch(p){ if(!PFILTER) return true; const q=PFILTER;
   if((p.name||'').toLowerCase().indexOf(q)>=0) return true;
@@ -3862,17 +3866,29 @@ function renderGanttFS(){
     levelEl.innerHTML=`<div class="rb${expandedProjects.size===0?' active':''}" onclick="setGfsLevel(1)" title="Projects only">1 · Projects</div>`
       +`<div class="rb${allExp?' active':''}" onclick="setGfsLevel(2)" title="Projects + milestone gates">2 · + Milestones</div>`
       +`<div class="rb mraHlBtn${MRASHOP_HL?' active':''}" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects">🟧 MRA Shop</div>`;
-    rangeEl.innerHTML=[['1 mo',1],['3 mo',3],['6 mo',6],['All','all']].map(([lbl,v])=>
-      `<div class="rb${(v==='all'?'all':+v)===RANGE?' active':''}" onclick="setRange(${v==='all'?"'all'":v});renderGanttFS()">${lbl}</div>`).join('');
+    rangeEl.innerHTML=
+      `<span class="gwinwrap" title="Zoom — how much time the Gantt shows at once">🔍<input id="gwinSliderFS" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year of the schedule at once"><span id="gwinLabFS" class="gwinlab"></span></span>`
+      +`<span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="gpanSliderFS" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider" title="Scroll: slide the window left (earlier) or right (later) through the timeline — the zoom level stays the same"></span>`
+      +`<div class="rb${(GWIN_DAYS==null&&RANGE==='all')?' active':''}" data-m="all" onclick="setRange('all')" title="Show the entire timeline at once">All</div>`;
     const projects=(D.projects||[]).slice(); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
-    const t=parseISO(today), mStart=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7);
-    let days;
+    // Window: zoom (GWIN_DAYS / RANGE) sets the LENGTH; the pan slider (GPAN) scrolls it. Mirrors renderProjects so both stay in sync.
+    const t=parseISO(today);
+    const defStartMs=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime();
+    let tlo=defStartMs, thi=defStartMs;
+    projects.forEach(p=>{ const s=parseISO(p.startISO), f=parseISO(p.finishISO);
+      if(s&&s.getTime()<tlo) tlo=s.getTime(); if(f&&f.getTime()>thi) thi=f.getTime(); });
+    thi+=10*DAY;
+    let days, fullView=false;
     if(GWIN_DAYS!=null) days=GWIN_DAYS;
-    else if(RANGE==='all'){ let maxFin=mStart.getTime();
-      projects.forEach(p=>{const f=parseISO(p.finishISO); if(f&&f.getTime()>maxFin)maxFin=f.getTime();});
-      days=Math.max(31,Math.ceil((maxFin-mStart.getTime())/DAY)+20); }
+    else if(RANGE==='all'){ days=Math.max(31,Math.ceil((thi-tlo)/DAY)); fullView=true; }
     else days=Math.round(RANGE*30.4);
+    const maxStart=Math.max(tlo, thi-days*DAY);
+    const startMs = fullView ? tlo : (GPAN!=null ? Math.max(tlo,Math.min(GPAN,maxStart)) : Math.max(tlo,Math.min(defStartMs,maxStart)));
+    const mStart=new Date(startMs);
     const win=buildWindow(mStart,days);
+    _panT0=tlo; _panT1=thi; _panDays=days;
+    { const sl=document.getElementById('gwinSliderFS'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLabFS'); if(gl) gl.textContent=gwinLabel(days);
+      const ps=document.getElementById('gpanSliderFS'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
     const dated=projects.filter(p=>p.startISO&&p.finishISO && barGeom(p.startISO,p.finishISO,win) && projMatch(p))
       .sort((a,b)=>(a.startISO||'').localeCompare(b.startISO||''));
     const rows=[];
