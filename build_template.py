@@ -36,6 +36,7 @@ DARK = "1F2430"
 GREY = "6B7280"
 FIELD = "FFF7F4"   # very light orange tint for fill-in cells
 AUTO = "F3F4F6"    # light grey for auto-filled / system columns
+SUB_FILL = "EEF2F7"   # very light blue-grey — subtask slots + the subtask note banner
 
 wb = openpyxl.Workbook()
 ws = wb.active
@@ -137,8 +138,29 @@ label(f"A{INFO0+1}", "Project Manager:")
 field(f"B{INFO0+1}", f"D{INFO0+1}", title="Project Manager",
       prompt="The PM for this project — auto-fills down column J.")
 
+# ---- "How to" note banners (so people SEE & understand the two special rows) -
+def note_banner(r, text, fill):
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=15)
+    c = ws.cell(row=r, column=1, value=text)
+    c.fill = PatternFill("solid", fgColor=fill)
+    c.font = Font(size=10, bold=True, color=DARK)
+    c.alignment = Alignment(vertical="center", wrap_text=True, indent=1)
+    for cc in range(1, 16):
+        ws.cell(row=r, column=cc).border = box
+    ws.row_dimensions[r].height = 26
+
+note_banner(INFO0 + 2,
+    "◆  MILESTONES (the gold rows):  set  Milestone = Yes  for a key date / hard deadline "
+    "— they print on the schedule and show as ◆ gates on the dashboard.",
+    GOLD)
+note_banner(INFO0 + 3,
+    "↳  SUBTASKS:  put an  x  in the  Sub  column (far right →)  to make a row a sub-step "
+    "of the task ABOVE it — it shows indented & collapsible on the board. A few blank x-marked "
+    "subtask slots are already built in under each section.",
+    SUB_FILL)
+
 # ---- Task table header (dark band, like the master sheet) -------------------
-HDR = INFO0 + 3
+HDR = INFO0 + 5   # rows: 4-5 info · 6 milestone note · 7 subtask note · 8 spacer · 9 header
 ws.row_dimensions[HDR - 1].height = 8
 heads = ["Project", "Phase", "Type", "Task", "Start", "Finish", "Duration",
          "Assigned To", "Status", "PM", "Milestone", "Comments", "Task ID",
@@ -158,7 +180,6 @@ ws.row_dimensions[HDR].height = 24
 #      indented blank SUBTASK rows (Sub pre-set to "x") so the parent → subtask
 #      pattern is built in. Within each block (offsets after the milestone):
 #         1,2,3 = normal task slots   ·   4,5 = subtask slots (indented, Sub=x)
-SUB_FILL = "EEF2F7"   # very light blue-grey — sets the subtask slots apart
 DATA0 = HDR + 1
 NMILE, GAP = 10, 5
 STEP = GAP + 1
