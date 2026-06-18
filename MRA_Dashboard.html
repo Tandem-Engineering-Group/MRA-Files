@@ -568,12 +568,15 @@
   .mappanel h2{ margin-bottom:10px }
   .maplegend{ font-size:10px; color:var(--faint); font-weight:400; letter-spacing:0; text-transform:none; margin-left:8px }
   .maplegend .dot{ display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:middle; margin:0 2px 0 8px; border:1px solid rgba(0,0,0,.4) }
-  .unitmap{ width:100%; height:230px; border-radius:12px; overflow:hidden; background:var(--panel2); border:1px solid var(--line) }
+  /* position:relative + z-index confines Leaflet's internal layers (which use z-index up to ~1000) to
+     this box, so a mini map can't paint over the expand modal. */
+  .unitmap{ position:relative; z-index:0; width:100%; height:230px; border-radius:12px; overflow:hidden; background:var(--panel2); border:1px solid var(--line) }
   .unitmap-fallback{ display:flex; align-items:center; justify-content:center; height:100%; color:var(--muted); font-size:12.5px; text-align:center; padding:0 22px }
   .leaflet-container{ background:#0b0e13; font:inherit }
+  #mapModal{ z-index:1200 }   /* above the mini maps' Leaflet controls */
   #mapModal .mapmodal-inner{ background:var(--panel); border:1px solid var(--line); border-radius:16px; width:94vw; max-width:1400px; height:90vh; padding:14px 16px 16px; position:relative; display:flex; flex-direction:column }
   #mapModal .mapmodal-inner h3{ font-size:18px; font-weight:800; margin:0 0 10px }
-  .unitmap-big{ flex:1; width:100%; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--panel2) }
+  .unitmap-big{ position:relative; z-index:0; flex:1 1 auto; min-height:0; width:100%; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--panel2) }
 
   /* ----------  Phone pass — auto-reflow on small screens (no device detection; width-based)  ---------- */
   @media(max-width:760px){
@@ -842,13 +845,6 @@
       <span class="flagpick" title="Filter by flag"><input type="hidden" id="fioFlag"><button type="button" class="fp on" onclick="document.getElementById('fioFlag').value='';selFP(this);setFioFlag()" title="Any flag">All</button><button type="button" class="fp" onclick="document.getElementById('fioFlag').value='mra';selFP(this);setFioFlag()" title="At the MRA facility"><span class="mrahome" style="margin-left:0">MRA</span></button><button type="button" class="fp" onclick="document.getElementById('fioFlag').value='plant';selFP(this);setFioFlag()" title="In Michigan"><svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-3px"><path fill="#2f6fe0" d="M8 22 H17 Q20 22 20 19 V10 Q20 3 13.5 3 Q8 3 8 9 V11 Q3.5 11 3.5 14.5 Q3.5 18 8 17.5 V19 Q8 22 8 22 Z"/></svg></button><button type="button" class="fp" onclick="document.getElementById('fioFlag').value='can';selFP(this);setFioFlag()" title="Canadian asset">🍁</button></span>
       <a class="editbtn" href="https://secure.fleetio.com/8cf2193b5d/dashboard" target="_blank" rel="noopener" title="Open the full Fleetio app">↗ Open in Fleetio</a>
     </div>
-    <div class="panel mappanel">
-      <h2>🗺 Unit Map
-        <span class="maplegend"><span class="dot" style="background:#e04826"></span>at MRA<span class="dot" style="background:#2f6fe0"></span>in Michigan<span class="dot" style="background:#7b8794"></span>elsewhere · <span id="mapMiniFleetioCount"></span></span>
-        <button class="expandbtn" style="margin-left:auto" onclick="openUnitMap()" title="Open the full interactive map — zoom, pan, click a unit">⛶ Expand map</button>
-      </h2>
-      <div class="unitmap" id="mapMiniFleetio"></div>
-    </div>
     <div class="kpis" id="fleetioKpis"></div>
     <div class="panel" id="fp-search">
       <h2>🔎 Find Open Fleetio Items <span class="count" id="fSearchCount"></span>
@@ -866,6 +862,13 @@
         <h2>🏷️ Open Issues by Type <span class="count" id="fLabelCount"></span></h2>
         <div id="fIssueChart"></div>
       </div>
+    </div>
+    <div class="panel mappanel">
+      <h2>🗺 Unit Map
+        <span class="maplegend"><span class="dot" style="background:#e04826"></span>at MRA<span class="dot" style="background:#2f6fe0"></span>in Michigan<span class="dot" style="background:#7b8794"></span>elsewhere · <span id="mapMiniFleetioCount"></span></span>
+        <button class="expandbtn" style="margin-left:auto" onclick="openUnitMap()" title="Open the full interactive map — zoom, pan, click a unit">⛶ Expand map</button>
+      </h2>
+      <div class="unitmap" id="mapMiniFleetio"></div>
     </div>
     <div class="panel" id="fp-inbay">
       <h2>🔧 In the Shop — Open Fleetio Items <span class="count" id="fInBayCount"></span>
@@ -1519,6 +1522,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.86", date:"2026-06-18", title:"Unit map: fix Expand + move it on Fleetio", items:[
+    "Fixed the ⛶ Expand map view — the small map no longer shows through on top of the full-screen map (Leaflet's layers are now confined to their own box). On the FLEETIO tab the map now sits below the Service Backlog / Open Issues charts instead of at the very top. Now on MapTiler's dark style." ] },
   { rev:"3.85", date:"2026-06-18", title:"🗺 Unit map on Fleet / Fleetio / Equipment", items:[
     "New live map of where the units are (GPS from Samsara): a small map at the top of the FLEET, FLEETIO and EQUIPMENT tabs, plus an ⛶ Expand button that pops it full-screen to pan/zoom and click a pin for that unit's details. Pins are colored by location (orange = at MRA, blue = elsewhere in Michigan, grey = out of state; faded = stale GPS fix) and cluster together where units pack in. Built on a dark map that matches the dashboard." ] },
   { rev:"3.84", date:"2026-06-18", title:"Phone-friendly layout", items:[
