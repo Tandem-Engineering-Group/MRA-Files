@@ -258,6 +258,17 @@
   .ttool.del{color:#fca5a5} .ttool.del:hover{border-color:var(--red)}
   .ttool.reopen{color:var(--amber)} .ttool.reopen:hover{border-color:var(--amber)}
   body.closemode .ttool{display:inline-block}
+  /* Employee of the Month — centered celebratory card over a dimmed board (wall view) */
+  .eotm{position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center;
+    background:rgba(8,12,18,.84); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px)}
+  .eotm.show{display:flex; animation:eotmIn .45s ease}
+  @keyframes eotmIn{from{opacity:0; transform:scale(.96)} to{opacity:1; transform:none}}
+  .eotm-card{background:linear-gradient(180deg,#1c2433,#10151e); border:2px solid var(--brand);
+    border-radius:20px; padding:3vh 3vw; text-align:center; box-shadow:0 24px 90px rgba(0,0,0,.65)}
+  .eotm-banner{font-size:2.4vw; font-weight:900; letter-spacing:.05em; color:#ffd24a; text-transform:uppercase; margin-bottom:1.6vh}
+  .eotm-card img{max-width:34vw; max-height:56vh; border-radius:14px; border:3px solid #ffd24a; object-fit:cover; display:block; margin:0 auto}
+  .eotm-cap{font-size:2.6vw; font-weight:800; color:#fff; margin-top:1.8vh}
+  .eotm-cap b{color:var(--brand)}
   /* Bay-tile task groups (by assignee) */
   .tgrp-h{font-size:9.5px; font-weight:800; letter-spacing:.3px; color:var(--muted);
     margin:7px 0 1px; padding:3px 0 1px 2px; border-top:1px solid var(--line); text-transform:uppercase}
@@ -1192,6 +1203,13 @@
     </div>
   </div>
 
+  <!-- Employee of the Month — pops up centered on the wall/TV view only -->
+  <div id="eotm" class="eotm"><div class="eotm-card">
+    <div class="eotm-banner">🏆 Employee of the Month</div>
+    <img id="eotmImg" alt="Employee of the Month" onerror="this.style.display='none'">
+    <div class="eotm-cap">Congratulations <b id="eotmName"></b>!</div>
+  </div></div>
+
   <footer>
     <img class="footlogo" src="logo-full-dark.png" alt="MRA — mobile.experiential" onerror="this.style.display='none'">
     <div id="footerText"></div>
@@ -1355,6 +1373,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.73", date:"2026-06-18", title:"Wall view: all tiles scroll in unison", items:[
+    "On the 📺 wall/TV view, every auto-scrolling tile now moves together off one shared rhythm — they all glide down, pause at the bottom, then all glide back up — instead of each going its own direction. Much calmer to watch." ] },
+  { rev:"3.72", date:"2026-06-18", title:"🏆 Employee of the Month on the wall view", items:[
+    "On the 📺 wall/TV view, a centered Employee-of-the-Month card pops up every 5 minutes for ~10 seconds — the winner's photo + “Congratulations <name>!” — over a dimmed board, then fades out. Wall view only. Swap monthly by replacing the photo + name." ] },
   { rev:"3.71", date:"2026-06-18", title:"Bay tiles: tasks grouped by assignee", items:[
     "Expand a job's tasks on the floor and they're now grouped under a header per assignee — 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians · a person — each with a count. Reads the Shop Tasks Assigned column (falls back to the crew the task text routes to). Tasks with no assignee just list normally." ] },
   { rev:"3.70", date:"2026-06-18", title:"FLEETIO: quick search for open items", items:[
@@ -1609,9 +1631,22 @@ function toggleWall(btn){
     (window.MRA_DATA&&window.MRA_DATA.jobs||[]).forEach(j=>{ if(j.openCount>0) expandedJobs.add(j.row); });
     if(window.MRA_DATA) renderAll();
     startAutoScroll();
+    setTimeout(eotmShow, 6000);   // a first Employee-of-the-Month moment shortly after wall mode starts
   } else { stopAutoScroll(); }
   applyWallZoom();
 }
+/* ---------- Employee of the Month: centered card on the wall/TV view, every 5 min ----------
+   Swap monthly: change EOTM.name and replace the eotm.jpg image (bump ?v=). */
+const EOTM = { name: "John", photo: "eotm.jpg?v=20260618" };
+function eotmShow(){
+  if(!document.body.classList.contains('wall')) return;   // wall/TV view only
+  const el=document.getElementById('eotm'); if(!el) return;
+  const img=document.getElementById('eotmImg'); if(img && img.getAttribute('src')!==EOTM.photo) img.src=EOTM.photo;
+  const nm=document.getElementById('eotmName'); if(nm) nm.textContent=EOTM.name;
+  el.classList.add('show');
+  clearTimeout(el._et); el._et=setTimeout(()=>el.classList.remove('show'), 10000);
+}
+setInterval(eotmShow, 5*60*1000);
 // Per-screen size control: a zoom slider + S/M/L presets, remembered per device (like the theme).
 function ensureWallCtl(){
   if(document.getElementById('wallCtl')) return;
@@ -1640,28 +1675,32 @@ function setWallZoom(z){ z=parseInt(z,10)||100; WALL_ZOOM=Math.max(50,Math.min(2
 const WSEL='body.wall .bay-body, body.wall .asgbody';
 // A re-render (every refresh) rebuilds these elements and resets scrollTop to 0 — snapshot before, restore after,
 // so a tall column keeps cycling instead of snapping back to the top each time.
-function snapWallScroll(){ if(!WALL) return null; const s=[];
-  document.querySelectorAll(WSEL).forEach(el=>s.push({top:el.scrollTop,pos:el._pos,dir:el._dir,dwell:el._dwell})); return s; }
-function restoreWallScroll(s){ if(!WALL||!s) return;
-  document.querySelectorAll(WSEL).forEach((el,i)=>{ const o=s[i]; if(!o) return;
-    el._pos=o.pos; el._dir=o.dir; el._dwell=o.dwell; if(typeof o.top==='number') el.scrollTop=o.top; }); }
+// All wall tiles scroll TOGETHER off one shared phase (0=top … 1=bottom): everything
+// glides down in unison, pauses at the bottom, then glides back up — no more each-tile-
+// going-its-own-way. Each tile maps scrollTop = phase × its own scrollable height, so
+// they all hit top/bottom at the same instant regardless of how tall they are.
+let AS_PHASE=0, AS_DIR=1, AS_DWELL=0;
+const AS_CYCLE=22;   // seconds for one top→bottom sweep
+function snapWallScroll(){ return WALL; }
+function restoreWallScroll(){ if(!WALL) return;   // after a re-render, re-apply the shared phase
+  document.querySelectorAll(WSEL).forEach(el=>{ const max=el.scrollHeight-el.clientHeight;
+    el.scrollTop = max>8 ? AS_PHASE*max : 0; }); }
 function startAutoScroll(){
   stopAutoScroll();
+  AS_PHASE=0; AS_DIR=1; AS_DWELL=1.5;   // start at the top, brief pause, then sweep down
   let last=performance.now();
   AS_TIMER=setInterval(()=>{
     const now=performance.now(); const dt=Math.min(0.1,(now-last)/1000); last=now;
+    if(AS_DWELL>0){ AS_DWELL-=dt; }
+    else {
+      AS_PHASE += AS_DIR*(dt/AS_CYCLE);
+      if(AS_PHASE>=1){ AS_PHASE=1; AS_DIR=-1; AS_DWELL=2.8; }        // all at bottom — pause, then up
+      else if(AS_PHASE<=0){ AS_PHASE=0; AS_DIR=1; AS_DWELL=2.8; }    // all at top — pause, then down
+    }
     document.querySelectorAll(WSEL).forEach(el=>{
       if(el.matches(':hover')) return;                       // manual override on hover
       const max=el.scrollHeight-el.clientHeight;
-      if(max<8){ el.scrollTop=0; return; }                   // nothing to scroll
-      if(el._dir===undefined){ el._dir=1; el._dwell=0; }
-      // re-sync after a re-render (scrollTop reset to 0) or a manual scroll
-      if(el._pos===undefined || Math.abs(el._pos-el.scrollTop)>4) el._pos=el.scrollTop;
-      if(el._dwell>0){ el._dwell-=dt; return; }              // pause briefly at each end
-      el._pos += el._dir*28*dt;                              // ~28 px/sec
-      if(el._pos>=max){ el._pos=max; el._dir=-1; el._dwell=2.2; }
-      else if(el._pos<=0){ el._pos=0; el._dir=1; el._dwell=2.2; }
-      el.scrollTop=el._pos;
+      el.scrollTop = max>8 ? AS_PHASE*max : 0;
     });
   }, 33);
 }
