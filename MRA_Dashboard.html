@@ -184,6 +184,11 @@
   .st.active{color:var(--green)} .st.scheduled{color:var(--blue)}
   .st.onhold{color:#9fb0c4} .st.open{color:var(--faint)} .st.overdue{color:var(--red)}
   .bay-body{padding:9px 12px 11px}
+  /* Per-tile collapse/expand caret — normal (non-wall) view only; remembered per device. */
+  .bay-collapse{display:none; cursor:pointer; color:var(--muted); font-size:11px; margin-right:6px; user-select:none}
+  .bay-collapse:hover{color:var(--txt)}
+  body:not(.wall) .bay-collapse{display:inline-block}
+  body:not(.wall) .bay.collapsed .bay-body{display:none}
   .job{font-size:13px; margin-bottom:9px}
   .job:last-child{margin-bottom:0}
   .job.done{opacity:.5} .job.done .pj{text-decoration:line-through}
@@ -1447,7 +1452,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — see a trailer's tasks</h4>
-    <p>Click a <span class="k">"N tasks ▸"</span> button to drop down that trailer's open tasks — <b>grouped by assignee</b> under a header (🔧 Sal · 🎨 Wrap Team · ⚡ Electricians · a person), pulled from the Shop Tasks <b>Assigned</b> column (tasks with no assignee just list normally). Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). (No pill = no open tasks yet.)</p></div>
+    <p>Click a <span class="k">"N tasks ▸"</span> button to drop down that trailer's open tasks — <b>grouped by assignee</b> under a header (🔧 Sal · 🎨 Wrap Team · ⚡ Electricians · a person), pulled from the Shop Tasks <b>Assigned</b> column (tasks with no assignee just list normally). Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). (No pill = no open tasks yet.) Each tile has a <span class="k">▾</span> caret in its header — click it to <b>collapse</b> that tile down to just its title + count (handy for a tall <b>Next Up / On Hold</b> or Parking Lot), and <span class="k">▸</span> to expand it back. Your collapsed tiles are remembered on this device. (Wall mode ignores this and auto-scrolls instead.)</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap Team · Electricians</h4>
     <p>Three live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b> or <b>Electricians</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. In 📺 Wall mode each column auto-scrolls. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
@@ -1553,6 +1558,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.94", date:"2026-06-18", title:"Collapse Floor tiles (normal view)", items:[
+    "Each bay tile on the FLOOR now has a ▾ caret — click to collapse it to just its title + count (great for shrinking a tall Next Up / On Hold or Parking Lot), ▸ to expand. Remembered per device. Wall/TV mode is unchanged (it auto-scrolls)." ] },
   { rev:"3.93", date:"2026-06-18", title:"Renamed: MRA Command Center", items:[
     "The dashboard is now MRA Command Center (was \"Shop Floor\") — it covers floor, projects, fleet, equipment, the live map and history, so the name reflects that. Updated the header, subtitle, browser tab and the report/print titles." ] },
   { rev:"3.92", date:"2026-06-18", title:"Edit Staff on Leave from the board", items:[
@@ -1832,6 +1839,13 @@ const expandedJobs=new Set(), expandedBays=new Set();
 let SHOWCLOSED=false, SHOWSALCLOSED=false;
 function toggleJob(row){ expandedJobs.has(row)?expandedJobs.delete(row):expandedJobs.add(row); renderAll(); }
 function toggleBay(bay){ expandedBays.has(bay)?expandedBays.delete(bay):expandedBays.add(bay); renderAll(); }
+// Per-tile collapse on the FLOOR (normal view) — remembered per device. Toggles in place (no re-render, no scroll reset).
+let BAY_COLLAPSED=new Set(); try{ BAY_COLLAPSED=new Set(JSON.parse(localStorage.getItem('mra_bay_collapsed')||'[]')); }catch(e){}
+function toggleBayTile(el){ const bay=el.dataset.bay; const card=el.closest('.bay'); if(!card) return;
+  const now=!card.classList.contains('collapsed'); card.classList.toggle('collapsed',now);
+  el.textContent=now?'▸':'▾'; el.title=now?'Expand':'Collapse';
+  if(now) BAY_COLLAPSED.add(bay); else BAY_COLLAPSED.delete(bay);
+  try{ localStorage.setItem('mra_bay_collapsed', JSON.stringify([...BAY_COLLAPSED])); }catch(e){} }
 function toggleClosed(){ SHOWCLOSED=!SHOWCLOSED; renderAll(); }
 function toggleSalClosed(){ SHOWSALCLOSED=!SHOWSALCLOSED; renderAll(); }
 /* ---------- Wall (TV) mode: bound heights, auto-expand tasks, auto-scroll ---------- */
@@ -3238,7 +3252,9 @@ function renderFloor(D){
     }
     const cnt=opts.headCount&&list.length?` <span class="count">${list.length}</span>`:"";
     const bodyCls=opts.scroll?"bay-body autoscroll":"bay-body";
-    return `<div class="bay ${cls}"><div class="bay-head"><div class="name">${esc(bay)}${cnt}</div>`+
+    const col=BAY_COLLAPSED.has(bay);
+    const caret=`<span class="bay-collapse" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="${col?'Expand':'Collapse'}">${col?'▸':'▾'}</span>`;
+    return `<div class="bay ${cls}${col?' collapsed':''}"><div class="bay-head"><div class="name">${caret}${esc(bay)}${cnt}</div>`+
       `<div class="st ${stCls}">${stTxt}</div></div><div class="${bodyCls}">${body}</div></div>`;
   };
 
