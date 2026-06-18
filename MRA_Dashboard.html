@@ -814,6 +814,7 @@
           <div class="rb" data-m="all" onclick="setRange('all')" title="Show the entire timeline at once">All</div>
         </div>
         <button class="expandbtn mraHlBtn" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects — spot over-scheduling. Click to toggle.">🟧 MRA Shop load</button>
+        <button class="expandbtn" onclick="printProjects()" title="Print the projects Gantt + list on one page (11×17 landscape, auto-fit)">🖨 Print</button>
         <button class="expandbtn" onclick="openGantt('projects')" title="Full-screen detailed view">⛶ Expand</button>
       </h2>
       <div class="gantt" id="projGantt"></div>
@@ -1473,7 +1474,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
     <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a bar for a detail popover. The full-screen Projects view has the <b>same</b> <span class="k">🔍 zoom</span> and <span class="k">↔ scroll</span> sliders as the inline Gantt (below) — they stay in sync. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p></div>
   <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
-    <p>On the Project Schedules Gantt (inline or full-screen) the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom. <span class="k">All</span> snaps to the whole timeline. Your zoom is remembered per device.</p></div>
+    <p>On the Project Schedules Gantt (inline or full-screen) the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom. <span class="k">All</span> snaps to the whole timeline. Your zoom is remembered per device. <span class="k">🖨 Print</span> lays the whole project Gantt + a project list onto one <b>11×17 landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>⑥ᶜ ↕ Sort the Gantt</h4>
     <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>Program Development</b> (groups each person's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p></div>
   <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
@@ -1565,6 +1566,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"3.98", date:"2026-06-18", title:"Print the Projects Gantt (11×17)", items:[
+    "Added a 🖨 Print button above the Projects Gantt — lays the whole project Gantt (bars + milestone diamonds) and a project list onto one 11×17 landscape page, auto-fit, like the Resource Schedule print. Pick 11×17 paper, or Save as PDF." ] },
   { rev:"3.97", date:"2026-06-18", title:"Resource Schedule prints 11×17 landscape", items:[
     "The 📅 Crew / Resource Schedule 🖨 Print now lays out on an 11×17 (tabloid) landscape page instead of Letter — more room for the Gantt + task list, still auto-fit to one page. Pick 11×17 paper, or Save as PDF (it generates a tabloid-size PDF)." ] },
   { rev:"3.96", date:"2026-06-18", title:"Edit leave without scrolling up", items:[
@@ -4792,6 +4795,77 @@ function printCrew(){
       `<div class="pk-h"><h1><span class="ac">MRA</span> Resource Schedule — ${esc(CREW_WHO)}</h1><div class="pk-sub2">${items.length} task${items.length===1?'':'s'} · ${groups.length} project${groups.length===1?'':'s'} · ${stamp}</div></div>`+
       `<div class="pk-gantt">${axis}${barRows}</div>`+
       `<div class="pk-hd2">Tasks</div><div class="pk-list">${li}</div>`+
+    `</div></div>`+fitJS+`</body></html>`;
+  const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
+// Print the Projects Gantt (bars + project list) — one 11×17 landscape page, auto-fit.
+function printProjects(){
+  const D=window.MRA_DATA||{};
+  const projects=(D.projects||[]).slice(); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
+  const dated=projects.filter(p=>p.startISO&&p.finishISO).sort(projSortCmp);
+  if(!dated.length){ alert('No dated projects to print yet.'); return; }
+  const t=parseISO(D.todayISO), defStart=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime();
+  let lo=Infinity,hi=-Infinity;
+  dated.forEach(p=>{ const s=parseISO(p.startISO),f=parseISO(p.finishISO); if(s)lo=Math.min(lo,s.getTime()); if(f)hi=Math.max(hi,f.getTime()); });
+  if(!isFinite(lo)) lo=defStart; lo=Math.min(lo,defStart); if(!isFinite(hi)) hi=lo+30*DAY; hi=Math.max(hi,lo+30*DAY);
+  const days=Math.max(14, Math.ceil((hi-lo)/DAY)+5);
+  const win=buildWindow(new Date(lo), days), today=D.todayISO;
+  const grid = win.ticks.map(tk=>`<div class="pk-grid" style="left:${tk.pos}%"></div>`).join('')
+    + (win.todayPos>=0&&win.todayPos<=100?`<div class="pk-today" style="left:${win.todayPos}%"></div>`:'');
+  const axis = `<div class="pk-row pk-axis"><div class="pk-lbl"></div><div class="pk-trk">`+grid
+    + win.ticks.map(tk=>`<div class="pk-tk" style="left:${tk.pos}%">${esc(tk.label)}</div>`).join('')+`</div></div>`;
+  const barRows = dated.map(p=>{ const g=barGeom(p.startISO,p.finishISO,win);
+    let bar='', bout='', ms='';
+    if(g){ bar=`<div class="pk-bar" style="left:${g.left}%;width:${Math.max(g.width,0.8)}%;background:${p._color}"></div>`;
+      const lbl=esc(fmtMDY(p.startISO))+' – '+esc(fmtMDY(p.finishISO));
+      bout = ((g.left+g.width)>80)?`<div class="pk-bout r" style="right:${(100-g.left).toFixed(1)}%">${lbl}</div>`
+                                  :`<div class="pk-bout" style="left:${(g.left+g.width).toFixed(1)}%">${lbl}</div>`;
+      ms=(p.milestones||[]).map(m=>{ const mg=barGeom(m.dateISO,m.dateISO,win); return (mg&&mg.left>=0&&mg.left<=100)?`<div class="pk-ms" style="left:${mg.left}%" title="${escA((m.name||'')+' '+fmtMDY(m.dateISO))}"></div>`:''; }).join('');
+    }
+    return `<div class="pk-row"><div class="pk-lbl">${esc(p.name)}<span class="pk-sub">${esc(p.pm||'')}</span></div><div class="pk-trk">${grid}${bar}${ms}${bout}</div></div>`;
+  }).join('') || `<div class="pk-row"><div class="pk-lbl" style="color:#999">— no bars —</div><div class="pk-trk"></div></div>`;
+  const li = dated.map(p=>{ const h=projHealth(p,today);
+    const tag = h.state==='late'||h.state==='behind' ? 'past' : (h.state==='upcoming' ? 'upcoming' : (h.state==='done' ? 'done' : 'active'));
+    return `<div class="pk-li"><span class="pk-dot ${tag}"></span><span class="pk-task">${esc(p.name)}</span><span class="pk-meta">${esc(p.pm||'—')} · ${p.pct}% · ${fmtMDY(p.startISO)}–${fmtMDY(p.finishISO)}</span></div>`;
+  }).join('') || `<div class="pk-li">No dated projects.</div>`;
+  const now=new Date(), stamp=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
+  const css=`@page{size:17in 11in;margin:.35in}*{box-sizing:border-box}html,body{margin:0}`+
+    `body{font-family:'Segoe UI',Arial,sans-serif;color:#23272e;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}`+
+    `.bar{background:#23272e;color:#fff;padding:9px 16px;font-size:13px;display:flex;gap:14px;align-items:center}`+
+    `.bar button{background:#e04826;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-weight:700;cursor:pointer}`+
+    `#page{margin:0 auto}#sheet{width:16.3in;padding:2px 0;transform-origin:top left}`+
+    `.pk-h{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #e04826;padding-bottom:4px;margin-bottom:6px}`+
+    `.pk-h h1{font-size:16px;margin:0;font-weight:800}.pk-h h1 .ac{color:#e04826}.pk-sub2{font-size:11px;color:#666}`+
+    `.pk-gantt{margin-bottom:8px}`+
+    `.pk-row{display:flex;align-items:stretch;height:15px;border-bottom:1px solid #f2f2f2}`+
+    `.pk-row.pk-axis{height:13px;border-bottom:1px solid #cfd3d8}`+
+    `.pk-lbl{width:2.2in;flex:none;font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px;display:flex;align-items:center;gap:5px}`+
+    `.pk-sub{color:#9aa0a8;font-weight:400;font-size:8px}`+
+    `.pk-trk{position:relative;flex:1;border-left:1px solid #ddd;overflow:hidden}`+
+    `.pk-grid{position:absolute;top:0;bottom:0;border-left:1px dashed #eceef0}`+
+    `.pk-today{position:absolute;top:0;bottom:0;border-left:1.5px solid #e04826}`+
+    `.pk-tk{position:absolute;top:1px;font-size:8px;color:#888;padding-left:2px}`+
+    `.pk-bar{position:absolute;top:3px;height:9px;border-radius:2px;opacity:.88}`+
+    `.pk-ms{position:absolute;top:4px;width:7px;height:7px;margin-left:-3.5px;background:#f59e0b;transform:rotate(45deg);border:1px solid #b45309}`+
+    `.pk-bout{position:absolute;top:2px;font-size:7.5px;color:#666;white-space:nowrap;padding-left:3px}.pk-bout.r{padding-left:0;padding-right:3px;text-align:right}`+
+    `.pk-hd2{font-size:12px;font-weight:800;border-bottom:1px solid #cfd3d8;margin:8px 0 4px}`+
+    `.pk-list{column-count:3;column-gap:22px;font-size:9px}`+
+    `.pk-li{break-inside:avoid;display:flex;align-items:baseline;gap:5px;line-height:1.35;padding:1px 0}`+
+    `.pk-dot{width:7px;height:7px;border-radius:50%;flex:none}.pk-dot.done{background:#9aa0a8}.pk-dot.past{background:#dc2626}.pk-dot.upcoming{background:#3b82f6}.pk-dot.active{background:#f59e0b}`+
+    `.pk-task{flex:1}.pk-meta{color:#8a8f98;white-space:nowrap}`+
+    `@media print{.bar{display:none}}`;
+  const fitJS=`<scr`+`ipt>(function(){function fit(){var s=document.getElementById('sheet');if(!s)return;`+
+    `s.style.zoom='1';var ppi=s.getBoundingClientRect().width/16.3,availH=10.0*ppi,h=s.scrollHeight;`+
+    `if(h>availH)s.style.zoom=(availH/h).toFixed(4);}`+
+    `window.onload=function(){fit();setTimeout(function(){try{window.focus();window.print();}catch(e){}},350);};})();</scr`+`ipt>`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA Project Schedule</title><style>${css}</style></head><body>`+
+    `<div class="bar"><button onclick="window.print()">\u{1F5A8} Print / Save as PDF</button><span>11×17 (Tabloid) · Landscape · auto-fits to one page. Pick 11×17 paper, or Save as PDF.</span></div>`+
+    `<div id="page"><div id="sheet">`+
+      `<div class="pk-h"><h1><span class="ac">MRA</span> Project Schedule</h1><div class="pk-sub2">${dated.length} project${dated.length===1?'':'s'} · ${stamp}</div></div>`+
+      `<div class="pk-gantt">${axis}${barRows}</div>`+
+      `<div class="pk-hd2">Projects</div><div class="pk-list">${li}</div>`+
     `</div></div>`+fitJS+`</body></html>`;
   const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
