@@ -150,6 +150,8 @@
   .g-row.g-subrow .g-lbl{font-weight:500; color:var(--muted); font-size:11px}
   .g-row.clickable{cursor:pointer}
   .g-row.clickable:hover{background:rgba(255,255,255,.035)}
+  .g-rowedit .g-gutter:hover{background:rgba(255,255,255,.05)}
+  .g-rowedit .g-gutter:hover .g-lbl{text-decoration:underline; text-decoration-color:rgba(255,255,255,.45); text-underline-offset:2px}
   .g-bar.g-draggable{cursor:grab}
   .g-msline{position:absolute; top:0; bottom:0; border-left:1.5px dashed rgba(245,158,11,.82); z-index:1; pointer-events:none}
   .g-row.g-msrow{background:rgba(245,158,11,.09)}
@@ -1680,7 +1682,7 @@ const GENERAL_HELP = `
     <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>Program Development</b> (groups each person's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p></div>
   <div class="hsec"><h4>⑥ᵈ 🔎 Project detail view (click a Gantt bar)</h4>
     <p><b>Click any project's bar</b> (on the Projects Gantt or the floor schedules) to open a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, colored by status, with ◆ milestone gates you can collapse/expand. It has the same <span class="k">🔍 zoom</span> + <span class="k">↔ scroll</span> sliders (and an <span class="k">All</span> to fit the whole project) so you can zoom in for precise work.</p>
-    <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit.</p></div>
+    <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). <b>Click any task's name on the left</b> to open that one task's edit form directly. You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit.</p></div>
   <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
     <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp; <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
     On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone, solid fill = % complete, faded = completed, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:var(--red)">red line</span> = today.</p></div>
@@ -1778,6 +1780,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.38", date:"2026-06-19", title:"Project detail: click a task name to edit it", items:[
+    "In the project <b>detail view</b>, <b>click a task's name on the left</b> to open that task's edit form (dates, assignee, status, predecessor, comments) — the same editor as the Projects tab. The label underlines on hover so you know it's clickable. (Milestone gate rows still collapse/expand on click.)" ] },
   { rev:"4.37", date:"2026-06-19", title:"Gantt: brighter dates + grid / milestone / task lines", items:[
     "Brightened the Gantts so they read on the TV: the <b>date labels beside each bar</b> are brighter (and a touch larger), and the <b>lines are stronger</b> — the horizontal <b>task separator lines</b>, the vertical <b>month gridlines</b>, and the <b>◆ milestone lines</b> across the chart. Applies to every Gantt (project detail, Projects, Floor, Crew)." ] },
   { rev:"4.35", date:"2026-06-19", title:"Project detail view: full task controls + zoom / scroll · Design panel holds page 2", items:[
@@ -3745,9 +3749,10 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
     const ms=(r.milestones||[]).map(m=>{const p=msPos(m.dateISO,win);
       return p==null?'':`<div class="g-ms" style="left:${p}%" title="${esc(m.name)} · ${fmtMDY(m.dateISO)}"></div>`;}).join('');
     const rowClick = r.onclick ? ` onclick="${r.onclick}"` : '';
+    const gutAttr = r.gutterClick ? ` onclick="${r.gutterClick}" style="cursor:pointer" title="Click to edit this task"` : '';
     const hl=(MRASHOP_HL&&r.hlSegs&&r.hlSegs.length)?r.hlSegs.map(s=>{const gg=barGeom(s.startISO,s.endISO,win);
       return gg?`<div class="g-hl hl-${MRA_HL_STYLE}" style="left:${gg.left}%;width:${gg.width}%" title="MRA Shop assigned"></div>`:'';}).join(''):'';
-    html+=`<div class="g-row${r.cls?' '+r.cls:''}"${rowClick}><div class="g-gutter"><div class="g-lbl">${esc(r.label)}</div>`
+    html+=`<div class="g-row${r.cls?' '+r.cls:''}${r.gutterClick?' g-rowedit':''}"${rowClick}><div class="g-gutter"${gutAttr}><div class="g-lbl">${esc(r.label)}</div>`
       +`<div class="g-sub">${esc(r.sub||'')}</div>${r.bay?`<div class="g-bay" title="Currently in ${escA(r.bay)} on the shop floor">${esc(r.bay)}</div>`:''}</div>`
       +`<div class="g-track">${grid}${bar}${hl}${ms}</div></div>`;
   });
@@ -5863,6 +5868,11 @@ function setPdWinAll(){ PD_WIN_DAYS=null; PD_PAN=null; if(GFS==='project') rende
 // Full task controls from inside the detail view: open the same editor the Projects tab uses (add/edit/complete/delete/predecessor).
 function pdEditTasks(){ if(!GFS_PROJECT) return; if(typeof openProjectEditor==='function') openProjectEditor(GFS_PROJECT); }
 function pdAddTask(){ if(!GFS_PROJECT) return; if(typeof openProjectEditor!=='function') return; openProjectEditor(GFS_PROJECT); if(typeof openProjTaskNew==='function') openProjTaskNew(); }
+// Click a task's label (left side) in the detail view → open that task's edit form, like the Projects-tab editor.
+function pdEditTask(id){ if(!GFS_PROJECT || id==null || id==='') return;
+  if(typeof ensureAuth==='function' && !ensureAuth('edit a task')) return;
+  if(typeof openProjectEditor==='function') openProjectEditor(GFS_PROJECT);   // point the editor at this project first
+  if(typeof openProjTaskEdit==='function') openProjTaskEdit(String(id)); }
 function setGfsFloorDays(d){ GFS_FLOOR_DAYS=d; renderGanttFS(); }
 function setGfsLevel(lv){
   const D=window.MRA_DATA; if(!D) return;
@@ -6000,10 +6010,12 @@ function renderGanttFS(){
       const color=bad?'#a855f7':(done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6')));
       const badDate=(t.startISO&&!SANE(t.startISO))?t.startISO:t.finISO;
       const canDrag=(t.id!=null&&t.id!==''&&s&&!bad);
+      const canEdit=(t.id!=null&&t.id!=='');   // editable rows: clicking the label opens the task edit form
       return { label:(bad?'⚠ ':'')+(t.t||'(task)'),
         sub:[t.who,t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
         startISO:s, endISO:f, color, milestones:[], done, noBar:(!s||bad), cls:t.sub?'g-subrow':'',
         dragId:canDrag?t.id:null,
+        gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null,
         barTitle:canDrag?((t.t||'')+'\n'+fmtMDY(s)+' – '+fmtMDY(f)+'\n'+dragHelp):(bad?((t.t||'')+'\n⚠ check this date: '+badDate):null) };
     };
     // Group lead-up tasks under each milestone GATE (a collapsible header). Tasks stay draggable;
