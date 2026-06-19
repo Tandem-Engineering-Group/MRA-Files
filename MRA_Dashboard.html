@@ -1734,6 +1734,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.17", date:"2026-06-19", title:"Normal view: bay-tile tasks visible by default", items:[
+    "On a laptop / desktop the bay tiles now show their open tasks <b>by default</b> (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians) — no need to click to see them. Click <b>N tasks ▾</b> on a tile to collapse it if you want. The wall TV is unchanged (just the N open count)." ] },
   { rev:"4.16", date:"2026-06-19", title:"Wall layout back to normal; per-tile sizing fixed; tile tasks return on laptop", items:[
     "Reverted the wall board to the original fit (the screen-fill experiment was stretching tiles and leaving big gaps).",
     "Fixed the 🎨 Design panel tile sizing: tile HEIGHT is now fully independent (sizing Bay 2 Front no longer moves Bay 2 Back — it sets each tile's own height), and column WIDTH widens the whole column. Wall mode only, remembered per monitor, ↺ Reset tiles to clear.",
@@ -2087,9 +2089,14 @@ document.addEventListener('keydown',e=>{ if(e.key!=='/'||e.metaKey||e.ctrlKey||e
 document.addEventListener('click',e=>{ const p=document.getElementById('barPop');
   if(p && p.classList.contains('show') && !p.contains(e.target) && !(e.target.closest && e.target.closest('.g-bar'))) closeBarPop(); });
 
-const expandedJobs=new Set(), expandedBays=new Set();
+const expandedJobs=new Set(), expandedBays=new Set(), collapsedJobs=new Set();
 let SHOWCLOSED=false, SHOWSALCLOSED=false;
-function toggleJob(row){ expandedJobs.has(row)?expandedJobs.delete(row):expandedJobs.add(row); renderAll(); }
+// Normal view: tiles show their tasks by DEFAULT (collapsedJobs tracks the ones you've hidden).
+// Wall/TV view: tiles are count-only and the Fleetio pill expands on demand (expandedJobs).
+function toggleJob(row){
+  if(WALL){ expandedJobs.has(row)?expandedJobs.delete(row):expandedJobs.add(row); }
+  else { collapsedJobs.has(row)?collapsedJobs.delete(row):collapsedJobs.add(row); }
+  renderAll(); }
 function toggleBay(bay){ expandedBays.has(bay)?expandedBays.delete(bay):expandedBays.add(bay); renderAll(); }
 // Per-tile collapse on the FLOOR (normal view) — remembered per device. Toggles in place (no re-render, no scroll reset).
 let BAY_COLLAPSED=new Set(); try{ BAY_COLLAPSED=new Set(JSON.parse(localStorage.getItem('mra_bay_collapsed')||'[]')); }catch(e){}
@@ -3626,7 +3633,8 @@ function renderFloor(D){
     pills+=`<span class="pill j jjump" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.jobNum||"—")}</span><span class="pill">${fmtMD(j.startISO)}→${fmtMD(j.completionISO)}</span>`;
     if(c.overdue) pills+=`<span class="pill due">${Math.abs(c.daysLeft)}d overdue</span>`;
     else if(c.dueSoon) pills+=`<span class="pill soon">due ${c.daysLeft}d</span>`;
-    const jOpen=expandedJobs.has(j.row);
+    // Normal view: open by default (tasks visible up top); wall view: collapsed (count-only).
+    const jOpen = WALL ? expandedJobs.has(j.row) : !collapsedJobs.has(j.row);
     const _trk=new Set((j.tasks||[]).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
     const fl=fleetioFor(j).filter(it=>!_trk.has(String(it.num)));  // hide issues already added as tasks
     // Open-task count pill. WALL/TV: a plain count (tasks live in the Open Tasks by Assignee
