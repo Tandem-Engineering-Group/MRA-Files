@@ -1757,6 +1757,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.29", date:"2026-06-19", title:"Fleetio link stays after assigning · detail-view Edit button + drag help · date guard", items:[
+    "The 🔧 Fleetio ↗ link now stays on a task after you assign it (was disappearing once a Fleetio issue became a Shop Task) — on the bay card and in the crew queues.",
+    "Project detail view: a clear <b>🔒 Edit dates</b> button (top-left) to enter edit mode, and <b>hover a task bar for the drag instructions</b> — left end = start, middle = move, right end = finish.",
+    "Detail view guards against a typo'd task date (e.g. a 1918 year): the timeline no longer blows out to a century — only sane dates set the range, and the bad task is flagged ⚠ with the date to fix." ] },
   { rev:"4.28", date:"2026-06-19", title:"Drag task bars to reschedule (project detail view)", items:[
     "In a project's full-screen detail (click a Gantt bar to open it), you can now <b>drag a task bar to reschedule it</b> — drag the <b>middle</b> to move the whole task, the <b>left end</b> to change the start, the <b>right end</b> to change the finish. Snaps to days, shows the new dates as you drag, and writes back like any edit. Edit-mode (code) protected." ] },
   { rev:"4.27", date:"2026-06-19", title:"Predecessor auto-fills the start date", items:[
@@ -3620,7 +3624,7 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
     else if(g){
       const onclk = r.barClick ? ` onclick="${r.barClick}"` : (r.popKey ? ` onclick="showBarPop(event,'${r.popKey}')"` : '');
       const styleAttr = `${(r.popKey||r.barClick)?'cursor:pointer;':''}left:${g.left}%;width:${g.width}%;background:${hexA(r.color,.28)};border-color:${r.color}`;
-      const ttl = escA(`${r.label||''}${r.sub?' — '+r.sub:''}\n${fmtMDY(r.startISO)} – ${fmtMDY(r.endISO)}${r.pct!=null?'  ·  '+r.pct+'% complete':''}`);
+      const ttl = r.barTitle ? escA(r.barTitle) : escA(`${r.label||''}${r.sub?' — '+r.sub:''}\n${fmtMDY(r.startISO)} – ${fmtMDY(r.endISO)}${r.pct!=null?'  ·  '+r.pct+'% complete':''}`);
       const showPct = (r.pct!=null && g.width>9);
       const dragAttr = (r.dragId!=null) ? ` data-tid="${escA(String(r.dragId))}"` : '';
       let inner = (r.pct!=null?`<div class="g-fill" style="width:${r.pct}%;background:${r.color}"></div>`:'');
@@ -3775,7 +3779,8 @@ function renderFloor(D){
         gkeys.sort((a,b)=> (a===''?1:0)-(b===''?1:0) || (crewIdx(a)-crewIdx(b)) || a.localeCompare(b));
         const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
         const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`; };
+          const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`; };
         let inner="";
         gkeys.forEach(k=>{
           if(!onlyUnassigned){
@@ -3922,7 +3927,7 @@ function renderSal(D){
   };
   const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
-    `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw);return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}</li>`;}).join("")}</ol></div>`;
+    `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw); const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):''; return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${fa}</li>`;}).join("")}</ol></div>`;
   GROUPS.forEach(g=>{
     const cards=build(g.re);
     const tot=cards.reduce((s,x)=>s+x.open.length,0), c=document.getElementById(g.cnt);
@@ -5683,8 +5688,9 @@ function closeGantt(e){ if(!e || e.target.id==='ganttFS' || e.target.classList.c
 /* ---------- Drag a task bar in the project-detail view to reschedule it (edit mode) ----------
    Middle = move (shift start + finish), left end = change start, right end = change finish.
    Snaps to whole days; writes back like any other task edit. */
+function pdEnterEdit(){ if(ensureAuth('reschedule tasks')) renderGanttFS(); }   // the "🔒 Edit dates" button
 function pdragHover(e){
-  if(GFS!=='project') return;
+  if(GFS!=='project' || !CLOSE_PIN) return;   // only show the drag cursor once you're in edit mode
   const bar=e.target.closest('.g-bar[data-tid]'); if(!bar||bar._dragging) return;
   const r=bar.getBoundingClientRect(); const z=Math.min(12, r.width/3);
   bar.style.cursor=(e.clientX-r.left<z || r.right-e.clientX<z)?'ew-resize':'grab';
@@ -5815,31 +5821,47 @@ function renderGanttFS(){
     // Detailed view of ONE project (opened by clicking its Gantt bar): every task as its own bar,
     // sorted by full date, colored by status, milestones flagged ◆.
     const p=(D.projects||[]).find(x=>x.name===GFS_PROJECT);
-    levelEl.innerHTML=''; rangeEl.innerHTML='';
-    titleEl.textContent=(p?p.name:'Project')+' — Detailed';
+    titleEl.textContent=(p?p.name:'Project')+' — Detailed'; rangeEl.innerHTML='';
+    // Edit toggle so it's obvious how to get into drag/edit mode (otherwise the first drag just prompts).
+    levelEl.innerHTML = CLOSE_PIN
+      ? `<div class="rb active" title="Edit on — drag a task bar: middle moves it, the ends change start/finish">✏️ Edit on — drag bars to reschedule</div>`
+      : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars and change dates">🔒 Edit dates</div>`;
     if(!p || !(p.tasks||[]).length){
       cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
       legEl.innerHTML=''; warnEl.textContent=''; return;
     }
-    const allISO=[]; (p.tasks||[]).forEach(t=>{ if(t.startISO) allISO.push(t.startISO); if(t.finISO) allISO.push(t.finISO); });
-    if(p.startISO) allISO.push(p.startISO); if(p.finishISO) allISO.push(p.finishISO);
+    // Date guard: a typo'd year (e.g. 1918) shouldn't blow the timeline out to a century — only sane
+    // dates set the window; out-of-range tasks are flagged (⚠) instead of squishing every bar.
+    const SANE=iso=>{ const y=(iso&&/^\d{4}-/.test(iso))?+iso.slice(0,4):0; return y>=2020&&y<=2035; };
+    const allISO=[]; (p.tasks||[]).forEach(t=>{ if(SANE(t.startISO)) allISO.push(t.startISO); if(SANE(t.finISO)) allISO.push(t.finISO); });
+    if(SANE(p.startISO)) allISO.push(p.startISO); if(SANE(p.finishISO)) allISO.push(p.finishISO);
     allISO.push(today); allISO.sort();
     const tlo=parseISO(allISO[0]).getTime()-5*DAY, thi=parseISO(allISO[allISO.length-1]).getTime()+7*DAY;
     const win=buildWindow(new Date(tlo), Math.max(21,Math.ceil((thi-tlo)/DAY)));
     const byId={}; (p.tasks||[]).forEach(t=>{ if(t.id!=null&&t.id!=='') byId[String(t.id)]=t; });
     const dkey=t=>(t.startISO||t.finISO||'9999-99-99');
+    let flagged=0;
+    const dragHelp = CLOSE_PIN
+      ? 'DRAG TO RESCHEDULE:   ⟸ left end = change START   ·   middle = MOVE the whole task   ·   right end = change FINISH ⟹'
+      : 'Click “🔒 Edit dates” (top-left), then drag a bar — middle moves it, the ends change start / finish.';
     const rows=(p.tasks||[]).slice().sort((a,b)=>dkey(a).localeCompare(dkey(b))).map(t=>{
       const isMile=/yes/i.test(t.ml||''), done=projIsDone(t), s=t.startISO, f=t.finISO||t.startISO;
-      const color=done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6'));
-      return { label:(isMile?'◆ ':'')+(t.t||'(task)'), sub:[t.phase,t.who,t.st].filter(Boolean).join(' · ')+(s?'':' · no dates'),
-        startISO:s, endISO:f, color, milestones:[], done, noBar:!s, cls:t.sub?'g-subrow':'',
-        dragId:(t.id!=null&&t.id!==''&&s)?t.id:null };
+      const bad=(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO));
+      if(bad) flagged++;
+      const color=bad?'#a855f7':(done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6')));
+      const badDate=(t.startISO&&!SANE(t.startISO))?t.startISO:t.finISO;
+      const canDrag=(t.id!=null&&t.id!==''&&s&&!bad);
+      return { label:(bad?'⚠ ':'')+(isMile?'◆ ':'')+(t.t||'(task)'),
+        sub:[t.phase,t.who,t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
+        startISO:s, endISO:f, color, milestones:[], done, noBar:(!s||bad), cls:t.sub?'g-subrow':'',
+        dragId:canDrag?t.id:null,
+        barTitle:canDrag?((t.t||'')+'\n'+fmtMDY(s)+' – '+fmtMDY(f)+'\n'+dragHelp):(bad?((t.t||'')+'\n⚠ check this date: '+badDate):null) };
     });
     renderGantt(cont, rows, win, {dates:true});
     window._pdrag={win, project:p.name, byId};
-    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ edit mode: drag a bar — middle moves it, ends change start/finish</span>`;
-    warnEl.style.color='var(--muted)';
-    warnEl.textContent=(p.pm?('PM '+p.pm+'  ·  '):'')+((p.taskCount||p.tasks.length)+' tasks')+(p.pct!=null?('  ·  '+p.pct+'% complete'):'');
+    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ in edit mode, drag a bar — middle moves it, ends change start/finish</span>`;
+    warnEl.style.color=flagged?'#fca5a5':'var(--muted)';
+    warnEl.textContent=(p.pm?('PM '+p.pm+'  ·  '):'')+((p.taskCount||p.tasks.length)+' tasks')+(p.pct!=null?('  ·  '+p.pct+'% complete'):'')+(flagged?('  ·  ⚠ '+flagged+(flagged>1?' task dates look':' task date looks')+' off — fix in the workbook'):'');
     return;
   }
 
