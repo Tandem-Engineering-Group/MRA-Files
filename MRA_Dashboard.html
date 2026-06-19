@@ -1372,11 +1372,14 @@
           <div><label>Start date</label><input id="ejStart" type="date"></div>
           <div><label>Completion date</label><input id="ejComp" type="date"></div>
         </div>
-        <div><label>Notes / tasks (Input cell)</label><textarea id="ejNotes" style="min-height:80px"></textarea></div>
+        <div><label>Job notes <span style="color:var(--faint);font-weight:400">— free text on the Input row</span></label><textarea id="ejNotes" style="min-height:80px"></textarea>
+          <div id="ejNotesHint" style="font-size:11.5px;color:#fca5a5;margin-top:6px;display:none">⚠ This job has its own task list, so the board shows <b>those</b> — text typed here will <b>not</b> appear as a task. To add one that shows (and can be assigned), use <b>➕ Add task</b> below.</div>
+        </div>
         <div id="ejMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="submitDeleteJob()" id="ejDelete" style="margin-right:auto;border-color:rgba(239,68,68,.5);color:#fca5a5">🗑 Delete job</button>
           <button class="btn-ghost" onclick="bringBackHere()" id="ejBringBack" style="display:none;border-color:rgba(34,197,94,.5);color:#86efac" title="Reactivate this shipped trailer for a new maintenance visit (Active · Parking Lot · today), logging the prior ship date">🔄 Bring back</button>
+          <button class="btn-ghost" onclick="addTaskForJob()" title="Add an assignable Shop Task to this job — it shows on the board" style="border-color:rgba(59,130,246,.5);color:#93c5fd">➕ Add task</button>
           <button class="btn-ghost" onclick="closeEdit()">Cancel</button>
           <button class="btn-primary" id="ejSubmit" onclick="submitEditJob()">Save changes</button>
         </div>
@@ -1806,6 +1809,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.47", date:"2026-06-19", title:"Edit job: 'Notes' no longer a hidden task trap + ➕ Add task shortcut", items:[
+    "Typing a task into the Edit-job <b>Notes</b> box did nothing visible when the job already had a structured task list (the board shows those, not the notes cell). The field is now labeled <b>Job notes</b>, warns you when it's being ignored, and a new <b>➕ Add task</b> button opens the proper assignable add — prefilled for that job — so the task actually shows on the board." ] },
   { rev:"4.46", date:"2026-06-19", title:"Fixes: Fleetio task ghost + detail-view theme button", items:[
     "<b>Fixed Fleetio tasks coming back unassigned.</b> Assigning (or editing) a Fleetio task you'd added — e.g. #964 Handrails to Sal — left a duplicate <i>unassigned</i> copy that reappeared every 15-min update (and came back after you deleted it). The device's pending-add cache was re-injecting the original because it only matched by exact text; it now matches by the Fleetio issue # and stops once a fresh export has run, and deleting a task clears its pending entry. Old stuck ghosts clear themselves on load.",
     "<b>Fixed the detail-view ☀️/🌙 button kicking you out.</b> Clicking it no longer closes the project detail view (the click was bubbling to the overlay's close)." ] },
@@ -2829,7 +2834,9 @@ function submitEditTask(){
 const SHOP_WRITE_URL = CLOSE_FLOW_URL;   // Add + Edit/Move reuse the existing close flow (its script now handles all 3 actions)
 const BAY_OPTIONS = ['Bay 2 Front','Bay 2 Back / Loading Dock','Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back','Parking Lot','On Hold','Next Up'];
 const ASSIGNEE_OPTIONS = ['Sal','Wrap Team','Electricians','Doug','Vendor'];
-function openAddTask(){
+// Jump from Edit job → the proper assignable task add, prefilled for this job.
+function addTaskForJob(){ const proj=window._ejProj; document.getElementById('editModal').classList.remove('show'); openAddTask(proj); }
+function openAddTask(prefillProj){
   if(!SHOP_WRITE_URL){ alert("Add-from-dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
   if(!ensureAuth("add a task")) return;
   const D=window.MRA_DATA||{};
@@ -2843,6 +2850,7 @@ function openAddTask(){
   document.getElementById('atTask').value=""; document.getElementById('atComments').value="";
   document.getElementById('atMsg').textContent=""; document.getElementById('atNewProj').value="";
   document.getElementById('atMilestone').value=""; document.getElementById('atSubmit').disabled=false;
+  if(prefillProj){ const sel=document.getElementById('atProject'); if([...sel.options].some(o=>o.value===prefillProj)) sel.value=prefillProj; }
   atProjectChange();
   document.getElementById('addModal').classList.add('show');
 }
@@ -2910,6 +2918,7 @@ function openEditJob(row){
   document.getElementById('ejStart').value = j.startISO||"";
   document.getElementById('ejComp').value = j.completionISO||"";
   document.getElementById('ejNotes').value = j.notesRaw||"";
+  { const hint=document.getElementById('ejNotesHint'); if(hint) hint.style.display = ((j.tasks||[]).length)?'':'none'; }   // warn when the notes box is ignored (job has a structured task list)
   const bb=document.getElementById('ejBringBack'); if(bb) bb.style.display = DONE_STATUSES.includes((j.status||"").toLowerCase())?'':'none';
   document.getElementById('ejMsg').textContent=""; document.getElementById('ejSubmit').disabled=false;
   document.getElementById('editModal').classList.add('show');
