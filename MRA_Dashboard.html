@@ -1596,8 +1596,8 @@ const GENERAL_HELP = `
     <span class="k">🔍 Search</span> (top bar, or press <b>/</b>) = find <b>anything</b> across the whole board — a job (open <b>or</b> completed), a project, a unit, an equipment job, a client, a person, or any task wording — and click a result to jump right to it. (This replaced the old History tab.)</p></div>
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
-  <div class="hsec"><h4>③ Bay Status — see a trailer's tasks</h4>
-    <p>Click a <span class="k">"N tasks ▸"</span> button to drop down that trailer's open tasks — <b>grouped by assignee</b> under a header (🔧 Sal · 🎨 Wrap Team · ⚡ Electricians · a person), pulled from the Shop Tasks <b>Assigned</b> column (tasks with no assignee just list normally). Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). (No pill = no open tasks yet.) Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> it down to just its title + count — handy for shrinking a tall <b>Next Up / On Hold</b> or Parking Lot; click again (<span class="k">▸</span>) to expand it back. Your collapsed tiles are remembered on this device. (Wall mode ignores this and auto-scrolls instead.)</p></div>
+  <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
+    <p>Each tile shows the job's name, client / Program Development, job #, dates and a small <span class="k">N open</span> badge so you can see at a glance which trailer is busy. The actual task lines now live in the <b>🧰 Open Tasks by Assignee</b> panel just below (grouped by Sal · Wrap Team · Electricians) — so they're not duplicated on the tiles, which keeps the board (and the wall TV) compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> it down to just its title + count — handy for a tall <b>Next Up / On Hold</b> or Parking Lot; click again (<span class="k">▸</span>) to expand. Collapsed tiles are remembered on this device. <b>🔧 Fleetio issues are the exception</b> — a trailer's incoming Fleetio issues still show on its bay card as a collapsed <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue, after which it shows below in Open Tasks by Assignee. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks on its tile.</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap Team · Electricians</h4>
     <p>Three live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b> or <b>Electricians</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; Wrap Team and Electricians stay single. On a phone the columns stack. In 📺 Wall mode they auto-scroll. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
@@ -1711,6 +1711,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.13", date:"2026-06-19", title:"FLOOR bay tiles: tasks off the tiles (count only), Fleetio stays", items:[
+    "Shop tasks no longer list on the bay tiles — they live in the 🧰 Open Tasks by Assignee panel below, so they're not shown twice. Each tile now just shows a small N open badge so you can still see which trailer is busy.",
+    "🔧 Fleetio issues still ride on the bay card (collapsed) — expand and ➕ to assign one into a crew queue, exactly as before. They only surface here until assigned.",
+    "Wall / TV mode no longer auto-expands every tile, so the board is much more compact and frees up vertical room (the tasks auto-scroll in the assignee panel below)." ] },
   { rev:"4.12", date:"2026-06-19", title:"Bring back a shipped trailer (returns for maintenance)", items:[
     "New 🔄 Bring back trailer under the FLOOR ☰ Actions menu — when a shipped trailer comes back for maintenance, pick it from the list and it returns to the Parking Lot (Active, starting today) with its open tasks intact, instead of staying hidden as Shipped.",
     "Each return logs the previous ship date, so a trailer builds a visit history (🚢 Shipped: 6/12/26 · 8/8/26 …) — every ship/return stays on the record.",
@@ -2078,9 +2082,8 @@ function toggleWall(btn){
   WALL=!WALL; document.body.classList.toggle('wall',WALL);
   try{ localStorage.setItem('mra_wall', WALL?'1':''); }catch(e){}
   if(btn){ btn.classList.toggle('on',WALL); btn.textContent=WALL?'📺 Wall: ON':'📺 Wall'; }
-  if(WALL){
-    (window.MRA_DATA&&window.MRA_DATA.jobs||[]).forEach(j=>{ if(j.openCount>0) expandedJobs.add(j.row); });
-  }
+  // (No longer auto-expand every tile in wall mode: tasks live in the Open Tasks by Assignee
+  //  panel below now, so compact tiles keep the wall TV clean and free up vertical room.)
   if(window.MRA_DATA) renderAll();   // re-render both ways so Sal's columns split (wall) / un-split (normal)
   if(WALL){
     startAutoScroll();
@@ -3521,38 +3524,17 @@ function renderFloor(D){
     const jOpen=expandedJobs.has(j.row);
     const _trk=new Set((j.tasks||[]).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
     const fl=fleetioFor(j).filter(it=>!_trk.has(String(it.num)));  // hide issues already added as tasks
-    if(j.openCount>0) pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
-    if(fl.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Live Fleetio maintenance issues for this trailer">🔧 ${fl.length} Fleetio ${jOpen?"▾":"▸"}</span>`;
+    // Tasks now live in the "Open Tasks by Assignee" panel below — the tile just shows a
+    // small count (no list), so the board stays compact. Fleetio issues stay here (collapsed),
+    // because they only surface on the bay card until they're assigned into a crew queue.
+    if(j.openCount>0) pills+=`<span class="pill task" title="${j.openCount} open task${j.openCount>1?"s":""} — listed below in Open Tasks by Assignee">${j.openCount} open</span>`;
+    if(fl.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Live Fleetio maintenance issues for this trailer — expand to assign (➕)">🔧 ${fl.length} Fleetio ${jOpen?"▾":"▸"}</span>`;
     let tl="";
-    if(jOpen){
-      if((j.openTasks||[]).length){
-        const opens=(j.tasks&&j.tasks.length)
-          ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t),who:shopWho(t)}))
-          : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk),who:shopWho({raw:tk})}));
-        // group by assignee (who), with a header per group; assigned crews first, Unassigned last
-        const grp={}, gkeys=[];
-        opens.forEach(o=>{ const k=o.who||''; if(!(k in grp)){ grp[k]=[]; gkeys.push(k); } grp[k].push(o); });
-        const crewIdx=n=>{ const i=KNOWN_CREW.findIndex(c=>c[0]===n); return i<0?98:i; };
-        gkeys.sort((a,b)=> (a===''?1:0)-(b===''?1:0) || (crewIdx(a)-crewIdx(b)) || a.localeCompare(b));
-        const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
-        const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`; };
-        let inner="";
-        gkeys.forEach(k=>{
-          if(!onlyUnassigned){
-            const hdr = k===''?'— unassigned —':(crewEmoji(k)+' '+esc(k));
-            inner+=`<div class="tgrp-h">${hdr}${k===''?'':` <span class="tgrp-n">${grp[k].length}</span>`}</div>`;
-          }
-          inner+=grp[k].map(taskHtml).join("");
-        });
-        tl+=`<div class="tasklist">`+inner+`</div>`;
-      }
-      if(fl.length){
-        tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
-          const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
-          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>`;
-        }).join("")+`</div>`;
-      }
+    if(jOpen && fl.length){
+      tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
+        const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
+        return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>`;
+      }).join("")+`</div>`;
     }
     if(SHOWCLOSED){
       const doneStruct=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>t.done):null;
