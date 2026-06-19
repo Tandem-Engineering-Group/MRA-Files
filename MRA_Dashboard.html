@@ -1607,8 +1607,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.7", date:"2026-06-19", title:"Fix: Fleetio links open the right item", items:[
+    "The Fleetio click-through links now use the item's number (e.g. /issues/778) instead of the internal id, so they open the correct record. No export re-run needed — the number was already in the data." ] },
   { rev:"4.6", date:"2026-06-19", title:"Click a Fleetio item to open it in Fleetio · bigger headers", items:[
-    "Every Fleetio item (issues, work orders, service) on the FLEETIO tab, the In-the-Shop list, and the FLOOR bay cards is now clickable (↗) — opens that exact record in Fleetio so you can close it there (since we don't write back). Needs the updated Export-Data.ps1 (now stores each item's Fleetio id) re-run; until then a click lands on the Fleetio list page.",
+    "Every Fleetio item (issues, work orders, service) on the FLEETIO tab, the In-the-Shop list, and the FLOOR bay cards is now clickable (↗) — opens that record in Fleetio so you can close it there (since we don't write back).",
     "Bumped the bay-tile headers (Bay 2 Front, etc.) and the crew names (Sal / Wrap Team / Electricians) up a couple sizes for readability." ] },
   { rev:"4.5", date:"2026-06-19", title:"Sal's two-column layout in regular view too", items:[
     "Sal's Open Tasks panel is now double-wide with two columns in the normal Floor view as well (not just wall mode) — Wrap Team and Electricians stay single. Shortens the page and balances the row. On a phone the two columns stack." ] },
@@ -3317,7 +3319,7 @@ function renderFloor(D){
       if(fl.length){
         tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
           const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
-          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.id)}</div>`;
+          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>`;
         }).join("")+`</div>`;
       }
     }
@@ -3768,12 +3770,15 @@ function trailerPop(t){
 let FFILTER=null, FTRAILERS=[], FASSIGN='', FREPORT='';
 function fAsg(x){ var a=x&&x.assignees; return Array.isArray(a)?a:(a?[a]:[]); }   // tolerate single vs array
 // Deep-link a Fleetio item so it can be closed there (the dashboard doesn't write back to Fleetio).
-// Uses the item's Fleetio id when present (from the export) → exact record; otherwise the list page.
+// Fleetio's web URLs use the item's NUMBER (e.g. /issues/778), not the internal API id.
 const FLEETIO_BASE='https://secure.fleetio.com/8cf2193b5d';
-function fioHref(kind,id){ const path=kind==='wo'?'work_orders':kind==='svc'?'service_reminders':'issues';
-  return FLEETIO_BASE+'/'+path+((id!=null&&id!=='')?('/'+encodeURIComponent(id)):''); }
-function fioTitle(kind,id,label){ return `<a class="fiotitle" href="${fioHref(kind,id)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${id?' to close it there':''} ↗">${esc(label)}<span class="fioarrow"> ↗</span></a>`; }
-function fioArrow(kind,id){ return ` <a class="fioarrow" href="${fioHref(kind,id)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${id?' to close it there':''} ↗">↗</a>`; }
+function fioHref(kind,num){
+  if(kind==='wo')  return FLEETIO_BASE+'/work_orders'+((num!=null&&num!=='')?('/'+encodeURIComponent(num)):'');
+  if(kind==='svc') return FLEETIO_BASE+'/service_reminders';   // no per-item number — open the reminders list
+  return FLEETIO_BASE+'/issues'+((num!=null&&num!=='')?('/'+encodeURIComponent(num)):'');
+}
+function fioTitle(kind,num,label){ return `<a class="fiotitle" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">${esc(label)}<span class="fioarrow"> ↗</span></a>`; }
+function fioArrow(kind,num){ return ` <a class="fioarrow" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">↗</a>`; }
 function renderFleetio(D){
   const F=D.fleetio, today=D.todayISO;
   const issues=(F&&F.issues)||[], wos=(F&&F.workOrders)||[], svc=(F&&F.service)||[];
@@ -3859,7 +3864,7 @@ function renderFleetio(D){
     const b = s.c.overdue?`<span class="badge red">${s.c.days!=null?Math.abs(s.c.days)+'d overdue':'overdue'}</span>`
             : s.c.soon?`<span class="badge amber">${(s.c.days!=null&&s.c.days>=0)?'due '+s.c.days+'d':'due soon'}</span>`
             : (s.dueISO?`<span class="badge grey">${fmtMD(s.dueISO)}</span>`:`<span class="badge grey">${esc(s.meterDue?('@ '+s.meterDue):'—')}</span>`);
-    return `<div class="row"><div><div class="lead">${fioTitle('svc',s.id,s.service||'Service')}</div>`+
+    return `<div class="row"><div><div class="lead">${fioTitle('svc','',s.service||'Service')}</div>`+
       `<div class="meta">${esc(s.asset||'')}${canFlag(s.asset)}${plantFlag(s.asset)}${mapPinFor(s.asset)}${s.jobNum?' · '+esc(s.jobNum):''}</div></div><div class="right">${b}</div></div>`;
   }).join('') : `<div class="empty">No service ${FFILTER==='svc_over'?'overdue':FFILTER==='svc_soon'?'due soon':'reminders due'}</div>`);
   document.getElementById('fSvcCount').textContent=svcSorted.length;
@@ -3881,7 +3886,7 @@ function renderFleetio(D){
     const pr = i.priority?`<span class="badge ${/(high|emerg)/i.test(i.priority)?'red':/med/i.test(i.priority)?'amber':'grey'}">${esc(i.priority)}</span>`:'';
     const wa=fAsg(i); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = i.reporter?` · ✍ ${esc(i.reporter)}`:'';
-    return `<div class="row"><div><div class="lead">${fioTitle('issue',i.id,i.summary||('Issue '+(i.num||'')))}</div>`+
+    return `<div class="row"><div><div class="lead">${fioTitle('issue',i.num,i.summary||('Issue '+(i.num||'')))}</div>`+
       `<div class="meta">${esc(i.asset||'')}${canFlag(i.asset)}${plantFlag(i.asset)}${mapPinFor(i.asset)}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
       `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${pr} ${b}</div></div>`;
   }).join('') : `<div class="empty">${issEmpty}</div>`);
@@ -3896,7 +3901,7 @@ function renderFleetio(D){
     const st = w.status?`<span class="badge ${/pend/i.test(w.status)?'amber':'blue'}">${esc(w.status)}</span>`:'';
     const wa=fAsg(w); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = w.reporter?` · ✍ ${esc(w.reporter)}`:'';
-    return `<div class="row"><div><div class="lead">${fioTitle('wo',w.id,w.summary||('WO '+(w.num||'')))}</div>`+
+    return `<div class="row"><div><div class="lead">${fioTitle('wo',w.num,w.summary||('WO '+(w.num||'')))}</div>`+
       `<div class="meta">${esc(w.asset||'')}${canFlag(w.asset)}${plantFlag(w.asset)}${mapPinFor(w.asset)}${w.jobNum?' · '+esc(w.jobNum):''}${who}${rby}</div>`+
       `${w.detail?`<div class="det" title="${escA(w.detail)}">${esc(w.detail)}</div>`:''}</div>`+
       `<div class="right">${st}${age!=null?` <span class="badge grey">${age}d</span>`:''}</div></div>`;
@@ -4000,12 +4005,12 @@ function renderInBayFleetio(D){
     const edge = b.iss.some(i=>i.overdue)?'#ef4444' : (b.iss.length?'#f59e0b' : (b.wo.length?'#3b82f6' : '#22c55e'));
     let lines='';
     b.iss.forEach(i=>{ const ov=i.overdue?' <span class="badge red">overdue</span>':'';
-      lines+=`<div class="taskline fleet" title="${escA((i.detail||i.summary||'').slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(i.num))}')" title="Add as an assignable Shop Task">➕</span>⚠ ${esc(i.summary||('Issue #'+i.num))}${ov}${fioArrow('issue',i.id)}</div>`; });
+      lines+=`<div class="taskline fleet" title="${escA((i.detail||i.summary||'').slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(i.num))}')" title="Add as an assignable Shop Task">➕</span>⚠ ${esc(i.summary||('Issue #'+i.num))}${ov}${fioArrow('issue',i.num)}</div>`; });
     b.wo.forEach(w=>{ const st=w.status?` <span class="badge ${/pend/i.test(w.status)?'amber':'blue'}">${esc(w.status)}</span>`:'';
-      lines+=`<div class="taskline fleet" title="${escA((w.detail||w.summary||'').slice(0,300))}">📋 ${esc(w.summary||('WO '+(w.num||'')))}${st}${fioArrow('wo',w.id)}</div>`; });
+      lines+=`<div class="taskline fleet" title="${escA((w.detail||w.summary||'').slice(0,300))}">📋 ${esc(w.summary||('WO '+(w.num||'')))}${st}${fioArrow('wo',w.num)}</div>`; });
     b.svc.forEach(s=>{ const fs=fleetState(s.dueISO,today);
       const bd=fs.overdue?` <span class="badge red">overdue</span>`:(fs.soon?` <span class="badge amber">due soon</span>`:(s.dueISO?` <span class="badge grey">${fmtMD(s.dueISO)}</span>`:''));
-      lines+=`<div class="taskline fleet" title="${escA(s.service||'Service')}">🔧 ${esc(s.service||'Service')}${bd}${fioArrow('svc',s.id)}</div>`; });
+      lines+=`<div class="taskline fleet" title="${escA(s.service||'Service')}">🔧 ${esc(s.service||'Service')}${bd}${fioArrow('svc','')}</div>`; });
     const cnt=b.iss.length+b.wo.length+b.svc.length;
     return `<div class="teamcard" style="border-left-color:${edge}"><div class="th"><span class="tn">${esc(j.project||j.jobNum)} <span class="jn">${esc(j.jobNum||'')}</span></span><span class="tc">${cnt}</span></div>`+
       `<div class="tmeta"><span class="bayt">${esc(j.bay)}</span></div>`+
