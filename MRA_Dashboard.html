@@ -1428,7 +1428,7 @@
           <div><label>Finish date</label><input id="ptFinish" type="date"></div>
         </div>
         <div class="addrow2">
-          <div><label>Predecessor — starts after…</label><select id="ptPred"></select></div>
+          <div><label>Predecessor — starts after…</label><select id="ptPred" onchange="ptPredPickDate()"></select></div>
           <div><label>Milestone?</label><select id="ptMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
         </div>
         <div><label>Comments</label><input id="ptComments" autocomplete="off"></div>
@@ -1753,6 +1753,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.27", date:"2026-06-19", title:"Predecessor auto-fills the start date", items:[
+    "In the task editor, picking a <b>Predecessor</b> now auto-fills this task's <b>Start</b> to the day after that predecessor finishes (Finish-to-Start). If the task already had a length, the Finish shifts to keep the same duration." ] },
   { rev:"4.26", date:"2026-06-19", title:"Click a Gantt bar → full-screen detail for that project", items:[
     "On any Gantt (Projects tab + the floor schedules), <b>clicking a project's bar</b> now opens a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, sorted by date, colored by status (not started / in progress / done / past due), with ◆ milestones. Clicking the <b>name</b> on the left still opens the editor.",
     "Floor-schedule bars open the project detail when the job is a tracked project; otherwise they show the usual job popover." ] },
@@ -3070,6 +3072,20 @@ function fillPredOptions(p,excludeId){
   const tasks=((p&&p.tasks)||[]).filter(t=>t.id!=null&&t.id!=='' && String(t.id)!==String(excludeId));
   document.getElementById('ptPred').innerHTML=`<option value="">— none —</option>`+
     tasks.map(t=>`<option value="${escA(String(t.id))}">${esc((t.t||'').slice(0,70))}</option>`).join("");
+}
+// Pick a predecessor → auto-fill this task's Start = predecessor's Finish + 1 day (Finish-to-Start).
+// Keeps the task's existing length if it already has start+finish; otherwise sets finish = start.
+function ptPredPickDate(){
+  const p=oProj(window._ptProj), predId=document.getElementById('ptPred').value;
+  if(!p||!predId) return;
+  const pred=projTaskById(p,predId); const base=pred&&(pred.finISO||pred.startISO); if(!base) return;
+  const d=parseISO(base); if(!d) return; d.setDate(d.getDate()+1);
+  const iso=localISO(d.getTime()), st=document.getElementById('ptStart'), fin=document.getElementById('ptFinish');
+  let dur=0; if(st.value&&fin.value){ const a=parseISO(st.value),b=parseISO(fin.value); if(a&&b&&b>=a) dur=Math.round((b-a)/DAY); }
+  st.value=iso;
+  if(dur>0){ const f=parseISO(iso); f.setDate(f.getDate()+dur); fin.value=localISO(f.getTime()); }
+  else if(fin && (!fin.value || fin.value<iso)) fin.value=iso;
+  const msg=document.getElementById('ptMsg'); if(msg){ msg.style.color='var(--muted)'; msg.textContent='Start set to the day after “'+((pred.t||'').slice(0,40))+'” finishes.'; }
 }
 function fillAssignAndPhase(p){
   document.getElementById('ptAssignList').innerHTML = projAssignees().map(a=>`<option value="${escA(a)}">`).join("");
