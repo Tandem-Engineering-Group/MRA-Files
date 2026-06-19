@@ -1196,7 +1196,8 @@
       <div class="rangebtns" id="gfsLevel"></div>
       <div class="rangebtns" id="gfsRange" style="margin-left:12px"></div>
       <div class="gfs-warn" id="gfsWarn"></div>
-      <button class="gfs-close" onclick="closeGantt()" title="Close (Esc)">✕</button>
+      <button class="gfs-close" id="gfsThemeBtn" onclick="toggleTheme(this)" style="margin-left:auto" title="Switch this view (and the whole dashboard) light / dark — remembered on this device">☀️ Light</button>
+      <button class="gfs-close" onclick="closeGantt()" style="margin-left:8px" title="Close (Esc)">✕</button>
     </div>
     <div class="gfs-body">
       <div id="gfsCap"></div>
@@ -1697,7 +1698,7 @@ const GENERAL_HELP = `
     <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>Program Development</b> (groups each person's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p></div>
   <div class="hsec"><h4>⑥ᵈ 🔎 Project detail view (click a Gantt bar)</h4>
     <p><b>Click any project's bar</b> (on the Projects Gantt or the floor schedules) to open a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, colored by status, with ◆ milestone gates you can collapse/expand. It has the same <span class="k">🔍 zoom</span> + <span class="k">↔ scroll</span> sliders (and an <span class="k">All</span> to fit the whole project) so you can zoom in for precise work.</p>
-    <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). <b>Click any task's name on the left</b> to open that one task's edit form directly — where you can also set its <b>% Complete</b> (slider or type a number); a partly-done task shows a <b>partial bar fill + the %</b>. You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit.</p></div>
+    <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). <b>Click any task's name on the left</b> to open that one task's edit form directly — where you can also set its <b>% Complete</b> (slider or type a number); a partly-done task shows a <b>partial bar fill + the %</b>. You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit. The top bar also has a <span class="k">☀️ Light / 🌙 Dark</span> button to switch the theme right from this screen (it flips the whole dashboard, remembered per device).</p></div>
   <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
     <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp; <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
     On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone, solid fill = % complete, faded = completed, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:var(--red)">red line</span> = today.</p></div>
@@ -1795,6 +1796,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.43", date:"2026-06-19", title:"Light / dark switch on the project detail view", items:[
+    "The full-screen <b>project detail</b> (click a Gantt bar) now has its own <b>☀️ Light / 🌙 Dark</b> button in the top bar — that screen covers the menu, so the existing theme toggle wasn't reachable from there. It flips the whole dashboard and is remembered per device, same as the ☰ Menu one (they stay in sync)." ] },
   { rev:"4.42", date:"2026-06-19", title:"Crew icons for Josh (🪚) and Jeff (🚛)", items:[
     "The <b>Open Tasks by Assignee</b> columns now give <b>Josh</b> a 🪚 (woodworker) and <b>Jeff</b> a 🚛 (semi driver / handyman) instead of the generic 👤 — matching the rest of the crew icons (Sal 🔧, Wrap 🎨, Electricians ⚡, Doug 🛠️). Easy to swap if you'd rather a different one." ] },
   { rev:"4.41", date:"2026-06-19", title:"Project % now reflects partly-done tasks", items:[
@@ -2246,7 +2249,8 @@ function toggleTheme(btn){
   const light=!document.body.classList.contains('light');
   document.body.classList.toggle('light',light);
   try{ localStorage.setItem('mra_theme', light?'light':'dark'); }catch(e){}
-  setThemeBtn(btn||document.getElementById('btnTheme'));
+  setThemeBtn(document.getElementById('btnTheme'));       // keep the ☰ Menu button…
+  setThemeBtn(document.getElementById('gfsThemeBtn'));    // …and the detail-view button in sync
 }
 function toggleWall(btn){
   WALL=!WALL; document.body.classList.toggle('wall',WALL);
@@ -6275,6 +6279,7 @@ renderFleet();
 // Close-from-dashboard is parked until the write-back transport is reliable — hide the toggle.
 if(!CLOSE_FLOW_URL){ const _cb=document.getElementById('btnCloseMode'); if(_cb) _cb.style.display='none'; }
 try{ if(localStorage.getItem('mra_theme')==='light') document.body.classList.add('light'); }catch(e){}
+setThemeBtn(document.getElementById('btnTheme')); setThemeBtn(document.getElementById('gfsThemeBtn'));   // labels reflect the saved theme on load
 setThemeBtn(document.getElementById('btnTheme'));
 applyDesignVars();   // apply this screen's saved size/spacing tweaks (Design panel)
 refresh().then(ok=>{ if(!ok) renderAll(); try{ if(localStorage.getItem('mra_wall')){ const b=document.getElementById('btnWall'); if(b && !WALL) toggleWall(b); } }catch(e){} });
