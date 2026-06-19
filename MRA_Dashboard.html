@@ -539,6 +539,10 @@
   #fleetioView .panel > h2 .pcaret:hover{color:var(--txt)}
   #fleetioView .panel.pcollapsed > h2{margin-bottom:0}
   #fleetioView .panel.pcollapsed > :not(h2){display:none}
+  /* Capped, scrollable lists (Needs Attention / By Assignee) with an Expand toggle */
+  .fscroll{max-height:300px; overflow-y:auto; padding-right:2px}
+  .fscroll.exp{max-height:none; overflow:visible}
+  .fexp{font-size:11px; padding:3px 9px}
   .modal{background:var(--panel); border:1px solid var(--line); border-radius:16px;
     max-width:680px; width:100%; max-height:86vh; overflow:auto; padding:24px 30px; position:relative}
   .modal h3{font-size:20px; font-weight:800; margin-bottom:4px}
@@ -924,8 +928,9 @@
     <div class="panel" id="fp-attention">
       <h2>⚡ Needs Attention <span class="count" id="fAttentionCount"></span>
         <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">overdue issues &amp; service + aging open issues — click to open &amp; close in Fleetio</span>
+        <button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fAttention')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
       </h2>
-      <div id="fAttention"></div>
+      <div id="fAttention" class="fscroll"></div>
     </div>
     <div class="panel" id="fp-search">
       <h2>🔎 Find Open Fleetio Items <span class="count" id="fSearchCount"></span>
@@ -964,8 +969,9 @@
     <div class="panel" id="fp-byassignee">
       <h2>🧑‍🔧 Open Work by Assignee <span class="count" id="fByAssigneeCount"></span>
         <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">who owes what in Fleetio · click an item to open it</span>
+        <button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fByAssignee')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
       </h2>
-      <div class="teamgrid" id="fByAssignee"></div>
+      <div class="teamgrid fscroll" id="fByAssignee"></div>
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="panel" id="fp-issues">
@@ -1659,6 +1665,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.10", date:"2026-06-19", title:"Needs Attention & By Assignee: compact + expandable", items:[
+    "Both the ⚡ Needs Attention and 🧑‍🔧 Open Work by Assignee panels are now compact by default — they scroll within a fixed height so they don't dominate the tab — with an ⤢ Expand button to grow each to full height (remembered per device)." ] },
   { rev:"4.9", date:"2026-06-19", title:"Fleetio tab: Needs Attention, by-assignee, top units, collapsible", items:[
     "New ⚡ Needs Attention list at the top — overdue issues & service plus aging open issues, worst-first, each a click-through to Fleetio.",
     "New 🧑‍🔧 Open Work by Assignee — issues + work orders grouped by who they're on (overdue counts up top).",
@@ -3878,7 +3886,16 @@ function setupFleetioCollapse(){
       h.insertBefore(c, h.firstChild); }
     c.textContent = col?'▸':'▾'; c.title='Collapse / expand this panel';
   });
+  applyFScroll();
 }
+// Capped/expandable scroll lists (Needs Attention, By Assignee)
+function toggleFScroll(btn,id){ const el=document.getElementById(id); if(!el) return;
+  const exp=el.classList.toggle('exp'); if(btn) btn.textContent=exp?'⤡ Less':'⤢ Expand';
+  try{ localStorage.setItem('fexp_'+id, exp?'1':'0'); }catch(e){} }
+function applyFScroll(){ ['fAttention','fByAssignee'].forEach(id=>{ const el=document.getElementById(id); if(!el) return;
+  let exp=false; try{ exp=localStorage.getItem('fexp_'+id)==='1'; }catch(e){}
+  el.classList.toggle('exp',exp);
+  const pl=el.closest('.panel'); const btn=pl&&pl.querySelector('.fexp'); if(btn) btn.textContent=exp?'⤡ Less':'⤢ Expand'; }); }
 function renderFleetio(D){
   const F=D.fleetio, today=D.todayISO;
   const issues=(F&&F.issues)||[], wos=(F&&F.workOrders)||[], svc=(F&&F.service)||[];
