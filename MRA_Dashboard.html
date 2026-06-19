@@ -259,6 +259,11 @@
   body.wall .baycol.parkcol{max-height:none; overflow:visible}
   body.wall .baycol.parkcol .bay-body.autoscroll{max-height:19vh}
   body.wall .asgbody{max-height:30vh}
+  /* Wall: assignee row is a flex row so each panel can be sized on its own (Design panel).
+     Default keeps Sal double-wide (2) vs Wrap / Electricians (1). */
+  body.wall .assignees{display:flex; gap:12px; align-items:flex-start}
+  body.wall .assignees .asg{flex:1 1 0; min-width:0}
+  body.wall .assignees .asg[data-asg="Sal"]{flex:2 1 0}
   /* Multi-job cards (Parking Lot, Next Up/On Hold…) flow into more columns as the card widens,
      so pushing the other columns narrow makes a wide Parking Lot double-up and run shorter. */
   body.wall .bay-body.wrapjobs{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
@@ -826,9 +831,9 @@
     <div class="panel" id="openTasksPanel">
       <h2>🧰 Open Tasks by Assignee <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span></h2>
       <div class="assignees">
-        <div class="asg asgSalWrap"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
-        <div class="asg"><div class="asg-h">🎨 Wrap Team <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
-        <div class="asg"><div class="asg-h">⚡ Electricians <span class="count" id="cntElec"></span></div><div class="asgbody autoscroll" id="asgElec"></div></div>
+        <div class="asg asgSalWrap" data-asg="Sal"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
+        <div class="asg" data-asg="Wrap Team"><div class="asg-h">🎨 Wrap Team <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
+        <div class="asg" data-asg="Electricians"><div class="asg-h">⚡ Electricians <span class="count" id="cntElec"></span></div><div class="asgbody autoscroll" id="asgElec"></div></div>
       </div>
     </div>
 
@@ -1202,7 +1207,7 @@
     <div class="ds-row"><label>Spacing</label><input type="range" id="ds-density" min="0.6" max="1.8" step="0.05" oninput="setDesign('density',this.value)"><span class="ds-v" id="ds-density-v"></span></div>
     <div class="ds-btns"><button onclick="resetDesign()">↺ Reset</button><button onclick="copyDesign(event)">📋 Copy settings</button></div>
     <div class="ds-div">📺 Wall tile sizes <span>TV / wall mode only</span></div>
-    <div class="ds-sub" style="margin:0 0 12px">Pick a bay, then size it for this monitor — <b>width</b> widens its whole column (Front + Back together) to soak up empty space; <b>height</b> sizes just that tile. Takes effect in <b>📺 Wall mode</b>.</div>
+    <div class="ds-sub" style="margin:0 0 12px">Pick a <b>bay</b> or an <b>Open Tasks by Assignee</b> tile (Sal · Wrap · Electricians), then size it for this monitor — <b>width</b> and <b>height</b> are independent (changing one tile never moves another). For bays, width sizes the whole column (Front + Back). Takes effect in <b>📺 Wall mode</b>.</div>
     <div class="ds-row"><label>Bay tile</label><select id="ds-tilepick" onchange="dsTilePick()" style="flex:1; min-width:0; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:6px 8px; font-size:12px; font-family:inherit"></select></div>
     <div class="ds-row"><label>Col width</label><input type="range" id="ds-tilew" min="50" max="250" step="5" oninput="setTileW(this.value)"><span class="ds-v" id="ds-tilew-v"></span></div>
     <div class="ds-row"><label>Tile height</label><input type="range" id="ds-tileh" min="30" max="250" step="5" oninput="setTileH(this.value)"><span class="ds-v" id="ds-tileh-v"></span></div>
@@ -1742,6 +1747,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.21", date:"2026-06-19", title:"Wall: size the Open Tasks by Assignee tiles too", items:[
+    "The 🎨 Design panel per-tile sizing now also covers the <b>Open Tasks by Assignee</b> tiles (Sal · Wrap Team · Electricians) on the TV — pick one from the tile list and set its width and height independently, same as the bays." ] },
   { rev:"4.20", date:"2026-06-19", title:"Normal view: collapse/expand each job in a bay", items:[
     "Each job on the bays now has a little ▾/▸ caret right next to its name (laptop/desktop view) — click it to collapse or expand just that one job's tasks, so you can shrink an individual trailer (e.g. WFCU in Bay 5 Front) without touching the others." ] },
   { rev:"4.19", date:"2026-06-19", title:"Wall: wide bay cards auto-wrap into columns", items:[
@@ -2232,12 +2239,15 @@ let WALL_COLS=[];                 // [{key, bays:[...]}] rebuilt every render of
 let WALL_LAYOUT={w:{}, h:{}};     // w: column key -> width %, h: bay name -> height %
 try{ const o=JSON.parse(localStorage.getItem('mra_wall_layout_v1')||'{}'); if(o&&typeof o==='object'){ WALL_LAYOUT.w=o.w||{}; WALL_LAYOUT.h=o.h||{}; } }catch(e){}
 function saveWallLayout(){ try{ localStorage.setItem('mra_wall_layout_v1', JSON.stringify(WALL_LAYOUT)); }catch(e){} }
+const ASG_W={'Sal':2,'Wrap Team':1,'Electricians':1}, ASG_T=4;   // default width shares of the assignee row
 function applyWallLayout(){
   const cols=document.querySelectorAll('#bays .baycol'), bays=document.querySelectorAll('#bays .bay');
+  const asgs=document.querySelectorAll('.assignees .asg[data-asg]');
   // Off in normal view — clear every override so the standard layout is untouched.
   if(!document.body.classList.contains('wall')){
     cols.forEach(c=>{ c.style.flex=''; c.style.maxHeight=''; });
     bays.forEach(b=>{ const bd=b.querySelector('.bay-body'); if(bd){ bd.style.height=''; bd.style.maxHeight=''; } });
+    asgs.forEach(a=>{ a.style.flex=''; a.querySelectorAll('.asgbody').forEach(bd=>bd.style.maxHeight=''); });
     return;
   }
   // WIDTH — per column (Front + Back share a column), INDEPENDENT: a customized column gets a
@@ -2257,31 +2267,43 @@ function applyWallLayout(){
   });
   // a column holding a custom-sized tile is freed from the 44vh cap so nothing gets clipped
   cols.forEach(c=>{ if(grown.has(c)) c.style.maxHeight='none'; else if(!c.classList.contains('parkcol')) c.style.maxHeight=''; });
+  // Open Tasks by Assignee tiles (Sal / Wrap Team / Electricians): WIDTH = fixed share (independent,
+  // 100% = its normal share), HEIGHT = that panel's task-list cap (100% ≈ the default 30vh).
+  asgs.forEach(a=>{ const k=a.getAttribute('data-asg');
+    const wp=WALL_LAYOUT.w[k];
+    a.style.flex = wp?('0 0 '+((wp/100)*((ASG_W[k]||1)/ASG_T)*100).toFixed(2)+'%'):'';
+    const hp=WALL_LAYOUT.h[k], vh=hp?(hp/100*30).toFixed(1)+'vh':'';
+    a.querySelectorAll('.asgbody').forEach(bd=>{ bd.style.maxHeight=vh; });
+  });
 }
 function dsColKeyOf(bay){ const c=WALL_COLS.find(c=>c.bays.includes(bay)); return c?c.key:bay; }
+function dsIsAsg(name){ return name in ASG_W; }                       // an Open-Tasks-by-Assignee tile
+function dsWidthKey(name){ return dsIsAsg(name)?name:dsColKeyOf(name); }  // bay → its column; asg → itself
 function dsPopulateTiles(){
   const sel=document.getElementById('ds-tilepick'); if(!sel) return;
   const bays=[]; WALL_COLS.forEach(c=>c.bays.forEach(b=>{ if(b&&bays.indexOf(b)<0) bays.push(b); }));
+  const asgs=Object.keys(ASG_W);
   if(!bays.length){ sel.innerHTML='<option>(open the FLOOR first)</option>'; return; }
   const cur=sel.value;
-  sel.innerHTML=bays.map(b=>`<option value="${escA(b)}">${esc(b)}</option>`).join('');
-  if(bays.indexOf(cur)>=0) sel.value=cur;
+  sel.innerHTML='<optgroup label="Bays">'+bays.map(b=>`<option value="${escA(b)}">${esc(b)}</option>`).join('')+'</optgroup>'
+    +'<optgroup label="Open Tasks by Assignee">'+asgs.map(a=>`<option value="${escA(a)}">${esc(a)}</option>`).join('')+'</optgroup>';
+  if([...bays,...asgs].indexOf(cur)>=0) sel.value=cur;
   dsTileSync();
 }
 function dsTileSync(){
-  const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const bay=sel.value;
-  const w=WALL_LAYOUT.w[dsColKeyOf(bay)]||100, h=WALL_LAYOUT.h[bay]||100;
+  const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const name=sel.value;
+  const w=WALL_LAYOUT.w[dsWidthKey(name)]||100, h=WALL_LAYOUT.h[name]||100;
   const ws=document.getElementById('ds-tilew'), hs=document.getElementById('ds-tileh');
   if(ws) ws.value=w; if(hs) hs.value=h;
   const wv=document.getElementById('ds-tilew-v'), hv=document.getElementById('ds-tileh-v');
   if(wv) wv.textContent=w+'%'; if(hv) hv.textContent=h+'%';
 }
 function dsTilePick(){ dsTileSync(); }
-function setTileW(v){ const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const k=dsColKeyOf(sel.value);
+function setTileW(v){ const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const k=dsWidthKey(sel.value);
   v=+v; if(v===100) delete WALL_LAYOUT.w[k]; else WALL_LAYOUT.w[k]=v; saveWallLayout(); applyWallLayout();
   const wv=document.getElementById('ds-tilew-v'); if(wv) wv.textContent=v+'%'; }
-function setTileH(v){ const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const bay=sel.value;
-  v=+v; if(v===100) delete WALL_LAYOUT.h[bay]; else WALL_LAYOUT.h[bay]=v; saveWallLayout(); applyWallLayout();
+function setTileH(v){ const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const name=sel.value;
+  v=+v; if(v===100) delete WALL_LAYOUT.h[name]; else WALL_LAYOUT.h[name]=v; saveWallLayout(); applyWallLayout();
   const hv=document.getElementById('ds-tileh-v'); if(hv) hv.textContent=v+'%'; }
 function resetWallLayout(){ WALL_LAYOUT={w:{},h:{}}; saveWallLayout(); applyWallLayout(); dsTileSync(); }
 function applyWallZoom(){
