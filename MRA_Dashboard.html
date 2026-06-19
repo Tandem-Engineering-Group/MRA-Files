@@ -1752,6 +1752,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.24", date:"2026-06-19", title:"Wall: tile-height guard keeps content on-screen", items:[
+    "Stretching a tile's height in the 🎨 Design panel can no longer push content off the bottom of the TV — if it would overflow, the height is trimmed so the tile lands right at the screen edge (the slider snaps back to the max that fits)." ] },
   { rev:"4.23", date:"2026-06-19", title:"Sal's two columns balance by height", items:[
     "Sal's task list now splits across its two columns by <b>height</b> (each trailer card counts its header + its tasks), keeping trailers whole — so a card drops to the right column when the left is taller, instead of the left stacking up while the right sits half-empty." ] },
   { rev:"4.22", date:"2026-06-19", title:"Wall tuning: EOTM up top, fill the bottom, size Sal's two columns, see-through panel", items:[
@@ -2328,6 +2330,19 @@ function setTileW(v){ const sel=document.getElementById('ds-tilepick'); if(!sel|
   const wv=document.getElementById('ds-tilew-v'); if(wv) wv.textContent=v+'%'; }
 function setTileH(v){ const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const name=sel.value;
   v=+v; if(v===100) delete WALL_LAYOUT.h[name]; else WALL_LAYOUT.h[name]=v; saveWallLayout(); applyWallLayout();
+  // Guard: a taller tile can't push content off the bottom of the TV. If the page now overflows,
+  // trim this tile's height by the overflow so it lands right at the screen edge.
+  if(WALL && WALL_LAYOUT.h[name] && WALL_LAYOUT.h[name]>100){
+    const over=document.documentElement.scrollHeight-window.innerHeight;
+    if(over>2){
+      const base=(dsIsAsg(name)||name==='salL'||name==='salR')?30:17, vhPx=window.innerHeight/100;
+      const curPx=WALL_LAYOUT.h[name]/100*base*vhPx;
+      let pct=Math.floor(((curPx-over-8)/vhPx/base*100)/5)*5;
+      pct=Math.max(100,Math.min(WALL_LAYOUT.h[name],pct));
+      if(pct!==WALL_LAYOUT.h[name]){ if(pct<=100) delete WALL_LAYOUT.h[name]; else WALL_LAYOUT.h[name]=pct;
+        saveWallLayout(); applyWallLayout(); v=pct; const hs=document.getElementById('ds-tileh'); if(hs) hs.value=v; }
+    }
+  }
   const hv=document.getElementById('ds-tileh-v'); if(hv) hv.textContent=v+'%'; }
 function resetWallLayout(){ WALL_LAYOUT={w:{},h:{}}; saveWallLayout(); applyWallLayout(); dsTileSync(); }
 function applyWallZoom(){
