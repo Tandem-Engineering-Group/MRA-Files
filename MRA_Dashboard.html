@@ -540,6 +540,8 @@
   .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:100;
     display:none; align-items:center; justify-content:center; padding:30px}
   .modal-overlay.show{display:flex}
+  /* Task editors must sit ABOVE the full-screen project-detail overlay (z 150) when opened from it */
+  #projEditModal, #projTaskModal{z-index:200}
   /* Global search overlay (spotlight, anchored near the top) */
   #searchModal{align-items:flex-start; padding:0}
   #searchModal .searchbox{margin-top:8vh; width:min(680px,94vw); background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.55); overflow:hidden}
@@ -1619,6 +1621,8 @@ let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
 let GFS_PROJECT=null;      // when GFS==='project', the single project to detail
 const PD_COLLAPSED=new Set();   // collapsed milestone sections in the project-detail view (project|gate)
 let PD_UNDO=[], PD_REDO=[], PD_UNDO_PROJ=null;   // undo/redo stacks for drag-reschedule (per project)
+let PD_WIN_DAYS=null;   // project-detail Gantt zoom (window length in days); null = fit the whole project
+let PD_PAN=null;        // project-detail horizontal scroll 0..100; null = anchored at the span start
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
 let MRASHOP_HL=false; try{ MRASHOP_HL = localStorage.getItem('mra_hl_mrashop')==='1'; }catch(e){}  // Projects Gantt: highlight MRA Shop load
@@ -1669,11 +1673,14 @@ const GENERAL_HELP = `
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
     <span class="k">Everyone / People only</span> toggle hides crews & vendors — your choice is remembered. It's <b>compact by default</b> — scrolls within a fixed height so it doesn't dominate the tab — with an <span class="k">⤢ Expand</span> button to grow it to full height (remembered per device). <b>Project Progress</b> works the same way.</p></div>
   <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
-    <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a bar for a detail popover. The full-screen Projects view has the <b>same</b> <span class="k">🔍 zoom</span> and <span class="k">↔ scroll</span> sliders as the inline Gantt (below) — they stay in sync. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p></div>
+    <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a <b>bar</b> to open that project's <b>detailed view</b> (⑥ᵈ below). The full-screen Projects view has the <b>same</b> <span class="k">🔍 zoom</span> and <span class="k">↔ scroll</span> sliders as the inline Gantt (below) — they stay in sync. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p></div>
   <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
     <p>On the Project Schedules Gantt (inline or full-screen) the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom. <span class="k">All</span> snaps to the whole timeline. Your zoom is remembered per device. <span class="k">🖨 Print</span> lays the whole project Gantt + a project list onto one <b>11×17 landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>⑥ᶜ ↕ Sort the Gantt</h4>
     <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>Program Development</b> (groups each person's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p></div>
+  <div class="hsec"><h4>⑥ᵈ 🔎 Project detail view (click a Gantt bar)</h4>
+    <p><b>Click any project's bar</b> (on the Projects Gantt or the floor schedules) to open a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, colored by status, with ◆ milestone gates you can collapse/expand. It has the same <span class="k">🔍 zoom</span> + <span class="k">↔ scroll</span> sliders (and an <span class="k">All</span> to fit the whole project) so you can zoom in for precise work.</p>
+    <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit.</p></div>
   <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
     <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp; <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
     On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone, solid fill = % complete, faded = completed, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:var(--red)">red line</span> = today.</p></div>
@@ -1771,6 +1778,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.35", date:"2026-06-19", title:"Project detail view: full task controls + zoom / scroll · Design panel holds page 2", items:[
+    "The project <b>detail view</b> (click a Gantt bar) now has the <b>same 🔍 zoom + ↔ scroll sliders</b> as the other Gantts, plus <b>All</b> to fit the whole project — so a long schedule can be zoomed in for finer drag-rescheduling.",
+    "In edit mode, the <b>full task controls</b> now sit up top next to ↶ Undo / ↷ Redo: <b>➕ Add task</b> and <b>✎ Edit tasks</b> (the same add / edit / ✓ complete / ↩ reopen / 🗑 delete / predecessor editor as the Projects tab) — no need to leave the detail view.",
+    "🎨 Design panel: picking a <b>page-2 crew tile</b> (Doug / Josh / Jeff) now <b>jumps the wall straight to that page and holds it</b> while you size — the auto-rotation pauses so it can't swap to Sal mid-adjust, and resumes when you close the panel." ] },
   { rev:"4.34", date:"2026-06-19", title:"Size the Doug · Josh · Jeff tiles too · set the crew-rotation interval", items:[
     "The 🎨 Design panel per-tile sizing now also covers the <b>page-2 crew tiles</b> — <b>Doug</b>, <b>Josh</b> and <b>Jeff</b> — so every Open-Tasks tile on both pages can be sized independently (width + height) for the TV, same as the bays.",
     "The <span style=\"white-space:nowrap\">⚙ wall gear</span> <b>🔁 Rotate crews</b> control now has a <b>how-often setting next to it</b> — set how fast the bottom panel swaps between the two crew pages, anywhere from <b>5 to 20 seconds</b> (remembered per monitor)." ] },
@@ -2226,13 +2237,16 @@ function toggleWall(btn){
 let ASG_PAGE=0, _asgTimer=null;
 let ASG_ROTATE_SEC=15; try{ const _s=parseInt(localStorage.getItem('mra_asg_rotate_sec'),10); if(_s>=5&&_s<=20) ASG_ROTATE_SEC=_s; }catch(e){}   // how often the crew pages swap (5–20s, set in the ⚙ wall gear)
 let ASG_ROTATE=true; try{ const _r=localStorage.getItem('mra_asg_rotate'); if(_r!==null) ASG_ROTATE=(_r==='1'); }catch(e){}
+let DS_HOLD_PAGE=null;   // while the 🎨 Design panel is open, hold the crew page that owns the tile being sized (0=Sal/Wrap/Elec, 1=Doug/Josh/Jeff)
 function showAsgPage(){
   const A=document.getElementById('assigneesA'), B=document.getElementById('assigneesB'), ind=document.getElementById('asgPageInd');
   if(!A||!B) return;
   const hasB=!!window._asgPageBHasTasks;
   if(!WALL){ A.style.display=''; B.style.display=''; if(ind) ind.textContent='scroll within each · 📺 Wall mode auto-scrolls'; return; }
-  if(!hasB||!ASG_ROTATE) ASG_PAGE=0;
-  const showB=(ASG_PAGE===1 && hasB);
+  // While sizing a tile in the Design panel, HOLD the chosen page so the cycle can't swap it away mid-edit.
+  const holding=document.body.classList.contains('dsopen') && DS_HOLD_PAGE!=null;
+  if(holding) ASG_PAGE=DS_HOLD_PAGE; else if(!hasB||!ASG_ROTATE) ASG_PAGE=0;
+  const showB=(ASG_PAGE===1 && (hasB||holding));
   A.style.display=showB?'none':''; B.style.display=showB?'':'none';
   if(ind){ ind.innerHTML = hasB
     ? `<span class="pgdot" onclick="setAsgPage(0)" title="Sal · Wrap · Electricians">${showB?'○':'●'}</span> <span class="pgdot" onclick="setAsgPage(1)" title="Doug · Josh · Jeff">${showB?'●':'○'}</span> &nbsp;${showB?'Doug · Josh · Jeff':'Sal · Wrap · Electricians'}${ASG_ROTATE?' · auto-rotating':''}`
@@ -2240,6 +2254,7 @@ function showAsgPage(){
 }
 function setAsgPage(n){ ASG_PAGE=n; showAsgPage(); startAsgRotate(); }   // clicking a dot also restarts the timer
 function startAsgRotate(){ clearInterval(_asgTimer); _asgTimer=null;
+  if(document.body.classList.contains('dsopen')) return;   // paused while the 🎨 Design panel is open (sizing)
   if(WALL && ASG_ROTATE && window._asgPageBHasTasks){ _asgTimer=setInterval(()=>{ ASG_PAGE=ASG_PAGE?0:1; showAsgPage(); }, ASG_ROTATE_SEC*1000); } }
 function stopAsgRotate(){ clearInterval(_asgTimer); _asgTimer=null; ASG_PAGE=0; showAsgPage(); }
 function toggleAsgRotate(btn){ ASG_ROTATE=!ASG_ROTATE; try{ localStorage.setItem('mra_asg_rotate', ASG_ROTATE?'1':'0'); }catch(e){}
@@ -2325,7 +2340,10 @@ function applyDesignVars(){ Object.keys(DS_VALS).forEach(k=>{
   }); }
 function setDesign(k,val){ if(!(k in DS_DEFAULTS)) return; DS_VALS[k]=+val;
   try{ localStorage.setItem('mra_design_v1', JSON.stringify(DS_VALS)); }catch(e){} applyDesignVars(); }
-function toggleDesign(){ document.body.classList.toggle('dsopen'); if(document.body.classList.contains('dsopen')) dsPopulateTiles(); }
+function toggleDesign(){ document.body.classList.toggle('dsopen');
+  if(document.body.classList.contains('dsopen')){ dsPopulateTiles(); clearInterval(_asgTimer); _asgTimer=null; }   // pause crew rotation while sizing
+  else { DS_HOLD_PAGE=null; if(WALL){ showAsgPage(); if(ASG_ROTATE) startAsgRotate(); } }   // release the held page + resume on close
+}
 function resetDesign(){ DS_VALS=Object.assign({}, DS_DEFAULTS); try{ localStorage.removeItem('mra_design_v1'); }catch(e){} applyDesignVars(); }
 function copyDesign(ev){ const txt='MRA design (this screen): '+Object.keys(DS_VALS).map(k=>k+'='+DS_VALS[k]+DS_UNIT[k]).join(' · ')
     +(Object.keys(WALL_LAYOUT.w).length||Object.keys(WALL_LAYOUT.h).length?' · wall tiles='+JSON.stringify(WALL_LAYOUT):'');
@@ -2410,6 +2428,16 @@ function dsTileSync(){
   if(ws) ws.value=w; if(hs) hs.value=h;
   const wv=document.getElementById('ds-tilew-v'), hv=document.getElementById('ds-tileh-v');
   if(wv) wv.textContent=w+'%'; if(hv) hv.textContent=h+'%';
+  dsHoldPage(name);
+}
+// While the Design panel is open, jump the wall to the page that owns the picked crew tile (and hold it
+// there) so Doug/Josh/Jeff are reachable without waiting for the rotation to land on page 2.
+function dsHoldPage(name){
+  if(!document.body.classList.contains('dsopen')){ DS_HOLD_PAGE=null; return; }
+  const isAsg=dsIsAsg(name)||name==='salL'||name==='salR';
+  if(!isAsg){ DS_HOLD_PAGE=null; if(WALL) showAsgPage(); return; }   // a bay tile — release the crew-page hold
+  DS_HOLD_PAGE=(name==='Doug'||name==='Josh'||name==='Jeff')?1:0;
+  if(WALL) showAsgPage();
 }
 function dsTilePick(){ dsTileSync(); }
 function setTileW(v){ const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const k=dsWidthKey(sel.value);
@@ -3064,8 +3092,9 @@ function openProjectEditor(name){
   peProjectChange();
   document.getElementById('projEditModal').classList.add('show');
 }
-function closePE(e){ if(!e || e.target.id==='projEditModal' || e.target.classList.contains('modal-close'))
-  document.getElementById('projEditModal').classList.remove('show'); }
+function closePE(e){ if(!e || e.target.id==='projEditModal' || e.target.classList.contains('modal-close')){
+  document.getElementById('projEditModal').classList.remove('show');
+  if(GFS==='project' && typeof renderGanttFS==='function') renderGanttFS(); } }   // reflect add/edit/delete back in the detail bars
 function peCurrentProject(){
   const v=document.getElementById('peProject').value;
   return (v==='__new__') ? document.getElementById('peNewProj').value.trim() : v;
@@ -5753,7 +5782,7 @@ function openGantt(which){ GFS=which; document.getElementById('ganttFS').classLi
 // Click a Gantt BAR → open a full-screen DETAILED view of that one project (its tasks as bars).
 function openProjectDetail(ev, name){ if(ev&&ev.stopPropagation) ev.stopPropagation();
   if(!name) return; GFS='project'; GFS_PROJECT=name;
-  if(name!==PD_UNDO_PROJ){ PD_UNDO=[]; PD_REDO=[]; PD_UNDO_PROJ=name; }   // undo history is per project
+  if(name!==PD_UNDO_PROJ){ PD_UNDO=[]; PD_REDO=[]; PD_UNDO_PROJ=name; PD_WIN_DAYS=null; PD_PAN=null; }   // undo history + zoom are per project
   document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); }
 // Floor bars: open the project detail if this job is a tracked project (has tasks), else the popover.
 function barProjectOrPop(ev, popKey, projName){ if(ev&&ev.stopPropagation) ev.stopPropagation();
@@ -5825,6 +5854,13 @@ function pdragSave(project, t, startISO, finISO){
 }
 function pdUndo(){ if(!PD_UNDO.length) return; const a=PD_UNDO.pop(); PD_REDO.push(a); pdApplyDates(a.project, a.id, a.oldStart, a.oldFin); }
 function pdRedo(){ if(!PD_REDO.length) return; const a=PD_REDO.pop(); PD_UNDO.push(a); pdApplyDates(a.project, a.id, a.newStart, a.newFin); }
+// Zoom + horizontal scroll for the single-project detail Gantt (transient, reset when you open a different project).
+function setPdWin(d){ PD_WIN_DAYS=Math.max(7,Math.min(365,Math.round(d))); if(GFS==='project') renderGanttFS(); }
+function setPdPan(v){ PD_PAN=Math.max(0,Math.min(100,parseFloat(v)||0)); if(GFS==='project') renderGanttFS(); }
+function setPdWinAll(){ PD_WIN_DAYS=null; PD_PAN=null; if(GFS==='project') renderGanttFS(); }
+// Full task controls from inside the detail view: open the same editor the Projects tab uses (add/edit/complete/delete/predecessor).
+function pdEditTasks(){ if(!GFS_PROJECT) return; if(typeof openProjectEditor==='function') openProjectEditor(GFS_PROJECT); }
+function pdAddTask(){ if(!GFS_PROJECT) return; if(typeof openProjectEditor!=='function') return; openProjectEditor(GFS_PROJECT); if(typeof openProjTaskNew==='function') openProjTaskNew(); }
 function setGfsFloorDays(d){ GFS_FLOOR_DAYS=d; renderGanttFS(); }
 function setGfsLevel(lv){
   const D=window.MRA_DATA; if(!D) return;
@@ -5910,16 +5946,19 @@ function renderGanttFS(){
     // Detailed view of ONE project (opened by clicking its Gantt bar): every task as its own bar,
     // sorted by full date, colored by status, milestones flagged ◆.
     const p=(D.projects||[]).find(x=>x.name===GFS_PROJECT);
-    titleEl.textContent=(p?p.name:'Project')+' — Detailed'; rangeEl.innerHTML='';
-    // Edit toggle so it's obvious how to get into drag/edit mode (otherwise the first drag just prompts).
+    titleEl.textContent=(p?p.name:'Project')+' — Detailed';
+    // Edit toggle so it's obvious how to get into drag/edit mode, plus the full task controls (add / edit /
+    // complete / delete) and Undo/Redo — all appear together once you're in edit mode.
     levelEl.innerHTML = (CLOSE_PIN
-      ? `<div class="rb active" title="Edit on — drag a task bar: middle moves it, the ends change start/finish">✏️ Edit on — drag bars to reschedule</div>`
+      ? `<div class="rb active" title="Edit on — drag a task bar: middle moves it, the ends change start/finish">✏️ Edit on — drag to reschedule</div>`
+        + `<div class="rb" onclick="pdAddTask()" title="Add a new task to this project">➕ Add task</div>`
+        + `<div class="rb" onclick="pdEditTasks()" title="Open the full task editor for this project — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors">✎ Edit tasks</div>`
         + `<div class="rb${PD_UNDO.length?'':' rbdim'}" onclick="pdUndo()" title="Undo the last date change">↶ Undo${PD_UNDO.length?(' ('+PD_UNDO.length+')'):''}</div>`
         + `<div class="rb${PD_REDO.length?'':' rbdim'}" onclick="pdRedo()" title="Redo">↷ Redo${PD_REDO.length?(' ('+PD_REDO.length+')'):''}</div>`
-      : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars and change dates">🔒 Edit dates</div>`);
+      : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars, add and edit tasks">🔒 Edit / add tasks</div>`);
     if(!p || !(p.tasks||[]).length){
       cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
-      legEl.innerHTML=''; warnEl.textContent=''; return;
+      legEl.innerHTML=''; warnEl.textContent=''; rangeEl.innerHTML=''; return;
     }
     // Date guard: a typo'd year (e.g. 1918) shouldn't blow the timeline out to a century — only sane
     // dates set the window; out-of-range tasks are flagged (⚠) instead of squishing every bar.
@@ -5928,13 +5967,31 @@ function renderGanttFS(){
     if(SANE(p.startISO)) allISO.push(p.startISO); if(SANE(p.finishISO)) allISO.push(p.finishISO);
     allISO.push(today); allISO.sort();
     const tlo=parseISO(allISO[0]).getTime()-5*DAY, thi=parseISO(allISO[allISO.length-1]).getTime()+7*DAY;
-    const win=buildWindow(new Date(tlo), Math.max(21,Math.ceil((thi-tlo)/DAY)));
+    const fullDays=Math.max(21,Math.ceil((thi-tlo)/DAY));
+    let winDays=fullDays, winStart=tlo;                       // default: fit the whole project on screen
+    if(PD_WIN_DAYS!=null){ winDays=Math.max(7,Math.min(fullDays,PD_WIN_DAYS));
+      const span=(fullDays-winDays)*DAY;                      // scrollable range left over after zooming in
+      winStart=tlo+(span>0?Math.round(span*((PD_PAN!=null?PD_PAN:0)/100)):0); }
+    const win=buildWindow(new Date(winStart), winDays);
+    // Zoom 🔍 + scroll ↔ sliders (same as the other Gantts) — needed now that a long project can be zoomed in for finer drags.
+    // Build the controls ONCE, then only sync their values — so dragging a slider isn't interrupted by the re-render it triggers.
+    const _panSpan=fullDays-winDays;
+    if(!document.getElementById('pdWinSlider')){
+      rangeEl.innerHTML =
+        `<span class="gwinwrap" title="Zoom — how much of the timeline to show at once">🔍<input id="pdWinSlider" type="range" min="0" max="100" oninput="setPdWin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show from ~1 week up to the whole project"><span id="pdWinLab" class="gwinlab"></span></span>`
+        +`<span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="pdPanSlider" type="range" min="0" max="100" oninput="setPdPan(this.value)" class="gwinslider" title="Scroll the window left (earlier) or right (later) — the zoom stays the same"></span>`
+        +`<div id="pdAllBtn" class="rb" onclick="setPdWinAll()" title="Fit the whole project on screen">All</div>`;
+    }
+    { const zl=document.getElementById('pdWinSlider'); if(zl && document.activeElement!==zl) zl.value=_d2s(winDays);
+      const ll=document.getElementById('pdWinLab'); if(ll) ll.textContent=gwinLabel(winDays);
+      const ps=document.getElementById('pdPanSlider'); if(ps){ ps.disabled=(_panSpan<=0); if(document.activeElement!==ps) ps.value=_panSpan<=0?0:(PD_PAN!=null?PD_PAN:0); }
+      const ab=document.getElementById('pdAllBtn'); if(ab) ab.classList.toggle('active', PD_WIN_DAYS==null); }
     const byId={}; (p.tasks||[]).forEach(t=>{ if(t.id!=null&&t.id!=='') byId[String(t.id)]=t; });
     const dkey=t=>(t.startISO||t.finISO||'9999-99-99');
     const flagged=(p.tasks||[]).filter(t=>(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO))).length;
     const dragHelp = CLOSE_PIN
       ? 'DRAG TO RESCHEDULE:   ⟸ left end = change START   ·   middle = MOVE the whole task   ·   right end = change FINISH ⟹'
-      : 'Click “🔒 Edit dates” (top-left), then drag a bar — middle moves it, the ends change start / finish.';
+      : 'Click “🔒 Edit / add tasks” (top-left), then drag a bar — middle moves it, the ends change start / finish.';
     const taskRow=t=>{
       const done=projIsDone(t), s=t.startISO, f=t.finISO||t.startISO;
       const bad=(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO));
