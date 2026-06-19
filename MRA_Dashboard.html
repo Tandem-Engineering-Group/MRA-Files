@@ -248,13 +248,39 @@
   .asg-split > .asgbody{flex:1 1 0; min-width:0}
   /* On narrow screens (phone/tablet) everything stacks and Sal's two columns stack into one */
   @media(max-width:1100px){ .assignees{grid-template-columns:1fr} .asg-split{flex-direction:column; gap:0} }
-  /* Wall (TV) mode: bound heights + scroll so bays + assignees fit one screen */
-  body.wall .baycol{max-height:44vh; overflow:hidden}
-  body.wall .baycol:not(.parkcol) .bay-body{max-height:17vh; overflow-y:auto}   /* scroll each card's task list with its title PINNED (like the Parking Lot card) — don't scroll the whole column */
-  body.wall .bay-body.autoscroll{max-height:30vh; overflow-y:auto}   /* combined Next Up / On Hold tile scrolls on its own */
-  body.wall .baycol.parkcol{max-height:none; overflow:visible}                /* Parking Lot column: don't scroll the column… */
-  body.wall .baycol.parkcol .bay-body.autoscroll{max-height:19vh}            /* …each card (Parking Lot + Next Up/On Hold) auto-scrolls itself */
-  body.wall .asgbody{max-height:30vh}
+  /* Wall (TV) mode: FILL the screen — a flex column that grows to use all vertical room,
+     instead of fixed vh caps that wasted space and overflowed the bottom. */
+  body.wall{ display:flex; flex-direction:column; height:100vh; overflow:hidden; padding:6px 12px 8px }
+  body.wall header{ padding-bottom:6px; gap:12px; flex:none }
+  body.wall .logo{ height:32px }
+  body.wall .brand h1{ font-size:18px }
+  body.wall .brand .sub{ display:none }
+  body.wall header .tabs, body.wall header .helpbtn, body.wall #topMenu, body.wall #authPill{ display:none }
+  body.wall .clockbox .time{ font-size:22px }
+  body.wall .clockbox .meta{ margin-top:1px }
+  body.wall #floorView{ flex:1 1 auto; display:flex; flex-direction:column; min-height:0; gap:8px }
+  body.wall #floorView > .panel{ margin:0; padding:8px 13px; min-height:0 }
+  /* display:flex only on the two VISIBLE panels — setting it on the generic > .panel was
+     overriding the display:none on crewSched/floorGantt (higher specificity) and they re-appeared. */
+  body.wall #bayStatusPanel, body.wall #openTasksPanel{ display:flex; flex-direction:column }
+  body.wall #bayStatusPanel{ flex:3 1 0 }      /* Bay Status gets the bigger share of the screen */
+  body.wall #openTasksPanel{ flex:2 1 0 }       /* Open Tasks by Assignee gets the rest */
+  body.wall #floorView > .panel > h2{ margin-bottom:6px; flex:none }
+  body.wall .panel h2 span:not(.count){ display:none }      /* drop the grey hint text on the TV */
+  body.wall #bayStatusPanel h2 .linksmenu{ display:none }   /* drop the Actions menu on the TV */
+  /* Bays fill the bay panel; each card's body scrolls with its title pinned. Empty bays shrink
+     so busy bays can use the freed height. */
+  body.wall #bays{ flex:1 1 auto; min-height:0; align-items:stretch; overflow:hidden }
+  body.wall .baycol{ max-height:100%; min-height:0; overflow:hidden }
+  body.wall .bay{ min-height:0; display:flex; flex-direction:column }
+  body.wall .bay:not(.bay-empty){ flex:1 1 0 }
+  body.wall .bay.bay-empty{ flex:0 0 auto }
+  body.wall .bay .bay-body{ flex:1 1 auto; min-height:0; max-height:none; overflow-y:auto }
+  /* Crew queues fill the lower panel */
+  body.wall .assignees{ flex:1 1 auto; min-height:0; align-items:stretch }
+  body.wall .asg{ min-height:0 }
+  body.wall .asg-split{ flex:1 1 auto; min-height:0 }
+  body.wall .asgbody{ flex:1 1 auto; max-height:none; min-height:0 }
   /* Wall: give Sal a double-wide panel and split his tasks into two side-by-side columns */
   /* (Sal's two-column layout is now the default on wide screens — see .assignees / .asg-split above) */
   /* Wall mode: per-screen size control (zoom). Lives in body so it scales with the board. */
@@ -547,6 +573,9 @@
   #dsPanel .ds-btns{display:flex; gap:8px; margin-top:8px}
   #dsPanel .ds-btns button{flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:8px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit}
   #dsPanel .ds-btns button:hover{border-color:#7aa2d6; color:#7aa2d6}
+  #dsPanel .ds-div{font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--txt);
+    margin:18px 0 8px; padding-top:14px; border-top:1px solid var(--line); display:flex; align-items:baseline; gap:8px}
+  #dsPanel .ds-div span{font-size:9.5px; font-weight:600; text-transform:none; letter-spacing:0; color:var(--faint)}
   /* Collapsible FLEETIO + PROJECTS panels */
   #fleetioView .panel > h2 .pcaret, #projectsView .panel > h2 .pcaret{cursor:pointer; color:var(--muted); font-size:12px; font-weight:700; margin-right:8px; user-select:none}
   #fleetioView .panel > h2 .pcaret:hover, #projectsView .panel > h2 .pcaret:hover{color:var(--txt)}
@@ -791,7 +820,7 @@
   <div id="floorView">
     <div class="kpis" id="kpis"></div>
 
-    <div class="panel">
+    <div class="panel" id="bayStatusPanel">
       <h2>Bay Status <span class="count" id="bayCount"></span>
         <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">click a task count to see the tasks</span>
         <div class="linksmenu" style="margin-left:8px">
@@ -811,7 +840,7 @@
       <div class="bays" id="bays"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="openTasksPanel">
       <h2>🧰 Open Tasks by Assignee <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span></h2>
       <div class="assignees">
         <div class="asg asgSalWrap"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
@@ -1189,6 +1218,12 @@
     <div class="ds-row"><label>Task text</label><input type="range" id="ds-task" min="9" max="20" step="0.5" oninput="setDesign('task',this.value)"><span class="ds-v" id="ds-task-v"></span></div>
     <div class="ds-row"><label>Spacing</label><input type="range" id="ds-density" min="0.6" max="1.8" step="0.05" oninput="setDesign('density',this.value)"><span class="ds-v" id="ds-density-v"></span></div>
     <div class="ds-btns"><button onclick="resetDesign()">↺ Reset</button><button onclick="copyDesign(event)">📋 Copy settings</button></div>
+    <div class="ds-div">📺 Wall tile sizes <span>TV / wall mode only</span></div>
+    <div class="ds-sub" style="margin:0 0 12px">Pick a bay, then size it for this monitor — <b>width</b> widens its whole column (Front + Back together) to soak up empty space; <b>height</b> sizes just that tile. Takes effect in <b>📺 Wall mode</b>.</div>
+    <div class="ds-row"><label>Bay tile</label><select id="ds-tilepick" onchange="dsTilePick()" style="flex:1; min-width:0; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:6px 8px; font-size:12px; font-family:inherit"></select></div>
+    <div class="ds-row"><label>Col width</label><input type="range" id="ds-tilew" min="50" max="250" step="5" oninput="setTileW(this.value)"><span class="ds-v" id="ds-tilew-v"></span></div>
+    <div class="ds-row"><label>Tile height</label><input type="range" id="ds-tileh" min="30" max="250" step="5" oninput="setTileH(this.value)"><span class="ds-v" id="ds-tileh-v"></span></div>
+    <div class="ds-btns"><button onclick="resetWallLayout()">↺ Reset tiles</button></div>
   </div>
   <div class="barpop" id="barPop" onmouseenter="popHold()" onmouseleave="popHoverOut()"></div>
 
@@ -1647,7 +1682,7 @@ const GENERAL_HELP = `
     </ul>
     <div class="tip">Keep <b>one file per project</b> with a stable name (e.g. <i>SWC MMOT.xlsx</i>), and give it that project's <b>complete</b> task list each time — re-dropping <b>replaces</b> the project, it doesn't merge. A project already in the master workbook should live in <b>one</b> place, not both.</div></div>
   <div class="hsec"><h4>⑩ 📺 Wall / TV mode</h4>
-    <p>The <span class="k">📺 Wall</span> button (top right) packs the bays and the three crew queues onto one screen for the shop TV and auto-scrolls anything too tall to fit — including tall <b>bay columns</b>, the <b>Next Up / On Hold</b> tile and each assignee panel (each keeps its place across refreshes so it cycles all the way through). <b>Hover a panel</b> to take over and scroll it yourself; it resumes on its own. To keep the TV clean, the <b>bottom footer</b> (logo / refreshed / rev) is hidden in wall mode. A small <span class="k">⚙</span> gear sits in the <b>bottom-right corner</b> — click it to pop up the wall settings: a <b>Size</b> slider with <b>S / M / L</b> presets (or type an exact <b>%</b>) to scale the whole board for that screen, and a <b>🌀 Scroll</b> speed slider. <b>Each monitor remembers its own size & speed</b> independently. Click the gear again (or anywhere outside) to tuck it away. Click <span class="k">📺 Wall: ON</span> to exit. The TV remembers the mode.</p></div>
+    <p>The <span class="k">📺 Wall</span> button (in <span class="k">☰ Menu</span>) packs the bays and the three crew queues onto one screen for the shop TV — the board now <b>fills the whole screen</b> (the Bay Status and Open Tasks panels stretch to use every inch of height, no wasted space at the bottom) and auto-scrolls anything too tall to fit. To maximize that room the TV view drops the tabs, search, footer and other chrome — leaving just the logo, clock and the board. <b>Hover a panel</b> to take over and scroll it yourself; it resumes on its own. A small <span class="k">⚙</span> gear sits in the <b>bottom-right corner</b> — click it to pop up the wall controls: <b>Size</b> (slider + S / M / L presets, or type an exact <b>%</b>), <b>🌀 Scroll</b> speed, a <b>Theme</b> toggle, and <b>⏹ Exit wall</b>. <b>Each monitor remembers its own size & speed</b>. Click the gear again (or anywhere outside) to tuck it away. <b>Fine-tuning (admin):</b> in the 🎨 Design panel you can size individual bays for a given monitor — widen a column to soak up empty space on the right, or make a busy bay taller and a quiet one shorter (remembered per screen).</p></div>
   <div class="hsec"><h4>⑪ 🗂️ Shop Tasks tab — how tasks work now</h4>
     <p>Shop-floor tasks live on the <b>Shop Tasks</b> tab of the workbook — <b>one row per task</b>, with dropdowns for <span class="k">Bay</span>, <span class="k">Assigned</span> and <span class="k">Status</span>, plus <span class="k">Opened</span> / <span class="k">Closed</span> dates. The sheet is sortable and color-banded by project, and each row flows onto the matching bay card and crew queue automatically. (No row yet for a job? The old <b>Notes</b> cell on Input still works as a fallback.)</p></div>
   <div class="hsec"><h4>⑫ ✅ Close a task from the dashboard</h4>
@@ -1724,6 +1759,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.15", date:"2026-06-19", title:"Wall mode fills the whole screen + per-tile sizing (admin)", items:[
+    "📺 Wall / TV mode now FILLS the screen: the Bay Status and Open Tasks panels stretch to use all the vertical room (no more wasted space or cut-off bottom — it was overflowing ~90px before, now it fits exactly one screen at any TV resolution).",
+    "Reclaimed the room by dropping the TV chrome (tabs, search, ? and the grey hint lines) and slimming the header/padding — the wall view is just the logo, clock and the board.",
+    "Empty bays shrink so busy bays get the height; the Theme toggle and ⏹ Exit wall moved into the ⚙ gear (since the menu is hidden on the TV).",
+    "Admin (🎨 Design panel): new per-tile sizing for wall mode — pick a bay, then widen its column to use empty horizontal space or set that tile's height. Remembered per monitor; resets with ↺ Reset tiles." ] },
   { rev:"4.14", date:"2026-06-19", title:"Wall mode: cleaner bottom — footer hidden, settings tucked into a ⚙ gear", items:[
     "Wall / TV mode now hides the bottom footer (MRA logo · Data refreshed · rev) so it stops eating screen space on the TV. (The refresh time still shows up top by the clock.)",
     "The bottom-right wall Size / Scroll controls are now collapsed behind a small ⚙ gear — click it to pop the panel up, click the gear (or anywhere outside) to tuck it away. Same Size S/M/L + % and Scroll speed, just out of the way until you need them." ] },
@@ -2155,7 +2195,10 @@ function ensureWallCtl(){
     +'<div class="wc-row"><input id="wallZoom" type="range" min="60" max="200" step="5" style="flex:1" oninput="setWallZoom(this.value)" title="Board size on THIS screen — drag to scale the whole board bigger or smaller (remembered per monitor)"></div>'
     +'<div class="wc-row"><span class="wc-lbl">🌀 Scroll</span><span class="wc-pct">🐢</span>'
     +'<input id="wallSpeed" type="range" min="0" max="100" step="5" style="flex:1" oninput="setWallSpeed(this.value)" title="Wall auto-scroll speed on THIS screen — left = slower, right = faster (remembered per monitor)">'
-    +'<span class="wc-pct">🐇</span></div>';
+    +'<span class="wc-pct">🐇</span></div>'
+    +'<div class="wc-row" style="border-top:1px solid var(--line); padding-top:9px; margin-top:1px">'
+    +'<button type="button" onclick="toggleTheme()" title="Light / dark on this screen">☀️ Theme</button>'
+    +'<button type="button" onclick="toggleWall(document.getElementById(\'btnWall\'))" title="Leave wall / TV mode">⏹ Exit wall</button></div>';
   document.body.appendChild(d);
 }
 function toggleWallCtl(){ const c=document.getElementById('wallCtl'); if(c) c.classList.toggle('show'); }
@@ -2178,11 +2221,52 @@ function applyDesignVars(){ Object.keys(DS_VALS).forEach(k=>{
   }); }
 function setDesign(k,val){ if(!(k in DS_DEFAULTS)) return; DS_VALS[k]=+val;
   try{ localStorage.setItem('mra_design_v1', JSON.stringify(DS_VALS)); }catch(e){} applyDesignVars(); }
-function toggleDesign(){ document.body.classList.toggle('dsopen'); }
+function toggleDesign(){ document.body.classList.toggle('dsopen'); if(document.body.classList.contains('dsopen')) dsPopulateTiles(); }
 function resetDesign(){ DS_VALS=Object.assign({}, DS_DEFAULTS); try{ localStorage.removeItem('mra_design_v1'); }catch(e){} applyDesignVars(); }
-function copyDesign(ev){ const txt='MRA design (this screen): '+Object.keys(DS_VALS).map(k=>k+'='+DS_VALS[k]+DS_UNIT[k]).join(' · ');
+function copyDesign(ev){ const txt='MRA design (this screen): '+Object.keys(DS_VALS).map(k=>k+'='+DS_VALS[k]+DS_UNIT[k]).join(' · ')
+    +(Object.keys(WALL_LAYOUT.w).length||Object.keys(WALL_LAYOUT.h).length?' · wall tiles='+JSON.stringify(WALL_LAYOUT):'');
   try{ navigator.clipboard.writeText(txt); }catch(e){}
   const btn=ev&&ev.target; if(btn){ const t=btn.textContent; btn.textContent='✓ Copied — send it to Rich/Claude'; setTimeout(()=>{btn.textContent=t;},1500); } }
+
+/* ---------- Wall tile sizing (Design panel): per-column WIDTH + per-tile HEIGHT, wall mode only ----------
+   Lets Rich tune the board to each monitor — widen a column to soak up empty space on the right,
+   make a busy bay taller, shrink a quiet one. Remembered per device; applied only in wall mode. */
+let WALL_COLS=[];                 // [{key, bays:[...]}] rebuilt every render of the bays
+let WALL_LAYOUT={w:{}, h:{}};     // w: column key -> width %, h: bay name -> height %
+try{ const o=JSON.parse(localStorage.getItem('mra_wall_layout_v1')||'{}'); if(o&&typeof o==='object'){ WALL_LAYOUT.w=o.w||{}; WALL_LAYOUT.h=o.h||{}; } }catch(e){}
+function saveWallLayout(){ try{ localStorage.setItem('mra_wall_layout_v1', JSON.stringify(WALL_LAYOUT)); }catch(e){} }
+function applyWallLayout(){
+  const cols=document.querySelectorAll('#bays .baycol'), bays=document.querySelectorAll('#bays .bay');
+  if(!document.body.classList.contains('wall')){ cols.forEach(c=>c.style.flexGrow=''); bays.forEach(b=>b.style.flex=''); return; }
+  cols.forEach(c=>{ const pct=WALL_LAYOUT.w[c.getAttribute('data-col')]; c.style.flexGrow = pct?(pct/100):''; });
+  bays.forEach(b=>{ const pct=WALL_LAYOUT.h[b.getAttribute('data-bay')]; b.style.flex = pct?((pct/100)+' 1 0'):''; });
+}
+function dsColKeyOf(bay){ const c=WALL_COLS.find(c=>c.bays.includes(bay)); return c?c.key:bay; }
+function dsPopulateTiles(){
+  const sel=document.getElementById('ds-tilepick'); if(!sel) return;
+  const bays=[]; WALL_COLS.forEach(c=>c.bays.forEach(b=>{ if(b&&bays.indexOf(b)<0) bays.push(b); }));
+  if(!bays.length){ sel.innerHTML='<option>(open the FLOOR first)</option>'; return; }
+  const cur=sel.value;
+  sel.innerHTML=bays.map(b=>`<option value="${escA(b)}">${esc(b)}</option>`).join('');
+  if(bays.indexOf(cur)>=0) sel.value=cur;
+  dsTileSync();
+}
+function dsTileSync(){
+  const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const bay=sel.value;
+  const w=WALL_LAYOUT.w[dsColKeyOf(bay)]||100, h=WALL_LAYOUT.h[bay]||100;
+  const ws=document.getElementById('ds-tilew'), hs=document.getElementById('ds-tileh');
+  if(ws) ws.value=w; if(hs) hs.value=h;
+  const wv=document.getElementById('ds-tilew-v'), hv=document.getElementById('ds-tileh-v');
+  if(wv) wv.textContent=w+'%'; if(hv) hv.textContent=h+'%';
+}
+function dsTilePick(){ dsTileSync(); }
+function setTileW(v){ const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const k=dsColKeyOf(sel.value);
+  v=+v; if(v===100) delete WALL_LAYOUT.w[k]; else WALL_LAYOUT.w[k]=v; saveWallLayout(); applyWallLayout();
+  const wv=document.getElementById('ds-tilew-v'); if(wv) wv.textContent=v+'%'; }
+function setTileH(v){ const sel=document.getElementById('ds-tilepick'); if(!sel||!sel.value) return; const bay=sel.value;
+  v=+v; if(v===100) delete WALL_LAYOUT.h[bay]; else WALL_LAYOUT.h[bay]=v; saveWallLayout(); applyWallLayout();
+  const hv=document.getElementById('ds-tileh-v'); if(hv) hv.textContent=v+'%'; }
+function resetWallLayout(){ WALL_LAYOUT={w:{},h:{}}; saveWallLayout(); applyWallLayout(); dsTileSync(); }
 function applyWallZoom(){
   ensureWallCtl();
   document.body.style.zoom = WALL ? (WALL_ZOOM/100) : '';
@@ -3596,7 +3680,7 @@ function renderFloor(D){
     const bodyCls=opts.scroll?"bay-body autoscroll":"bay-body";
     const col=BAY_COLLAPSED.has(bay);
     const caret=`<span class="bay-collapse">${col?'▸':'▾'}</span>`;
-    return `<div class="bay ${cls}${col?' collapsed':''}"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}</div>`+
+    return `<div class="bay ${cls}${col?' collapsed':''}${!list.length?' bay-empty':''}" data-bay="${escA(bay)}"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}</div>`+
       `<div class="st ${stCls}">${stTxt}</div></div><div class="${bodyCls}">${body}</div></div>`;
   };
 
@@ -3613,16 +3697,22 @@ function renderFloor(D){
       return ax-bx || (a.startISO||"9999").localeCompare(b.startISO||"9999");});
 
   const physCards=physBays.map(bay=>bayCard(bay, byBay[bay]||[]));
-  // pair each physical bay into a column — Front card on top of Back card
+  // pair each physical bay into a column — Front card on top of Back card. Each column is keyed
+  // by its front bay so the Design panel can size column WIDTH per column (wall mode).
+  WALL_COLS=[];
   let bayHtml="";
-  for(let i=0;i<physCards.length;i+=2) bayHtml+=`<div class="baycol">`+physCards[i]+(physCards[i+1]||'')+`</div>`;
+  for(let i=0;i<physCards.length;i+=2){ const key=physBays[i];
+    WALL_COLS.push({key, bays:[physBays[i], physBays[i+1]].filter(Boolean)});
+    bayHtml+=`<div class="baycol" data-col="${escA(key)}">`+physCards[i]+(physCards[i+1]||'')+`</div>`; }
   // final column: Parking Lot on top, combined Next Up / On Hold below (scrolls)
   const parkCard=bayCard('Parking Lot', parkingJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true});
   const heldCard=bayCard('Next Up / On Hold', heldJobs,
     {expandAll:true, scroll:true, showBay:true, headCount:true, emptyTxt:"none", fixedSt:["Pipeline & holds","open"]});
   // parkcol: don't scroll the whole column — let Parking Lot AND Next Up/On Hold each auto-scroll on their own
-  bayHtml+=`<div class="baycol parkcol">`+parkCard+heldCard+`</div>`;
+  WALL_COLS.push({key:'Parking Lot', bays:['Parking Lot','Next Up / On Hold']});
+  bayHtml+=`<div class="baycol parkcol" data-col="Parking Lot">`+parkCard+heldCard+`</div>`;
   document.getElementById('bays').innerHTML=bayHtml;
+  applyWallLayout();
   document.getElementById('bayCount').textContent=physBays.length+" bays";
   const bc=document.getElementById('btnClosed'); if(bc){ bc.classList.toggle('on',SHOWCLOSED); bc.textContent=SHOWCLOSED?'✓ Closed shown':'Show closed'; }
 
