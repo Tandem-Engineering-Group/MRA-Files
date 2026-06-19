@@ -1761,6 +1761,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.31", date:"2026-06-19", title:"Project detail: milestones keep their own draggable bar", items:[
+    "Milestone rows in the project detail view now keep their <b>own bar</b> and are <b>drag-editable</b> like any task (drag to move its date) — while still being collapsible: <b>click the row label</b> to collapse/expand its lead-up tasks, <b>drag the bar</b> to change its date." ] },
   { rev:"4.30", date:"2026-06-19", title:"Project detail: collapsible milestone sections + milestone lines", items:[
     "The project detail view now <b>groups tasks under each milestone gate</b> — click a ◆ milestone row to <b>collapse/expand</b> the tasks leading up to it (collapse them all for a clean milestone overview, expand as needed).",
     "Each milestone now draws a <b>faint dashed line across the whole chart</b> at its date and its row is gold-banded, so the gates actually stand out instead of getting lost." ] },
@@ -5878,10 +5880,15 @@ function renderGanttFS(){
           const key=p.name+'|'+(gate.id!=null&&gate.id!==''?gate.id:gate.t);
           const collapsed=PD_COLLAPSED.has(key), gd=gate.finISO||gate.startISO;
           const mp=(gd&&SANE(gd))?msPos(gd,win):null; if(mp!=null) mlines.push(mp);
+          const gs=gate.startISO, gf=gate.finISO||gate.startISO;
+          const gbad=(gate.startISO&&!SANE(gate.startISO))||(gate.finISO&&!SANE(gate.finISO));
+          const gdrag=(gate.id!=null&&gate.id!==''&&gs&&!gbad);   // milestone keeps its own draggable bar
           rows.push({ label:(collapsed?'▸':'▾')+' ◆ '+(gate.t||'(milestone)'),
             sub:(gd?fmtMDY(gd):'TBD')+((collapsed&&pending.length)?(' · '+pending.length+' task'+(pending.length>1?'s':'')+' hidden'):''),
-            startISO:null, endISO:null, milestones:(gd&&SANE(gd))?[{name:gate.t,dateISO:gd}]:[], noBar:true,
-            color:'#f59e0b', cls:'g-msrow clickable', onclick:`pdToggleMs('${escJsAttr(key)}')` });
+            startISO:gs, endISO:gf, milestones:[], noBar:(!gs||gbad), done:projIsDone(gate),
+            color:gbad?'#a855f7':'#f59e0b', cls:'g-msrow clickable', onclick:`pdToggleMs('${escJsAttr(key)}')`,
+            dragId:gdrag?gate.id:null,
+            barTitle:gdrag?((gate.t||'')+'\n'+fmtMDY(gs)+' – '+fmtMDY(gf)+'\n'+dragHelp+'\n(click the row label to collapse / expand its tasks)'):null });
           if(!collapsed) pending.forEach(t=>rows.push(taskRow(t)));
         } else { pending.forEach(t=>rows.push(taskRow(t))); }
         pending=[];
