@@ -855,7 +855,7 @@
     </div>
 
     <div class="panel" id="openTasksPanel">
-      <h2>🧰 Open Tasks by Assignee <span id="asgPageInd" style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span></h2>
+      <h2>🧰 Open Tasks by Assignee <span id="asgPageInd" style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span><button class="btn-ghost" onclick="openAddGeneralTask()" style="float:right;padding:4px 11px;font-size:11.5px" title="Add a crew task that isn't tied to a trailer (move a trailer, parts run, etc.) — assign it to a person and it shows in their column">➕ General task</button></h2>
       <div class="assignees" id="assigneesA">
         <div class="asg asgSalWrap" data-asg="Sal"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
         <div class="asg" data-asg="Wrap Team"><div class="asg-h">🎨 Wrap Team <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
@@ -1809,6 +1809,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.48", date:"2026-06-19", title:"General tasks (not tied to a trailer)", items:[
+    "New <b>➕ General task</b> button on <b>Open Tasks by Assignee</b> — for crew work that isn't on a trailer (move a trailer, Home Depot run, etc.). Pick the person and type the task; it shows in <b>their column</b> on the bottom board under a <b>🛠 General</b> card, and writes back so everyone sees it.",
+    "These don't clutter the bay board (no trailer tile). <b>Setup:</b> needs the updated Export-Data.ps1 + a re-run (no workbook columns to add — it just collects any Shop Tasks whose Project is “General”). Assign them to one of the crew columns (Sal, Doug, Josh, Jeff, Wrap, Electricians)." ] },
   { rev:"4.47", date:"2026-06-19", title:"Edit job: 'Notes' no longer a hidden task trap + ➕ Add task shortcut", items:[
     "Typing a task into the Edit-job <b>Notes</b> box did nothing visible when the job already had a structured task list (the board shows those, not the notes cell). The field is now labeled <b>Job notes</b>, warns you when it's being ignored, and a new <b>➕ Add task</b> button opens the proper assignable add — prefilled for that job — so the task actually shows on the board." ] },
   { rev:"4.46", date:"2026-06-19", title:"Fixes: Fleetio task ghost + detail-view theme button", items:[
@@ -2599,6 +2602,7 @@ function isSal(line){ return /\bsal\b/i.test(line||""); }
 // — canonicalized to the crew name — else the crew its TEXT routes to (same rule
 // as the crew queues), else '' (unassigned).
 const KNOWN_CREW=[['Sal',/\bsal\b/i],['Wrap Team',/wrap|w2 graphic|\bw2\b/i],['Electricians',/electr|beyer/i],['Doug',/\bdoug\b/i],['Maintenance',/\bmaintenance\b/i]];
+const GENERAL_PROJ="🛠 General";   // catch-all "job" for crew tasks not tied to a trailer (move a trailer, Home Depot run…)
 function shopWho(t){
   const w=(t.who||'').trim();
   if(w){ for(const c of KNOWN_CREW){ if(c[1].test(w)) return c[0]; } return w; }
@@ -2836,11 +2840,14 @@ const BAY_OPTIONS = ['Bay 2 Front','Bay 2 Back / Loading Dock','Bay 3 Front','Ba
 const ASSIGNEE_OPTIONS = ['Sal','Wrap Team','Electricians','Doug','Vendor'];
 // Jump from Edit job → the proper assignable task add, prefilled for this job.
 function addTaskForJob(){ const proj=window._ejProj; document.getElementById('editModal').classList.remove('show'); openAddTask(proj); }
+// Add a general crew task (no trailer) — opens the add form on the "🛠 General" lane.
+function openAddGeneralTask(){ openAddTask(GENERAL_PROJ); }
 function openAddTask(prefillProj){
   if(!SHOP_WRITE_URL){ alert("Add-from-dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
   if(!ensureAuth("add a task")) return;
   const D=window.MRA_DATA||{};
   const projs=[...new Set((D.jobs||[]).filter(j=>j.category!=='leave').map(j=>j.project).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(projs.indexOf(GENERAL_PROJ)<0) projs.unshift(GENERAL_PROJ);   // always offer the no-trailer General lane
   const jobByProj={}, bayByProj={};
   (D.jobs||[]).forEach(j=>{ if(j.project && !jobByProj[j.project]){ jobByProj[j.project]=j.jobNum||''; bayByProj[j.project]=j.bay||''; } });
   window._atJobByProj=jobByProj; window._atBayByProj=bayByProj;
@@ -2883,7 +2890,9 @@ function submitAddTask(){
   fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
     .then(()=>{
       const tobj={t:payload.task, who:payload.assigned, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:payload.milestone, cm:payload.comments};
-      const j=oJob(proj); if(j){ if(!j.tasks) j.tasks=[]; j.tasks.push(tobj); oRecompute(j); }
+      let j=oJob(proj);
+      if(!j && proj===GENERAL_PROJ){ j={row:'general',bay:'General',project:GENERAL_PROJ,jobNum:'',status:'',category:'general',tasks:[],openTasks:[],openCount:0,doneCount:0,salOpen:0}; (window.MRA_DATA.jobs=window.MRA_DATA.jobs||[]).push(j); }   // first general task: spin up the lane so it shows instantly
+      if(j){ if(!j.tasks) j.tasks=[]; j.tasks.push(tobj); oRecompute(j); }
       pendAdd({kind:'jobTask', project:proj, obj:tobj});
       oApply();
       msg.style.color='var(--green)'; msg.textContent='✓ Added.'; btn.textContent="Add task";
@@ -2908,6 +2917,7 @@ function openEditJob(row){
   const D=window.MRA_DATA||{};
   const j=(D.jobs||[]).find(x=>x.row===row);
   if(!j){ alert("Couldn't find that job."); return; }
+  if(j.category==='general'){ openAddGeneralTask(); return; }   // the General lane isn't a real job — add another general task instead of "editing the job"
   window._ejRow=row; window._ejProj=j.project;
   document.getElementById('ejSub').innerHTML = `<b>${esc(j.project)}</b>${j.jobNum?" · "+esc(j.jobNum):""} — saves to the Input sheet; board updates within ~15 min.`;
   // Bay dropdown (include the job's current value even if it's not a standard bay)

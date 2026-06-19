@@ -370,6 +370,20 @@ try {
         })
     }
 
+    # General lane: Shop Tasks whose Project is "General" (no trailer) — collect them into ONE catch-all
+    # job so general crew tasks (move a trailer, Home Depot run, ...) show in the bottom-board crew columns.
+    $genRows = @($shopTasks.all | Where-Object { -not $_.matched -and ((([string]$_.proj) -replace '[^\w ]','').Trim().ToLower() -eq 'general') })
+    if ($genRows.Count -gt 0) {
+        foreach ($r in $genRows) { $r.matched = $true }
+        $gt = Build-TasksFromRows $genRows
+        [void]$jobs.Add([PSCustomObject]@{
+            row = 'general'; bay = 'General'; project = "$([char]0xD83D)$([char]0xDEE0) General"; client = ''; jobNum = ''
+            status = ''; pm = ''; startISO = $null; completionISO = $null
+            startText = ''; completionText = ''; category = 'general'; notesRaw = ''
+            openTasks = $gt.open; openCount = $gt.openCount; doneCount = $gt.doneCount; salOpen = $gt.salOpen; doneTasks = $gt.done; tasks = $gt.tasks
+        })
+    }
+
     # Surface any 'Shop Tasks' rows that matched NO job — so a mismatch is never silent.
     $stOrphans = @($shopTasks.all | Where-Object { -not $_.matched })
     $stLog = Join-Path $ScriptDir 'shoptasks-unmatched.txt'
