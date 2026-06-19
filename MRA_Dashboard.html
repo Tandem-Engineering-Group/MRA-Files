@@ -150,6 +150,9 @@
   .g-row.clickable{cursor:pointer}
   .g-row.clickable:hover{background:rgba(255,255,255,.035)}
   .g-bar.g-draggable{cursor:grab}
+  .g-msline{position:absolute; top:0; bottom:0; border-left:1.5px dashed rgba(245,158,11,.42); z-index:1; pointer-events:none}
+  .g-row.g-msrow{background:rgba(245,158,11,.09)}
+  .g-row.g-msrow .g-lbl{color:#fcd34d; font-weight:700}
   #pdragHint{position:fixed; z-index:300; background:var(--panel); border:1px solid var(--line); border-radius:7px;
     padding:4px 9px; font-size:12px; font-weight:700; color:var(--txt); pointer-events:none; display:none;
     box-shadow:0 6px 20px rgba(0,0,0,.5); font-variant-numeric:tabular-nums}
@@ -1606,6 +1609,7 @@ try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
 let GFS=null;              // full-screen gantt: 'floor' | 'projects' | 'crew' | 'project' | null
 let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
 let GFS_PROJECT=null;      // when GFS==='project', the single project to detail
+const PD_COLLAPSED=new Set();   // collapsed milestone sections in the project-detail view (project|gate)
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
 let MRASHOP_HL=false; try{ MRASHOP_HL = localStorage.getItem('mra_hl_mrashop')==='1'; }catch(e){}  // Projects Gantt: highlight MRA Shop load
@@ -1757,6 +1761,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.30", date:"2026-06-19", title:"Project detail: collapsible milestone sections + milestone lines", items:[
+    "The project detail view now <b>groups tasks under each milestone gate</b> — click a ◆ milestone row to <b>collapse/expand</b> the tasks leading up to it (collapse them all for a clean milestone overview, expand as needed).",
+    "Each milestone now draws a <b>faint dashed line across the whole chart</b> at its date and its row is gold-banded, so the gates actually stand out instead of getting lost." ] },
   { rev:"4.29", date:"2026-06-19", title:"Fleetio link stays after assigning · detail-view Edit button + drag help · date guard", items:[
     "The 🔧 Fleetio ↗ link now stays on a task after you assign it (was disappearing once a Fleetio issue became a Shop Task) — on the bay card and in the crew queues.",
     "Project detail view: a clear <b>🔒 Edit dates</b> button (top-left) to enter edit mode, and <b>hover a task bar for the drag instructions</b> — left end = start, middle = move, right end = finish.",
@@ -3613,6 +3620,7 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
   const bands = (win.weekends||[]).map(w=>`<div class="g-weekend" style="left:${w.pos}%;width:${w.width}%"></div>`).join('')
     + (win.curWeek?`<div class="g-curweek" style="left:${win.curWeek.pos}%;width:${win.curWeek.width}%"></div>`:'');
   const grid = bands + win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
+    + (opts.mlines||[]).map(p=>`<div class="g-msline" style="left:${p}%"></div>`).join('')
     + (win.todayPos>=0&&win.todayPos<=100?`<div class="g-today" style="left:${win.todayPos}%"></div>`:'');
   let html = `<div class="g-axisrow"><div class="g-gutter"></div><div class="g-track">`
     + win.ticks.map(t=>`<div class="g-tick" style="left:${t.pos}%">${t.label}</div>`).join('') + `</div></div>`;
@@ -5689,6 +5697,7 @@ function closeGantt(e){ if(!e || e.target.id==='ganttFS' || e.target.classList.c
    Middle = move (shift start + finish), left end = change start, right end = change finish.
    Snaps to whole days; writes back like any other task edit. */
 function pdEnterEdit(){ if(ensureAuth('reschedule tasks')) renderGanttFS(); }   // the "🔒 Edit dates" button
+function pdToggleMs(key){ PD_COLLAPSED.has(key)?PD_COLLAPSED.delete(key):PD_COLLAPSED.add(key); renderGanttFS(); }   // collapse/expand a milestone section
 function pdragHover(e){
   if(GFS!=='project' || !CLOSE_PIN) return;   // only show the drag cursor once you're in edit mode
   const bar=e.target.closest('.g-bar[data-tid]'); if(!bar||bar._dragging) return;
@@ -5840,26 +5849,49 @@ function renderGanttFS(){
     const win=buildWindow(new Date(tlo), Math.max(21,Math.ceil((thi-tlo)/DAY)));
     const byId={}; (p.tasks||[]).forEach(t=>{ if(t.id!=null&&t.id!=='') byId[String(t.id)]=t; });
     const dkey=t=>(t.startISO||t.finISO||'9999-99-99');
-    let flagged=0;
+    const flagged=(p.tasks||[]).filter(t=>(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO))).length;
     const dragHelp = CLOSE_PIN
       ? 'DRAG TO RESCHEDULE:   ⟸ left end = change START   ·   middle = MOVE the whole task   ·   right end = change FINISH ⟹'
       : 'Click “🔒 Edit dates” (top-left), then drag a bar — middle moves it, the ends change start / finish.';
-    const rows=(p.tasks||[]).slice().sort((a,b)=>dkey(a).localeCompare(dkey(b))).map(t=>{
-      const isMile=/yes/i.test(t.ml||''), done=projIsDone(t), s=t.startISO, f=t.finISO||t.startISO;
+    const taskRow=t=>{
+      const done=projIsDone(t), s=t.startISO, f=t.finISO||t.startISO;
       const bad=(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO));
-      if(bad) flagged++;
       const color=bad?'#a855f7':(done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6')));
       const badDate=(t.startISO&&!SANE(t.startISO))?t.startISO:t.finISO;
       const canDrag=(t.id!=null&&t.id!==''&&s&&!bad);
-      return { label:(bad?'⚠ ':'')+(isMile?'◆ ':'')+(t.t||'(task)'),
-        sub:[t.phase,t.who,t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
+      return { label:(bad?'⚠ ':'')+(t.t||'(task)'),
+        sub:[t.who,t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
         startISO:s, endISO:f, color, milestones:[], done, noBar:(!s||bad), cls:t.sub?'g-subrow':'',
         dragId:canDrag?t.id:null,
         barTitle:canDrag?((t.t||'')+'\n'+fmtMDY(s)+' – '+fmtMDY(f)+'\n'+dragHelp):(bad?((t.t||'')+'\n⚠ check this date: '+badDate):null) };
-    });
-    renderGantt(cont, rows, win, {dates:true});
+    };
+    // Group lead-up tasks under each milestone GATE (a collapsible header). Tasks stay draggable;
+    // a milestone shows as a ◆ gate (with a faint line across the chart) you can collapse/expand.
+    const sorted=(p.tasks||[]).slice().sort((a,b)=>dkey(a).localeCompare(dkey(b)));
+    const hasMs=sorted.some(t=>/yes/i.test(t.ml||''));
+    const rows=[], mlines=[];
+    if(!hasMs){ sorted.forEach(t=>rows.push(taskRow(t))); }
+    else {
+      let pending=[];
+      const flush=gate=>{
+        if(gate){
+          const key=p.name+'|'+(gate.id!=null&&gate.id!==''?gate.id:gate.t);
+          const collapsed=PD_COLLAPSED.has(key), gd=gate.finISO||gate.startISO;
+          const mp=(gd&&SANE(gd))?msPos(gd,win):null; if(mp!=null) mlines.push(mp);
+          rows.push({ label:(collapsed?'▸':'▾')+' ◆ '+(gate.t||'(milestone)'),
+            sub:(gd?fmtMDY(gd):'TBD')+((collapsed&&pending.length)?(' · '+pending.length+' task'+(pending.length>1?'s':'')+' hidden'):''),
+            startISO:null, endISO:null, milestones:(gd&&SANE(gd))?[{name:gate.t,dateISO:gd}]:[], noBar:true,
+            color:'#f59e0b', cls:'g-msrow clickable', onclick:`pdToggleMs('${escJsAttr(key)}')` });
+          if(!collapsed) pending.forEach(t=>rows.push(taskRow(t)));
+        } else { pending.forEach(t=>rows.push(taskRow(t))); }
+        pending=[];
+      };
+      sorted.forEach(t=>{ if(/yes/i.test(t.ml||'')) flush(t); else pending.push(t); });
+      if(pending.length) flush(null);
+    }
+    renderGantt(cont, rows, win, {dates:true, mlines});
     window._pdrag={win, project:p.name, byId};
-    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ in edit mode, drag a bar — middle moves it, ends change start/finish</span>`;
+    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone gate — click to collapse / expand its tasks</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ edit mode: drag a bar — middle moves it, ends change start/finish</span>`;
     warnEl.style.color=flagged?'#fca5a5':'var(--muted)';
     warnEl.textContent=(p.pm?('PM '+p.pm+'  ·  '):'')+((p.taskCount||p.tasks.length)+' tasks')+(p.pct!=null?('  ·  '+p.pct+'% complete'):'')+(flagged?('  ·  ⚠ '+flagged+(flagged>1?' task dates look':' task date looks')+' off — fix in the workbook'):'');
     return;
