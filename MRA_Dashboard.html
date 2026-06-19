@@ -194,6 +194,9 @@
   body:not(.wall) .bay-head:hover .bay-collapse{border-color:#7aa2d6; color:#7aa2d6}
   body:not(.wall) .bay-collapse{display:inline-block}
   body:not(.wall) .bay.collapsed .bay-body{display:none}
+  /* Per-job collapse caret (normal view) — shrink a single job's tasks right by its name */
+  .job-collapse{cursor:pointer; color:#9fb0c4; font-weight:800; font-size:11px; line-height:1; margin-right:6px; user-select:none; vertical-align:middle}
+  .job-collapse:hover{color:#7aa2d6}
   .job{font-size:13px; margin-bottom:calc(9px*var(--ds-density,1))}
   .job:last-child{margin-bottom:0}
   .job.done{opacity:.5} .job.done .pj{text-decoration:line-through}
@@ -1625,7 +1628,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
-    <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tile has a <span class="k">N tasks ▸</span> pill — click it to <b>expand</b> that trailer's open tasks (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians) or collapse them again; they're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Collapsed tiles are remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks.</p></div>
+    <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Collapsed tiles are remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks.</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap Team · Electricians</h4>
     <p>Three live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b> or <b>Electricians</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; Wrap Team and Electricians stay single. On a phone the columns stack. In 📺 Wall mode they auto-scroll. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
@@ -1739,6 +1742,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.20", date:"2026-06-19", title:"Normal view: collapse/expand each job in a bay", items:[
+    "Each job on the bays now has a little ▾/▸ caret right next to its name (laptop/desktop view) — click it to collapse or expand just that one job's tasks, so you can shrink an individual trailer (e.g. WFCU in Bay 5 Front) without touching the others." ] },
   { rev:"4.19", date:"2026-06-19", title:"Wall: wide bay cards auto-wrap into columns", items:[
     "On the TV, a bay card with several jobs (Parking Lot, Next Up / On Hold…) now <b>auto-wraps into 2+ columns</b> as the card gets wider — so when you push the other columns narrow and the Parking Lot gets wide, its list doubles up and runs shorter instead of one tall column. More width = more columns, automatically." ] },
   { rev:"4.18", date:"2026-06-19", title:"Wall tile width: each column truly independent", items:[
@@ -3696,7 +3701,11 @@ function renderFloor(D){
         tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
     }
     const jc=c.state==="done"?" done":"";
-    return `<div class="job${jc}"><div class="pj"><span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
+    // Normal view: a caret right by the job name collapses/expands just that job's tasks,
+    // so a single job (e.g. WFCU in Bay 5 Front) can be shrunk on its own.
+    const jcaret = (!WALL && (j.openCount>0 || fl.length))
+      ? `<span class="job-collapse" onclick="toggleJob(${j.row})" title="Collapse / expand this job">${jOpen?'▾':'▸'}</span>` : '';
+    return `<div class="job${jc}"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
