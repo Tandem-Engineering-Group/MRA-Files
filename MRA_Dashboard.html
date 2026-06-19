@@ -248,39 +248,14 @@
   .asg-split > .asgbody{flex:1 1 0; min-width:0}
   /* On narrow screens (phone/tablet) everything stacks and Sal's two columns stack into one */
   @media(max-width:1100px){ .assignees{grid-template-columns:1fr} .asg-split{flex-direction:column; gap:0} }
-  /* Wall (TV) mode: FILL the screen — a flex column that grows to use all vertical room,
-     instead of fixed vh caps that wasted space and overflowed the bottom. */
-  body.wall{ display:flex; flex-direction:column; height:100vh; overflow:hidden; padding:6px 12px 8px }
-  body.wall header{ padding-bottom:6px; gap:12px; flex:none }
-  body.wall .logo{ height:32px }
-  body.wall .brand h1{ font-size:18px }
-  body.wall .brand .sub{ display:none }
-  body.wall header .tabs, body.wall header .helpbtn, body.wall #topMenu, body.wall #authPill{ display:none }
-  body.wall .clockbox .time{ font-size:22px }
-  body.wall .clockbox .meta{ margin-top:1px }
-  body.wall #floorView{ flex:1 1 auto; display:flex; flex-direction:column; min-height:0; gap:8px }
-  body.wall #floorView > .panel{ margin:0; padding:8px 13px; min-height:0 }
-  /* display:flex only on the two VISIBLE panels — setting it on the generic > .panel was
-     overriding the display:none on crewSched/floorGantt (higher specificity) and they re-appeared. */
-  body.wall #bayStatusPanel, body.wall #openTasksPanel{ display:flex; flex-direction:column }
-  body.wall #bayStatusPanel{ flex:3 1 0 }      /* Bay Status gets the bigger share of the screen */
-  body.wall #openTasksPanel{ flex:2 1 0 }       /* Open Tasks by Assignee gets the rest */
-  body.wall #floorView > .panel > h2{ margin-bottom:6px; flex:none }
-  body.wall .panel h2 span:not(.count){ display:none }      /* drop the grey hint text on the TV */
-  body.wall #bayStatusPanel h2 .linksmenu{ display:none }   /* drop the Actions menu on the TV */
-  /* Bays fill the bay panel; each card's body scrolls with its title pinned. Empty bays shrink
-     so busy bays can use the freed height. */
-  body.wall #bays{ flex:1 1 auto; min-height:0; align-items:stretch; overflow:hidden }
-  body.wall .baycol{ max-height:100%; min-height:0; overflow:hidden }
-  body.wall .bay{ min-height:0; display:flex; flex-direction:column }
-  body.wall .bay:not(.bay-empty){ flex:1 1 0 }
-  body.wall .bay.bay-empty{ flex:0 0 auto }
-  body.wall .bay .bay-body{ flex:1 1 auto; min-height:0; max-height:none; overflow-y:auto }
-  /* Crew queues fill the lower panel */
-  body.wall .assignees{ flex:1 1 auto; min-height:0; align-items:stretch }
-  body.wall .asg{ min-height:0 }
-  body.wall .asg-split{ flex:1 1 auto; min-height:0 }
-  body.wall .asgbody{ flex:1 1 auto; max-height:none; min-height:0 }
+  /* Wall (TV) mode: bound heights + scroll so bays + assignees fit one screen.
+     Per-tile size overrides from the 🎨 Design panel tweak individual tiles — see applyWallLayout(). */
+  body.wall .baycol{max-height:44vh; overflow:hidden}
+  body.wall .baycol:not(.parkcol) .bay-body{max-height:17vh; overflow-y:auto}
+  body.wall .bay-body.autoscroll{max-height:30vh; overflow-y:auto}
+  body.wall .baycol.parkcol{max-height:none; overflow:visible}
+  body.wall .baycol.parkcol .bay-body.autoscroll{max-height:19vh}
+  body.wall .asgbody{max-height:30vh}
   /* Wall: give Sal a double-wide panel and split his tasks into two side-by-side columns */
   /* (Sal's two-column layout is now the default on wide screens — see .assignees / .asg-split above) */
   /* Wall mode: per-screen size control (zoom). Lives in body so it scales with the board. */
@@ -1645,7 +1620,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
-    <p>Each tile shows the job's name, client / Program Development, job #, dates and a small <span class="k">N open</span> badge so you can see at a glance which trailer is busy. The actual task lines now live in the <b>🧰 Open Tasks by Assignee</b> panel just below (grouped by Sal · Wrap Team · Electricians) — so they're not duplicated on the tiles, which keeps the board (and the wall TV) compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> it down to just its title + count — handy for a tall <b>Next Up / On Hold</b> or Parking Lot; click again (<span class="k">▸</span>) to expand. Collapsed tiles are remembered on this device. <b>🔧 Fleetio issues are the exception</b> — a trailer's incoming Fleetio issues still show on its bay card as a collapsed <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue, after which it shows below in Open Tasks by Assignee. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks on its tile.</p></div>
+    <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tile has a <span class="k">N tasks ▸</span> pill — click it to <b>expand</b> that trailer's open tasks (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians) or collapse them again; they're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Collapsed tiles are remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks.</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap Team · Electricians</h4>
     <p>Three live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b> or <b>Electricians</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; Wrap Team and Electricians stay single. On a phone the columns stack. In 📺 Wall mode they auto-scroll. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
@@ -1682,7 +1657,7 @@ const GENERAL_HELP = `
     </ul>
     <div class="tip">Keep <b>one file per project</b> with a stable name (e.g. <i>SWC MMOT.xlsx</i>), and give it that project's <b>complete</b> task list each time — re-dropping <b>replaces</b> the project, it doesn't merge. A project already in the master workbook should live in <b>one</b> place, not both.</div></div>
   <div class="hsec"><h4>⑩ 📺 Wall / TV mode</h4>
-    <p>The <span class="k">📺 Wall</span> button (in <span class="k">☰ Menu</span>) packs the bays and the three crew queues onto one screen for the shop TV — the board now <b>fills the whole screen</b> (the Bay Status and Open Tasks panels stretch to use every inch of height, no wasted space at the bottom) and auto-scrolls anything too tall to fit. To maximize that room the TV view drops the tabs, search, footer and other chrome — leaving just the logo, clock and the board. <b>Hover a panel</b> to take over and scroll it yourself; it resumes on its own. A small <span class="k">⚙</span> gear sits in the <b>bottom-right corner</b> — click it to pop up the wall controls: <b>Size</b> (slider + S / M / L presets, or type an exact <b>%</b>), <b>🌀 Scroll</b> speed, a <b>Theme</b> toggle, and <b>⏹ Exit wall</b>. <b>Each monitor remembers its own size & speed</b>. Click the gear again (or anywhere outside) to tuck it away. <b>Fine-tuning (admin):</b> in the 🎨 Design panel you can size individual bays for a given monitor — widen a column to soak up empty space on the right, or make a busy bay taller and a quiet one shorter (remembered per screen).</p></div>
+    <p>The <span class="k">📺 Wall</span> button (in <span class="k">☰ Menu</span>) packs the bays and the three crew queues onto one screen for the shop TV and auto-scrolls anything too tall to fit. The footer is hidden to save room. <b>Hover a panel</b> to take over and scroll it yourself; it resumes on its own. A small <span class="k">⚙</span> gear sits in the <b>bottom-right corner</b> — click it to pop up the wall controls: <b>Size</b> (slider + S / M / L presets, or type an exact <b>%</b>) and <b>🌀 Scroll</b> speed; <b>each monitor remembers its own</b>. Click the gear again (or anywhere outside) to tuck it away. <b>Fine-tuning each tile (admin, 🎨 Design panel):</b> the <b>📺 Wall tile sizes</b> section lets you size the board for a specific monitor — pick a bay, then set its <b>column width</b> (widens that whole column, Front + Back together, to soak up empty space on the right) and that <b>tile's height</b> on its own (each tile is independent — sizing Bay 2 Front never moves Bay 2 Back). Remembered per screen; <span class="k">↺ Reset tiles</span> clears it.</p></div>
   <div class="hsec"><h4>⑪ 🗂️ Shop Tasks tab — how tasks work now</h4>
     <p>Shop-floor tasks live on the <b>Shop Tasks</b> tab of the workbook — <b>one row per task</b>, with dropdowns for <span class="k">Bay</span>, <span class="k">Assigned</span> and <span class="k">Status</span>, plus <span class="k">Opened</span> / <span class="k">Closed</span> dates. The sheet is sortable and color-banded by project, and each row flows onto the matching bay card and crew queue automatically. (No row yet for a job? The old <b>Notes</b> cell on Input still works as a fallback.)</p></div>
   <div class="hsec"><h4>⑫ ✅ Close a task from the dashboard</h4>
@@ -1759,6 +1734,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.16", date:"2026-06-19", title:"Wall layout back to normal; per-tile sizing fixed; tile tasks return on laptop", items:[
+    "Reverted the wall board to the original fit (the screen-fill experiment was stretching tiles and leaving big gaps).",
+    "Fixed the 🎨 Design panel tile sizing: tile HEIGHT is now fully independent (sizing Bay 2 Front no longer moves Bay 2 Back — it sets each tile's own height), and column WIDTH widens the whole column. Wall mode only, remembered per monitor, ↺ Reset tiles to clear.",
+    "Bay tiles show open tasks again on a laptop / desktop — a clickable N tasks ▸ pill expands/collapses the list right on the tile. The wall TV still shows just the N open count (tasks stay in the panel below)." ] },
   { rev:"4.15", date:"2026-06-19", title:"Wall mode fills the whole screen + per-tile sizing (admin)", items:[
     "📺 Wall / TV mode now FILLS the screen: the Bay Status and Open Tasks panels stretch to use all the vertical room (no more wasted space or cut-off bottom — it was overflowing ~90px before, now it fits exactly one screen at any TV resolution).",
     "Reclaimed the room by dropping the TV chrome (tabs, search, ? and the grey hint lines) and slimming the header/padding — the wall view is just the logo, clock and the board.",
@@ -2195,10 +2174,7 @@ function ensureWallCtl(){
     +'<div class="wc-row"><input id="wallZoom" type="range" min="60" max="200" step="5" style="flex:1" oninput="setWallZoom(this.value)" title="Board size on THIS screen — drag to scale the whole board bigger or smaller (remembered per monitor)"></div>'
     +'<div class="wc-row"><span class="wc-lbl">🌀 Scroll</span><span class="wc-pct">🐢</span>'
     +'<input id="wallSpeed" type="range" min="0" max="100" step="5" style="flex:1" oninput="setWallSpeed(this.value)" title="Wall auto-scroll speed on THIS screen — left = slower, right = faster (remembered per monitor)">'
-    +'<span class="wc-pct">🐇</span></div>'
-    +'<div class="wc-row" style="border-top:1px solid var(--line); padding-top:9px; margin-top:1px">'
-    +'<button type="button" onclick="toggleTheme()" title="Light / dark on this screen">☀️ Theme</button>'
-    +'<button type="button" onclick="toggleWall(document.getElementById(\'btnWall\'))" title="Leave wall / TV mode">⏹ Exit wall</button></div>';
+    +'<span class="wc-pct">🐇</span></div>';
   document.body.appendChild(d);
 }
 function toggleWallCtl(){ const c=document.getElementById('wallCtl'); if(c) c.classList.toggle('show'); }
@@ -2237,9 +2213,25 @@ try{ const o=JSON.parse(localStorage.getItem('mra_wall_layout_v1')||'{}'); if(o&
 function saveWallLayout(){ try{ localStorage.setItem('mra_wall_layout_v1', JSON.stringify(WALL_LAYOUT)); }catch(e){} }
 function applyWallLayout(){
   const cols=document.querySelectorAll('#bays .baycol'), bays=document.querySelectorAll('#bays .bay');
-  if(!document.body.classList.contains('wall')){ cols.forEach(c=>c.style.flexGrow=''); bays.forEach(b=>b.style.flex=''); return; }
+  // Off in normal view — clear every override so the standard layout is untouched.
+  if(!document.body.classList.contains('wall')){
+    cols.forEach(c=>{ c.style.flexGrow=''; c.style.maxHeight=''; });
+    bays.forEach(b=>{ const bd=b.querySelector('.bay-body'); if(bd){ bd.style.height=''; bd.style.maxHeight=''; } });
+    return;
+  }
+  // WIDTH — per column (Front + Back share a column): widen/narrow that whole column.
   cols.forEach(c=>{ const pct=WALL_LAYOUT.w[c.getAttribute('data-col')]; c.style.flexGrow = pct?(pct/100):''; });
-  bays.forEach(b=>{ const pct=WALL_LAYOUT.h[b.getAttribute('data-bay')]; b.style.flex = pct?((pct/100)+' 1 0'):''; });
+  // HEIGHT — per tile, INDEPENDENT: give that one tile its own fixed body height (100%≈the
+  // default 17vh). Each tile is sized on its own — changing Front never moves Back.
+  const grown=new Set();
+  bays.forEach(b=>{ const bd=b.querySelector('.bay-body'); if(!bd) return;
+    const pct=WALL_LAYOUT.h[b.getAttribute('data-bay')];
+    if(pct){ const vh=(pct/100*17).toFixed(1)+'vh'; bd.style.height=vh; bd.style.maxHeight=vh;
+      const col=b.closest('.baycol'); if(col) grown.add(col); }
+    else { bd.style.height=''; bd.style.maxHeight=''; }
+  });
+  // a column holding a custom-sized tile is freed from the 44vh cap so nothing gets clipped
+  cols.forEach(c=>{ if(grown.has(c)) c.style.maxHeight='none'; else if(!c.classList.contains('parkcol')) c.style.maxHeight=''; });
 }
 function dsColKeyOf(bay){ const c=WALL_COLS.find(c=>c.bays.includes(bay)); return c?c.key:bay; }
 function dsPopulateTiles(){
@@ -3637,17 +3629,43 @@ function renderFloor(D){
     const jOpen=expandedJobs.has(j.row);
     const _trk=new Set((j.tasks||[]).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
     const fl=fleetioFor(j).filter(it=>!_trk.has(String(it.num)));  // hide issues already added as tasks
-    // Tasks now live in the "Open Tasks by Assignee" panel below — the tile just shows a
-    // small count (no list), so the board stays compact. Fleetio issues stay here (collapsed),
-    // because they only surface on the bay card until they're assigned into a crew queue.
-    if(j.openCount>0) pills+=`<span class="pill task" title="${j.openCount} open task${j.openCount>1?"s":""} — listed below in Open Tasks by Assignee">${j.openCount} open</span>`;
+    // Open-task count pill. WALL/TV: a plain count (tasks live in the Open Tasks by Assignee
+    // panel below, so the TV stays compact). NORMAL view: a clickable "N tasks ▸" that
+    // collapses/expands this trailer's open tasks right on the tile.
+    if(j.openCount>0){
+      if(WALL) pills+=`<span class="pill task" title="${j.openCount} open task${j.openCount>1?"s":""} — listed below in Open Tasks by Assignee">${j.openCount} open</span>`;
+      else pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Show / hide this trailer's open tasks">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
+    }
     if(fl.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Live Fleetio maintenance issues for this trailer — expand to assign (➕)">🔧 ${fl.length} Fleetio ${jOpen?"▾":"▸"}</span>`;
     let tl="";
-    if(jOpen && fl.length){
-      tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
-        const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
-        return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>`;
-      }).join("")+`</div>`;
+    if(jOpen){
+      if(!WALL && (j.openTasks||[]).length){
+        const opens=(j.tasks&&j.tasks.length)
+          ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t),who:shopWho(t)}))
+          : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk),who:shopWho({raw:tk})}));
+        const grp={}, gkeys=[];
+        opens.forEach(o=>{ const k=o.who||''; if(!(k in grp)){ grp[k]=[]; gkeys.push(k); } grp[k].push(o); });
+        const crewIdx=n=>{ const i=KNOWN_CREW.findIndex(c=>c[0]===n); return i<0?98:i; };
+        gkeys.sort((a,b)=> (a===''?1:0)-(b===''?1:0) || (crewIdx(a)-crewIdx(b)) || a.localeCompare(b));
+        const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
+        const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`; };
+        let inner="";
+        gkeys.forEach(k=>{
+          if(!onlyUnassigned){
+            const hdr = k===''?'— unassigned —':(crewEmoji(k)+' '+esc(k));
+            inner+=`<div class="tgrp-h">${hdr}${k===''?'':` <span class="tgrp-n">${grp[k].length}</span>`}</div>`;
+          }
+          inner+=grp[k].map(taskHtml).join("");
+        });
+        tl+=`<div class="tasklist">`+inner+`</div>`;
+      }
+      if(fl.length){
+        tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
+          const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
+          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>`;
+        }).join("")+`</div>`;
+      }
     }
     if(SHOWCLOSED){
       const doneStruct=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>t.done):null;
