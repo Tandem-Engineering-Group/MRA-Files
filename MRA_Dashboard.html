@@ -534,6 +534,11 @@
   #dsPanel .ds-btns{display:flex; gap:8px; margin-top:8px}
   #dsPanel .ds-btns button{flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:8px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit}
   #dsPanel .ds-btns button:hover{border-color:#7aa2d6; color:#7aa2d6}
+  /* Collapsible FLEETIO panels */
+  #fleetioView .panel > h2 .pcaret{cursor:pointer; color:var(--muted); font-size:12px; font-weight:700; margin-right:8px; user-select:none}
+  #fleetioView .panel > h2 .pcaret:hover{color:var(--txt)}
+  #fleetioView .panel.pcollapsed > h2{margin-bottom:0}
+  #fleetioView .panel.pcollapsed > :not(h2){display:none}
   .modal{background:var(--panel); border:1px solid var(--line); border-radius:16px;
     max-width:680px; width:100%; max-height:86vh; overflow:auto; padding:24px 30px; position:relative}
   .modal h3{font-size:20px; font-weight:800; margin-bottom:4px}
@@ -916,6 +921,12 @@
       <a class="editbtn" href="https://secure.fleetio.com/8cf2193b5d/dashboard" target="_blank" rel="noopener" title="Open the full Fleetio app">↗ Open in Fleetio</a>
     </div>
     <div class="kpis" id="fleetioKpis"></div>
+    <div class="panel" id="fp-attention">
+      <h2>⚡ Needs Attention <span class="count" id="fAttentionCount"></span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">overdue issues &amp; service + aging open issues — click to open &amp; close in Fleetio</span>
+      </h2>
+      <div id="fAttention"></div>
+    </div>
     <div class="panel" id="fp-search">
       <h2>🔎 Find Open Fleetio Items <span class="count" id="fSearchCount"></span>
         <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">type a job #, unit, or person — open issues / work orders / service</span>
@@ -923,7 +934,7 @@
       <input id="fSearch" type="search" class="fsearchbox" placeholder="Search open items — e.g. J1543, 6160, Siemens, a name…" oninput="renderFleetSearch()" autocomplete="off">
       <div id="fSearchResults"></div>
     </div>
-    <div class="grid" style="grid-template-columns:1fr 1fr">
+    <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="panel">
         <h2>📊 Service Backlog</h2>
         <div id="fSvcChart"></div>
@@ -931,6 +942,10 @@
       <div class="panel">
         <h2>🏷️ Open Issues by Type <span class="count" id="fLabelCount"></span></h2>
         <div id="fIssueChart"></div>
+      </div>
+      <div class="panel">
+        <h2>🚚 Top Units — Open Items</h2>
+        <div id="fTopUnits"></div>
       </div>
     </div>
     <div class="panel mappanel">
@@ -945,6 +960,12 @@
         <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">units on the floor right now, grouped by job · ➕ adds an issue as an assignable shop task</span>
       </h2>
       <div class="teamgrid" id="fInBay"></div>
+    </div>
+    <div class="panel" id="fp-byassignee">
+      <h2>🧑‍🔧 Open Work by Assignee <span class="count" id="fByAssigneeCount"></span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">who owes what in Fleetio · click an item to open it</span>
+      </h2>
+      <div class="teamgrid" id="fByAssignee"></div>
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="panel" id="fp-issues">
@@ -1638,6 +1659,12 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.9", date:"2026-06-19", title:"Fleetio tab: Needs Attention, by-assignee, top units, collapsible", items:[
+    "New ⚡ Needs Attention list at the top — overdue issues & service plus aging open issues, worst-first, each a click-through to Fleetio.",
+    "New 🧑‍🔧 Open Work by Assignee — issues + work orders grouped by who they're on (overdue counts up top).",
+    "New 🚚 Top Units — Open Items bar list (click a unit to open it in Assets).",
+    "Open-issue age badges are now color-banded: green <30d, amber 30–90d, red >90d.",
+    "Every FLEETIO panel can collapse — click the ▾ in its header (remembered per device) to tidy the long tab." ] },
   { rev:"4.8", date:"2026-06-19", title:"Personal Design panel (admin)", items:[
     "When Rich is signed in, a 🎨 handle appears on the right edge — click it for a slide-in panel to live-adjust the bay-header / crew-name / card-title / task-text sizes and the spacing, on that screen only (remembered per device, slides away when closed; no board space used). ↺ Reset to defaults, and 📋 Copy settings to share numbers for a global default." ] },
   { rev:"4.7", date:"2026-06-19", title:"Fix: Fleetio links open the right item", items:[
@@ -3834,6 +3861,24 @@ function fioHref(kind,num){
 }
 function fioTitle(kind,num,label){ return `<a class="fiotitle" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">${esc(label)}<span class="fioarrow"> ↗</span></a>`; }
 function fioArrow(kind,num){ return ` <a class="fioarrow" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">↗</a>`; }
+// Age-banded "open" badge: green <30d, amber 30–90d, red >90d.
+function ageBadge(age){ if(age==null) return ''; const cls=age>90?'red':age>=30?'amber':'green'; return `<span class="badge ${cls}">${age}d open</span>`; }
+// Collapsible FLEETIO panels — decorate each panel header with a ▾ caret, remembered per device.
+function setupFleetioCollapse(){
+  document.querySelectorAll('#fleetioView .panel').forEach(pl=>{
+    const h=pl.querySelector(':scope > h2'); if(!h) return;
+    const key='fiocol_'+(pl.id || (h.textContent||'').trim().slice(0,20).replace(/\s+/g,'_'));
+    let col=false; try{ col=localStorage.getItem(key)==='1'; }catch(e){}
+    pl.classList.toggle('pcollapsed', col);
+    let c=h.querySelector('.pcaret');
+    if(!c){ c=document.createElement('span'); c.className='pcaret';
+      c.onclick=function(e){ e.stopPropagation(); const now=!pl.classList.contains('pcollapsed');
+        pl.classList.toggle('pcollapsed',now); c.textContent=now?'▸':'▾';
+        try{ localStorage.setItem(key, now?'1':'0'); }catch(e){} };
+      h.insertBefore(c, h.firstChild); }
+    c.textContent = col?'▸':'▾'; c.title='Collapse / expand this panel';
+  });
+}
 function renderFleetio(D){
   const F=D.fleetio, today=D.todayISO;
   const issues=(F&&F.issues)||[], wos=(F&&F.workOrders)||[], svc=(F&&F.service)||[];
@@ -3937,7 +3982,7 @@ function renderFleetio(D){
   const issEmpty = (FASSIGN||FREPORT) ? 'No matching issues' : (FFILTER==='iss_over'?'No overdue issues':'No open issues 🎉');
   document.getElementById('fIssues').innerHTML = aNote + issNote + (issShow.length ? issShow.slice(0,40).map(i=>{
     const age = i.openedISO ? Math.max(0,daysBetween(today,i.openedISO)) : (i.ageDays!=null?i.ageDays:null);
-    const b = i.overdue?`<span class="badge red">overdue</span>` : (age!=null?`<span class="badge grey">${age}d open</span>`:'');
+    const b = i.overdue?`<span class="badge red">overdue</span>` : ageBadge(age);
     const pr = i.priority?`<span class="badge ${/(high|emerg)/i.test(i.priority)?'red':/med/i.test(i.priority)?'amber':'grey'}">${esc(i.priority)}</span>`:'';
     const wa=fAsg(i); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = i.reporter?` · ✍ ${esc(i.reporter)}`:'';
@@ -3970,9 +4015,52 @@ function renderFleetio(D){
   wos.forEach(w=>{ const t=bucket(w); t.wo++; t._w.push(w); });
   svcC.forEach(s=>{ const t=bucket(s); t.svc++; if(s.c.overdue) t.svcOver++; t._s.push(s); });
   FTRAILERS=Object.values(tmap);
+
+  // ⚡ Needs Attention — overdue issues + overdue/due-soon service + aging open issues, worst first.
+  const attn=[];
+  issues.forEach(i=>{ const age=i.openedISO?Math.max(0,daysBetween(today,i.openedISO)):(i.ageDays!=null?i.ageDays:0);
+    if(i.overdue) attn.push({kind:'issue',num:i.num,label:i.summary||('Issue '+(i.num||'')),asset:i.asset,badge:'<span class="badge red">overdue</span>',rank:0,age:age||1});
+    else if(age>=60) attn.push({kind:'issue',num:i.num,label:i.summary||('Issue '+(i.num||'')),asset:i.asset,badge:ageBadge(age),rank:2,age}); });
+  svcC.forEach(s=>{ if(s.c.overdue) attn.push({kind:'svc',num:'',label:s.service||'Service',asset:s.asset,badge:'<span class="badge red">svc overdue</span>',rank:0,age:9999});
+    else if(s.c.soon) attn.push({kind:'svc',num:'',label:s.service||'Service',asset:s.asset,badge:`<span class="badge amber">svc due${(s.c.days!=null&&s.c.days>=0)?' '+s.c.days+'d':' soon'}</span>`,rank:1,age:0}); });
+  attn.sort((a,b)=> a.rank-b.rank || b.age-a.age);
+  const attnEl=document.getElementById('fAttention');
+  if(attnEl) attnEl.innerHTML = attn.length ? attn.slice(0,18).map(a=>
+      `<div class="row"><div><div class="lead">${fioTitle(a.kind,a.num,a.label)}</div><div class="meta">${esc(a.asset||'')}</div></div><div class="right">${a.badge}</div></div>`).join('')
+      + (attn.length>18?`<div class="empty">+${attn.length-18} more</div>`:'')
+    : `<div class="empty">Nothing overdue or aging — all caught up ✓</div>`;
+  { const c=document.getElementById('fAttentionCount'); if(c) c.textContent=attn.length+' need attention'; }
+
+  // 🧑‍🔧 Open Work by Assignee — issues + work orders grouped by who they're assigned to.
+  const byA={};
+  const addA=(who,it,kind)=>{ if(!byA[who]) byA[who]={who,items:[],over:0}; byA[who].items.push({it,kind}); if(it.overdue) byA[who].over++; };
+  issues.forEach(i=>{ const as=fAsg(i); if(as.length) as.forEach(w=>addA(w,i,'issue')); else addA('— Unassigned —',i,'issue'); });
+  wos.forEach(w=>{ const as=fAsg(w); if(as.length) as.forEach(p=>addA(p,w,'wo')); else addA('— Unassigned —',w,'wo'); });
+  const people=Object.values(byA).sort((a,b)=> b.over-a.over || b.items.length-a.items.length || a.who.localeCompare(b.who));
+  const baEl=document.getElementById('fByAssignee');
+  if(baEl) baEl.innerHTML = people.length ? people.map(p=>{
+      const lines=p.items.slice(0,10).map(x=>{ const it=x.it; const bdg=it.overdue?'<span class="badge red">overdue</span>':(x.kind==='wo'&&it.status?`<span class="badge blue">${esc(it.status)}</span>`:'');
+        return `<div class="trow"><div class="tlead">${fioTitle(x.kind,it.num,it.summary||((x.kind==='wo'?'WO ':'Issue ')+(it.num||'')))}<div class="tsub">${esc(it.asset||'')}</div></div><div class="tright">${bdg}</div></div>`; }).join('');
+      return `<div class="teamcard"><div class="th"><span class="tn">${esc(p.who)}</span><span class="tc">${p.items.length}</span></div>`+
+        (p.over?`<div class="tmeta"><span class="badge red">${p.over} overdue</span></div>`:'')+
+        `<div class="tlist">${lines}${p.items.length>10?`<div class="tsub" style="padding-left:0;margin-top:3px">+${p.items.length-10} more</div>`:''}</div></div>`;
+    }).join('') : `<div class="empty">No open issues or work orders assigned.</div>`;
+  { const c=document.getElementById('fByAssigneeCount'); if(c) c.textContent=people.length+(people.length===1?' person':' people'); }
+
+  // 🚚 Top Units — most open items (issues + WOs + service), click to open in Assets.
+  const uCnt={}; const bumpU=a=>{ if(a) uCnt[a]=(uCnt[a]||0)+1; };
+  issues.forEach(i=>bumpU(i.asset)); wos.forEach(w=>bumpU(w.asset)); svcC.forEach(s=>bumpU(s.asset));
+  const topU=Object.entries(uCnt).map(([asset,n])=>({asset,n})).sort((a,b)=>b.n-a.n).slice(0,10);
+  const tmax=Math.max(1,...topU.map(u=>u.n));
+  const tuEl=document.getElementById('fTopUnits');
+  if(tuEl) tuEl.innerHTML = topU.length ? topU.map(u=>
+      `<div class="pmrow" onclick="searchGoUnit('${escJsAttr(String(u.asset))}')" style="cursor:pointer" title="Open ${escA(String(u.asset))} in Assets"><div class="nm" title="${escA(String(u.asset))}">${esc(u.asset)}</div><div class="pmbar"><div class="seg" style="width:${u.n/tmax*100}%;background:var(--brand)"></div></div><div class="v">${u.n}</div></div>`).join('')
+    : `<div class="empty">—</div>`;
+
   renderTrailerCards();
   renderInBayFleetio(D);
   renderFleetSearch();
+  setupFleetioCollapse();
 }
 // Quick search across ALL open Fleetio items (issues + work orders + service) by
 // job #, unit/asset, summary, or person. Type-to-filter; empty = prompt.
