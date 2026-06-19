@@ -6,6 +6,7 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         client?: string; pm?: string;
         row?: number; status?: string; start?: string; completion?: string; notes?: string;
         id?: string | number; phase?: string; type?: string; finish?: string; pred?: string;
+        ord?: string | number; estDays?: string | number; estHours?: string | number; budget?: string | number;
         pin?: string; user?: string;
         // bulk upload of a whole project (action "importProject")
         replace?: boolean;
@@ -133,7 +134,7 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         logIt("Delete job", p.project || "", "row " + r); return;
     }
 
-    // ===== PROJECT TASKS (the long-term "Project Tasks" sheet: cols A..N) =====
+    // ===== PROJECT TASKS (the long-term "Project Tasks" sheet: cols A..T) =====
     if (p.action === "addProjectTask" || p.action === "editProjectTask" || p.action === "deleteProjectTask"
         || p.action === "closeProjectTask" || p.action === "reopenProjectTask") {
         const pws = workbook.getWorksheet("Project Tasks");
@@ -141,13 +142,21 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         const used = pws.getUsedRange(); const vals = used.getValues();
         const base = used.getRowIndex(), cnt = used.getRowCount();
         const PROJECT = 0, PHASE = 1, TYPE = 2, TASK = 3, START = 4, FINISH = 5,
-            ASSIGNED = 7, STATUS = 8, MILE = 10, COMMENTS = 11, ID = 12, PRED = 13;
+            ASSIGNED = 7, STATUS = 8, MILE = 10, COMMENTS = 11, ID = 12, PRED = 13,
+            ORDER = 16, ESTDAYS = 17, ESTHOURS = 18, BUDGET = 19;   // Q / R / S / T
         const pr = String(p.project || "").trim().toLowerCase();
         const mileVal = (m: string | undefined) => (m === "Yes" ? "Yes" : "No");
         const setPDate = (rowAbs: number, col: number, iso: string) => {
             const cell = pws.getCell(rowAbs, col), s = serialOf(iso || "");
             if (s === "") cell.clear(ExcelScript.ClearApplyTo.Contents);
             else { cell.setValue(s); cell.setNumberFormatLocal([["m/d/yyyy"]]); }
+        };
+        // Numeric cell (Order / Est Days / Est Hours / Budget): write a number, or clear when blank.
+        const setPNum = (rowAbs: number, col: number, v: string | number | undefined) => {
+            const cell = pws.getCell(rowAbs, col);
+            const s = String(v == null ? "" : v).replace(/[$,\s]/g, "");
+            if (s === "") { cell.clear(ExcelScript.ClearApplyTo.Contents); return; }
+            const n = Number(s); if (isNaN(n)) cell.setValue(s); else cell.setValue(n);
         };
 
         if (p.action === "addProjectTask") {
@@ -167,6 +176,10 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
             pws.getCell(r, COMMENTS).setValue(p.comments || "");
             pws.getCell(r, ID).setValue(newId);
             pws.getCell(r, PRED).setValue(p.pred || "");
+            if (p.ord !== undefined) setPNum(r, ORDER, p.ord);
+            if (p.estDays !== undefined) setPNum(r, ESTDAYS, p.estDays);
+            if (p.estHours !== undefined) setPNum(r, ESTHOURS, p.estHours);
+            if (p.budget !== undefined) setPNum(r, BUDGET, p.budget);
             logIt("Add project task", p.project, String(p.task) + " (#" + newId + ")"); return;
         }
 
@@ -203,6 +216,10 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
             if (p.pred !== undefined) pws.getCell(rowAbs, PRED).setValue(p.pred);
             if (p.start !== undefined) setPDate(rowAbs, START, p.start);
             if (p.finish !== undefined) setPDate(rowAbs, FINISH, p.finish);
+            if (p.ord !== undefined) setPNum(rowAbs, ORDER, p.ord);
+            if (p.estDays !== undefined) setPNum(rowAbs, ESTDAYS, p.estDays);
+            if (p.estHours !== undefined) setPNum(rowAbs, ESTHOURS, p.estHours);
+            if (p.budget !== undefined) setPNum(rowAbs, BUDGET, p.budget);
             logIt("Edit project task", p.project || "", String(p.task || wantId)); return;
         }
         return;

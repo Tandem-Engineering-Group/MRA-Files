@@ -211,6 +211,10 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     $pPred     = ([string](Resolve-Cell $pc['N'] $shared)).Trim()   # Predecessor (col N)
     $pSub      = ([string](Resolve-Cell $pc['O'] $shared)).Trim()   # Sub (col O) — 'x' = subtask of the task above
     $pSubRes   = ([string](Resolve-Cell $pc['P'] $shared)).Trim()   # Sub-Resource (col P) — person within the Assigned-To group
+    $pOrder    = ([string](Resolve-Cell $pc['Q'] $shared)).Trim()   # Order (col Q) — manual sort within a phase (blank = date order)
+    $pEstDays  = ([string](Resolve-Cell $pc['R'] $shared)).Trim()   # Est Days (col R)
+    $pEstHours = ([string](Resolve-Cell $pc['S'] $shared)).Trim()   # Est Hours (col S)
+    $pBudget   = (([string](Resolve-Cell $pc['T'] $shared)).Trim()) -replace '[$,]',''   # Budget $ (col T)
     if ($pTaskId -match '^\d+\.0+$')  { $pTaskId  = $pTaskId  -replace '\.0+$','' }   # numeric cell safety
     if ($pDur -match '^\d+\.0+$') { $pDur = $pDur -replace '\.0+$','' }
     $psd = Get-CellDate $pc['E']
@@ -220,6 +224,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
         $pmap[$name] = [PSCustomObject]@{
             name = $name; pm = ''; minStart = $null; maxFinish = $null
             taskCount = 0; doneCount = 0; pctSum = 0
+            estDays = 0.0; estHours = 0.0; budget = 0.0
             milestones = (New-Object System.Collections.ArrayList)
             tasks      = (New-Object System.Collections.ArrayList)
         }
@@ -232,6 +237,9 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     if ($pStatus -eq 'Completed') { $tp = 100 }
     elseif ($pStatus -match '(\d{1,3})\s*%') { $tp = [int]$matches[1]; if ($tp -gt 100) { $tp = 100 } elseif ($tp -lt 0) { $tp = 0 } }
     $o.pctSum += $tp
+    if ($pEstDays  -match '^-?\d+(\.\d+)?$') { $o.estDays  += [double]$pEstDays }      # roll up estimates + budget
+    if ($pEstHours -match '^-?\d+(\.\d+)?$') { $o.estHours += [double]$pEstHours }
+    if ($pBudget   -match '^-?\d+(\.\d+)?$') { $o.budget   += [double]$pBudget }
     if ($pPM -ne '' -and $o.pm -eq '') { $o.pm = $pPM }
     if ($psd -and ($null -eq $o.minStart -or $psd -lt $o.minStart)) { $o.minStart = $psd }
     if ($pfd -and ($null -eq $o.maxFinish -or $pfd -gt $o.maxFinish)) { $o.maxFinish = $pfd }
@@ -267,6 +275,10 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
         pred  = $pPred
         sub   = ($pSub -match '^[xX]')
         subRes = $pSubRes
+        ord   = $(if ($pOrder    -match '^-?\d+(\.\d+)?$') { [double]$pOrder    } else { $null })
+        eD    = $(if ($pEstDays  -match '^-?\d+(\.\d+)?$') { [double]$pEstDays  } else { $null })
+        eH    = $(if ($pEstHours -match '^-?\d+(\.\d+)?$') { [double]$pEstHours } else { $null })
+        bud   = $(if ($pBudget   -match '^-?\d+(\.\d+)?$') { [double]$pBudget   } else { $null })
         done  = ($pStatus -eq 'Completed')
     })
 }
@@ -433,6 +445,9 @@ try {
             taskCount = $o.taskCount
             doneCount = $o.doneCount
             pct       = $pct
+            estDays   = $o.estDays
+            estHours  = $o.estHours
+            budget    = $o.budget
             milestones = @($o.milestones)
             tasks      = @($o.tasks)
         })
