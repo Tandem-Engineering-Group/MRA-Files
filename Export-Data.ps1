@@ -90,7 +90,7 @@ function Parse-Tasks($text) {
 # the Input Notes cell -> fully backward-compatible, nothing changes until the
 # sheet exists.
 function Read-ShopTasks($zip, $wbXml, $relsXml, $shared, $nsMain, $nsRel, $nsPkg) {
-    # Rows are matched to a job by Project (col A) OR Job# (col B) — case-insensitive —
+    # Rows are matched to a job by Project (col A) OR Job# (col B) - case-insensitive -
     # so a small project-name mismatch doesn't silently drop the task. Returns lookup
     # maps plus a flat list (for unmatched-row logging).
     $byProj = @{}; $byJob = @{}; $all = New-Object System.Collections.ArrayList
@@ -220,9 +220,9 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     $pDur      = ([string](Resolve-Cell $pc['G'] $shared)).Trim()
     $pTaskId   = ([string](Resolve-Cell $pc['M'] $shared)).Trim()   # Task ID  (col M)
     $pPred     = ([string](Resolve-Cell $pc['N'] $shared)).Trim()   # Predecessor (col N)
-    $pSub      = ([string](Resolve-Cell $pc['O'] $shared)).Trim()   # Sub (col O) — 'x' = subtask of the task above
-    $pSubRes   = ([string](Resolve-Cell $pc['P'] $shared)).Trim()   # Sub-Resource (col P) — person within the Assigned-To group
-    $pOrder    = ([string](Resolve-Cell $pc['Q'] $shared)).Trim()   # Order (col Q) — manual sort within a phase (blank = date order)
+    $pSub      = ([string](Resolve-Cell $pc['O'] $shared)).Trim()   # Sub (col O) - 'x' = subtask of the task above
+    $pSubRes   = ([string](Resolve-Cell $pc['P'] $shared)).Trim()   # Sub-Resource (col P) - person within the Assigned-To group
+    $pOrder    = ([string](Resolve-Cell $pc['Q'] $shared)).Trim()   # Order (col Q) - manual sort within a phase (blank = date order)
     $pEstDays  = ([string](Resolve-Cell $pc['R'] $shared)).Trim()   # Est Days (col R)
     $pEstHours = ([string](Resolve-Cell $pc['S'] $shared)).Trim()   # Est Hours (col S)
     $pBudget   = (([string](Resolve-Cell $pc['T'] $shared)).Trim()) -replace '[$,]',''   # Budget $ (col T)
@@ -354,7 +354,7 @@ try {
         $startTxt = if ($sd) { $sd.ToString('MM/dd/yy') } else { '' }
         $compTxt  = if ($cd) { $cd.ToString('MM/dd/yy') } else { '' }
 
-        # Prefer structured 'Shop Tasks' rows for this job — match by Project name,
+        # Prefer structured 'Shop Tasks' rows for this job - match by Project name,
         # then fall back to Job# (so a project-name typo/prefix doesn't drop the task);
         # else parse the Notes cell.
         $stRows = $null
@@ -381,7 +381,7 @@ try {
         })
     }
 
-    # General lane: Shop Tasks whose Project is "General" (no trailer) — collect them into ONE catch-all
+    # General lane: Shop Tasks whose Project is "General" (no trailer) - collect them into ONE catch-all
     # job so general crew tasks (move a trailer, Home Depot run, ...) show in the bottom-board crew columns.
     $genRows = @($shopTasks.all | Where-Object { -not $_.matched -and ((([string]$_.proj) -replace '[^\w ]','').Trim().ToLower() -eq 'general') })
     if ($genRows.Count -gt 0) {
@@ -395,7 +395,7 @@ try {
         })
     }
 
-    # Surface any 'Shop Tasks' rows that matched NO job — so a mismatch is never silent.
+    # Surface any 'Shop Tasks' rows that matched NO job - so a mismatch is never silent.
     $stOrphans = @($shopTasks.all | Where-Object { -not $_.matched })
     $stLog = Join-Path $ScriptDir 'shoptasks-unmatched.txt'
     if ($stOrphans.Count -gt 0) {
@@ -460,7 +460,7 @@ try {
     }
 
     foreach ($o in $pmap.Values) {
-        # Overall % is the AVERAGE of each task's own % (Completed=100, partials count, rest=0) — not just done/total.
+        # Overall % is the AVERAGE of each task's own % (Completed=100, partials count, rest=0) - not just done/total.
         $pct = if ($o.taskCount -gt 0) { [math]::Round($o.pctSum / $o.taskCount) } else { 0 }
         [void]$projects.Add([PSCustomObject]@{
             name      = $o.name
@@ -491,7 +491,7 @@ function NormFleet($s){ $t = ((([string]$s).Trim()) -split '\s+')[0]; $t = $t.Tr
     if ($t -match '^(\d+)G$') { return ([int64]$matches[1]).ToString() }   # genset "1546G" -> base unit "1546"
     if ($t -match '^\d+$') { return ([int64]$t).ToString() }
     return $t.ToUpper() }
-# Reduce a full address to "City, ST" — handles US ("…, MA, 01505") and Canada ("…, ON N8Y 1L6").
+# Reduce a full address to "City, ST" - handles US ("..., MA, 01505") and Canada ("..., ON N8Y 1L6").
 function PlaceFromAddr($addr){
     $addr = ([string]$addr).Trim(); if ($addr -eq '') { return '' }
     $parts = $addr -split ','
@@ -505,7 +505,7 @@ function PlaceFromAddr($addr){
     if ($addr.Length -gt 40) { return $addr.Substring(0,40) } else { return $addr }
 }
 
-# --- Fleetio (optional) — reads fleetio.txt: line1 = API key, line2 = Account Token ---
+# --- Fleetio (optional) - reads fleetio.txt: line1 = API key, line2 = Account Token ---
 $fleetio = $null
 $FleetioTokenFile = Join-Path $ScriptDir 'fleetio.txt'
 if (Test-Path $FleetioTokenFile) {
@@ -566,7 +566,7 @@ if (Test-Path $FleetioTokenFile) {
             $pr = ''
             if ($i.labels) { try { $pr = (@($i.labels | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { $_.name } }) -join ', ') } catch {} }
             $det = ''
-            if ($i.description) { $det = ([string]$i.description).Trim(); if ($det.Length -gt 600) { $det = $det.Substring(0,600) + '…' } }
+            if ($i.description) { $det = ([string]$i.description).Trim(); if ($det.Length -gt 600) { $det = $det.Substring(0,600) + '...' } }
             [void]$fIssues.Add([PSCustomObject]@{
                 id = $i.id; num = (([string]$i.number) -replace '^#',''); summary = $(if ($i.summary) { $i.summary } else { $i.name })
                 asset = $i.vehicle_name; jobNum = (Get-FleetJob $i.vehicle_name)
@@ -681,7 +681,7 @@ if (Test-Path $FleetioTokenFile) {
     }
 }
 
-# --- Samsara (optional) — LIVE GPS location, reads samsara.txt: line1 = API token ---
+# --- Samsara (optional) - LIVE GPS location, reads samsara.txt: line1 = API token ---
 # Samsara is the upstream GPS source (Fleetio only mirrors it nightly). One paginated call
 # gets every tracked vehicle AND trailer's current location + a reverse-geocoded address. Fills
 # the shared $fLoc (keyed by fleet #), which $fleetio.locations references. Matches by the leading
@@ -694,7 +694,7 @@ if (Test-Path $SamsaraTokenFile) {
         $shead  = @{ 'Authorization' = "Bearer $stoken"; 'Accept' = 'application/json' }
         $SamDbg = Join-Path $ScriptDir 'samsara-debug.txt'
         "=== Samsara GPS  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $SamDbg -Encoding utf8
-        # Pull BOTH vehicles (trucks/tractors) AND trailers — Samsara tracks trailers on a
+        # Pull BOTH vehicles (trucks/tractors) AND trailers - Samsara tracks trailers on a
         # separate endpoint, so trailers (e.g. #54) were getting no location before.
         $samV = 0; $samT = 0
         foreach ($ep in @('vehicles','trailers')) {
@@ -716,7 +716,7 @@ if (Test-Path $SamsaraTokenFile) {
                     if ($place -eq '') { continue }
                     $atISO = if ($g.time) { [string]$g.time } else { $null }
                     $yard = ''; if ($g.address -and $g.address.name) { $yard = [string]$g.address.name }
-                    # Some names appear more than once (and a few report stale fixes) — keep the FRESHEST.
+                    # Some names appear more than once (and a few report stale fixes) - keep the FRESHEST.
                     $ex = $fLoc[$key]
                     if ($ex -and $ex.atISO -and $atISO -and ([string]$atISO -lt [string]$ex.atISO)) { continue }
                     $lat = $null; $lng = $null
@@ -863,8 +863,8 @@ Write-Output "Wrote $($jobs.Count) jobs and $($projects.Count) projects to data.
 $AzureStorageAccount = 'mrashopdash'
 # ROOT-CAUSE FIX: authenticate the push with the storage ACCOUNT KEY, not the
 # logged-in 'az login' session. Without this, "--auth-mode key" makes az fetch the
-# key via your interactive login — which works when YOU run it, but FAILS under the
-# scheduled task (no login) → data.js rebuilds locally but never reaches Azure →
+# key via your interactive login - which works when YOU run it, but FAILS under the
+# scheduled task (no login) -> data.js rebuilds locally but never reaches Azure ->
 # the live board freezes silently. Put the key in azure-key.txt next to this script.
 # Get it ONCE (while logged in) with:
 #   az storage account keys list --account-name mrashopdash --query "[0].value" -o tsv
@@ -872,7 +872,7 @@ $AzureStorageAccount = 'mrashopdash'
 $AzKeyFile = Join-Path $ScriptDir 'azure-key.txt'
 $AzKey = if (Test-Path $AzKeyFile) { (Get-Content $AzKeyFile -Raw).Trim() } else { '' }
 $AzAuth = if ($AzKey -ne '') { @('--account-key', $AzKey) } else { @('--auth-mode', 'key') }
-Log-Export ("AUTH  " + $(if ($AzKey -ne '') { 'account-key (non-interactive)' } else { 'az login session (FRAGILE under Task Scheduler — add azure-key.txt)' }))
+Log-Export ("AUTH  " + $(if ($AzKey -ne '') { 'account-key (non-interactive)' } else { 'az login session (FRAGILE under Task Scheduler - add azure-key.txt)' }))
 # Locate az: prefer the known install path, otherwise fall back to whatever
 # 'az' is on PATH (handles installs under Program Files (x86) or elsewhere).
 $azExe = 'C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
@@ -894,7 +894,7 @@ if (Test-Path $azExe) {
         --only-show-errors 2>$null | Out-Null
     $code = $LASTEXITCODE
     # Employee-of-the-Month photo: push eotm.png / eotm.jpg if present in this folder
-    # (wall-view feature). Swap monthly — drop a new eotm.png here and re-export.
+    # (wall-view feature). Swap monthly - drop a new eotm.png here and re-export.
     foreach ($img in @(@{f='eotm.png'; ct='image/png'}, @{f='eotm.jpg'; ct='image/jpeg'})) {
         $imgPath = Join-Path $ScriptDir $img.f
         if (Test-Path $imgPath) {
@@ -917,13 +917,13 @@ if (Test-Path $azExe) {
 }
 
 # --- Final status: record what happened so a silent freeze can't hide -------
-# The killer case is "data.js written locally but the Azure push failed" — the live
+# The killer case is "data.js written locally but the Azure push failed" - the live
 # site then stays frozen even though the export 'ran'. Make that loud in the marker.
 if ($null -ne $code -and $code -ne 0) {
-    Set-LastRun ("WARN  data.js written but Azure push FAILED (exit $code) — LIVE SITE NOT UPDATED")
+    Set-LastRun ("WARN  data.js written but Azure push FAILED (exit $code) - LIVE SITE NOT UPDATED")
     Log-Export  ("DONE  push FAILED (exit $code)")
 } elseif ($null -eq $code) {
-    Set-LastRun ("WARN  data.js written but Azure push SKIPPED (az CLI not found) — live site not updated")
+    Set-LastRun ("WARN  data.js written but Azure push SKIPPED (az CLI not found) - live site not updated")
     Log-Export  ("DONE  push skipped (az not found)")
 } else {
     Set-LastRun ("OK  data.js written + pushed to Azure")
