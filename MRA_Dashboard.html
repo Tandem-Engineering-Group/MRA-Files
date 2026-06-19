@@ -1201,7 +1201,7 @@
       <div class="rangebtns" id="gfsLevel"></div>
       <div class="rangebtns" id="gfsRange" style="margin-left:12px"></div>
       <div class="gfs-warn" id="gfsWarn"></div>
-      <button class="gfs-theme" id="gfsThemeBtn" onclick="toggleTheme(this)" title="Switch this view (and the whole dashboard) light / dark — remembered on this device">☀️ Light</button>
+      <button class="gfs-theme" id="gfsThemeBtn" onclick="event.stopPropagation(); toggleTheme(this)" title="Switch this view (and the whole dashboard) light / dark — remembered on this device">☀️ Light</button>
       <button class="gfs-close" onclick="closeGantt()" style="margin-left:8px" title="Close (Esc)">✕</button>
     </div>
     <div class="gfs-body">
@@ -1806,6 +1806,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.46", date:"2026-06-19", title:"Fixes: Fleetio task ghost + detail-view theme button", items:[
+    "<b>Fixed Fleetio tasks coming back unassigned.</b> Assigning (or editing) a Fleetio task you'd added — e.g. #964 Handrails to Sal — left a duplicate <i>unassigned</i> copy that reappeared every 15-min update (and came back after you deleted it). The device's pending-add cache was re-injecting the original because it only matched by exact text; it now matches by the Fleetio issue # and stops once a fresh export has run, and deleting a task clears its pending entry. Old stuck ghosts clear themselves on load.",
+    "<b>Fixed the detail-view ☀️/🌙 button kicking you out.</b> Clicking it no longer closes the project detail view (the click was bubbling to the overlay's close)." ] },
   { rev:"4.45", date:"2026-06-19", title:"Fix: detail-view light/dark button was clipped & vanished in light mode", items:[
     "The ☀️/🌙 button on the project detail view was crammed into the tiny ✕-close square, so its label was clipped and it washed out in light mode (with no way back). It's now a proper full-size button with the same <b>☀️ Light / 🌙 Dark</b> label as the ☰ Menu toggle, clearly visible in both themes." ] },
   { rev:"4.44", date:"2026-06-19", title:"Task fields: Est. Days, Est. Hours & Budget ($)", items:[
@@ -2711,14 +2714,21 @@ function oApply(){ markPending(); if(window.MRA_DATA) renderAll(); }
 const PENDING_KEY='mra_pending_adds_v1', PENDING_TTL=12*3600*1000;   // 12h
 function pendLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_KEY)||'[]'); }catch(e){ return []; } }
 function pendSave(a){ try{ localStorage.setItem(PENDING_KEY, JSON.stringify(a)); }catch(e){} }
-function pendAdd(entry){ entry.ts=Date.now(); const a=pendLoad(); a.push(entry); pendSave(a); }
+function pendAdd(entry){ entry.ts=Date.now(); entry.baseGen=((window.MRA_DATA||{}).generatedAt)||null; const a=pendLoad(); a.push(entry); pendSave(a); }
 function pendNorm(s){ return String(s==null?'':s).trim().toLowerCase(); }
+function pendFleetNum(s){ const m=String(s||'').match(/🔧\s*#(\d+)/); return m?m[1]:null; }   // a Fleetio task's issue # (stable key)
+// Forget any pending-add for this task (by text OR Fleetio #) so deleting/closing it can't re-spawn the original.
+function pendDrop(kind, project, taskText){ const fn=pendFleetNum(taskText);
+  pendSave(pendLoad().filter(e=> !(e.kind===kind && e.project===project &&
+    (pendNorm(e.obj&&e.obj.t)===pendNorm(taskText) || (fn && pendFleetNum(e.obj&&e.obj.t)===fn))))); }
 function mergePending(D){
   if(!D) return;
   const a=pendLoad(); if(!a.length) return;
   const now=Date.now(), keep=[];
   for(const e of a){
     if(now-(e.ts||0) > PENDING_TTL) continue;                 // too old — give up, avoid ghosts
+    if(e.baseGen==null) continue;                             // pre-fix entry (no baseGen) — drop, clears old stuck ghosts
+    if(D.generatedAt && D.generatedAt!==e.baseGen) continue;  // a fresh export has run since you added — data.js is now the truth, stop re-injecting (kills the "keeps coming back" ghost after assign/edit/delete)
     if(e.kind==='projTask'){
       const p=(D.projects||[]).find(x=>x.name===e.project); if(!p){ keep.push(e); continue; }
       if(!p.tasks) p.tasks=[];
@@ -2729,7 +2739,8 @@ function mergePending(D){
     } else if(e.kind==='jobTask'){
       const j=(D.jobs||[]).find(x=>x.project===e.project); if(!j){ keep.push(e); continue; }
       if(!j.tasks) j.tasks=[];
-      if(j.tasks.some(t=>pendNorm(t.t)===pendNorm(e.obj.t))) continue;   // landed — prune
+      const fn=pendFleetNum(e.obj.t);   // a Fleetio add: prune once a task with the SAME issue # exists (even if it was assigned / its text edited)
+      if(j.tasks.some(t=>pendNorm(t.t)===pendNorm(e.obj.t)) || (fn && j.tasks.some(t=>pendFleetNum(t.t)===fn))) continue;
       j.tasks.push(Object.assign({}, e.obj, {_pending:true}));
       oRecompute(j);
       keep.push(e);
@@ -2760,6 +2771,7 @@ function delTaskBtn(el){
   el.textContent="…"; el.style.pointerEvents="none";
   shopWrite({action:"deleteTask", project:proj, task:task, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
     const j=oJob(proj); if(j&&j.tasks){ j.tasks=j.tasks.filter(x=>x.t!==task); oRecompute(j); }
+    pendDrop('jobTask', proj, task);   // forget any pending-add so it doesn't re-appear on the next refresh
     oApply();
   }).catch(()=>{ el.textContent="🗑"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
 }
