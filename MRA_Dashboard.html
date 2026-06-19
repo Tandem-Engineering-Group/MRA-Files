@@ -157,9 +157,24 @@
   .g-rowedit .g-gutter:hover{background:rgba(255,255,255,.05)}
   .g-rowedit .g-gutter:hover .g-lbl{text-decoration:underline; text-decoration-color:rgba(255,255,255,.45); text-underline-offset:2px}
   .g-bar.g-draggable{cursor:grab}
+  .g-bar.g-reordering{opacity:.5; outline:2px solid var(--amber); cursor:grabbing}
   .g-msline{position:absolute; top:0; bottom:0; border-left:1.5px dashed rgba(245,158,11,.82); z-index:1; pointer-events:none}
   .g-row.g-msrow{background:rgba(245,158,11,.09)}
   .g-row.g-msrow .g-lbl{color:#fcd34d; font-weight:700}
+  /* ---- Light-mode polish for the Gantt (dark-tuned white rgba washes out / disappears on white) ---- */
+  body.light .g-row{border-top-color:rgba(0,0,0,.12)}
+  body.light .g-grid{background:rgba(0,0,0,.10)}
+  body.light .g-weekend{background:rgba(0,0,0,.03)}
+  body.light .g-curweek{background:rgba(59,130,246,.08)}
+  body.light .g-row.clickable:hover{background:rgba(0,0,0,.04)}
+  body.light .g-rowedit .g-gutter:hover{background:rgba(0,0,0,.05)}
+  body.light .g-rowedit .g-gutter:hover .g-lbl{text-decoration-color:rgba(0,0,0,.45)}
+  body.light .g-bar{border-color:rgba(0,0,0,.22)}
+  body.light .g-bar.done{opacity:.66}
+  body.light .g-row.g-msrow{background:rgba(245,158,11,.18)}
+  body.light .g-row.g-msrow .g-lbl{color:#8a5a00}
+  body.light .g-dout{color:#475569; text-shadow:none}
+  body.light .g-hl.hl-white{background:rgba(0,0,0,.06); border-color:rgba(0,0,0,.7)}
   #pdragHint{position:fixed; z-index:300; background:var(--panel); border:1px solid var(--line); border-radius:7px;
     padding:4px 9px; font-size:12px; font-weight:700; color:var(--txt); pointer-events:none; display:none;
     box-shadow:0 6px 20px rgba(0,0,0,.5); font-variant-numeric:tabular-nums}
@@ -1809,6 +1824,12 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.50", date:"2026-06-19", title:"Light mode polish on the project detail Gantt", items:[
+    "Light mode on the full-screen project detail looked washed out — invisible row dividers, faded completed bars, hard-to-read milestone labels (the styling was tuned for dark). Fixed the row lines, grid, completed-bar contrast, milestone gate rows, and out-of-bar date labels so it's crisp on white too." ] },
+  { rev:"4.49", date:"2026-06-19", title:"Drag tasks up/down to reorder (project detail)", items:[
+    "In the project <b>detail view</b> (edit mode), grab the <b>middle of a task bar</b> and drag <b>up/down</b> to reorder it in the list — a dashed line shows where it'll land. Dragging the middle <b>left/right</b> still reschedules dates, and the <b>ends</b> still change start/finish.",
+    "Default stays <b>date order</b>; once you hand-place a task it stays put (saved to the workbook, so the iPad/TV see the same order). A <b>↺ Reset order</b> button puts a project back to pure date order.",
+    "Needs the Order column (Q) — already wired into your export/script, so nothing new to set up." ] },
   { rev:"4.48", date:"2026-06-19", title:"General tasks (not tied to a trailer)", items:[
     "New <b>➕ General task</b> button on <b>Open Tasks by Assignee</b> — for crew work that isn't on a trailer (move a trailer, Home Depot run, etc.). Pick the person and type the task; it shows in <b>their column</b> on the bottom board under a <b>🛠 General</b> card, and writes back so everyone sees it.",
     "These don't clutter the bay board (no trailer tile). <b>Setup:</b> needs the updated Export-Data.ps1 + a re-run (no workbook columns to add — it just collects any Shop Tasks whose Project is “General”). Assign them to one of the crew columns (Sal, Doug, Josh, Jeff, Wrap, Electricians)." ] },
@@ -3152,6 +3173,10 @@ function projTaskPct(st){ st=String(st||''); const m=st.match(/(\d{1,3})\s*%/);
   return null; }   // null = no explicit % (Not Started / plain In Progress / On Hold / blank)
 function projBaseStatus(st){ st=String(st||'').replace(/\s*\d{1,3}\s*%\s*/,' ').trim();   // drop the "25%"
   const f=PROJ_STATUS_OPTIONS.find(s=>s.toLowerCase()===st.toLowerCase()); return f||st; }
+// Manual task order (col Q "ord"): a task's sort key is its ord when set, else its date as YYYYMMDD —
+// SAME numeric scale, so dragging only needs to set the moved task's ord; everything else stays date-sorted.
+function projDnum(t){ const d=(t&&(t.startISO||t.finISO))||''; const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m?(+(m[1]+m[2]+m[3])):99999999; }
+function projOrdKey(t){ const o=(t||{}).ord; return (o!=null && o!=='' && isFinite(+o)) ? +o : projDnum(t); }
 function oProj(name){ return (((window.MRA_DATA||{}).projects)||[]).find(p=>p.name===name); }
 function projAssignees(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.who) s.add(t.who.trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
 function projPhases(p){ const s=new Set(); ((p&&p.tasks)||[]).forEach(t=>{ if(t.phase) s.add(t.phase.trim()); }); return [...s].filter(Boolean); }
@@ -3255,7 +3280,7 @@ function renderProjTaskList(){
       units.push({head:t, subs}); i=j;
     }
     const dkey=t=>(t.startISO||t.finISO||'9999-99-99');
-    units.sort((u1,u2)=>dkey(u1.head).localeCompare(dkey(u2.head)));
+    units.sort((u1,u2)=>(projOrdKey(u1.head)-projOrdKey(u2.head)) || dkey(u1.head).localeCompare(dkey(u2.head)));
     let rows=units.map(u=>{
       if(u.orphan) return peRow(u.head,{sub:true});
       if(u.subs.length){ const pkey=ph+'|'+(u.head.id!=null&&u.head.id!==''?u.head.id:u.head.t), closed=PE_SUBCLOSED.has(pkey);
@@ -5947,18 +5972,71 @@ function pdragStart(e){
   const pxPerDay=trackW/ctx.win.days, startMs0=s0.getTime(), finMs0=f0.getTime();
   e.preventDefault(); bar._dragging=true; document.body.style.userSelect='none';
   let dd=0, ns=startMs0, nf=finMs0;
+  let mode=(edge==='M')?null:'date', dropIdx=null;   // ends always reschedule; middle decides after first movement
   const calc=dx=>{ dd=Math.round(dx/pxPerDay); ns=startMs0; nf=finMs0;
     if(edge==='M'){ ns=startMs0+dd*DAY; nf=finMs0+dd*DAY; }
     else if(edge==='L'){ ns=Math.min(startMs0+dd*DAY, finMs0); }
     else { nf=Math.max(finMs0+dd*DAY, startMs0); } };
-  const onMove=ev=>{ calc(ev.clientX-e.clientX);
-    const g=barGeom(localISO(ns), localISO(nf), ctx.win);
-    if(g){ bar.style.left=g.left+'%'; bar.style.width=g.width+'%'; }
-    pdragHint(ev, fmtMDY(localISO(ns))+'  –  '+fmtMDY(localISO(nf))); };
+  const onMove=ev=>{ const dx=ev.clientX-e.clientX, dy=ev.clientY-e.clientY;
+    if(mode===null){                                  // axis-lock the middle drag: vertical → reorder, horizontal → reschedule
+      if(Math.abs(dx)<5 && Math.abs(dy)<5) return;
+      mode=(Math.abs(dy)>Math.abs(dx))?'reorder':'date';
+      if(mode==='reorder'){ bar.classList.add('g-reordering'); document.body.style.cursor='grabbing'; } }
+    if(mode==='reorder'){ dropIdx=pdReorderHover(ev, bar.getAttribute('data-tid')); }
+    else { calc(dx); const g=barGeom(localISO(ns), localISO(nf), ctx.win);
+      if(g){ bar.style.left=g.left+'%'; bar.style.width=g.width+'%'; }
+      pdragHint(ev, fmtMDY(localISO(ns))+'  –  '+fmtMDY(localISO(nf))); } };
   const onUp=()=>{ document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp);
-    document.body.style.userSelect=''; bar._dragging=false; pdragHintHide();
-    if(dd) pdragSave(ctx.project, t, localISO(ns), localISO(nf)); };
+    document.body.style.userSelect=''; document.body.style.cursor=''; bar._dragging=false; bar.classList.remove('g-reordering'); pdragHintHide(); pdDropLineHide();
+    if(mode==='reorder') pdReorderDrop(ctx, t, dropIdx);
+    else if(dd) pdragSave(ctx.project, t, localISO(ns), localISO(nf)); };
   document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
+}
+/* ---- Reorder: drop a task between two task bars → give it an 'ord' between their keys (one write) ---- */
+function pdBars(){ const g=document.getElementById('gfsGantt'); if(!g) return [];
+  return [...g.querySelectorAll('.g-bar[data-tid]')].map(el=>({tid:el.getAttribute('data-tid'), r:el.getBoundingClientRect()})); }
+let _pdReorder=null;
+function pdReorderHover(ev, dragTid){
+  const bars=pdBars().filter(b=>b.tid!==String(dragTid));
+  let idx=0; bars.forEach(b=>{ if((b.r.top+b.r.bottom)/2 < ev.clientY) idx++; });   // how many bars sit above the pointer
+  const g=document.getElementById('gfsGantt'), gr=g.getBoundingClientRect();
+  let y; if(!bars.length) y=gr.top+6;
+  else if(idx<=0) y=bars[0].r.top-1;
+  else if(idx>=bars.length) y=bars[bars.length-1].r.bottom+1;
+  else y=(bars[idx-1].r.bottom+bars[idx].r.top)/2;
+  pdDropLine(gr.left+6, gr.right-6, y); _pdReorder={bars, idx}; return idx;
+}
+function pdDropLine(left,right,y){ let l=document.getElementById('pdDropLine');
+  if(!l){ l=document.createElement('div'); l.id='pdDropLine'; document.body.appendChild(l); }
+  l.style.cssText='position:fixed; left:'+left+'px; width:'+(right-left)+'px; top:'+y+'px; height:0; border-top:2px dashed var(--amber); box-shadow:0 0 7px rgba(245,158,11,.7); z-index:320; pointer-events:none; display:block'; }
+function pdDropLineHide(){ const l=document.getElementById('pdDropLine'); if(l) l.style.display='none'; }
+function pdReorderDrop(ctx, t, idx){
+  const info=_pdReorder; _pdReorder=null; if(!info || idx==null) return;
+  const bars=info.bars; if(!bars.length) return;
+  const keyOf=tid=>{ const tt=ctx.byId[tid]; return tt?projOrdKey(tt):0; };
+  let newOrd;
+  if(idx<=0) newOrd=keyOf(bars[0].tid)-1;
+  else if(idx>=bars.length) newOrd=keyOf(bars[bars.length-1].tid)+1;
+  else { const a=keyOf(bars[idx-1].tid), b=keyOf(bars[idx].tid); newOrd=(a===b)?a:((a+b)/2); }
+  if(newOrd===projOrdKey(t)) return;                 // no actual move
+  pdApplyOrder(ctx.project, t, newOrd);
+}
+function pdApplyOrder(project, t, newOrd){
+  const p=oProj(project); if(!p) return;
+  t.ord=newOrd;
+  if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, taskOld:t.t, ord:newOrd });
+  if(typeof oRecomputeProject==='function') oRecomputeProject(p);
+  renderGanttFS(); if(typeof renderAll==='function') renderAll();
+}
+function pdResetOrder(){
+  if(!GFS_PROJECT) return; if(typeof ensureAuth==='function' && !ensureAuth('reset task order')) return;
+  const p=oProj(GFS_PROJECT); if(!p) return;
+  const had=(p.tasks||[]).filter(t=>t.ord!=null && t.ord!=='');
+  if(!had.length){ alert('This project is already in date order — nothing to reset.'); return; }
+  if(!confirm('Reset "'+GFS_PROJECT+'" back to date order? This clears the manual task order for everyone.')) return;
+  had.forEach(t=>{ t.ord=null; if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project:GFS_PROJECT, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, taskOld:t.t, ord:'' }); });
+  if(typeof oRecomputeProject==='function') oRecomputeProject(p);
+  renderGanttFS(); if(typeof renderAll==='function') renderAll();
 }
 function pdragHint(e, txt){ let h=document.getElementById('pdragHint');
   if(!h){ h=document.createElement('div'); h.id='pdragHint'; document.body.appendChild(h); }
@@ -6091,6 +6169,7 @@ function renderGanttFS(){
         + `<div class="rb" onclick="pdEditTasks()" title="Open the full task editor for this project — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors">✎ Edit tasks</div>`
         + `<div class="rb${PD_UNDO.length?'':' rbdim'}" onclick="pdUndo()" title="Undo the last date change">↶ Undo${PD_UNDO.length?(' ('+PD_UNDO.length+')'):''}</div>`
         + `<div class="rb${PD_REDO.length?'':' rbdim'}" onclick="pdRedo()" title="Redo">↷ Redo${PD_REDO.length?(' ('+PD_REDO.length+')'):''}</div>`
+        + `<div class="rb" onclick="pdResetOrder()" title="Clear any manual up/down ordering — go back to pure date order">↺ Reset order</div>`
       : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars, add and edit tasks">🔒 Edit / add tasks</div>`);
     if(!p || !(p.tasks||[]).length){
       cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
@@ -6126,8 +6205,8 @@ function renderGanttFS(){
     const dkey=t=>(t.startISO||t.finISO||'9999-99-99');
     const flagged=(p.tasks||[]).filter(t=>(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO))).length;
     const dragHelp = CLOSE_PIN
-      ? 'DRAG TO RESCHEDULE:   ⟸ left end = change START   ·   middle = MOVE the whole task   ·   right end = change FINISH ⟹'
-      : 'Click “🔒 Edit / add tasks” (top-left), then drag a bar — middle moves it, the ends change start / finish.';
+      ? 'DRAG the bar:   middle ←/→ = MOVE dates   ·   middle ↑/↓ = REORDER in the list   ·   ⟸ left end = START   ·   right end = FINISH ⟹'
+      : 'Click “🔒 Edit / add tasks” (top-left), then drag a bar — middle to move dates or drag up/down to reorder; the ends change start / finish.';
     const taskRow=t=>{
       const done=projIsDone(t), s=t.startISO, f=t.finISO||t.startISO;
       const bad=(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO));
@@ -6146,7 +6225,7 @@ function renderGanttFS(){
     };
     // Group lead-up tasks under each milestone GATE (a collapsible header). Tasks stay draggable;
     // a milestone shows as a ◆ gate (with a faint line across the chart) you can collapse/expand.
-    const sorted=(p.tasks||[]).slice().sort((a,b)=>dkey(a).localeCompare(dkey(b)));
+    const sorted=(p.tasks||[]).slice().sort((a,b)=>(projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b)));
     const hasMs=sorted.some(t=>/yes/i.test(t.ml||''));
     const rows=[], mlines=[];
     if(!hasMs){ sorted.forEach(t=>rows.push(taskRow(t))); }
@@ -6175,7 +6254,7 @@ function renderGanttFS(){
     }
     renderGantt(cont, rows, win, {dates:true, mlines});
     window._pdrag={win, project:p.name, byId};
-    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone gate — click to collapse / expand its tasks</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ edit mode: drag a bar — middle moves it, ends change start/finish</span>`;
+    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone gate — click to collapse / expand its tasks</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ edit mode: drag a bar — middle ←/→ moves dates · middle ↑/↓ reorders · ends change start/finish</span>`;
     warnEl.style.color=flagged?'#fca5a5':'var(--muted)';
     warnEl.textContent=(p.pm?('PM '+p.pm+'  ·  '):'')+((p.taskCount||p.tasks.length)+' tasks')+(p.pct!=null?('  ·  '+p.pct+'% complete'):'')+(flagged?('  ·  ⚠ '+flagged+(flagged>1?' task dates look':' task date looks')+' off — fix in the workbook'):'');
     return;
