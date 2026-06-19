@@ -1752,6 +1752,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.23", date:"2026-06-19", title:"Sal's two columns balance by height", items:[
+    "Sal's task list now splits across its two columns by <b>height</b> (each trailer card counts its header + its tasks), keeping trailers whole — so a card drops to the right column when the left is taller, instead of the left stacking up while the right sits half-empty." ] },
   { rev:"4.22", date:"2026-06-19", title:"Wall tuning: EOTM up top, fill the bottom, size Sal's two columns, see-through panel", items:[
     "🏆 Employee of the Month badge now rides up in the header next to the clock in wall mode (was sitting in the bottom-left), freeing the bottom.",
     "The Open Tasks by Assignee tile <b>height</b> now actually stretches the panel — pull a tile down to fill the dead space at the bottom of the TV.",
@@ -3875,9 +3877,15 @@ function renderSal(D){
       // Sal always gets two columns (side by side on wide screens, stacked on narrow) — trailers kept whole,
       // first ~half of the tasks on the left, the rest on the right.
       const elA=document.getElementById('asgSal'), elB=document.getElementById('asgSalB');
-      const half=tot/2; let run=0, a=[], b=[];
-      cards.forEach(s=>{ if(run<half || !a.length){ a.push(s); run+=s.open.length; } else b.push(s); });
-      if(elA) elA.innerHTML = a.length ? a.map(card).join("") : `<div class="empty">No open Sal tasks</div>`;
+      if(!cards.length){ if(elA) elA.innerHTML=`<div class="empty">No open Sal tasks</div>`; if(elB) elB.innerHTML=""; return; }
+      // Balance the two columns by REAL height: render all cards once to measure each trailer
+      // card, then deal each (kept whole) onto the currently-shorter column — so a card flows to
+      // the right whenever the left is taller, instead of the left stacking up while the right sits empty.
+      if(elA) elA.innerHTML = cards.map(card).join("");
+      const hs = elA ? [...elA.children].map(n=>n.offsetHeight||1) : cards.map(s=>50+18*s.open.length);
+      let wa=0, wb=0, a=[], b=[];
+      cards.forEach((s,i)=>{ if(wa<=wb){ a.push(s); wa+=hs[i]; } else { b.push(s); wb+=hs[i]; } });
+      if(elA) elA.innerHTML = a.map(card).join("");
       if(elB) elB.innerHTML = b.map(card).join("");
       return;
     }
