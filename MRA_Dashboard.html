@@ -231,6 +231,9 @@
   .asg-h{padding:9px 13px; font-weight:700; font-size:13px; border-bottom:1px solid var(--line); display:flex; align-items:center; letter-spacing:.3px}
   .asg-h .count{margin-left:auto}
   .asgbody{padding:10px; display:flex; flex-direction:column; gap:10px; overflow-y:auto}
+  /* Sal's panel holds two task columns (used only in wall mode); normal view shows just the one. */
+  .asg-split{display:flex; flex-direction:column; min-height:0; flex:1 1 auto}
+  .asgSalB{display:none}
   @media(max-width:1100px){ .assignees{grid-template-columns:1fr} }
   /* Wall (TV) mode: bound heights + scroll so bays + assignees fit one screen */
   body.wall .baycol{max-height:44vh; overflow:hidden}
@@ -239,6 +242,11 @@
   body.wall .baycol.parkcol{max-height:none; overflow:visible}                /* Parking Lot column: don't scroll the column… */
   body.wall .baycol.parkcol .bay-body.autoscroll{max-height:19vh}            /* …each card (Parking Lot + Next Up/On Hold) auto-scrolls itself */
   body.wall .asgbody{max-height:30vh}
+  /* Wall: give Sal a double-wide panel and split his tasks into two side-by-side columns */
+  body.wall .assignees{grid-template-columns:2fr 1fr 1fr}
+  body.wall .asg-split{flex-direction:row; gap:10px}
+  body.wall .asg-split > .asgbody{flex:1 1 0; min-width:0}
+  body.wall .asgSalB{display:flex}
   /* Wall mode: per-screen size control (zoom). Lives in body so it scales with the board. */
   #wallCtl{position:fixed; right:14px; bottom:14px; z-index:9999; display:none; align-items:center; gap:8px;
     background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:8px 12px;
@@ -730,7 +738,7 @@
     <div class="panel">
       <h2>🧰 Open Tasks by Assignee <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span></h2>
       <div class="assignees">
-        <div class="asg"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asgbody autoscroll" id="asgSal"></div></div>
+        <div class="asg asgSalWrap"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
         <div class="asg"><div class="asg-h">🎨 Wrap Team <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
         <div class="asg"><div class="asg-h">⚡ Electricians <span class="count" id="cntElec"></span></div><div class="asgbody autoscroll" id="asgElec"></div></div>
       </div>
@@ -1462,7 +1470,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>③ Bay Status — see a trailer's tasks</h4>
     <p>Click a <span class="k">"N tasks ▸"</span> button to drop down that trailer's open tasks — <b>grouped by assignee</b> under a header (🔧 Sal · 🎨 Wrap Team · ⚡ Electricians · a person), pulled from the Shop Tasks <b>Assigned</b> column (tasks with no assignee just list normally). Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). (No pill = no open tasks yet.) Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> it down to just its title + count — handy for shrinking a tall <b>Next Up / On Hold</b> or Parking Lot; click again (<span class="k">▸</span>) to expand it back. Your collapsed tiles are remembered on this device. (Wall mode ignores this and auto-scrolls instead.)</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap Team · Electricians</h4>
-    <p>Three live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b> or <b>Electricians</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. In 📺 Wall mode each column auto-scrolls. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p></div>
+    <p>Three live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b> or <b>Electricians</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. In 📺 Wall mode the columns auto-scroll, and <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most) so his list scrolls about half as far. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
     <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show completed</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). The picker is <b>two-level</b>: a group (MRA Design, MRA Shop, Electricians, Wrap Team, Maintenance) <b>rolls up everyone</b> ("MRA Design — all") with each member indented under it ("› Steve K") — pick the group to see all of it, or a person to drill in. Members come from the workbook's <b>Sub-Resource</b> column (Assigned To = group, Sub-Resource = person); until that's filled, the board reads them from existing "Group / Person" assignments. Name variants are still merged (e.g. <b>MasterWraps → Wrap Team</b>, <b>Electrician → Electricians</b>). <span class="k">🖨 Print</span> lays the Gantt + full task list on one <b>11×17 (tabloid) landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>④ᶜ ✉ Daily Shop Letter</h4>
@@ -1566,6 +1574,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.0", date:"2026-06-19", title:"Wall view: split Sal + same-speed scroll", items:[
+    "📺 Wall view: Sal now gets a double-wide, two-column layout (he always has the most tasks), so his list scrolls about half as far. Wrap Team and Electricians stay single.",
+    "Reworked the wall auto-scroll: every tile now moves at the SAME speed instead of the same duration. Everything starts at the top together; a short tile reaches its bottom and waits, then once the longest tile finishes they all scroll back up together — and wait at the top for each other before heading down again. (The 🌀 Scroll slider still sets the pace.)" ] },
   { rev:"3.99", date:"2026-06-19", title:"Renamed Bay 2 Back → Bay 2 Back / Loading Dock", items:[
     "Renamed the bay everywhere: the Add/Edit-job Bay dropdown, the export's bay list, and the workbook (Input + Shop Tasks Bay columns + the dropdown). Existing jobs move with it; the tile now reads \"Bay 2 Back / Loading Dock.\"" ] },
   { rev:"3.98", date:"2026-06-18", title:"Print the Projects Gantt (11×17)", items:[
@@ -1885,7 +1896,9 @@ function toggleWall(btn){
   if(btn){ btn.classList.toggle('on',WALL); btn.textContent=WALL?'📺 Wall: ON':'📺 Wall'; }
   if(WALL){
     (window.MRA_DATA&&window.MRA_DATA.jobs||[]).forEach(j=>{ if(j.openCount>0) expandedJobs.add(j.row); });
-    if(window.MRA_DATA) renderAll();
+  }
+  if(window.MRA_DATA) renderAll();   // re-render both ways so Sal's columns split (wall) / un-split (normal)
+  if(WALL){
     startAutoScroll();
     setTimeout(eotmShow, 6000);   // a first Employee-of-the-Month moment shortly after wall mode starts
   } else { stopAutoScroll(); }
@@ -1957,34 +1970,34 @@ function setWallZoom(z){ z=parseInt(z,10)||100; WALL_ZOOM=Math.max(50,Math.min(2
 const WSEL='body.wall .bay-body, body.wall .asgbody';
 // A re-render (every refresh) rebuilds these elements and resets scrollTop to 0 — snapshot before, restore after,
 // so a tall column keeps cycling instead of snapping back to the top each time.
-// All wall tiles scroll TOGETHER off one shared phase (0=top … 1=bottom): everything
-// glides down in unison, pauses at the bottom, then glides back up — no more each-tile-
-// going-its-own-way. Each tile maps scrollTop = phase × its own scrollable height, so
-// they all hit top/bottom at the same instant regardless of how tall they are.
-let AS_PHASE=0, AS_DIR=1, AS_DWELL=0;
-// Seconds for one top→bottom sweep (higher = slower). Adjustable per screen from the wall control.
+// SAME-SPEED model: every tile scrolls at the same pixels/sec (not the same duration). All start at the
+// top and move down together; a short tile reaches its bottom first and WAITS there; once the LONGEST
+// tile reaches bottom, everything pauses, then scrolls back up together (short tiles reach top first and
+// wait). Speed is set so the longest tile takes WALL_CYCLE seconds — the 🌀 slider still controls pace.
+let AS_DIR=1, AS_ELAPSED=0, AS_DWELL=0;
+// Seconds for the LONGEST tile to sweep top→bottom (higher = slower). Adjustable per screen.
 let WALL_CYCLE=34; try{ const _wc=parseInt(localStorage.getItem('mra_wall_cycle'),10); if(_wc>=12&&_wc<=120) WALL_CYCLE=_wc; }catch(e){}
+function applyWallScroll(){
+  const arr=[...document.querySelectorAll(WSEL)].map(el=>({el, m:el.scrollHeight-el.clientHeight}));
+  let MAXALL=0; arr.forEach(o=>{ if(o.m>MAXALL) MAXALL=o.m; });
+  if(MAXALL<=8){ arr.forEach(o=>{ o.el.scrollTop=0; }); return; }
+  const v=MAXALL/Math.max(1,WALL_CYCLE);   // px/sec — identical for every tile
+  const d=AS_ELAPSED*v;                    // pixels travelled this phase
+  arr.forEach(o=>{ if(o.m<=8){ o.el.scrollTop=0; return; } if(o.el.matches(':hover')) return;
+    o.el.scrollTop = (AS_DIR>0) ? Math.min(d, o.m) : Math.max(o.m-d, 0); });
+}
 function snapWallScroll(){ return WALL; }
-function restoreWallScroll(){ if(!WALL) return;   // after a re-render, re-apply the shared phase
-  document.querySelectorAll(WSEL).forEach(el=>{ const max=el.scrollHeight-el.clientHeight;
-    el.scrollTop = max>8 ? AS_PHASE*max : 0; }); }
+function restoreWallScroll(){ if(WALL) applyWallScroll(); }   // re-apply current position after a re-render
 function startAutoScroll(){
   stopAutoScroll();
-  AS_PHASE=0; AS_DIR=1; AS_DWELL=1.5;   // start at the top, brief pause, then sweep down
+  AS_DIR=1; AS_ELAPSED=0; AS_DWELL=1.5;   // start at the top, brief pause, then sweep down
   let last=performance.now();
   AS_TIMER=setInterval(()=>{
     const now=performance.now(); const dt=Math.min(0.1,(now-last)/1000); last=now;
     if(AS_DWELL>0){ AS_DWELL-=dt; }
-    else {
-      AS_PHASE += AS_DIR*(dt/WALL_CYCLE);
-      if(AS_PHASE>=1){ AS_PHASE=1; AS_DIR=-1; AS_DWELL=2.8; }        // all at bottom — pause, then up
-      else if(AS_PHASE<=0){ AS_PHASE=0; AS_DIR=1; AS_DWELL=2.8; }    // all at top — pause, then down
-    }
-    document.querySelectorAll(WSEL).forEach(el=>{
-      if(el.matches(':hover')) return;                       // manual override on hover
-      const max=el.scrollHeight-el.clientHeight;
-      el.scrollTop = max>8 ? AS_PHASE*max : 0;
-    });
+    else { AS_ELAPSED+=dt;
+      if(AS_ELAPSED>=WALL_CYCLE){ AS_ELAPSED=0; AS_DIR=-AS_DIR; AS_DWELL=2.8; } }   // longest tile hit the end — pause, reverse together
+    applyWallScroll();
   }, 33);
 }
 function stopAutoScroll(){ if(AS_TIMER){ clearInterval(AS_TIMER); AS_TIMER=null; } }
@@ -3362,10 +3375,21 @@ function renderSal(D){
     `<div class="sb">${esc(s.bay)}${s.jobNum?" · "+esc(s.jobNum):""}</div>`+
     `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw);return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}</li>`;}).join("")}</ol></div>`;
   GROUPS.forEach(g=>{
-    const cards=build(g.re), el=document.getElementById(g.id); if(!el) return;
-    el.innerHTML = cards.length ? cards.map(card).join("") : `<div class="empty">No open ${esc(g.label)} tasks</div>`;
+    const cards=build(g.re);
     const tot=cards.reduce((s,x)=>s+x.open.length,0), c=document.getElementById(g.cnt);
     if(c) c.textContent=tot+" open · "+cards.length+" trailer"+(cards.length===1?"":"s");
+    if(g.id==='asgSal' && WALL){
+      // Wall view: split Sal's trailers across two columns (first half of the tasks left, rest right) — trailers kept whole.
+      const elA=document.getElementById('asgSal'), elB=document.getElementById('asgSalB');
+      const half=tot/2; let run=0, a=[], b=[];
+      cards.forEach(s=>{ if(run<half || !a.length){ a.push(s); run+=s.open.length; } else b.push(s); });
+      if(elA) elA.innerHTML = a.length ? a.map(card).join("") : `<div class="empty">No open Sal tasks</div>`;
+      if(elB) elB.innerHTML = b.map(card).join("");
+      return;
+    }
+    const el=document.getElementById(g.id); if(!el) return;
+    el.innerHTML = cards.length ? cards.map(card).join("") : `<div class="empty">No open ${esc(g.label)} tasks</div>`;
+    if(g.id==='asgSal'){ const elB=document.getElementById('asgSalB'); if(elB) elB.innerHTML=""; }   // normal view: 2nd column unused
   });
 }
 
