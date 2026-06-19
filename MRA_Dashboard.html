@@ -543,6 +543,15 @@
   .fscroll{max-height:300px; overflow-y:auto; padding-right:2px}
   .fscroll.exp{max-height:none; overflow:visible}
   .fexp{font-size:11px; padding:3px 9px}
+  /* Bring-back trailer picker rows */
+  .bb-row{display:flex; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid var(--line)}
+  .bb-row:last-child{border-bottom:0}
+  .bb-main{flex:1; min-width:0}
+  .bb-nm{font-size:13.5px; font-weight:700}
+  .bb-nm .bb-j{color:var(--muted); font-weight:600; font-size:12px; margin-left:6px}
+  .bb-sub{font-size:11.5px; color:var(--muted); margin-top:2px}
+  .bb-hist{color:var(--faint)}
+  .bb-go{flex:none; white-space:nowrap; padding:6px 12px; font-size:12px}
   .modal{background:var(--panel); border:1px solid var(--line); border-radius:16px;
     max-width:680px; width:100%; max-height:86vh; overflow:auto; padding:24px 30px; position:relative}
   .modal h3{font-size:20px; font-weight:800; margin-bottom:4px}
@@ -778,6 +787,7 @@
             <button class="mi" id="btnCloseMode" onclick="toggleCloseMode(this)" title="Enter your code (1974) to close tasks AND move/edit jobs">🔒 Edit mode</button>
             <button class="mi" id="btnAddTask" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
             <button class="mi" id="btnAddJob" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
+            <button class="mi" id="btnBringBack" onclick="openBringBack();closeDrops()" title="Return a shipped/finished trailer to the floor for new maintenance — keeps its ship history (needs code)">🔄 Bring back trailer</button>
             <button class="mi" id="btnPrint" onclick="printBoard();closeDrops()" title="Print the shop board on one page">🖨 Print</button>
             <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
             <div class="mi-div">View</div>
@@ -1247,6 +1257,17 @@
     </div>
   </div>
 
+  <!-- ===================== BRING-BACK MODAL (return a shipped trailer) ===================== -->
+  <div class="modal-overlay" id="bringBackModal" onclick="closeBringBack(event)">
+    <div class="modal" style="max-width:600px">
+      <button class="modal-close" onclick="closeBringBack()" title="Close">×</button>
+      <h3>🔄 Bring back a trailer</h3>
+      <div class="msub">Pick a shipped/finished trailer that's coming back (3–6 mo or annual maintenance). It returns to the <b>Parking Lot</b> (Active, starting today) with its open tasks intact — and the <b>previous ship date is logged</b>, so each visit stays in the trailer's history.</div>
+      <input id="bbSearch" type="search" class="fsearchbox" placeholder="Find a trailer — name, job #, client…" oninput="renderBringBack()" autocomplete="off" style="margin-bottom:10px">
+      <div id="bbList" class="fscroll" style="max-height:50vh"></div>
+    </div>
+  </div>
+
   <!-- ===================== LEAVE MODAL (add / edit time-off) ===================== -->
   <div class="modal-overlay" id="leaveModal" onclick="closeLeave(event)">
     <div class="modal" style="max-width:440px">
@@ -1287,6 +1308,7 @@
         <div id="ejMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="submitDeleteJob()" id="ejDelete" style="margin-right:auto;border-color:rgba(239,68,68,.5);color:#fca5a5">🗑 Delete job</button>
+          <button class="btn-ghost" onclick="bringBackHere()" id="ejBringBack" style="display:none;border-color:rgba(34,197,94,.5);color:#86efac" title="Reactivate this shipped trailer for a new maintenance visit (Active · Parking Lot · today), logging the prior ship date">🔄 Bring back</button>
           <button class="btn-ghost" onclick="closeEdit()">Cancel</button>
           <button class="btn-primary" id="ejSubmit" onclick="submitEditJob()">Save changes</button>
         </div>
@@ -1628,6 +1650,8 @@ const GENERAL_HELP = `
       <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.)</li>
     </ul>
     <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. A task you <b>add</b> now also sticks on <b>your</b> device through a page reload (handy on an iPad, which reloads tabs on its own) until the workbook catches up — so it won't appear to vanish.</div></div>
+  <div class="hsec"><h4>⑭ᵇ 🔄 Bring back a trailer (returns for maintenance)</h4>
+    <p>When a trailer that already <b>shipped</b> comes back — a 3–6 month or annual maintenance return — it's hidden from the floor (Shipped jobs roll off on purpose), so adding a task to it won't make it reappear. Use <span class="k">☰ Actions ▸ 🔄 Bring back trailer</span>: pick it from the list of shipped/finished trailers (search by name, job # or client). It opens the job pre-set to <b>Active · Parking Lot · starting today</b>, with its <b>open tasks intact</b> — review and hit <b>Save</b>. The trailer's <b>previous ship date is logged</b> in the notes (<i>🚢 Shipped: 6/12/26 · 8/8/26 …</i>), so you build up a <b>visit history</b> — each ship/return stays on the record. (You can also bring one back from its <span class="k">✎ edit</span> screen — a <span class="k">🔄 Bring back</span> button appears on any shipped job, and the list of past ship dates shows right in the picker.)</p></div>
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented). Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule — handy for a "what's left" handout.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
@@ -1687,6 +1711,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.12", date:"2026-06-19", title:"Bring back a shipped trailer (returns for maintenance)", items:[
+    "New 🔄 Bring back trailer under the FLOOR ☰ Actions menu — when a shipped trailer comes back for maintenance, pick it from the list and it returns to the Parking Lot (Active, starting today) with its open tasks intact, instead of staying hidden as Shipped.",
+    "Each return logs the previous ship date, so a trailer builds a visit history (🚢 Shipped: 6/12/26 · 8/8/26 …) — every ship/return stays on the record.",
+    "Any shipped job also gets a 🔄 Bring back button on its ✎ edit screen.",
+    "Why it was needed: adding a task to a Shipped job didn't bring it back — Shipped jobs are hidden from the floor by design, and adding a task doesn't change a job's status or date." ] },
   { rev:"4.11", date:"2026-06-19", title:"Projects tab: Portfolio Health, Needs Attention, collapsible & compact", items:[
     "New 🩺 Portfolio Health donut — every project split by schedule health (past-due / behind / on-track / upcoming / done), with the at-risk count in the center.",
     "New ⚡ Needs Attention list — past-due & behind projects, missed milestone gates, overdue tasks and milestones due within 2 weeks, worst-first; click any row to jump into that project's editor.",
@@ -2509,6 +2538,7 @@ function openEditJob(row){
   document.getElementById('ejStart').value = j.startISO||"";
   document.getElementById('ejComp').value = j.completionISO||"";
   document.getElementById('ejNotes').value = j.notesRaw||"";
+  const bb=document.getElementById('ejBringBack'); if(bb) bb.style.display = DONE_STATUSES.includes((j.status||"").toLowerCase())?'':'none';
   document.getElementById('ejMsg').textContent=""; document.getElementById('ejSubmit').disabled=false;
   document.getElementById('editModal').classList.add('show');
 }
@@ -2581,6 +2611,89 @@ function submitAddJob(){
       msg.style.color='var(--green)'; msg.textContent='✓ Job added.'; btn.textContent="Add job";
       setTimeout(()=>document.getElementById('addJobModal').classList.remove('show'),1100); })
     .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Add job"; btn.disabled=false; });
+}
+
+/* ---------- Bring back a shipped trailer for a new maintenance visit ----------
+   Trailers come back for 3–6 mo / annual maintenance. "Shipped" hides a job from the
+   floor, so this REACTIVATES the same job row (Active · Parking Lot · today) — its open
+   tasks return with it (tasks match a job by name, so reusing the row keeps that clean) —
+   and logs the prior ship date into the notes, building a per-trailer ship history.
+   Rides entirely on the existing editJob write-back; no Office Script / export changes. */
+const SHIP_LOG_RE = /^[ \t]*🚢[ \t]*Shipped:[ \t]*(.*)$/im;
+function shipHistory(notes){ const m=(notes||'').match(SHIP_LOG_RE); if(!m) return [];
+  return m[1].split(/\s*·\s*/).map(s=>s.trim()).filter(Boolean); }
+function stripShipLog(notes){ return (notes||'').replace(SHIP_LOG_RE,'').replace(/^\s*\n/,'').trim(); }
+function buildNotesWithShip(notes, newShipISO){
+  const hist=shipHistory(notes), rest=stripShipLog(notes);
+  const d=newShipISO?fmtMDY(newShipISO):null;
+  if(d && !hist.includes(d)) hist.push(d);
+  if(!hist.length) return rest;
+  return `🚢 Shipped: ${hist.join(' · ')}`+(rest?'\n'+rest:'');
+}
+// Shipped / finished trailers, newest ship first, each with its full ship history.
+function bringBackData(){
+  return (((window.MRA_DATA||{}).jobs)||[])
+    .filter(j=>j.category!=='leave' && DONE_STATUSES.includes((j.status||'').toLowerCase()))
+    .map(j=>{ const ships=shipHistory(j.notesRaw);
+      if(j.completionISO){ const d=fmtMDY(j.completionISO); if(!ships.includes(d)) ships.push(d); }
+      return { row:j.row, name:j.project, client:j.client, jobNum:j.jobNum, pm:j.pm,
+        lastShip:j.completionISO||null, ships, openCount:j.openCount||0 }; })
+    .sort((a,b)=>((b.lastShip||'')+'').localeCompare((a.lastShip||'')+''));
+}
+function openBringBack(){
+  if(!SHOP_WRITE_URL){ alert("Adding from the dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
+  const s=document.getElementById('bbSearch'); if(s) s.value='';
+  renderBringBack();
+  document.getElementById('bringBackModal').classList.add('show');
+  if(s) setTimeout(()=>s.focus(),50);
+}
+function closeBringBack(e){ if(!e || e.target.id==='bringBackModal' || e.target.classList.contains('modal-close'))
+  document.getElementById('bringBackModal').classList.remove('show'); }
+function renderBringBack(){
+  const box=document.getElementById('bbList'); if(!box) return;
+  const q=((document.getElementById('bbSearch')||{}).value||'').toLowerCase().trim();
+  let list=bringBackData();
+  if(q) list=list.filter(t=>[t.name,t.jobNum,t.client,t.pm].filter(Boolean).join(' ').toLowerCase().includes(q));
+  if(!list.length){ box.innerHTML=`<div class="empty">${q?'No shipped trailers match.':'No shipped or finished trailers to bring back.'}</div>`; return; }
+  box.innerHTML=list.map(t=>{
+    const sub=[];
+    if(t.client) sub.push(esc(t.client)); else if(t.pm) sub.push(esc(t.pm));
+    if(t.openCount) sub.push(`${t.openCount} open task${t.openCount>1?'s':''}`);
+    const hist = t.ships.length ? `🚢 ${t.ships.length>1?t.ships.length+' visits · ':''}shipped ${t.ships.map(esc).join(' · ')}` : 'no ship date on record';
+    sub.push(`<span class="bb-hist">${hist}</span>`);
+    return `<div class="bb-row"><div class="bb-main">`+
+      `<div class="bb-nm">${esc(t.name||'—')}${t.jobNum?` <span class="bb-j">${esc(t.jobNum)}</span>`:''}</div>`+
+      `<div class="bb-sub">${sub.join(' · ')}</div></div>`+
+      `<button class="btn-primary bb-go" onclick="bringBackTo(${t.row})">🔄 Bring back</button></div>`;
+  }).join('');
+}
+// Apply the "returned for maintenance" preset to the (already-open) Edit-Job modal.
+function _bbApply(j){
+  const bay=document.getElementById('ejBay');
+  if(bay){ if(![...bay.options].some(o=>/^parking lot$/i.test(o.value))) bay.add(new Option('Parking Lot','Parking Lot'));
+    const po=[...bay.options].find(o=>/^parking lot$/i.test(o.value)); if(po) bay.value=po.value; }
+  const st=document.getElementById('ejStatus');
+  if(st){ const ao=[...st.options].find(o=>/^active$/i.test(o.value)); if(ao) st.value=ao.value; }
+  document.getElementById('ejStart').value=localISO(Date.now());
+  document.getElementById('ejComp').value='';
+  document.getElementById('ejNotes').value=buildNotesWithShip(j.notesRaw, j.completionISO);
+  const bb=document.getElementById('ejBringBack'); if(bb) bb.style.display='none';
+  const sub=document.getElementById('ejSub');
+  if(sub) sub.innerHTML=`🔄 <b>Bringing ${esc(j.project||'this trailer')} back</b> for maintenance — set to <b>Active · Parking Lot</b>, starting today, with the prior ship date logged. Adjust the bay or set a target finish if you like, then <b>Save changes</b>. Its open tasks return with it.`;
+}
+// From the picker: open the editor on this row, pre-set as a return, for a quick review + Save.
+function bringBackTo(row){
+  const j=(((window.MRA_DATA||{}).jobs)||[]).find(x=>x.row===row);
+  if(!j){ alert("Couldn't find that trailer."); return; }
+  closeBringBack();
+  window._ejRow=null;        // so the guard below is reliable if auth is cancelled
+  openEditJob(row);          // handles auth + populates the form
+  if(window._ejRow===row) _bbApply(j);   // only override if the editor actually opened (auth passed)
+}
+// From inside the Edit-Job modal (the 🔄 Bring back button on a shipped job).
+function bringBackHere(){
+  const row=window._ejRow; if(row==null) return;
+  const j=(((window.MRA_DATA||{}).jobs)||[]).find(x=>x.row===row); if(j) _bbApply(j);
 }
 
 /* ---------- Staff on Leave: add / edit / delete (writes to the Input sheet as a Leave row) ---------- */
