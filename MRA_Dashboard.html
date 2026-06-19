@@ -1440,7 +1440,13 @@
         </div>
         <div class="addrow2">
           <div><label>Assigned to</label><input id="ptAssigned" list="ptAssignList" autocomplete="off"><datalist id="ptAssignList"></datalist></div>
-          <div><label>Status</label><select id="ptStatus"></select></div>
+          <div><label>Status</label><select id="ptStatus" onchange="ptStatusChange()"></select></div>
+        </div>
+        <div><label>% Complete <span id="ptPctVal" style="color:var(--muted); font-weight:400; font-size:11px">0%</span></label>
+          <div style="display:flex; align-items:center; gap:10px">
+            <input id="ptPct" type="range" min="0" max="100" step="5" value="0" style="flex:1" oninput="ptSetPct(this.value)" title="Drag to set how far along this task is — 100% marks it Completed">
+            <input id="ptPctNum" type="number" min="0" max="100" step="5" value="0" style="width:62px" onchange="ptSetPct(this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="Type a % (0–100)">
+          </div>
         </div>
         <div class="addrow2">
           <div><label>Start date</label><input id="ptStart" type="date"></div>
@@ -1682,7 +1688,7 @@ const GENERAL_HELP = `
     <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>Program Development</b> (groups each person's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p></div>
   <div class="hsec"><h4>⑥ᵈ 🔎 Project detail view (click a Gantt bar)</h4>
     <p><b>Click any project's bar</b> (on the Projects Gantt or the floor schedules) to open a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, colored by status, with ◆ milestone gates you can collapse/expand. It has the same <span class="k">🔍 zoom</span> + <span class="k">↔ scroll</span> sliders (and an <span class="k">All</span> to fit the whole project) so you can zoom in for precise work.</p>
-    <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). <b>Click any task's name on the left</b> to open that one task's edit form directly. You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit.</p></div>
+    <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). <b>Click any task's name on the left</b> to open that one task's edit form directly — where you can also set its <b>% Complete</b> (slider or type a number); a partly-done task shows a <b>partial bar fill + the %</b>. You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit.</p></div>
   <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
     <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp; <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
     On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone, solid fill = % complete, faded = completed, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:var(--red)">red line</span> = today.</p></div>
@@ -1780,6 +1786,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.39", date:"2026-06-19", title:"Tasks: set a % complete (10 / 25 / 80…)", items:[
+    "The task add/edit form now has a <b>% Complete</b> control — a <b>slider</b> and a <b>type-in box</b> (0–100). Set a task to e.g. <b>25%</b> and its bar in the detail view shows a <b>partial fill + the %</b>, and the editor badge reads “In Progress 25%”.",
+    "It stays in step with the Status dropdown (100% = Completed, 0% = Not Started, in-between = In Progress; On Hold keeps its %). Stored within the Status value so it rides through the workbook with no new column.",
+    "Note: a task's % is shown per-task; the project's overall % still rolls up from completed tasks (ask if you want it weighted by these task %s)." ] },
   { rev:"4.38", date:"2026-06-19", title:"Project detail: click a task name to edit it", items:[
     "In the project <b>detail view</b>, <b>click a task's name on the left</b> to open that task's edit form (dates, assignee, status, predecessor, comments) — the same editor as the Projects tab. The label underlines on hover so you know it's clickable. (Milestone gate rows still collapse/expand on click.)" ] },
   { rev:"4.37", date:"2026-06-19", title:"Gantt: brighter dates + grid / milestone / task lines", items:[
@@ -3069,6 +3079,14 @@ let PE_SUBCLOSED = new Set();  // parent tasks whose subtasks are collapsed
 let PE_HIDEDONE = false; try{ PE_HIDEDONE = localStorage.getItem('mra_pe_hidedone')==='1'; }catch(e){}  // hide completed tasks in the editor
 function peToggleHideDone(){ PE_HIDEDONE=!PE_HIDEDONE; try{localStorage.setItem('mra_pe_hidedone',PE_HIDEDONE?'1':'0');}catch(e){} renderProjTaskList(); }
 function projIsDone(t){ return !!(t && (t.done || /^completed$/i.test(t.st||''))); }
+// Per-task % complete is stored INSIDE the status string (e.g. "In Progress 25%") so it round-trips
+// through the workbook + export with no new column. These read / strip it.
+function projTaskPct(st){ st=String(st||''); const m=st.match(/(\d{1,3})\s*%/);
+  if(m) return Math.max(0,Math.min(100,parseInt(m[1],10)));
+  if(/^completed$/i.test(st.trim())) return 100;
+  return null; }   // null = no explicit % (Not Started / plain In Progress / On Hold / blank)
+function projBaseStatus(st){ st=String(st||'').replace(/\s*\d{1,3}\s*%\s*/,' ').trim();   // drop the "25%"
+  const f=PROJ_STATUS_OPTIONS.find(s=>s.toLowerCase()===st.toLowerCase()); return f||st; }
 function oProj(name){ return (((window.MRA_DATA||{}).projects)||[]).find(p=>p.name===name); }
 function projAssignees(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.who) s.add(t.who.trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
 function projPhases(p){ const s=new Set(); ((p&&p.tasks)||[]).forEach(t=>{ if(t.phase) s.add(t.phase.trim()); }); return [...s].filter(Boolean); }
@@ -3115,9 +3133,10 @@ function peProjectChange(){
 function projStatusBadge(t){
   const st=(t.st||'').trim();
   if(projIsDone(t)) return `<span class="badge green">Completed</span>`;
-  if(/in progress/i.test(st)) return `<span class="badge amber">In Progress</span>`;
-  if(/on hold/i.test(st)) return `<span class="badge grey">On Hold</span>`;
-  return `<span class="badge grey">${esc(st||'Not Started')}</span>`;
+  const pct=projTaskPct(st); const pctTxt=(pct!=null&&pct>0&&pct<100)?(' '+pct+'%'):'';
+  if(/in progress/i.test(st)) return `<span class="badge amber">In Progress${pctTxt}</span>`;
+  if(/on hold/i.test(st)) return `<span class="badge grey">On Hold${pctTxt}</span>`;
+  return `<span class="badge grey">${esc(projBaseStatus(st)||'Not Started')}${pctTxt}</span>`;
 }
 function renderProjTaskList(){
   const name=peCurrentProject(), p=oProj(name);
@@ -3206,6 +3225,26 @@ function fillAssignAndPhase(p){
   document.getElementById('ptPhaseList').innerHTML = projPhases(p).map(ph=>`<option value="${escA(ph)}">`).join("");
   document.getElementById('ptStatus').innerHTML = PROJ_STATUS_OPTIONS.map(s=>`<option>${esc(s)}</option>`).join("");
 }
+// ---- % Complete control (slider + number box), kept in light sync with the Status dropdown ----
+function ptSetPctSilent(p){ p=Math.max(0,Math.min(100,Math.round((parseInt(p,10)||0)/5)*5));   // snap to clean 5% steps
+  const sl=document.getElementById('ptPct'), nb=document.getElementById('ptPctNum'), lab=document.getElementById('ptPctVal');
+  if(sl) sl.value=p; if(nb) nb.value=p; if(lab) lab.textContent=p+'%'; }
+function ptSetPct(v){ let p=Math.max(0,Math.min(100,parseInt(v,10)||0)); ptSetPctSilent(p);
+  const sd=document.getElementById('ptStatus'); if(sd){ const cur=sd.value;   // nudge the status to match
+    if(p>=100) sd.value='Completed';
+    else if(p<=0){ if(cur!=='On Hold') sd.value='Not Started'; }
+    else { if(cur!=='On Hold' && cur!=='In Progress') sd.value='In Progress'; } } }
+function ptStatusChange(){ const sd=document.getElementById('ptStatus'); if(!sd) return;   // jumping the status sets the obvious %
+  if(sd.value==='Completed') ptSetPctSilent(100);
+  else if(sd.value==='Not Started') ptSetPctSilent(0); }
+// Combine the Status dropdown + the % into the single status string we store ("In Progress 25%").
+function ptComposeStatus(){
+  const base=document.getElementById('ptStatus').value;
+  const pct=Math.max(0,Math.min(100,parseInt(document.getElementById('ptPctNum').value,10)||0));
+  if(base==='Completed'||pct>=100) return 'Completed';
+  if(base==='Not Started') return 'Not Started';
+  return pct>0 ? (base+' '+pct+'%') : base;   // In Progress 25% / On Hold 40% — or plain when 0
+}
 function openProjTaskNew(){
   const name=peCurrentProject();
   if(!name){ alert("Pick a project or type a new project name first."); return; }
@@ -3217,7 +3256,7 @@ function openProjTaskNew(){
   fillAssignAndPhase(p); fillPredOptions(p,null);
   document.getElementById('ptTask').value=""; document.getElementById('ptType').value="";
   document.getElementById('ptPhase').value=""; document.getElementById('ptAssigned').value="";
-  document.getElementById('ptStatus').value="Not Started";
+  document.getElementById('ptStatus').value="Not Started"; ptSetPctSilent(0);
   document.getElementById('ptStart').value=""; document.getElementById('ptFinish').value="";
   document.getElementById('ptPred').value=""; document.getElementById('ptMilestone').value="";
   document.getElementById('ptComments').value="";
@@ -3237,7 +3276,9 @@ function openProjTaskEdit(id){
   document.getElementById('ptType').value=t.type||"";
   document.getElementById('ptPhase').value=t.phase||"";
   document.getElementById('ptAssigned').value=t.who||"";
-  document.getElementById('ptStatus').value=(PROJ_STATUS_OPTIONS.find(s=>s.toLowerCase()===(t.st||'').toLowerCase()))||(projIsDone(t)?'Completed':'Not Started');
+  { const base=projBaseStatus(t.st); const sd=document.getElementById('ptStatus');
+    sd.value=(PROJ_STATUS_OPTIONS.indexOf(base)>=0?base:(projIsDone(t)?'Completed':'Not Started'));
+    const pp=projTaskPct(t.st); ptSetPctSilent(pp!=null?pp:(projIsDone(t)?100:0)); }
   document.getElementById('ptStart').value=t.startISO||"";
   document.getElementById('ptFinish').value=t.finISO||"";
   document.getElementById('ptPred').value=(t.pred!=null?String(t.pred):"");
@@ -3257,7 +3298,7 @@ function submitProjTask(){
   const msg=document.getElementById('ptMsg');
   if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
   const f={ task:task, phase:document.getElementById('ptPhase').value.trim(), type:document.getElementById('ptType').value.trim(),
-    assigned:document.getElementById('ptAssigned').value.trim(), status:document.getElementById('ptStatus').value,
+    assigned:document.getElementById('ptAssigned').value.trim(), status:ptComposeStatus(),
     start:document.getElementById('ptStart').value, finish:document.getElementById('ptFinish').value,
     pred:document.getElementById('ptPred').value, milestone:document.getElementById('ptMilestone').value,
     comments:document.getElementById('ptComments').value.trim() };
@@ -6011,9 +6052,11 @@ function renderGanttFS(){
       const badDate=(t.startISO&&!SANE(t.startISO))?t.startISO:t.finISO;
       const canDrag=(t.id!=null&&t.id!==''&&s&&!bad);
       const canEdit=(t.id!=null&&t.id!=='');   // editable rows: clicking the label opens the task edit form
+      const tp=projTaskPct(t.st);              // per-task % → partial bar fill + label
       return { label:(bad?'⚠ ':'')+(t.t||'(task)'),
         sub:[t.who,t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
         startISO:s, endISO:f, color, milestones:[], done, noBar:(!s||bad), cls:t.sub?'g-subrow':'',
+        pct:(!done&&!bad&&tp!=null&&tp>0&&tp<100)?tp:undefined,
         dragId:canDrag?t.id:null,
         gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null,
         barTitle:canDrag?((t.t||'')+'\n'+fmtMDY(s)+' – '+fmtMDY(f)+'\n'+dragHelp):(bad?((t.t||'')+'\n⚠ check this date: '+badDate):null) };
