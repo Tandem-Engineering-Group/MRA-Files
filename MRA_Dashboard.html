@@ -197,6 +197,8 @@
   .job:last-child{margin-bottom:0}
   .job.done{opacity:.5} .job.done .pj{text-decoration:line-through}
   .job .pj{font-weight:600; font-size:13px; line-height:1.25}
+  .jname{cursor:pointer}
+  .jname:hover{text-decoration:underline; color:#fff}
   .job .mt{color:var(--muted); font-size:11.5px; margin-top:2px; line-height:1.35}
   .job .pills{margin-top:5px; display:flex; flex-wrap:wrap; gap:5px}
   .pill{font-size:10.5px; padding:1.5px 7px; border-radius:20px; background:#243042; color:var(--muted); white-space:nowrap}
@@ -495,6 +497,21 @@
   .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:100;
     display:none; align-items:center; justify-content:center; padding:30px}
   .modal-overlay.show{display:flex}
+  /* Global search overlay (spotlight, anchored near the top) */
+  #searchModal{align-items:flex-start; padding:0}
+  #searchModal .searchbox{margin-top:8vh; width:min(680px,94vw); background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.55); overflow:hidden}
+  #searchModal #globalSearch{width:100%; box-sizing:border-box; background:transparent; border:none; border-bottom:1px solid var(--line); color:var(--txt); font-size:17px; font-family:inherit; padding:16px 18px; outline:none}
+  #searchModal #globalSearch::placeholder{color:var(--faint)}
+  #searchResults{max-height:64vh; overflow-y:auto; padding:6px 0}
+  #searchResults .sr-hint{color:var(--faint); font-size:13px; padding:16px 18px; line-height:1.5}
+  #searchResults .sr-cat{font-size:10.5px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); font-weight:700; padding:9px 18px 4px}
+  #searchResults .sr-cat span{color:var(--faint); font-weight:600; margin-left:5px}
+  #searchResults .sr-row{padding:7px 18px; cursor:pointer; border-left:3px solid transparent}
+  #searchResults .sr-row:hover{background:var(--panel2); border-left-color:var(--brand)}
+  #searchResults .sr-main{font-size:13.5px; color:var(--txt); font-weight:600}
+  #searchResults .sr-j{color:var(--brand); font-weight:700; font-size:12px; margin-left:4px}
+  #searchResults .sr-sub{font-size:11.5px; color:var(--muted); margin-top:1px}
+  #searchResults mark{background:rgba(224,72,38,.32); color:var(--txt); border-radius:2px; padding:0 1px}
   .modal{background:var(--panel); border:1px solid var(--line); border-radius:16px;
     max-width:680px; width:100%; max-height:86vh; overflow:auto; padding:24px 30px; position:relative}
   .modal h3{font-size:20px; font-weight:800; margin-bottom:4px}
@@ -667,9 +684,9 @@
       <div class="tab" data-view="projects" onclick="setView('projects')">PROJECTS</div>
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
       <div class="tab" data-view="assets" onclick="setView('assets')">ASSETS</div>
-      <div class="tab" data-view="history" onclick="setView('history')">HISTORY</div>
     </div>
-    <button class="helpbtn" onclick="openHelp()" style="margin-left:auto" title="How to use this dashboard">?</button>
+    <button class="helpbtn" onclick="openSearch()" style="margin-left:auto" title="Search everything — jobs (open &amp; completed), projects, units, equipment, people">🔍</button>
+    <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
     <button class="authpill" id="authPill" onclick="signOut()" style="display:none" title="You're signed in for editing on this screen — click to log out. The next edit will ask for a code again (also auto-logs-out after 5 min idle).">🔓 <span id="authName"></span> · Log out</button>
     <div class="linksmenu" id="topMenu">
       <button class="editbtn" id="menuBtn" onclick="toggleDrop(event,'menuPop')" title="Tools &amp; links">☰ Menu ▾</button>
@@ -1063,6 +1080,13 @@
         <span class="maplegend"><span class="dot" style="background:#e04826"></span>at MRA<span class="dot" style="background:#2f6fe0"></span>in Michigan<span class="dot" style="background:#7b8794"></span>elsewhere<span class="dot" style="background:#7b8794;opacity:.45"></span>stale fix · <span id="mapBigCount"></span></span>
       </h3>
       <div class="unitmap-big" id="mapBig"></div>
+    </div>
+  </div>
+  <!-- Global search (🔍 in the top bar, or press /) — searches jobs (open & completed), projects, units, equipment, people -->
+  <div class="modal-overlay" id="searchModal" onclick="closeSearch(event)">
+    <div class="searchbox">
+      <input id="globalSearch" type="search" placeholder="Search everything — job #, project, unit #, client, person, task…" oninput="runGlobalSearch()" autocomplete="off">
+      <div id="searchResults"></div>
     </div>
   </div>
   <div class="barpop" id="barPop" onmouseenter="popHold()" onmouseleave="popHoverOut()"></div>
@@ -1469,7 +1493,7 @@ const GENERAL_HELP = `
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, Program Development load and team capacity.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
-    <span class="k">HISTORY</span> = search the whole board — any job, person, Job # or task (open <b>and</b> completed), with a time filter. The floor only keeps shipped jobs for ~2 weeks; everything older lives here.</p></div>
+    <span class="k">🔍 Search</span> (top bar, or press <b>/</b>) = find <b>anything</b> across the whole board — a job (open <b>or</b> completed), a project, a unit, an equipment job, a client, a person, or any task wording — and click a result to jump right to it. (This replaced the old History tab.)</p></div>
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — see a trailer's tasks</h4>
@@ -1579,6 +1603,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.3", date:"2026-06-19", title:"Global 🔍 search · click a job name to edit · History retired", items:[
+    "New 🔍 search in the top bar (or press /): one box finds anything across the board — jobs (open & completed), projects, units, equipment, clients, people, even task wording — click a result to jump straight there. No vertical space used.",
+    "Retired the HISTORY tab — the global search covers everything it did (including completed work), so it's now Floor · Projects · Fleetio · Assets + 🔍.",
+    "Click a job's NAME (not just its #) on a bay tile or crew task card to open its editor — matching how the Projects Gantt opens on the project name." ] },
   { rev:"4.2", date:"2026-06-19", title:"Click a job # to edit · freshness · past-due polish", items:[
     "Click any job number (on a bay tile or a crew task card) to open that job's editor — it asks for your code first, same as ✎ edit.",
     "Footer now shows per-source freshness — Fleetio unit count + Samsara GPS coverage/newest fix — and flags the data as \"Xh old\" in amber if it hasn't refreshed in a while.",
@@ -1871,7 +1899,13 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   const etm=document.getElementById('editTaskModal'); if(etm) etm.classList.remove('show');
   document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop();
   const mm=document.getElementById('mapModal'); if(mm) mm.classList.remove('show');
+  const sm=document.getElementById('searchModal'); if(sm) sm.classList.remove('show');
 } });
+// Press "/" to open global search (unless you're typing in a field)
+document.addEventListener('keydown',e=>{ if(e.key!=='/'||e.metaKey||e.ctrlKey||e.altKey) return;
+  const t=e.target, tag=(t&&t.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select'||(t&&t.isContentEditable)) return;
+  e.preventDefault(); openSearch(); });
 document.addEventListener('click',e=>{ const p=document.getElementById('barPop');
   if(p && p.classList.contains('show') && !p.contains(e.target) && !(e.target.closest && e.target.closest('.g-bar'))) closeBarPop(); });
 
@@ -2319,11 +2353,13 @@ function submitAddTask(){
 
 /* ---------- Edit / move a job from the dashboard (PIN-gated) ---------- */
 const STATUS_OPTIONS = ['Active','Scheduled','On Hold','Shipped','Leave','TBD'];
-// Click a job # anywhere → open its editor (prompts for the code first, via openEditJob's ensureAuth).
+// Click a job's NAME or # anywhere → open its editor (prompts for the code first, via openEditJob's ensureAuth).
 function jobEdit(ev, row){ if(ev){ ev.stopPropagation(); } if(row!=null) openEditJob(row); }
-function jobEditByNum(ev, jobNum){ if(ev){ ev.stopPropagation(); }
-  const j=((window.MRA_DATA||{}).jobs||[]).find(x=>String(x.jobNum||"")===String(jobNum));
-  if(j) openEditJob(j.row); else alert("Couldn't find job "+jobNum+" on the schedule.");
+function jobEditByNum(ev, jobNum, project){ if(ev){ ev.stopPropagation(); }
+  const jobs=((window.MRA_DATA||{}).jobs||[]);
+  let j=jobNum?jobs.find(x=>String(x.jobNum||"")===String(jobNum)):null;
+  if(!j&&project) j=jobs.find(x=>String(x.project||"")===String(project));
+  if(j) openEditJob(j.row); else alert("Couldn't find that job on the schedule.");
 }
 function openEditJob(row){
   if(!SHOP_WRITE_URL){ alert("Editing from the dashboard isn't switched on yet — finish the Power Automate setup first."); return; }
@@ -3281,7 +3317,7 @@ function renderFloor(D){
         tl+=`<div class="tasklist closed">`+j.doneTasks.map(tk=>`<div class="taskline done${isSal(tk)?" sal":""}">✓ ${esc(cleanTask(tk,false))}</div>`).join("")+`</div>`;
     }
     const jc=c.state==="done"?" done":"";
-    return `<div class="job${jc}"><div class="pj">${esc(j.project)} ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
+    return `<div class="job${jc}"><div class="pj"><span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
@@ -3388,7 +3424,7 @@ function renderSal(D){
       return (ai<0?99:ai)-(bi<0?99:bi) || a.project.localeCompare(b.project);});
     return out;
   };
-  const card=(s)=>`<div class="salcard"><div class="sh">${esc(s.project)}</div>`+
+  const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
     `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw);return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}</li>`;}).join("")}</ol></div>`;
   GROUPS.forEach(g=>{
@@ -4514,6 +4550,50 @@ function renderHistory(){
   }).join('') + (results.length>80?`<div class="hist-hint">Showing first 80 of ${results.length} — refine your search to narrow.</div>`:'');
 }
 
+/* ====================== Global search (🔍 in the top bar, or press /) ====================== */
+function openSearch(){ const m=document.getElementById('searchModal'); if(!m) return; m.classList.add('show');
+  const i=document.getElementById('globalSearch'); if(i){ i.value=''; setTimeout(()=>i.focus(),30); } runGlobalSearch(); }
+function closeSearch(e){ if(!e || e.target.id==='searchModal'){ const m=document.getElementById('searchModal'); if(m) m.classList.remove('show'); } }
+function _srHit(hay,toks){ hay=(hay||'').toLowerCase(); return toks.every(t=>hay.indexOf(t)>=0); }
+function runGlobalSearch(){
+  const box=document.getElementById('searchResults'); if(!box) return;
+  const D=window.MRA_DATA||{};
+  const q=((document.getElementById('globalSearch')||{}).value||'').trim();
+  const toks=q.toLowerCase().split(/\s+/).filter(Boolean);
+  if(!toks.length){ box.innerHTML=`<div class="sr-hint">Search across <b>everything</b> — jobs (open &amp; completed), projects, units &amp; equipment. Try a job # (J1407), a unit (6160), a project, a client, a person, or any task wording.</div>`; return; }
+  let html='';
+  // Jobs (open + completed)
+  const jobs=(D.jobs||[]).filter(j=>j.category!=='leave')
+    .map(j=>({j, hay:[j.project,j.client,j.jobNum,j.pm,j.bay,j.status].filter(Boolean).join(' ')+' '+(j.openTasks||[]).join(' ')+' '+(j.doneTasks||[]).join(' ')}))
+    .filter(o=>_srHit(o.hay,toks))
+    .sort((a,b)=>((b.j.completionISO||b.j.startISO||'')+'').localeCompare((a.j.completionISO||a.j.startISO||'')+''));
+  if(jobs.length){ html+=`<div class="sr-cat">Jobs <span>${jobs.length}</span></div>`+jobs.slice(0,14).map(({j})=>{
+    const dt=(j.startISO||j.completionISO)?fmtMDY(j.startISO)+' → '+fmtMDY(j.completionISO):'';
+    return `<div class="sr-row" onclick="searchOpenJob(${j.row})"><div class="sr-main">${hlTokens(j.project||'—',toks)}${j.jobNum?`<span class="sr-j">${hlTokens(j.jobNum,toks)}</span>`:''}</div><div class="sr-sub">${esc(j.bay||'')}${j.status?' · '+esc(j.status):''}${j.pm?' · '+esc(j.pm):''}${dt?' · '+dt:''}</div></div>`;
+  }).join(''); }
+  // Projects
+  const projs=(D.projects||[])
+    .map(p=>({p, hay:[p.name,p.pm].filter(Boolean).join(' ')+' '+(p.tasks||[]).map(t=>t.t).join(' ')+' '+(p.milestones||[]).map(m=>m.name).join(' ')}))
+    .filter(o=>_srHit(o.hay,toks));
+  if(projs.length){ html+=`<div class="sr-cat">Projects <span>${projs.length}</span></div>`+projs.slice(0,10).map(({p})=>
+    `<div class="sr-row" onclick="searchOpenProject('${escJsAttr(p.name)}')"><div class="sr-main">${hlTokens(p.name||'',toks)}</div><div class="sr-sub">${esc(p.pm||'—')} · ${p.pct}%${p.finishISO?' · due '+fmtMDY(p.finishISO):''}</div></div>`).join(''); }
+  // Units (live roster merged over the office list)
+  const seenU=new Set(), units=[];
+  ((D.fleetio&&D.fleetio.fleet)||[]).forEach(v=>{ if(_srHit([v.f,v.t,v.mk,v.tour,v.plate,v.vin,v.nm].filter(Boolean).join(' '),toks)){ const k=_normKey(v.f); if(!seenU.has(k)){ seenU.add(k); units.push({f:v.f,t:v.t,mk:v.mk,tour:v.tour}); } } });
+  if(typeof FLEET!=='undefined') FLEET.forEach(a=>{ if(_srHit([a.f,a.t,a.m,a.j].filter(Boolean).join(' '),toks)){ const k=_normKey(a.f); if(!seenU.has(k)){ seenU.add(k); units.push({f:a.f,t:a.t,mk:a.m,tour:a.j}); } } });
+  if(units.length){ html+=`<div class="sr-cat">Units <span>${units.length}</span></div>`+units.slice(0,10).map(v=>
+    `<div class="sr-row" onclick="searchGoUnit('${escJsAttr(String(v.f))}')"><div class="sr-main">${hlTokens(String(v.f||''),toks)} <span style="color:var(--muted);font-size:11.5px">${esc(v.t||'')} ${esc(v.mk||'')}</span></div>${v.tour?`<div class="sr-sub">${esc(v.tour)}</div>`:''}</div>`).join(''); }
+  // Equipment / jobs by client
+  const eq=(typeof jobBoardMerged==='function'?jobBoardMerged():[]).filter(e=>_srHit([e.n,e.j,e.d].filter(Boolean).join(' '),toks));
+  if(eq.length){ html+=`<div class="sr-cat">Equipment / Jobs <span>${eq.length}</span></div>`+eq.slice(0,10).map(e=>
+    `<div class="sr-row" onclick="searchGoEquip('${escJsAttr(e.j||e.n)}')"><div class="sr-main">${hlTokens(e.n||'',toks)}${e.j?`<span class="sr-j">${hlTokens(e.j,toks)}</span>`:''}</div>${e.d?`<div class="sr-sub">${esc(e.d)}</div>`:''}</div>`).join(''); }
+  box.innerHTML = html || `<div class="sr-hint">No matches for “${esc(q)}”.</div>`;
+}
+function searchOpenJob(row){ closeSearch(); openEditJob(row); }
+function searchOpenProject(name){ closeSearch(); setView('projects'); if(typeof openProjectEditor==='function') openProjectEditor(name); }
+function searchGoUnit(f){ closeSearch(); const s=document.getElementById('assetSearch'); if(s) s.value=f; setView('assets'); if(typeof setAssetLens==='function') setAssetLens('unit'); }
+function searchGoEquip(qv){ closeSearch(); const s=document.getElementById('assetSearch'); if(s) s.value=qv; setView('assets'); if(typeof setAssetLens==='function') setAssetLens('job'); }
+
 /* ====================== Unit Map (Leaflet) ======================
    Small map strip at the top of Fleet / Fleetio / Equipment + a big pop-out (⛶ Expand).
    Loads from a CDN; if Leaflet or the tiles can't load, it degrades to a friendly message
@@ -4608,6 +4688,7 @@ function closeUnitMap(e){ if(!e || (e.target && (e.target.id==='mapModal' || (e.
 
 function setView(v){
   if(v==='fleet'||v==='equipment') v='assets';   // FLEET + EQUIPMENT merged into the ASSETS tab
+  if(v==='history') v='floor';   // History retired — use the 🔍 global search instead
   VIEW=v; try{localStorage.setItem('mra_view',v);}catch(e){}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
   document.getElementById('floorView').classList.toggle('hidden',v!=='floor');
