@@ -1734,6 +1734,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.18", date:"2026-06-19", title:"Wall tile width: each column truly independent", items:[
+    "Fixed the 🎨 Design panel column-width control so columns are independent — a customized column now gets a fixed width, so narrowing Bay 3 no longer makes Bay 2 (or any other adjusted column) grow back. Uncustomized columns still flex to fill the leftover space." ] },
   { rev:"4.17", date:"2026-06-19", title:"Normal view: bay-tile tasks visible by default", items:[
     "On a laptop / desktop the bay tiles now show their open tasks <b>by default</b> (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians) — no need to click to see them. Click <b>N tasks ▾</b> on a tile to collapse it if you want. The wall TV is unchanged (just the N open count)." ] },
   { rev:"4.16", date:"2026-06-19", title:"Wall layout back to normal; per-tile sizing fixed; tile tasks return on laptop", items:[
@@ -2222,12 +2224,16 @@ function applyWallLayout(){
   const cols=document.querySelectorAll('#bays .baycol'), bays=document.querySelectorAll('#bays .bay');
   // Off in normal view — clear every override so the standard layout is untouched.
   if(!document.body.classList.contains('wall')){
-    cols.forEach(c=>{ c.style.flexGrow=''; c.style.maxHeight=''; });
+    cols.forEach(c=>{ c.style.flex=''; c.style.maxHeight=''; });
     bays.forEach(b=>{ const bd=b.querySelector('.bay-body'); if(bd){ bd.style.height=''; bd.style.maxHeight=''; } });
     return;
   }
-  // WIDTH — per column (Front + Back share a column): widen/narrow that whole column.
-  cols.forEach(c=>{ const pct=WALL_LAYOUT.w[c.getAttribute('data-col')]; c.style.flexGrow = pct?(pct/100):''; });
+  // WIDTH — per column (Front + Back share a column), INDEPENDENT: a customized column gets a
+  // FIXED width (no flex-grow), so shrinking one column never makes another grow. 100% = its
+  // normal equal share; uncustomized columns keep flexing to fill whatever's left.
+  const ncols=cols.length||1;
+  cols.forEach(c=>{ const pct=WALL_LAYOUT.w[c.getAttribute('data-col')];
+    c.style.flex = pct?('0 0 '+((pct/100)*(100/ncols)).toFixed(2)+'%'):''; });
   // HEIGHT — per tile, INDEPENDENT: give that one tile its own fixed body height (100%≈the
   // default 17vh). Each tile is sized on its own — changing Front never moves Back.
   const grown=new Set();
