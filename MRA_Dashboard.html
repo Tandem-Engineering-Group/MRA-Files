@@ -250,6 +250,8 @@
   /* Sal tasks panel */
   .saltasks{display:grid; grid-template-columns:repeat(3,1fr); gap:12px}
   .assignees{display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px; align-items:start}   /* Sal double-wide (two task columns) */
+  .assignees.asgpageB{grid-template-columns:1fr 1fr 1fr; margin-top:12px}   /* page B (Doug/Josh/Jeff) — equal columns */
+  #asgPageInd .pgdot{cursor:pointer; font-size:13px; letter-spacing:1px; vertical-align:middle}
   .asg{background:var(--panel); border:1px solid var(--line); border-radius:12px; display:flex; flex-direction:column; min-height:0}
   .asg-h{padding:9px 13px; font-weight:700; font-size:var(--ds-crew,15px); border-bottom:1px solid var(--line); display:flex; align-items:center; letter-spacing:.3px}
   .asg-h .count{margin-left:auto}
@@ -842,11 +844,16 @@
     </div>
 
     <div class="panel" id="openTasksPanel">
-      <h2>🧰 Open Tasks by Assignee <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span></h2>
-      <div class="assignees">
+      <h2>🧰 Open Tasks by Assignee <span id="asgPageInd" style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span></h2>
+      <div class="assignees" id="assigneesA">
         <div class="asg asgSalWrap" data-asg="Sal"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
         <div class="asg" data-asg="Wrap Team"><div class="asg-h">🎨 Wrap Team <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
         <div class="asg" data-asg="Electricians"><div class="asg-h">⚡ Electricians <span class="count" id="cntElec"></span></div><div class="asgbody autoscroll" id="asgElec"></div></div>
+      </div>
+      <div class="assignees asgpageB" id="assigneesB">
+        <div class="asg" data-asg="Doug"><div class="asg-h">🛠️ Doug <span class="count" id="cntDoug"></span></div><div class="asgbody autoscroll" id="asgDoug"></div></div>
+        <div class="asg" data-asg="Josh"><div class="asg-h">👤 Josh <span class="count" id="cntJosh"></span></div><div class="asgbody autoscroll" id="asgJosh"></div></div>
+        <div class="asg" data-asg="Jeff"><div class="asg-h">👤 Jeff <span class="count" id="cntJeff"></span></div><div class="asgbody autoscroll" id="asgJeff"></div></div>
       </div>
     </div>
 
@@ -1763,6 +1770,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.33", date:"2026-06-19", title:"Open Tasks by Assignee: add Doug · Josh · Jeff (rotating crews on the TV)", items:[
+    "Added crew boxes for <b>Doug</b> (Doug / Doug Cooley / Maintenance), <b>Josh</b> and <b>Jeff</b> — they pull whatever's assigned to them.",
+    "On the shop TV the bottom panel <b>auto-rotates every "+15+"s</b> between two pages — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows just show at once. Turn rotation on/off in the ⚙ wall gear." ] },
   { rev:"4.32", date:"2026-06-19", title:"Project detail: Undo / Redo for drag reschedules", items:[
     "The drag-to-reschedule in the project detail view now has <b>↶ Undo</b> / <b>↷ Redo</b> buttons (top-left, in edit mode) — and <b>Ctrl/⌘+Z</b> to undo, <b>Ctrl/⌘+Shift+Z</b> (or Ctrl+Y) to redo. Each undo restores the task's previous dates and writes it back. History is per project." ] },
   { rev:"4.31", date:"2026-06-19", title:"Project detail: milestones keep their own draggable bar", items:[
@@ -2202,11 +2212,34 @@ function toggleWall(btn){
     if(h&&cb&&bdg&&bdg.parentElement!==h) h.insertBefore(bdg, cb); }
   if(window.MRA_DATA) renderAll();   // re-render both ways so Sal's columns split (wall) / un-split (normal)
   if(WALL){
-    startAutoScroll();
+    startAutoScroll(); startAsgRotate();
     setTimeout(eotmShow, 6000);   // a first Employee-of-the-Month moment shortly after wall mode starts
-  } else { stopAutoScroll(); }
+  } else { stopAutoScroll(); stopAsgRotate(); }
   applyWallZoom();
 }
+/* ---------- Bottom crew panels: page A (Sal·Wrap·Electricians) ⇄ page B (Doug·Josh·Jeff),
+   auto-rotating on the wall/TV so we can show more crews than fit across at once. ---------- */
+let ASG_PAGE=0, _asgTimer=null; const ASG_ROTATE_SEC=15;
+let ASG_ROTATE=true; try{ const _r=localStorage.getItem('mra_asg_rotate'); if(_r!==null) ASG_ROTATE=(_r==='1'); }catch(e){}
+function showAsgPage(){
+  const A=document.getElementById('assigneesA'), B=document.getElementById('assigneesB'), ind=document.getElementById('asgPageInd');
+  if(!A||!B) return;
+  const hasB=!!window._asgPageBHasTasks;
+  if(!WALL){ A.style.display=''; B.style.display=''; if(ind) ind.textContent='scroll within each · 📺 Wall mode auto-scrolls'; return; }
+  if(!hasB||!ASG_ROTATE) ASG_PAGE=0;
+  const showB=(ASG_PAGE===1 && hasB);
+  A.style.display=showB?'none':''; B.style.display=showB?'':'none';
+  if(ind){ ind.innerHTML = hasB
+    ? `<span class="pgdot" onclick="setAsgPage(0)" title="Sal · Wrap · Electricians">${showB?'○':'●'}</span> <span class="pgdot" onclick="setAsgPage(1)" title="Doug · Josh · Jeff">${showB?'●':'○'}</span> &nbsp;${showB?'Doug · Josh · Jeff':'Sal · Wrap · Electricians'}${ASG_ROTATE?' · auto-rotating':''}`
+    : 'scroll within each · 📺 Wall mode auto-scrolls'; }
+}
+function setAsgPage(n){ ASG_PAGE=n; showAsgPage(); startAsgRotate(); }   // clicking a dot also restarts the timer
+function startAsgRotate(){ clearInterval(_asgTimer); _asgTimer=null;
+  if(WALL && ASG_ROTATE && window._asgPageBHasTasks){ _asgTimer=setInterval(()=>{ ASG_PAGE=ASG_PAGE?0:1; showAsgPage(); }, ASG_ROTATE_SEC*1000); } }
+function stopAsgRotate(){ clearInterval(_asgTimer); _asgTimer=null; ASG_PAGE=0; showAsgPage(); }
+function toggleAsgRotate(btn){ ASG_ROTATE=!ASG_ROTATE; try{ localStorage.setItem('mra_asg_rotate', ASG_ROTATE?'1':'0'); }catch(e){}
+  if(btn) btn.textContent='🔁 Rotate crews: '+(ASG_ROTATE?'ON':'OFF');
+  if(ASG_ROTATE) startAsgRotate(); else stopAsgRotate(); }
 /* ---------- Employee of the Month: centered card on the wall/TV view, every 5 min ----------
    Swap monthly: change EOTM.name and replace the eotm.jpg image (bump ?v=). */
 const EOTM = { name: "John", photo: "eotm.png?v=20260618", on: true };
@@ -2255,7 +2288,9 @@ function ensureWallCtl(){
     +'<div class="wc-row"><input id="wallZoom" type="range" min="60" max="200" step="5" style="flex:1" oninput="setWallZoom(this.value)" title="Board size on THIS screen — drag to scale the whole board bigger or smaller (remembered per monitor)"></div>'
     +'<div class="wc-row"><span class="wc-lbl">🌀 Scroll</span><span class="wc-pct">🐢</span>'
     +'<input id="wallSpeed" type="range" min="0" max="100" step="5" style="flex:1" oninput="setWallSpeed(this.value)" title="Wall auto-scroll speed on THIS screen — left = slower, right = faster (remembered per monitor)">'
-    +'<span class="wc-pct">🐇</span></div>';
+    +'<span class="wc-pct">🐇</span></div>'
+    +'<div class="wc-row" style="border-top:1px solid var(--line); padding-top:9px; margin-top:1px">'
+    +'<button type="button" onclick="toggleAsgRotate(this)" title="Auto-rotate the bottom crew panels every '+ASG_ROTATE_SEC+'s (Sal·Wrap·Electricians ⇄ Doug·Josh·Jeff)">🔁 Rotate crews: '+(ASG_ROTATE?'ON':'OFF')+'</button></div>';
   document.body.appendChild(d);
 }
 function toggleWallCtl(){ const c=document.getElementById('wallCtl'); if(c) c.classList.toggle('show'); }
@@ -3921,7 +3956,10 @@ function renderSal(D){
   const GROUPS=[
     {id:"asgSal",cnt:"cntSal",re:/\bsal\b/i,label:"Sal"},
     {id:"asgWrap",cnt:"cntWrap",re:/wrap|w2 graphic|\bw2\b/i,label:"Wrap Team"},
-    {id:"asgElec",cnt:"cntElec",re:/electr|beyer/i,label:"Electricians"}];
+    {id:"asgElec",cnt:"cntElec",re:/electr|beyer/i,label:"Electricians"},
+    {id:"asgDoug",cnt:"cntDoug",re:/\bdoug\b|maintenance/i,label:"Doug",pageB:true},
+    {id:"asgJosh",cnt:"cntJosh",re:/\bjosh\b/i,label:"Josh",pageB:true},
+    {id:"asgJeff",cnt:"cntJeff",re:/\bjeff\b/i,label:"Jeff",pageB:true}];
   // An Assigned value naming a known crew wins outright (keeps a Sal-assigned task
   // out of MasterWraps even if its text says "wrap"). But if Assigned names someone
   // we have no panel for (e.g. "Vendor"), fall back to the task text too — so
@@ -3945,9 +3983,11 @@ function renderSal(D){
   const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
     `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw); const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):''; return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${fa}</li>`;}).join("")}</ol></div>`;
+  let pageBTot=0;
   GROUPS.forEach(g=>{
     const cards=build(g.re);
     const tot=cards.reduce((s,x)=>s+x.open.length,0), c=document.getElementById(g.cnt);
+    if(g.pageB) pageBTot+=tot;
     if(c) c.textContent=tot+" open · "+cards.length+" trailer"+(cards.length===1?"":"s");
     if(g.id==='asgSal'){
       // Sal always gets two columns (side by side on wide screens, stacked on narrow) — trailers kept whole,
@@ -3968,6 +4008,9 @@ function renderSal(D){
     const el=document.getElementById(g.id); if(!el) return;
     el.innerHTML = cards.length ? cards.map(card).join("") : `<div class="empty">No open ${esc(g.label)} tasks</div>`;
   });
+  window._asgPageBHasTasks = pageBTot>0;
+  showAsgPage();
+  if(WALL && ASG_ROTATE && window._asgPageBHasTasks && !_asgTimer) startAsgRotate();   // kick off once page B has work
 }
 
 /* ---------- Coming Back to MRA (from logistics calendars) ---------- */
