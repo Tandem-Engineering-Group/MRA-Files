@@ -219,7 +219,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     if (-not $pmap.Contains($name)) {
         $pmap[$name] = [PSCustomObject]@{
             name = $name; pm = ''; minStart = $null; maxFinish = $null
-            taskCount = 0; doneCount = 0
+            taskCount = 0; doneCount = 0; pctSum = 0
             milestones = (New-Object System.Collections.ArrayList)
             tasks      = (New-Object System.Collections.ArrayList)
         }
@@ -227,6 +227,11 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     $o = $pmap[$name]
     $o.taskCount++
     if ($pStatus -eq 'Completed') { $o.doneCount++ }
+    # Per-task % toward the project rollup: Completed = 100, an embedded "NN%" (e.g. "In Progress 25%") = NN, else 0.
+    $tp = 0
+    if ($pStatus -eq 'Completed') { $tp = 100 }
+    elseif ($pStatus -match '(\d{1,3})\s*%') { $tp = [int]$matches[1]; if ($tp -gt 100) { $tp = 100 } elseif ($tp -lt 0) { $tp = 0 } }
+    $o.pctSum += $tp
     if ($pPM -ne '' -and $o.pm -eq '') { $o.pm = $pPM }
     if ($psd -and ($null -eq $o.minStart -or $psd -lt $o.minStart)) { $o.minStart = $psd }
     if ($pfd -and ($null -eq $o.maxFinish -or $pfd -gt $o.maxFinish)) { $o.maxFinish = $pfd }
@@ -418,7 +423,8 @@ try {
     }
 
     foreach ($o in $pmap.Values) {
-        $pct = if ($o.taskCount -gt 0) { [math]::Round($o.doneCount * 100.0 / $o.taskCount) } else { 0 }
+        # Overall % is the AVERAGE of each task's own % (Completed=100, partials count, rest=0) — not just done/total.
+        $pct = if ($o.taskCount -gt 0) { [math]::Round($o.pctSum / $o.taskCount) } else { 0 }
         [void]$projects.Add([PSCustomObject]@{
             name      = $o.name
             pm        = $o.pm

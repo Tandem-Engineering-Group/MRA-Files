@@ -1745,7 +1745,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
     <p>Every Gantt shows dated gridlines on the <b>1st &amp; 15th</b> of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. <span style="color:var(--amber)">◆</span> = milestone gate, <span style="color:var(--red)">▏</span> = today, <span style="color:#93c5fd">blue band</span> = this week.</p></div>
   <div class="hsec"><h4>⑲ ⚠ Spotting at-risk projects</h4>
-    <p>The dashboard now flags projects that are slipping. The <span class="k">⚠ AT RISK</span> KPI card counts every project that's <b>behind</b> (less done than it should be by today) or <b>past due</b> (finish date gone, not complete) — hover it for the list. In <b>Project Progress</b>, each project shows an <span class="hchip ok">on track</span> / <span class="hchip behind">behind</span> / <span class="hchip late">⚠ past due</span> chip, any <b>overdue tasks</b>, and a small <b>tick on the progress bar marking where it should be today</b> — if the colored fill is left of the tick, it's behind. At-risk projects sort to the top.</p>
+    <p>The dashboard now flags projects that are slipping. The <span class="k">⚠ AT RISK</span> KPI card counts every project that's <b>behind</b> (less done than it should be by today) or <b>past due</b> (finish date gone, not complete) — hover it for the list. In <b>Project Progress</b>, each project shows an <span class="hchip ok">on track</span> / <span class="hchip behind">behind</span> / <span class="hchip late">⚠ past due</span> chip, any <b>overdue tasks</b>, and a small <b>tick on the progress bar marking where it should be today</b> — if the colored fill is left of the tick, it's behind. At-risk projects sort to the top. A project's <b>overall %</b> is the <b>average of its tasks' own %s</b> (a task set to 25% counts as a quarter done, completed tasks as 100%), so partly-done work shows up — not just finished tasks.</p>
     <p>Under <b>Upcoming Milestones</b>, any <span class="k">⚠ Missed gates</span> (a milestone whose date passed while the project isn't done) are listed first, in red, with how many days late.</p>
     <p>Lower on the tab, the <b>🩺 Portfolio Health</b> donut splits <b>every</b> project by health — past-due / behind / on-track / upcoming / done — with the <b>at-risk count</b> in the center. Next to it, <b>⚡ Needs Attention</b> rolls everything that needs a look into one worst-first list: past-due &amp; behind projects, missed milestone gates, projects with overdue tasks, and milestones due within two weeks — <b>click any row to jump straight into that project's editor</b>.</p></div>
   <div class="hsec"><h4>⑲ᵇ ▾ Collapse / compact the Projects panels</h4>
@@ -1795,10 +1795,14 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.41", date:"2026-06-19", title:"Project % now reflects partly-done tasks", items:[
+    "A project's <b>overall %</b> (Project Progress, the Gantt bar fill, the at-risk tick, KPIs) is now the <b>average of each task's own %</b> — a task you set to 25% pulls its weight, instead of only fully-completed tasks counting. Completed = 100%, a task with an explicit “NN%” counts as NN, everything else = 0.",
+    "Example: 4 tasks at 100 / 50 / 25 / 0 now reads <b>44%</b> (was 25% — only the one Completed task counted before). Tasks with no % set behave exactly as before, so nothing moves until you start setting per-task %s.",
+    "Takes effect live in the dashboard the moment you edit; the workbook export uses the same math so the rolled-up number survives a refresh. The “done” count still shows how many are fully finished." ] },
   { rev:"4.40", date:"2026-06-19", title:"Tasks: set a % complete (slider · number · quick presets)", items:[
     "The task add/edit form now has a <b>% Complete</b> control — a <b>slider</b>, a <b>type-in box</b>, and <b>quick chips</b> (0 · 25 · 50 · 75 · 100). Set a task to e.g. <b>25%</b> and its bar in the detail view shows a <b>partial fill + the %</b>, and the editor badge reads “In Progress 25%”.",
     "It stays in step with the Status dropdown (100% = Completed, 0% = Not Started, in-between = In Progress; On Hold keeps its %). Stored within the Status value so it rides through the workbook with no new column.",
-    "Note: a task's % is shown per-task; the project's overall % still rolls up from completed tasks (ask if you want it weighted by these task %s)." ] },
+    "Note: a task's % shows per-task; the project's overall % now averages these per-task %s too (see rev 4.41)." ] },
   { rev:"4.38", date:"2026-06-19", title:"Project detail: click a task name to edit it", items:[
     "In the project <b>detail view</b>, <b>click a task's name on the left</b> to open that task's edit form (dates, assignee, status, predecessor, comments) — the same editor as the Projects tab. The label underlines on hover so you know it's clickable. (Milestone gate rows still collapse/expand on click.)" ] },
   { rev:"4.37", date:"2026-06-19", title:"Gantt: brighter dates + grid / milestone / task lines", items:[
@@ -3105,7 +3109,9 @@ function oRecomputeProject(p){
   if(!p) return; const tasks=p.tasks||[];
   p.taskCount=tasks.length;
   p.doneCount=tasks.filter(projIsDone).length;
-  p.pct=p.taskCount?Math.round(p.doneCount*100/p.taskCount):0;
+  // Overall % = AVERAGE of each task's own % (done=100, an explicit "NN%" counts, rest=0) — mirrors Export-Data.ps1.
+  const pctSum=tasks.reduce((a,t)=>{ if(projIsDone(t)) return a+100; const pc=projTaskPct(t.st); return a+(pc!=null?pc:0); },0);
+  p.pct=p.taskCount?Math.round(pctSum/p.taskCount):0;
   let mn=null,mx=null;
   tasks.forEach(t=>{ if(t.startISO&&(!mn||t.startISO<mn)) mn=t.startISO; if(t.finISO&&(!mx||t.finISO>mx)) mx=t.finISO; });
   p.startISO=mn; p.finishISO=mx;
