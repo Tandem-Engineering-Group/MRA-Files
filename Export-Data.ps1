@@ -861,6 +861,18 @@ Write-Output "Wrote $($jobs.Count) jobs and $($projects.Count) projects to data.
 
 # --- Push to Azure Static Site -----------------------------------------------
 $AzureStorageAccount = 'mrashopdash'
+# ROOT-CAUSE FIX: authenticate the push with the storage ACCOUNT KEY, not the
+# logged-in 'az login' session. Without this, "--auth-mode key" makes az fetch the
+# key via your interactive login — which works when YOU run it, but FAILS under the
+# scheduled task (no login) → data.js rebuilds locally but never reaches Azure →
+# the live board freezes silently. Put the key in azure-key.txt next to this script.
+# Get it ONCE (while logged in) with:
+#   az storage account keys list --account-name mrashopdash --query "[0].value" -o tsv
+# Do NOT commit azure-key.txt.
+$AzKeyFile = Join-Path $ScriptDir 'azure-key.txt'
+$AzKey = if (Test-Path $AzKeyFile) { (Get-Content $AzKeyFile -Raw).Trim() } else { '' }
+$AzAuth = if ($AzKey -ne '') { @('--account-key', $AzKey) } else { @('--auth-mode', 'key') }
+Log-Export ("AUTH  " + $(if ($AzKey -ne '') { 'account-key (non-interactive)' } else { 'az login session (FRAGILE under Task Scheduler — add azure-key.txt)' }))
 # Locate az: prefer the known install path, otherwise fall back to whatever
 # 'az' is on PATH (handles installs under Program Files (x86) or elsewhere).
 $azExe = 'C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
@@ -878,7 +890,7 @@ if (Test-Path $azExe) {
         --file $OutFile `
         --content-type 'application/javascript' `
         --overwrite `
-        --auth-mode key `
+        @AzAuth `
         --only-show-errors 2>$null | Out-Null
     $code = $LASTEXITCODE
     # Employee-of-the-Month photo: push eotm.png / eotm.jpg if present in this folder
@@ -889,7 +901,7 @@ if (Test-Path $azExe) {
             & $azExe storage blob upload `
                 --account-name $AzureStorageAccount --container-name '$web' `
                 --name $img.f --file $imgPath --content-type $img.ct `
-                --overwrite --auth-mode key --only-show-errors 2>$null | Out-Null
+                --overwrite @AzAuth --only-show-errors 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) { Write-Output "  -> Pushed $($img.f) to Azure" }
         }
     }
