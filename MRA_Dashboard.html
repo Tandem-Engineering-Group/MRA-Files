@@ -649,6 +649,8 @@
   .btn-primary:disabled{opacity:.55; cursor:default}
   .btn-ghost{background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:8px; padding:9px 16px; cursor:pointer; font-family:inherit}
   .btn-ghost:hover{color:var(--txt)}
+  .ptpreset{flex:1; padding:4px 0; font-size:11.5px; font-weight:600; border-radius:14px}
+  .ptpreset.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
   /* Equipment / Job# board */
   .eqbar{display:flex; align-items:center; gap:12px; margin:2px 0 16px; flex-wrap:wrap}
   .eqsearch{flex:1; min-width:240px; max-width:440px; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:10px; padding:11px 15px; font-size:13.5px; font-family:inherit}
@@ -1447,6 +1449,13 @@
             <input id="ptPct" type="range" min="0" max="100" step="5" value="0" style="flex:1" oninput="ptSetPct(this.value)" title="Drag to set how far along this task is — 100% marks it Completed">
             <input id="ptPctNum" type="number" min="0" max="100" step="5" value="0" style="width:62px" onchange="ptSetPct(this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="Type a % (0–100)">
           </div>
+          <div class="ptpresets" style="display:flex; gap:5px; margin-top:6px">
+            <button type="button" class="btn-ghost ptpreset" onclick="ptSetPct(0)">0</button>
+            <button type="button" class="btn-ghost ptpreset" onclick="ptSetPct(25)">25</button>
+            <button type="button" class="btn-ghost ptpreset" onclick="ptSetPct(50)">50</button>
+            <button type="button" class="btn-ghost ptpreset" onclick="ptSetPct(75)">75</button>
+            <button type="button" class="btn-ghost ptpreset" onclick="ptSetPct(100)">100</button>
+          </div>
         </div>
         <div class="addrow2">
           <div><label>Start date</label><input id="ptStart" type="date"></div>
@@ -1786,8 +1795,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"4.39", date:"2026-06-19", title:"Tasks: set a % complete (10 / 25 / 80…)", items:[
-    "The task add/edit form now has a <b>% Complete</b> control — a <b>slider</b> and a <b>type-in box</b> (0–100). Set a task to e.g. <b>25%</b> and its bar in the detail view shows a <b>partial fill + the %</b>, and the editor badge reads “In Progress 25%”.",
+  { rev:"4.40", date:"2026-06-19", title:"Tasks: set a % complete (slider · number · quick presets)", items:[
+    "The task add/edit form now has a <b>% Complete</b> control — a <b>slider</b>, a <b>type-in box</b>, and <b>quick chips</b> (0 · 25 · 50 · 75 · 100). Set a task to e.g. <b>25%</b> and its bar in the detail view shows a <b>partial fill + the %</b>, and the editor badge reads “In Progress 25%”.",
     "It stays in step with the Status dropdown (100% = Completed, 0% = Not Started, in-between = In Progress; On Hold keeps its %). Stored within the Status value so it rides through the workbook with no new column.",
     "Note: a task's % is shown per-task; the project's overall % still rolls up from completed tasks (ask if you want it weighted by these task %s)." ] },
   { rev:"4.38", date:"2026-06-19", title:"Project detail: click a task name to edit it", items:[
@@ -3228,7 +3237,8 @@ function fillAssignAndPhase(p){
 // ---- % Complete control (slider + number box), kept in light sync with the Status dropdown ----
 function ptSetPctSilent(p){ p=Math.max(0,Math.min(100,Math.round((parseInt(p,10)||0)/5)*5));   // snap to clean 5% steps
   const sl=document.getElementById('ptPct'), nb=document.getElementById('ptPctNum'), lab=document.getElementById('ptPctVal');
-  if(sl) sl.value=p; if(nb) nb.value=p; if(lab) lab.textContent=p+'%'; }
+  if(sl) sl.value=p; if(nb) nb.value=p; if(lab) lab.textContent=p+'%';
+  document.querySelectorAll('.ptpreset').forEach(b=>b.classList.toggle('on', parseInt(b.textContent,10)===p)); }
 function ptSetPct(v){ let p=Math.max(0,Math.min(100,parseInt(v,10)||0)); ptSetPctSilent(p);
   const sd=document.getElementById('ptStatus'); if(sd){ const cur=sd.value;   // nudge the status to match
     if(p>=100) sd.value='Completed';
