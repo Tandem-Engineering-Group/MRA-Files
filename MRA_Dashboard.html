@@ -343,8 +343,11 @@
   .eotm-cap b{color:var(--brand)}
   /* Always-on EotM badge (wall view only, bottom-left so it clears the bottom-right size control) */
   .eotm-badge{display:none}
-  body.wall .eotm-badge{display:flex; position:fixed; left:14px; bottom:14px; z-index:60; align-items:center; gap:10px;
-    background:rgba(20,26,36,.93); border:1.5px solid #ffd24a; border-radius:13px; padding:7px 13px 7px 8px; box-shadow:0 6px 26px rgba(0,0,0,.5)}
+  /* In wall mode the badge rides up in the header next to the clock (moved there by JS),
+     so it's out of the way at the bottom. */
+  body.wall .eotm-badge{display:flex; align-items:center; gap:9px; z-index:60;
+    background:rgba(20,26,36,.93); border:1.5px solid #ffd24a; border-radius:11px; padding:4px 12px 4px 5px; box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  body.wall .eotm-badge img{width:34px; height:34px}
   .eotm-badge img{width:44px; height:44px; border-radius:9px; object-fit:cover; border:1.5px solid #ffd24a}
   .eotm-badge .eb-tx{display:flex; flex-direction:column; line-height:1.15}
   .eotm-badge .eb-t{font-size:10px; font-weight:800; letter-spacing:.04em; color:#ffd24a; text-transform:uppercase}
@@ -546,9 +549,11 @@
   #dsHandle{position:fixed; right:0; top:50%; transform:translateY(-50%); z-index:9998; display:none;
     background:var(--brand); color:#fff; width:30px; height:46px; align-items:center; justify-content:center;
     border-radius:10px 0 0 10px; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.45); font-size:17px}
+  /* Translucent + blurred so you can see the board (the tiles you're sizing) behind it. */
   #dsPanel{position:fixed; right:0; top:0; height:100vh; width:290px; z-index:9999; transform:translateX(105%);
-    transition:transform .22s ease; background:var(--panel); border-left:1px solid var(--line);
-    box-shadow:-12px 0 34px rgba(0,0,0,.5); padding:16px 16px 22px; overflow-y:auto; box-sizing:border-box}
+    transition:transform .22s ease; background:rgba(17,23,33,.80); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
+    border-left:1px solid var(--line); box-shadow:-12px 0 34px rgba(0,0,0,.5); padding:16px 16px 22px; overflow-y:auto; box-sizing:border-box}
+  body.light #dsPanel{background:rgba(244,247,251,.82)}
   body.dsopen #dsPanel{transform:translateX(0)}
   #dsPanel .ds-h{font-size:16px; font-weight:800; display:flex; align-items:center}
   #dsPanel .ds-x{margin-left:auto; cursor:pointer; font-size:22px; color:var(--muted); line-height:1}
@@ -1747,6 +1752,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.22", date:"2026-06-19", title:"Wall tuning: EOTM up top, fill the bottom, size Sal's two columns, see-through panel", items:[
+    "🏆 Employee of the Month badge now rides up in the header next to the clock in wall mode (was sitting in the bottom-left), freeing the bottom.",
+    "The Open Tasks by Assignee tile <b>height</b> now actually stretches the panel — pull a tile down to fill the dead space at the bottom of the TV.",
+    "Sal's two task columns can be sized <b>individually</b> — pick <b>Sal — left column</b> / <b>Sal — right column</b> in the 🎨 tile list to set each side's width (and height).",
+    "The 🎨 Design panel is now <b>translucent</b> when open, so you can see the board (the tiles you're resizing) behind it." ] },
   { rev:"4.21", date:"2026-06-19", title:"Wall: size the Open Tasks by Assignee tiles too", items:[
     "The 🎨 Design panel per-tile sizing now also covers the <b>Open Tasks by Assignee</b> tiles (Sal · Wrap Team · Electricians) on the TV — pick one from the tile list and set its width and height independently, same as the bays." ] },
   { rev:"4.20", date:"2026-06-19", title:"Normal view: collapse/expand each job in a bay", items:[
@@ -2145,8 +2155,10 @@ function toggleWall(btn){
   WALL=!WALL; document.body.classList.toggle('wall',WALL);
   try{ localStorage.setItem('mra_wall', WALL?'1':''); }catch(e){}
   if(btn){ btn.classList.toggle('on',WALL); btn.textContent=WALL?'📺 Wall: ON':'📺 Wall'; }
-  // (No longer auto-expand every tile in wall mode: tasks live in the Open Tasks by Assignee
-  //  panel below now, so compact tiles keep the wall TV clean and free up vertical room.)
+  // Wall mode: tuck the Employee-of-the-Month badge up in the header next to the clock
+  // (frees the bottom). It stays display:none outside wall, so leaving it there is harmless.
+  if(WALL){ const h=document.querySelector('header'), cb=h&&h.querySelector('.clockbox'), bdg=document.getElementById('eotmBadge');
+    if(h&&cb&&bdg&&bdg.parentElement!==h) h.insertBefore(bdg, cb); }
   if(window.MRA_DATA) renderAll();   // re-render both ways so Sal's columns split (wall) / un-split (normal)
   if(WALL){
     startAutoScroll();
@@ -2247,7 +2259,7 @@ function applyWallLayout(){
   if(!document.body.classList.contains('wall')){
     cols.forEach(c=>{ c.style.flex=''; c.style.maxHeight=''; });
     bays.forEach(b=>{ const bd=b.querySelector('.bay-body'); if(bd){ bd.style.height=''; bd.style.maxHeight=''; } });
-    asgs.forEach(a=>{ a.style.flex=''; a.querySelectorAll('.asgbody').forEach(bd=>bd.style.maxHeight=''); });
+    asgs.forEach(a=>{ a.style.flex=''; a.querySelectorAll('.asgbody').forEach(bd=>{ bd.style.height=''; bd.style.maxHeight=''; bd.style.flex=''; }); });
     return;
   }
   // WIDTH — per column (Front + Back share a column), INDEPENDENT: a customized column gets a
@@ -2268,13 +2280,22 @@ function applyWallLayout(){
   // a column holding a custom-sized tile is freed from the 44vh cap so nothing gets clipped
   cols.forEach(c=>{ if(grown.has(c)) c.style.maxHeight='none'; else if(!c.classList.contains('parkcol')) c.style.maxHeight=''; });
   // Open Tasks by Assignee tiles (Sal / Wrap Team / Electricians): WIDTH = fixed share (independent,
-  // 100% = its normal share), HEIGHT = that panel's task-list cap (100% ≈ the default 30vh).
+  // 100% = its normal share), HEIGHT = that panel's height (100% ≈ the default 30vh). Real height so
+  // it can be pulled down to fill the dead space at the bottom.
   asgs.forEach(a=>{ const k=a.getAttribute('data-asg');
     const wp=WALL_LAYOUT.w[k];
     a.style.flex = wp?('0 0 '+((wp/100)*((ASG_W[k]||1)/ASG_T)*100).toFixed(2)+'%'):'';
     const hp=WALL_LAYOUT.h[k], vh=hp?(hp/100*30).toFixed(1)+'vh':'';
-    a.querySelectorAll('.asgbody').forEach(bd=>{ bd.style.maxHeight=vh; });
+    a.querySelectorAll('.asgbody').forEach(bd=>{ bd.style.height=vh; bd.style.maxHeight=vh; });
   });
+  // Sal's two task columns: independent per-side WIDTH + HEIGHT (each side is its own column).
+  const split=document.querySelector('.asg[data-asg="Sal"] .asg-split');
+  if(split){ const sides=[['salL',split.querySelector('#asgSal')],['salR',split.querySelector('#asgSalB')]];
+    sides.forEach(([key,el])=>{ if(!el) return;
+      const wp=WALL_LAYOUT.w[key]; el.style.flex = wp?('0 0 '+((wp/100)*50).toFixed(1)+'%'):'';
+      const hp=WALL_LAYOUT.h[key]; if(hp){ const vh=(hp/100*30).toFixed(1)+'vh'; el.style.height=vh; el.style.maxHeight=vh; }
+    });
+  }
 }
 function dsColKeyOf(bay){ const c=WALL_COLS.find(c=>c.bays.includes(bay)); return c?c.key:bay; }
 function dsIsAsg(name){ return name in ASG_W; }                       // an Open-Tasks-by-Assignee tile
@@ -2282,12 +2303,13 @@ function dsWidthKey(name){ return dsIsAsg(name)?name:dsColKeyOf(name); }  // bay
 function dsPopulateTiles(){
   const sel=document.getElementById('ds-tilepick'); if(!sel) return;
   const bays=[]; WALL_COLS.forEach(c=>c.bays.forEach(b=>{ if(b&&bays.indexOf(b)<0) bays.push(b); }));
-  const asgs=Object.keys(ASG_W);
+  // [value,label] — Sal's two task columns are individually sizable.
+  const asgOpts=[['Sal','Sal (panel)'],['salL','Sal — left column'],['salR','Sal — right column'],['Wrap Team','Wrap Team'],['Electricians','Electricians']];
   if(!bays.length){ sel.innerHTML='<option>(open the FLOOR first)</option>'; return; }
   const cur=sel.value;
   sel.innerHTML='<optgroup label="Bays">'+bays.map(b=>`<option value="${escA(b)}">${esc(b)}</option>`).join('')+'</optgroup>'
-    +'<optgroup label="Open Tasks by Assignee">'+asgs.map(a=>`<option value="${escA(a)}">${esc(a)}</option>`).join('')+'</optgroup>';
-  if([...bays,...asgs].indexOf(cur)>=0) sel.value=cur;
+    +'<optgroup label="Open Tasks by Assignee">'+asgOpts.map(([v,l])=>`<option value="${escA(v)}">${esc(l)}</option>`).join('')+'</optgroup>';
+  if([...bays,...asgOpts.map(o=>o[0])].indexOf(cur)>=0) sel.value=cur;
   dsTileSync();
 }
 function dsTileSync(){
