@@ -1752,6 +1752,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.25", date:"2026-06-19", title:"Edit Project Tasks: sort by full date (year) + show the year", items:[
+    "Tasks in the ✎ Edit Project Tasks popup now sort within each phase by their <b>full date including the year</b>, so a 2027 task (e.g. Thunder Bay's \"Launch?\") falls to the bottom instead of the top. Subtasks stay grouped under their parent.",
+    "Task dates in that popup now show the <b>year</b> (M/D/YY) so it's clear which are next-year items." ] },
   { rev:"4.24", date:"2026-06-19", title:"Wall: tile-height guard keeps content on-screen", items:[
     "Stretching a tile's height in the 🎨 Design panel can no longer push content off the bottom of the TV — if it would overflow, the height is trimmed so the tile lands right at the screen edge (the slider snaps back to the max that fits)." ] },
   { rev:"4.23", date:"2026-06-19", title:"Sal's two columns balance by height", items:[
@@ -3018,7 +3021,7 @@ function renderProjTaskList(){
     const open=PE_EXPANDED.has(ph);
     const peRow=(t,opt)=>{ opt=opt||{};
       const predT=(t.pred!=null&&t.pred!=='' && byId[String(t.pred)])?byId[String(t.pred)]:null;
-      const dates=[t.startISO?('▸ '+fmtMD(t.startISO)):'', t.finISO?('⤇ '+fmtMD(t.finISO)):''].filter(Boolean).join('  ');
+      const dates=[t.startISO?('▸ '+fmtMDY(t.startISO)):'', t.finISO?('⤇ '+fmtMDY(t.finISO)):''].filter(Boolean).join('  ');
       const meta=[ t.who?esc(t.who):'', dates, predT?('after: '+esc(predT.t)):'', /yes/i.test(t.ml||'')?'◆ milestone':'' ].filter(Boolean).join(' · ');
       const idA=`data-id="${escA(t.id!=null?String(t.id):'')}"`;
       const tools=projIsDone(t)
@@ -3029,18 +3032,24 @@ function renderProjTaskList(){
         (meta?`<div class="petask-m">${meta}</div>`:'')+`</div>`+
         `<div class="petask-r">${projStatusBadge(t)}<span class="petask-tools">${tools}</span></div></div>`;
     };
-    // Nest subtasks (sub:true) under the nearest non-sub task above them; parents get a collapse caret.
-    let rows='', i=0;
-    while(i<g.length){
-      const t=g[i];
-      if(t.sub){ rows+=peRow(t,{sub:true}); i++; continue; }          // orphan subtask → show flat
+    // Group subtasks (sub:true) under the nearest non-sub task above them, THEN sort those units by
+    // the parent's full date (year-aware) so e.g. a 2027 task sorts below the 2026 ones. Undated last.
+    const units=[]; let i=0;
+    while(i<g.length){ const t=g[i];
+      if(t.sub){ units.push({head:t, subs:[], orphan:true}); i++; continue; }   // orphan subtask → flat
       const subs=[]; let j=i+1; while(j<g.length && g[j].sub){ subs.push(g[j]); j++; }
-      if(subs.length){ const pkey=ph+'|'+(t.id!=null&&t.id!==''?t.id:t.t), closed=PE_SUBCLOSED.has(pkey);
-        rows+=peRow(t,{caret:(closed?'▸':'▾'), pkey});
-        rows+=`<div class="pesubs"${closed?' style="display:none"':''}>`+subs.map(s=>peRow(s,{sub:true})).join('')+`</div>`;
-        i=j;
-      } else { rows+=peRow(t,{}); i++; }
+      units.push({head:t, subs}); i=j;
     }
+    const dkey=t=>(t.startISO||t.finISO||'9999-99-99');
+    units.sort((u1,u2)=>dkey(u1.head).localeCompare(dkey(u2.head)));
+    let rows=units.map(u=>{
+      if(u.orphan) return peRow(u.head,{sub:true});
+      if(u.subs.length){ const pkey=ph+'|'+(u.head.id!=null&&u.head.id!==''?u.head.id:u.head.t), closed=PE_SUBCLOSED.has(pkey);
+        return peRow(u.head,{caret:(closed?'▸':'▾'), pkey})
+          +`<div class="pesubs"${closed?' style="display:none"':''}>`+u.subs.map(s=>peRow(s,{sub:true})).join('')+`</div>`;
+      }
+      return peRow(u.head,{});
+    }).join('');
     return `<div class="pephase" data-ph="${escA(ph)}" onclick="togglePhase(this)" title="Click to ${open?'collapse':'expand'}">`+
       `<span class="pecaret">${open?'▾':'▸'}</span>${esc(ph)} <span class="pephase-n">${g.length}${doneN?(' · '+doneN+' done'):''}</span></div>`+
       `<div class="pephase-body"${open?'':' style="display:none"'}>${rows}</div>`;
