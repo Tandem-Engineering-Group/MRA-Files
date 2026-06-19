@@ -13,7 +13,7 @@ $Workbook  = Join-Path (Split-Path -Parent $ScriptDir) 'MRA_Shop_Board_v6_9_7.xl
 $OutFile   = Join-Path $ScriptDir 'data.js'
 $SheetName = 'Input'
 
-$PhysicalBays = @('Bay 2 Front','Bay 2 Back','Bay 3 Front','Bay 3 Back',
+$PhysicalBays = @('Bay 2 Front','Bay 2 Back / Loading Dock','Bay 3 Front','Bay 3 Back',
                   'Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back',
                   'Parking Lot','On Hold/Off-Site')
 
