@@ -522,7 +522,7 @@ if (Test-Path $FleetioTokenFile) {
             $det = ''
             if ($i.description) { $det = ([string]$i.description).Trim(); if ($det.Length -gt 600) { $det = $det.Substring(0,600) + '…' } }
             [void]$fIssues.Add([PSCustomObject]@{
-                num = (([string]$i.number) -replace '^#',''); summary = $(if ($i.summary) { $i.summary } else { $i.name })
+                id = $i.id; num = (([string]$i.number) -replace '^#',''); summary = $(if ($i.summary) { $i.summary } else { $i.name })
                 asset = $i.vehicle_name; jobNum = (Get-FleetJob $i.vehicle_name)
                 priority = $pr; openedISO = (FleetD10 $i.reported_at); overdue = [bool]$i.overdue
                 detail = $det; reporter = (Get-FleetReporter $i); assignees = (Get-FleetAssignees $i)
@@ -538,7 +538,7 @@ if (Test-Path $FleetioTokenFile) {
             $woDet = $(if ($woLines -and $woLines -ne $sum) { $woLines } else { '' })
             $op = $w.issued_at; if (-not $op) { $op = $w.scheduled_at }; if (-not $op) { $op = $w.created_at }
             [void]$fWos.Add([PSCustomObject]@{
-                num = (([string]$w.number) -replace '^#',''); summary = $sum; asset = $w.vehicle_name
+                id = $w.id; num = (([string]$w.number) -replace '^#',''); summary = $sum; asset = $w.vehicle_name
                 jobNum = (Get-FleetJob $w.vehicle_name); status = $w.work_order_status_name; openedISO = (FleetD10 $op)
                 detail = $woDet; reporter = (Get-FleetReporter $w); assignees = (Get-FleetAssignees $w)
             })
@@ -548,7 +548,7 @@ if (Test-Path $FleetioTokenFile) {
             $st = [string]$s.service_reminder_status_name
             if ($st -ne 'overdue' -and $st -ne 'due_soon') { continue }
             [void]$fSvc.Add([PSCustomObject]@{
-                service = $s.service_task_name; asset = $s.vehicle_name; jobNum = (Get-FleetJob $s.vehicle_name)
+                id = $s.id; service = $s.service_task_name; asset = $s.vehicle_name; jobNum = (Get-FleetJob $s.vehicle_name)
                 dueISO = (FleetD10 $s.next_due_at); meterDue = $s.next_due_meter_value; status = $st
             })
         }
