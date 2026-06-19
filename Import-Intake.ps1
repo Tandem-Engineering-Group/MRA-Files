@@ -133,9 +133,9 @@ function Close-Zip($z) {
 # Read the 'Enter Here' sheet -> array of object[12] (Project..Comments);
 # $null if the sheet is missing. Handles three layouts:
 #   LEGACY  : header "Project" in A1, data A:L straight down from row 2.
-#   MIRROR  : current template — letterhead + info block, then a task table whose
+#   MIRROR  : current template - letterhead + info block, then a task table whose
 #             header is A="Project" .. L="Comments" (1:1 with the master sheet).
-#   BRANDED : older template — info block + a task table A="Phase" .. J="Comments";
+#   BRANDED : older template - info block + a task table A="Phase" .. J="Comments";
 #             Project & PM are taken from the info block.
 function Read-IntakeRows($path) {
     $z = Open-Zip $path
