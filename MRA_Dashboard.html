@@ -256,6 +256,11 @@
   body.wall .baycol.parkcol{max-height:none; overflow:visible}
   body.wall .baycol.parkcol .bay-body.autoscroll{max-height:19vh}
   body.wall .asgbody{max-height:30vh}
+  /* Multi-job cards (Parking Lot, Next Up/On Hold…) flow into more columns as the card widens,
+     so pushing the other columns narrow makes a wide Parking Lot double-up and run shorter. */
+  body.wall .bay-body.wrapjobs{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    gap:calc(8px*var(--ds-density,1)) 12px; align-content:start}
+  body.wall .bay-body.wrapjobs .job{margin-bottom:0}
   /* Wall: give Sal a double-wide panel and split his tasks into two side-by-side columns */
   /* (Sal's two-column layout is now the default on wide screens — see .assignees / .asg-split above) */
   /* Wall mode: per-screen size control (zoom). Lives in body so it scales with the board. */
@@ -1734,6 +1739,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.19", date:"2026-06-19", title:"Wall: wide bay cards auto-wrap into columns", items:[
+    "On the TV, a bay card with several jobs (Parking Lot, Next Up / On Hold…) now <b>auto-wraps into 2+ columns</b> as the card gets wider — so when you push the other columns narrow and the Parking Lot gets wide, its list doubles up and runs shorter instead of one tall column. More width = more columns, automatically." ] },
   { rev:"4.18", date:"2026-06-19", title:"Wall tile width: each column truly independent", items:[
     "Fixed the 🎨 Design panel column-width control so columns are independent — a customized column now gets a fixed width, so narrowing Bay 3 no longer makes Bay 2 (or any other adjusted column) grow back. Uncustomized columns still flex to fill the leftover space." ] },
   { rev:"4.17", date:"2026-06-19", title:"Normal view: bay-tile tasks visible by default", items:[
@@ -3709,7 +3716,9 @@ function renderFloor(D){
       body=list.map(j=>jobTile(j,opts.showBay)).join("");
     }
     const cnt=opts.headCount&&list.length?` <span class="count">${list.length}</span>`:"";
-    const bodyCls=opts.scroll?"bay-body autoscroll":"bay-body";
+    // Cards with several jobs (Parking Lot, Next Up/On Hold…) auto-wrap into more columns as the
+    // card gets wider on the TV — so a wide Parking Lot "doubles up" instead of running tall.
+    const bodyCls=(opts.scroll?"bay-body autoscroll":"bay-body")+(list.length>1?" wrapjobs":"");
     const col=BAY_COLLAPSED.has(bay);
     const caret=`<span class="bay-collapse">${col?'▸':'▾'}</span>`;
     return `<div class="bay ${cls}${col?' collapsed':''}${!list.length?' bay-empty':''}" data-bay="${escA(bay)}"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}</div>`+
