@@ -13,6 +13,17 @@ $Workbook  = Join-Path (Split-Path -Parent $ScriptDir) 'MRA_Shop_Board_v6_9_7.xl
 $OutFile   = Join-Path $ScriptDir 'data.js'
 $SheetName = 'Input'
 
+# --- Run logging (so a stalled export is diagnosable instead of silent) -----
+# export-log.txt    = append a line every run (START / DONE / FAIL)
+# export-last-run.txt = single line: the last run's time + outcome (OK / WARN / FAIL)
+$LogFile     = Join-Path $ScriptDir 'export-log.txt'
+$LastRunFile = Join-Path $ScriptDir 'export-last-run.txt'
+function Log-Export($msg){ try{ ("{0}  {1}" -f ([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')), $msg) | Out-File -FilePath $LogFile -Append -Encoding utf8 }catch{} }
+function Set-LastRun($status){ try{ ("{0}  {1}" -f ([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')), $status) | Out-File -FilePath $LastRunFile -Encoding utf8 }catch{} }
+Log-Export "START"
+# Any terminating error is logged (with the message) before the script exits, so we can see WHY it died.
+trap { Log-Export ("FAIL  " + $_.Exception.Message); Set-LastRun ("FAIL  " + $_.Exception.Message); break }
+
 $PhysicalBays = @('Bay 2 Front','Bay 2 Back / Loading Dock','Bay 3 Front','Bay 3 Back',
                   'Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back',
                   'Parking Lot','On Hold/Off-Site')
@@ -891,4 +902,18 @@ if (Test-Path $azExe) {
     Remove-Item Env:\AZURE_CORE_NO_COLOR -ErrorAction SilentlyContinue
 } else {
     Write-Output "  -> Azure push skipped (az CLI not found)"
+}
+
+# --- Final status: record what happened so a silent freeze can't hide -------
+# The killer case is "data.js written locally but the Azure push failed" — the live
+# site then stays frozen even though the export 'ran'. Make that loud in the marker.
+if ($null -ne $code -and $code -ne 0) {
+    Set-LastRun ("WARN  data.js written but Azure push FAILED (exit $code) — LIVE SITE NOT UPDATED")
+    Log-Export  ("DONE  push FAILED (exit $code)")
+} elseif ($null -eq $code) {
+    Set-LastRun ("WARN  data.js written but Azure push SKIPPED (az CLI not found) — live site not updated")
+    Log-Export  ("DONE  push skipped (az not found)")
+} else {
+    Set-LastRun ("OK  data.js written + pushed to Azure")
+    Log-Export  ("DONE  OK")
 }
