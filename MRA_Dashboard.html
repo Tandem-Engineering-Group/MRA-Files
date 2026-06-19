@@ -122,6 +122,7 @@
   .rb{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
     font-size:11px; font-weight:700; padding:3px 11px; border-radius:7px; cursor:pointer; letter-spacing:.5px}
   .rb.active{background:var(--blue); border-color:var(--blue); color:#fff}
+  .rb.rbdim{opacity:.4; pointer-events:none}
   .expandbtn{background:var(--panel2); border:1px solid var(--line); color:var(--muted);
     font-size:11px; font-weight:700; padding:4px 11px; border-radius:7px; cursor:pointer;
     letter-spacing:.5px; margin-left:8px}
@@ -1610,6 +1611,7 @@ let GFS=null;              // full-screen gantt: 'floor' | 'projects' | 'crew' |
 let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
 let GFS_PROJECT=null;      // when GFS==='project', the single project to detail
 const PD_COLLAPSED=new Set();   // collapsed milestone sections in the project-detail view (project|gate)
+let PD_UNDO=[], PD_REDO=[], PD_UNDO_PROJ=null;   // undo/redo stacks for drag-reschedule (per project)
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
 let MRASHOP_HL=false; try{ MRASHOP_HL = localStorage.getItem('mra_hl_mrashop')==='1'; }catch(e){}  // Projects Gantt: highlight MRA Shop load
@@ -1761,6 +1763,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.32", date:"2026-06-19", title:"Project detail: Undo / Redo for drag reschedules", items:[
+    "The drag-to-reschedule in the project detail view now has <b>↶ Undo</b> / <b>↷ Redo</b> buttons (top-left, in edit mode) — and <b>Ctrl/⌘+Z</b> to undo, <b>Ctrl/⌘+Shift+Z</b> (or Ctrl+Y) to redo. Each undo restores the task's previous dates and writes it back. History is per project." ] },
   { rev:"4.31", date:"2026-06-19", title:"Project detail: milestones keep their own draggable bar", items:[
     "Milestone rows in the project detail view now keep their <b>own bar</b> and are <b>drag-editable</b> like any task (drag to move its date) — while still being collapsible: <b>click the row label</b> to collapse/expand its lead-up tasks, <b>drag the bar</b> to change its date." ] },
   { rev:"4.30", date:"2026-06-19", title:"Project detail: collapsible milestone sections + milestone lines", items:[
@@ -2149,6 +2153,9 @@ document.addEventListener('keydown',e=>{ if(e.key!=='/'||e.metaKey||e.ctrlKey||e
   const t=e.target, tag=(t&&t.tagName||'').toLowerCase();
   if(tag==='input'||tag==='textarea'||tag==='select'||(t&&t.isContentEditable)) return;
   e.preventDefault(); openSearch(); });
+// Undo / redo drag-reschedules while the project detail view is open (Ctrl/⌘+Z, Ctrl/⌘+Shift+Z or Ctrl+Y)
+document.addEventListener('keydown',e=>{ if(GFS!=='project'||!(e.ctrlKey||e.metaKey)) return; const k=(e.key||'').toLowerCase();
+  if(k==='z'&&!e.shiftKey){ e.preventDefault(); pdUndo(); } else if((k==='z'&&e.shiftKey)||k==='y'){ e.preventDefault(); pdRedo(); } });
 document.addEventListener('click',e=>{ const p=document.getElementById('barPop');
   if(p && p.classList.contains('show') && !p.contains(e.target) && !(e.target.closest && e.target.closest('.g-bar'))) closeBarPop(); });
 // Drag-to-reschedule task bars in the single-project detail view (handlers no-op unless GFS==='project').
@@ -5687,6 +5694,7 @@ function openGantt(which){ GFS=which; document.getElementById('ganttFS').classLi
 // Click a Gantt BAR → open a full-screen DETAILED view of that one project (its tasks as bars).
 function openProjectDetail(ev, name){ if(ev&&ev.stopPropagation) ev.stopPropagation();
   if(!name) return; GFS='project'; GFS_PROJECT=name;
+  if(name!==PD_UNDO_PROJ){ PD_UNDO=[]; PD_REDO=[]; PD_UNDO_PROJ=name; }   // undo history is per project
   document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); }
 // Floor bars: open the project detail if this job is a tracked project (has tasks), else the popover.
 function barProjectOrPop(ev, popKey, projName){ if(ev&&ev.stopPropagation) ev.stopPropagation();
@@ -5737,16 +5745,27 @@ function pdragHint(e, txt){ let h=document.getElementById('pdragHint');
   if(!h){ h=document.createElement('div'); h.id='pdragHint'; document.body.appendChild(h); }
   h.textContent=txt; h.style.display='block'; h.style.left=(e.clientX+14)+'px'; h.style.top=(e.clientY-12)+'px'; }
 function pdragHintHide(){ const h=document.getElementById('pdragHint'); if(h) h.style.display='none'; }
-function pdragSave(project, t, startISO, finISO){
+// Apply new dates to a task (write back + optimistic + re-render). Shared by drag, undo and redo.
+function pdApplyDates(project, id, startISO, finISO){
+  const p=oProj(project); if(!p) return;
+  const t=(p.tasks||[]).find(x=>String(x.id)===String(id)); if(!t) return;
   const payload={ action:'editProjectTask', project, pin:CLOSE_PIN, user:CURRENT_USER,
     id:t.id, taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'', assigned:t.who||'',
-    status:t.st||'Not Started', start:startISO, finish:finISO, pred:(t.pred!=null?t.pred:''),
+    status:t.st||'Not Started', start:startISO||'', finish:finISO||'', pred:(t.pred!=null?t.pred:''),
     milestone:/yes/i.test(t.ml||'')?'Yes':'', comments:t.cm||'' };
-  t.startISO=startISO; t.finISO=finISO;                       // optimistic
-  const p=oProj(project); if(p && typeof oRecomputeProject==='function') oRecomputeProject(p);
+  t.startISO=startISO||null; t.finISO=finISO||null;
+  if(typeof oRecomputeProject==='function') oRecomputeProject(p);
   if(typeof shopWrite==='function') shopWrite(payload);
   renderGanttFS(); if(typeof renderAll==='function') renderAll();
 }
+function pdragSave(project, t, startISO, finISO){
+  PD_UNDO.push({ project, id:t.id, label:(t.t||'').slice(0,30), oldStart:t.startISO||null, oldFin:t.finISO||null, newStart:startISO, newFin:finISO });
+  if(PD_UNDO.length>60) PD_UNDO.shift();
+  PD_REDO.length=0;                                   // a fresh change clears the redo trail
+  pdApplyDates(project, t.id, startISO, finISO);
+}
+function pdUndo(){ if(!PD_UNDO.length) return; const a=PD_UNDO.pop(); PD_REDO.push(a); pdApplyDates(a.project, a.id, a.oldStart, a.oldFin); }
+function pdRedo(){ if(!PD_REDO.length) return; const a=PD_REDO.pop(); PD_UNDO.push(a); pdApplyDates(a.project, a.id, a.newStart, a.newFin); }
 function setGfsFloorDays(d){ GFS_FLOOR_DAYS=d; renderGanttFS(); }
 function setGfsLevel(lv){
   const D=window.MRA_DATA; if(!D) return;
@@ -5834,9 +5853,11 @@ function renderGanttFS(){
     const p=(D.projects||[]).find(x=>x.name===GFS_PROJECT);
     titleEl.textContent=(p?p.name:'Project')+' — Detailed'; rangeEl.innerHTML='';
     // Edit toggle so it's obvious how to get into drag/edit mode (otherwise the first drag just prompts).
-    levelEl.innerHTML = CLOSE_PIN
+    levelEl.innerHTML = (CLOSE_PIN
       ? `<div class="rb active" title="Edit on — drag a task bar: middle moves it, the ends change start/finish">✏️ Edit on — drag bars to reschedule</div>`
-      : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars and change dates">🔒 Edit dates</div>`;
+        + `<div class="rb${PD_UNDO.length?'':' rbdim'}" onclick="pdUndo()" title="Undo the last date change">↶ Undo${PD_UNDO.length?(' ('+PD_UNDO.length+')'):''}</div>`
+        + `<div class="rb${PD_REDO.length?'':' rbdim'}" onclick="pdRedo()" title="Redo">↷ Redo${PD_REDO.length?(' ('+PD_REDO.length+')'):''}</div>`
+      : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars and change dates">🔒 Edit dates</div>`);
     if(!p || !(p.tasks||[]).length){
       cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
       legEl.innerHTML=''; warnEl.textContent=''; return;
