@@ -1599,8 +1599,9 @@ let CREW_PAN=null, _cwT0=0, _cwT1=0, _cwDays=120;
 let CREW_DONE=false; try{ CREW_DONE=localStorage.getItem('mra_crew_done')==='1'; }catch(e){}
 let TEAMFILTER='all';
 try{ TEAMFILTER = localStorage.getItem('mra_teamfilter')||'all'; }catch(e){}
-let GFS=null;              // full-screen gantt: 'floor' | 'projects' | 'crew' | null
+let GFS=null;              // full-screen gantt: 'floor' | 'projects' | 'crew' | 'project' | null
 let GFS_FLOOR_DAYS=28;     // floor full-screen window length (days)
+let GFS_PROJECT=null;      // when GFS==='project', the single project to detail
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
 let MRASHOP_HL=false; try{ MRASHOP_HL = localStorage.getItem('mra_hl_mrashop')==='1'; }catch(e){}  // Projects Gantt: highlight MRA Shop load
@@ -1696,7 +1697,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented). Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule — handy for a "what's left" handout.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
-    <p>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. <b>Subtasks</b> (the <b>Sub</b> column in the workbook) sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).</p></div>
+    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones); click its <b>name</b> on the left to open the editor below. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. <b>Subtasks</b> (the <b>Sub</b> column in the workbook) sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, and set a <b>Predecessor</b> (this task starts after another). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
     <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. The highlight is a clean <b>white outline</b>; adjacent tasks merge into one continuous band so it reads over any bar color. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
@@ -1752,6 +1753,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.26", date:"2026-06-19", title:"Click a Gantt bar → full-screen detail for that project", items:[
+    "On any Gantt (Projects tab + the floor schedules), <b>clicking a project's bar</b> now opens a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, sorted by date, colored by status (not started / in progress / done / past due), with ◆ milestones. Clicking the <b>name</b> on the left still opens the editor.",
+    "Floor-schedule bars open the project detail when the job is a tracked project; otherwise they show the usual job popover." ] },
   { rev:"4.25", date:"2026-06-19", title:"Edit Project Tasks: sort by full date (year) + show the year", items:[
     "Tasks in the ✎ Edit Project Tasks popup now sort within each phase by their <b>full date including the year</b>, so a 2027 task (e.g. Thunder Bay's \"Launch?\") falls to the bottom instead of the top. Subtasks stay grouped under their parent.",
     "Task dates in that popup now show the <b>year</b> (M/D/YY) so it's clear which are next-year items." ] },
@@ -3590,8 +3594,8 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
     let bar='';
     if(r.noBar){ bar=''; }
     else if(g){
-      const onclk = r.popKey ? ` onclick="showBarPop(event,'${r.popKey}')"` : '';
-      const styleAttr = `${r.popKey?'cursor:pointer;':''}left:${g.left}%;width:${g.width}%;background:${hexA(r.color,.28)};border-color:${r.color}`;
+      const onclk = r.barClick ? ` onclick="${r.barClick}"` : (r.popKey ? ` onclick="showBarPop(event,'${r.popKey}')"` : '');
+      const styleAttr = `${(r.popKey||r.barClick)?'cursor:pointer;':''}left:${g.left}%;width:${g.width}%;background:${hexA(r.color,.28)};border-color:${r.color}`;
       const ttl = escA(`${r.label||''}${r.sub?' — '+r.sub:''}\n${fmtMDY(r.startISO)} – ${fmtMDY(r.endISO)}${r.pct!=null?'  ·  '+r.pct+'% complete':''}`);
       const showPct = (r.pct!=null && g.width>9);
       let inner = (r.pct!=null?`<div class="g-fill" style="width:${r.pct}%;background:${r.color}"></div>`:'');
@@ -3701,6 +3705,7 @@ function renderFloor(D){
       sub:(/^bay\s/i.test(x.j.bay||'') ? (x.j.jobNum||"—") : ((x.j.bay||'')+" · "+(x.j.jobNum||"—"))),
       bay:(/^bay\s/i.test(x.j.bay||'')?x.j.bay:''),
       startISO:x.j.startISO, endISO:x.j.completionISO, color:stColor[x.c.state]||'#64748b',
+      barClick:`barProjectOrPop(event,null,'${escJsAttr(x.j.project)}')`,
       barLabel:x.j.jobNum||"", milestones:[]}));
   renderGantt(document.getElementById('floorGantt'), floorRows, win);
   document.getElementById('floorGanttCount').textContent=floorRows.length+" jobs";
@@ -4084,6 +4089,7 @@ function renderProjects(D){
     startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
     barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
     cls:'clickable', onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
+    barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`,
     _has:!!barGeom(p.startISO,p.finishISO,win)
   })).filter(r=>r._has);
   renderGantt(document.getElementById('projGantt'), rows, win, {dates:true});
@@ -5638,6 +5644,15 @@ function findBayConflicts(jobs){
   return {rows,pairs};
 }
 function openGantt(which){ GFS=which; document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); }
+// Click a Gantt BAR → open a full-screen DETAILED view of that one project (its tasks as bars).
+function openProjectDetail(ev, name){ if(ev&&ev.stopPropagation) ev.stopPropagation();
+  if(!name) return; GFS='project'; GFS_PROJECT=name;
+  document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); }
+// Floor bars: open the project detail if this job is a tracked project (has tasks), else the popover.
+function barProjectOrPop(ev, popKey, projName){ if(ev&&ev.stopPropagation) ev.stopPropagation();
+  const p = projName && (((window.MRA_DATA||{}).projects)||[]).find(x=>x.name===projName && (x.tasks||[]).length);
+  if(p) openProjectDetail(ev, projName);
+  else if(popKey) showBarPop(ev, popKey); }
 function closeGantt(e){ if(!e || e.target.id==='ganttFS' || e.target.classList.contains('gfs-close')){
   document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop(); } }
 function setGfsFloorDays(d){ GFS_FLOOR_DAYS=d; renderGanttFS(); }
@@ -5721,6 +5736,35 @@ function renderGanttFS(){
   warnEl.textContent=''; levelEl.innerHTML=''; capEl.innerHTML='';
   Object.keys(BARPOP).forEach(k=>delete BARPOP[k]); Object.keys(GFS_PKEY).forEach(k=>delete GFS_PKEY[k]);
 
+  if(GFS==='project'){
+    // Detailed view of ONE project (opened by clicking its Gantt bar): every task as its own bar,
+    // sorted by full date, colored by status, milestones flagged ◆.
+    const p=(D.projects||[]).find(x=>x.name===GFS_PROJECT);
+    levelEl.innerHTML=''; rangeEl.innerHTML='';
+    titleEl.textContent=(p?p.name:'Project')+' — Detailed';
+    if(!p || !(p.tasks||[]).length){
+      cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
+      legEl.innerHTML=''; warnEl.textContent=''; return;
+    }
+    const allISO=[]; (p.tasks||[]).forEach(t=>{ if(t.startISO) allISO.push(t.startISO); if(t.finISO) allISO.push(t.finISO); });
+    if(p.startISO) allISO.push(p.startISO); if(p.finishISO) allISO.push(p.finishISO);
+    allISO.push(today); allISO.sort();
+    const tlo=parseISO(allISO[0]).getTime()-5*DAY, thi=parseISO(allISO[allISO.length-1]).getTime()+7*DAY;
+    const win=buildWindow(new Date(tlo), Math.max(21,Math.ceil((thi-tlo)/DAY)));
+    const dkey=t=>(t.startISO||t.finISO||'9999-99-99');
+    const rows=(p.tasks||[]).slice().sort((a,b)=>dkey(a).localeCompare(dkey(b))).map(t=>{
+      const isMile=/yes/i.test(t.ml||''), done=projIsDone(t), s=t.startISO, f=t.finISO||t.startISO;
+      const color=done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6'));
+      return { label:(isMile?'◆ ':'')+(t.t||'(task)'), sub:[t.phase,t.who,t.st].filter(Boolean).join(' · ')+(s?'':' · no dates'),
+        startISO:s, endISO:f, color, milestones:[], done, noBar:!s, cls:t.sub?'g-subrow':'' };
+    });
+    renderGantt(cont, rows, win, {dates:true});
+    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span>`;
+    warnEl.style.color='var(--muted)';
+    warnEl.textContent=(p.pm?('PM '+p.pm+'  ·  '):'')+((p.taskCount||p.tasks.length)+' tasks')+(p.pct!=null?('  ·  '+p.pct+'% complete'):'');
+    return;
+  }
+
   if(GFS==='floor'){
     titleEl.textContent='Floor Schedule — Detailed';
     rangeEl.innerHTML=[14,28,56].map(d=>`<div class="rb${d===GFS_FLOOR_DAYS?' active':''}" onclick="setGfsFloorDays(${d})">${d/7} wk</div>`).join('');
@@ -5747,7 +5791,8 @@ function renderGanttFS(){
       .map(x=>{const con=conflictRows.has(x.j.row), key='f'+x.j.row; BARPOP[key]=floorPop(x.j,x.c);
         return {label:(con?'⚠ ':'')+x.j.project, sub:x.j.bay+' · '+(x.j.jobNum||'—')+(con?' · CONFLICT':''),
           startISO:x.j.startISO, endISO:x.j.completionISO, color:stColor[x.c.state]||'#64748b',
-          barLabel:x.j.jobNum||'', milestones:[], conflict:con, popKey:key};});
+          barLabel:x.j.jobNum||'', milestones:[], conflict:con, popKey:key,
+          barClick:`barProjectOrPop(event,'${key}','${escJsAttr(x.j.project)}')`};});
     renderGantt(cont, rows, win);
     legEl.innerHTML=`<span class="lg-a">Active</span><span class="lg-s">Scheduled</span><span class="lg-h">On hold</span>`
       +`<span class="lg-d">Past due</span><span style="color:var(--red)">▦ conflict</span>`
@@ -5808,7 +5853,9 @@ function renderGanttFS(){
       rows.push({label:(hasMs?(exp?'▾ ':'▸ '):'   ')+p.name,
         sub:(p.pm||'—')+' · '+p.taskCount+' tasks'+(hasMs?' · '+p.milestones.length+' gates':''),
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct, barLabel:'',
-        milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name), done, popKey:key, cls:hasMs?'clickable':'', onclick:hasMs?`toggleGfsProject('${key}')`:''});
+        milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name), done, popKey:key,
+        barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`,
+        cls:hasMs?'clickable':'', onclick:hasMs?`toggleGfsProject('${key}')`:''});
       if(exp) (p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')).forEach(m=>{
         rows.push({label:'◆ '+m.name, sub:fmtMDY(m.dateISO), startISO:null, endISO:null, color:p._color, milestones:[m], noBar:true, cls:'g-subrow'}); });
     });
