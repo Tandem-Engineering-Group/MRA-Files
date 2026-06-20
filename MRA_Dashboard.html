@@ -514,7 +514,7 @@
   .g-axisrow,.g-row{display:flex; align-items:stretch}
   .g-gutter{width:188px; flex:0 0 188px; padding:5px 10px 5px 2px}
   .g-track{position:relative; flex:1 1 auto; min-height:26px; border-left:1px solid var(--line)}
-  .g-axisrow .g-track{height:22px}
+  .g-axisrow .g-track{height:30px}   /* room for the date tick + holiday name (which can stagger to a 2nd line) */
   .g-axisrow .g-gutter{padding-bottom:2px}
   .g-tick{position:absolute; top:3px; font-size:10px; color:var(--muted); transform:translateX(4px); white-space:nowrap}
   .g-grid{position:absolute; top:0; bottom:0; width:1px; background:rgba(255,255,255,.16)}
@@ -1026,9 +1026,9 @@
         <button class="expandbtn" onclick="openGantt('projects')" title="Full-screen detailed view">⛶ Expand</button>
       </h2>
       <div class="gscrollwrap">
-        <button class="gnav gnav-l" onclick="ganttPanBy('gpanSlider',setGpan,-1)" title="Scroll the timeline earlier (left)">‹</button>
+        <button class="gnav gnav-l" onclick="projPanArrow(-1)" title="Scroll the timeline earlier (left) — about a quarter of the view">‹</button>
         <div class="gantt" id="projGantt"></div>
-        <button class="gnav gnav-r" onclick="ganttPanBy('gpanSlider',setGpan,1)" title="Scroll the timeline later (right)">›</button>
+        <button class="gnav gnav-r" onclick="projPanArrow(1)" title="Scroll the timeline later (right) — about a quarter of the view">›</button>
       </div>
       <div class="legend">
         <span style="color:var(--amber)">◆ milestone gate</span>
@@ -1986,9 +1986,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"4.77", date:"2026-06-20", title:"Gantt ‹ › scroll arrows · holiday label dimmed", items:[
-    "<b>‹ › scroll arrows</b> on the Gantts — tap the arrow at the left/right edge to slide the timeline earlier/later, an easier alternative to the ↔ scroll slider (which is still there). On the Projects Gantt and in the full-screen detail / crew / projects views.",
-    "<b>Holiday names</b> now sit just under the date and are <b>dimmed/transparent</b> so the date stays readable through them." ] },
+  { rev:"4.78", date:"2026-06-20", title:"Gantt ‹ › scroll arrows · holiday labels polished", items:[
+    "<b>‹ › scroll arrows</b> on the Gantts — tap the arrow at the left/right edge to slide the timeline; each tap moves about <b>a quarter of the view</b> (not the whole timeline). An easier alternative to the ↔ scroll slider (which is still there). On the Projects Gantt and in the full-screen detail / crew / projects views.",
+    "<b>Holiday names</b> sit just under the date and are <b>dimmed/transparent</b> so the date reads through them — and when two holidays fall close together (e.g. Canada Day + Independence Day) their labels <b>stagger to a second line</b> instead of overlapping." ] },
   { rev:"4.76", date:"2026-06-20", title:"Holidays on every Gantt · 📍 Today · ↑ Back to top", items:[
     "<b>📅 Holidays</b> — standard <b>US &amp; Canada</b> holidays now show on <b>every</b> schedule as a <b>soft violet band</b> on the day, and once you <b>zoom in</b> (≈11 weeks or tighter) the <b>holiday name is written right on the timeline</b>; hover any band for the name + US/CA. To keep the wide all-year view clean they only appear when you're zoomed to ~4 months or tighter. <b>Informational only</b> — they never block scheduling, so you can still book work on them when you need to. Admins can add company-specific days (e.g. <i>Shop Closed</i>) via <span class=\"k\">☰ Menu ▸ 📅 Manage holidays</span>.",
     "<b>📍 Today</b> — the project detail view (click a Gantt bar) has a new <b>Today</b> button next to 🔍/↔/All that scrolls the timeline to today (and zooms in if you were viewing the whole project).",
@@ -4481,8 +4481,19 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
   const hmarks = holidayMarks(win);
   const holTitle = h=>escA(h.name+' · '+holLabel(h.country)+' · '+fmtMDY(h.dateISO));
   const holBands = hmarks.map(h=>`<div class="g-holiday" style="left:${h.left}%;width:${h.width}%" title="${holTitle(h)}"></div>`).join('');
-  // When zoomed in enough to fit text, also WRITE the name as a chip centered over the band (in the axis row).
-  const holNames = (win.days<=HOL_LABEL_MAX_DAYS) ? hmarks.map(h=>`<div class="g-holname" style="left:${(h.left+h.width/2).toFixed(2)}%" title="${holTitle(h)}">${esc(h.name)}</div>`).join('') : '';
+  // When zoomed in enough to fit text, WRITE the name centered over the band (in the axis row). Holidays close
+  // together (e.g. Canada Day + Independence Day) stagger onto a 2nd line so their labels don't collide.
+  let holNames='';
+  if(win.days<=HOL_LABEL_MAX_DAYS){
+    const sorted=hmarks.map(h=>({h, c:h.left+h.width/2})).sort((a,b)=>a.c-b.c);
+    let last0=-99, last1=-99; const MINSEP=9;   // % apart below which two labels would overlap
+    holNames=sorted.map(o=>{ let lane=0;
+      if(o.c-last0>=MINSEP){ lane=0; last0=o.c; }
+      else if(o.c-last1>=MINSEP){ lane=1; last1=o.c; }
+      else { lane=0; last0=o.c; }
+      return `<div class="g-holname" style="left:${o.c.toFixed(2)}%;${lane?'top:20px;':''}" title="${holTitle(o.h)}">${esc(o.h.name)}</div>`;
+    }).join('');
+  }
   const grid = bands + holBands + win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
     + (opts.mlines||[]).map(p=>`<div class="g-msline" style="left:${p}%"></div>`).join('')
     + (win.todayPos>=0&&win.todayPos<=100?`<div class="g-today" style="left:${win.todayPos}%"></div>`:'');
@@ -6286,13 +6297,22 @@ function setGwin(d){ GWIN_DAYS=Math.max(7,Math.min(365,Math.round(d))); try{loca
 function setGpan(v){ const span=_panT1-_panDays*DAY-_panT0; if(span<=0) return;
   GPAN=_panT0 + (Math.max(0,Math.min(100,+v))/100)*span;
   if(window.MRA_DATA) renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); }
-// ‹ › arrows: nudge a pan slider by a step and fire its handler (the slider stays for those who prefer it).
-function ganttPanBy(sliderId, fn, dir){ const s=document.getElementById(sliderId); if(!s||s.disabled) return;
-  let v=(parseFloat(s.value)||0)+dir*15; v=Math.max(0,Math.min(100,v)); s.value=v; fn(v); }
-// Full-screen overlay arrows: route to whichever schedule is showing (projects / crew / project detail).
-function gfsPanBy(dir){ if(GFS==='projects') ganttPanBy('gpanSliderFS',setGpan,dir);
-  else if(GFS==='crew') ganttPanBy('crewPanSliderFS',setCrewPan,dir);
-  else if(GFS==='project') ganttPanBy('pdPanSlider',setPdPan,dir); }
+// ‹ › arrows: move the pan STATE by ~25% of the VISIBLE window per tap (not the whole timeline).
+// Reading the state (not the slider) lets small fractional steps accumulate. The slider stays for those who like it.
+function _defStart7(){ const t=new Date(); return new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime(); }
+function projPanArrow(dir){ const span=_panT1-_panDays*DAY-_panT0; if(span<=0) return;
+  const cur=(GPAN!=null)?GPAN:Math.max(_panT0,Math.min(_defStart7(),_panT0+span));
+  GPAN=Math.max(_panT0, Math.min(_panT0+span, cur + dir*0.25*_panDays*DAY));
+  if(window.MRA_DATA) renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); }
+function crewPanArrow(dir){ const span=_cwT1-_cwDays*DAY-_cwT0; if(span<=0) return;
+  const cur=(CREW_PAN!=null)?CREW_PAN:Math.max(_cwT0,Math.min(_defStart7(),_cwT0+span));
+  CREW_PAN=Math.max(_cwT0, Math.min(_cwT0+span, cur + dir*0.25*_cwDays*DAY));
+  if(window.MRA_DATA){ renderCrewSched(window.MRA_DATA); if(GFS==='crew') renderGanttFS(); } }
+function pdPanArrow(dir){ const g=window._PD_GEOM||{}; const wd=g.winDays||0, spanD=(g.fullDays||0)-wd;
+  if(spanD<=0||!wd) return; PD_PAN=Math.max(0, Math.min(100, (PD_PAN!=null?PD_PAN:0) + dir*25*wd/spanD));
+  if(GFS==='project') renderGanttFS(); }
+// Full-screen overlay arrows: route to whichever schedule is showing.
+function gfsPanBy(dir){ if(GFS==='projects') projPanArrow(dir); else if(GFS==='crew') crewPanArrow(dir); else if(GFS==='project') pdPanArrow(dir); }
 
 /* ---------- Crew / Resource Schedule (shop board): longer-term planning ----------
    Pulls each assignee's dated tasks from the project schedule, one bar per project
@@ -6884,6 +6904,7 @@ function renderGanttFS(){
     if(PD_WIN_DAYS!=null){ winDays=Math.max(7,Math.min(fullDays,PD_WIN_DAYS));
       const span=(fullDays-winDays)*DAY;                      // scrollable range left over after zooming in
       winStart=tlo+(span>0?Math.round(span*((PD_PAN!=null?PD_PAN:0)/100)):0); }
+    window._PD_GEOM.winDays=winDays;   // so the ‹ › arrows can step ~25% of the visible window
     const win=buildWindow(new Date(winStart), winDays);
     // Zoom 🔍 + scroll ↔ sliders (same as the other Gantts) — needed now that a long project can be zoomed in for finer drags.
     // Build the controls ONCE, then only sync their values — so dragging a slider isn't interrupted by the re-render it triggers.
