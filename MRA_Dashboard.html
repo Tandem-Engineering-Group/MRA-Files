@@ -1880,6 +1880,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.66", date:"2026-06-20", title:"Fix: completing several tasks fast no longer drops any of them", items:[
+    "Write-backs are now <b>serialized</b> — when you mark several tasks complete (or fire off several edits) in quick succession, the dashboard sends them <b>one at a time</b> instead of all at once, so two saves can't collide on the workbook and get dropped. Your screen still updates instantly; the saves just queue up behind the scenes. Fixes the case where a couple of completions reverted on the next 15-min refresh." ] },
   { rev:"4.65", date:"2026-06-20", title:"Fix: Standardize Assignees opened behind the editor", items:[
     "The 👥 Standardize Assignees popup was opening <b>behind</b> the Edit Project Tasks window (z-index) — it now sits on top where you can use it." ] },
   { rev:"4.64", date:"2026-06-20", title:"Set a project's PM · standardize assignees · click KPI hovers to jump", items:[
@@ -2800,18 +2802,35 @@ function closeTaskBtn(el){
   if(!ensureAuth("close a task")) return;
   const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
   const proj=el.dataset.proj, task=el.dataset.task;
-  const body=JSON.stringify({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});
   el.textContent="…"; el.style.pointerEvents="none";
-  fetch(CLOSE_FLOW_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:body}).then(()=>{
-    rememberClosed(proj, task);
-    const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===task); if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); } oRecompute(j); }
-    oApply();   // instant: task drops out of open list now, not in 15 min
-  }).catch(()=>{ el.textContent="✓ close"; el.style.pointerEvents=""; alert("Couldn't reach the close service — try again."); });
+  shopWrite({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});   // queued (serialized) send
+  rememberClosed(proj, task);
+  const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===task); if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); } oRecompute(j); }
+  oApply();   // instant: task drops out of open list now, not in 15 min
 }
 
 /* ---------- Per-task tools (edit / delete / reopen) — shown in Edit mode ---------- */
 function ensurePin(action){ return ensureAuth(action); }
-function shopWrite(payload){ return fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
+/* Write-back QUEUE: serialize every POST so rapid actions (e.g. completing several
+   tasks at once) can't hit the flow concurrently and collide on the one workbook.
+   Callers get an immediately-resolved promise (optimistic UI stays instant); the
+   sends go out one-at-a-time with a gap so each Office Script run finishes saving
+   before the next arrives. */
+const WRITE_GAP_MS = 1500;
+let _wq=[], _wqBusy=false;
+function _wqDrain(){
+  if(_wqBusy) return; _wqBusy=true;
+  (async()=>{
+    while(_wq.length){
+      const payload=_wq.shift();
+      try{ await fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
+      catch(e){ /* no-cors: response is opaque; nothing to read */ }
+      if(_wq.length) await new Promise(r=>setTimeout(r,WRITE_GAP_MS));
+    }
+    _wqBusy=false;
+  })();
+}
+function shopWrite(payload){ _wq.push(payload); _wqDrain(); return Promise.resolve(); }
 
 /* ---------- Fleetio: add an open issue as an assignable Shop Task (trailer issues only) ---------- */
 function addFleetioTask(row,num){
