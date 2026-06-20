@@ -961,6 +961,7 @@
           <div class="rb" data-m="all" onclick="setRange('all')" title="Show the entire timeline at once">All</div>
         </div>
         <button class="expandbtn mraHlBtn" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects — spot over-scheduling. Click to toggle.">🟧 MRA Shop load</button>
+        <button id="archToggle" class="expandbtn" onclick="toggleArchived()" title="Wrapped projects (shipped, or 100% done, more than 8 days ago) auto-archive off the active board. Click to show/hide them — they're always in 🔍 search too.">🗄 Show archived</button>
         <button class="expandbtn" onclick="printProjects()" title="Print the projects Gantt + list on one page (11×17 landscape, auto-fit)">🖨 Print</button>
         <button class="expandbtn" onclick="openGantt('projects')" title="Full-screen detailed view">⛶ Expand</button>
       </h2>
@@ -1630,6 +1631,18 @@ const REFRESH_SECONDS = 30;
 const DAY = 86400000;
 const SHIP_WINDOW_DAYS = 14;   // shipped jobs older than this drop off the floor (still in History)
 const DONE_STATUSES = ["shipped","done","completed"];
+// ---- Project auto-archive: a wrapped project stays on the active Projects board this long, then archives ----
+const PROJ_ARCHIVE_DAYS = 8;
+let SHOW_ARCHIVED=false; try{ SHOW_ARCHIVED=localStorage.getItem('mra_show_archived')==='1'; }catch(e){}
+function toggleArchived(){ SHOW_ARCHIVED=!SHOW_ARCHIVED; try{localStorage.setItem('mra_show_archived',SHOW_ARCHIVED?'1':'0');}catch(e){}
+  if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); } }
+// A project's "wrapped" date = its matching shipped floor job's ship date, else (if 100% done) its last finish.
+function projDoneISO(p){ if(!p) return null; const D=window.MRA_DATA||{}; const nm=String(p.name||'').trim().toLowerCase();
+  const j=(D.jobs||[]).find(x=>String(x.project||'').trim().toLowerCase()===nm && (x.status||'').toLowerCase()==='shipped');
+  if(j && j.completionISO) return j.completionISO;
+  if((p.pct||0)>=100 && p.finishISO) return p.finishISO;
+  return null; }
+function projArchived(p){ const d=projDoneISO(p); if(!d) return false; const a=daysAgo(d); return a!=null && a>PROJ_ARCHIVE_DAYS; }
 const PALETTE = ['#3b82f6','#22c55e','#f59e0b','#a78bfa','#2dd4bf','#ef4444',
                  '#ec4899','#84cc16','#06b6d4','#fb923c','#8b5cf6','#14b8a6'];
 
@@ -1824,6 +1837,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.53", date:"2026-06-19", title:"Projects auto-archive 8 days after they wrap", items:[
+    "A project now <b>auto-archives off the active Projects board</b> 8 days after it wraps — counted from when its <b>matching trailer is shipped on the floor</b>, or when the project hits <b>100% complete</b>. Keeps the Gantt, Project Progress and KPIs focused on live work instead of finished jobs piling up.",
+    "Nothing is lost — click <b>🗄 Show archived</b> (by the Gantt's sort box) to bring them back any time, and archived projects are always in <b>🔍 global search</b>. It's all computed on the dashboard, so it's the same for everyone (TV/iPad) with <b>no workbook change</b>." ] },
   { rev:"4.52", date:"2026-06-19", title:"Reorder now works with Undo / Redo", items:[
     "The project-detail <b>↶ Undo / ↷ Redo</b> buttons (and Ctrl/⌘+Z) now cover <b>drag-to-reorder</b> too, not just date moves — step back one up/down move at a time. <b>↺ Reset order</b> still clears all manual ordering at once." ] },
   { rev:"4.51", date:"2026-06-19", title:"Fix: added tasks vanishing + loud stale-data banner", items:[
@@ -4319,8 +4335,13 @@ function msListPop(title, list){
   return h+`</div>`;
 }
 function renderProjects(D){
-  const today=D.todayISO, projects=(D.projects||[]).slice();
+  const today=D.todayISO;
+  const allProjects=(D.projects||[]).slice();
+  const archN=allProjects.filter(projArchived).length;
+  const projects = SHOW_ARCHIVED ? allProjects : allProjects.filter(p=>!projArchived(p));   // auto-archive wrapped projects off the active board
   projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
+  { const ab=document.getElementById('archToggle'); if(ab){ ab.classList.toggle('on',SHOW_ARCHIVED);
+    ab.textContent = SHOW_ARCHIVED ? '🗄 Hide archived' : ('🗄 Show archived'+(archN?(' ('+archN+')'):'')); } }
 
   // KPIs
   const active=projects.filter(p=>projStatus(p,today)==="active");
@@ -5833,7 +5854,7 @@ function printCrew(){
 // Print the Projects Gantt (bars + project list) — one 11×17 landscape page, auto-fit.
 function printProjects(){
   const D=window.MRA_DATA||{};
-  const projects=(D.projects||[]).slice(); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
+  const projects=(D.projects||[]).filter(p=>SHOW_ARCHIVED||!projArchived(p)); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
   const dated=projects.filter(p=>p.startISO&&p.finishISO).sort(projSortCmp);
   if(!dated.length){ alert('No dated projects to print yet.'); return; }
   const t=parseISO(D.todayISO), defStart=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime();
@@ -6335,7 +6356,7 @@ function renderGanttFS(){
       `<span class="gwinwrap" title="Zoom — how much time the Gantt shows at once">🔍<input id="gwinSliderFS" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year of the schedule at once"><span id="gwinLabFS" class="gwinlab"></span></span>`
       +`<span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="gpanSliderFS" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider" title="Scroll: slide the window left (earlier) or right (later) through the timeline — the zoom level stays the same"></span>`
       +`<div class="rb${(GWIN_DAYS==null&&RANGE==='all')?' active':''}" data-m="all" onclick="setRange('all')" title="Show the entire timeline at once">All</div>`;
-    const projects=(D.projects||[]).slice(); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
+    const projects=(D.projects||[]).filter(p=>SHOW_ARCHIVED||!projArchived(p)); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
     // Window: zoom (GWIN_DAYS / RANGE) sets the LENGTH; the pan slider (GPAN) scrolls it. Mirrors renderProjects so both stay in sync.
     const t=parseISO(today);
     const defStartMs=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime();
