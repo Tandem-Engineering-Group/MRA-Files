@@ -519,10 +519,12 @@
   .g-tick{position:absolute; top:3px; font-size:10px; color:var(--muted); transform:translateX(4px); white-space:nowrap}
   .g-grid{position:absolute; top:0; bottom:0; width:1px; background:rgba(255,255,255,.16)}
   .g-today{position:absolute; top:0; bottom:0; width:2px; background:var(--red); opacity:.7; z-index:3}
-  /* Company holidays — a soft dashed line through every row + a flag in the axis. Informational, never blocks. */
-  .g-holiday{position:absolute; top:0; bottom:0; width:0; border-left:1px dashed rgba(96,165,250,.55); z-index:1; pointer-events:none}
-  body.light .g-holiday{border-left-color:rgba(37,99,235,.42)}
-  .g-holtick{position:absolute; top:1px; transform:translateX(-50%); font-size:10px; line-height:1; z-index:3; cursor:default; white-space:nowrap; user-select:none}
+  /* Company holidays — a dull shaded band on the day's column, BEHIND the bars (z-index 0) so it never blocks a
+     bar click or the detail-view drag. Hover shows the name + US/CA. Informational, never blocks scheduling. */
+  .g-holiday{position:absolute; top:0; bottom:0; background:rgba(148,163,184,.12); z-index:0; cursor:help}
+  .g-holiday:hover{background:rgba(148,163,184,.20)}
+  body.light .g-holiday{background:rgba(15,23,42,.06)}
+  body.light .g-holiday:hover{background:rgba(15,23,42,.11)}
   .g-row{border-top:1px solid rgba(255,255,255,.16)}
   .g-row .g-gutter{display:flex; flex-direction:column; justify-content:center}
   .g-lbl{font-weight:600; font-size:11.5px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -571,8 +573,9 @@
   .g-out{position:absolute; left:8px; top:6px; font-size:10px; color:var(--faint); font-style:italic}
   .gantt-note{font-size:11px; color:var(--faint); margin-top:8px; font-style:italic}
 
-  /* Floating "back to top" button — appears once you've scrolled down a long page. Sits below modals (z<100). */
-  .totop{position:fixed; right:18px; bottom:18px; z-index:90; width:44px; height:44px; border-radius:50%;
+  /* Floating "back to top" button — appears once you've scrolled down (page OR the full-screen detail view).
+     z above the detail overlay (150); hidden by JS whenever a popup/modal is open so it never floats over one. */
+  .totop{position:fixed; right:18px; bottom:18px; z-index:160; width:44px; height:44px; border-radius:50%;
     background:var(--brand); color:#fff; border:none; font-size:22px; line-height:1; font-weight:700; cursor:pointer;
     box-shadow:0 4px 14px rgba(0,0,0,.4); opacity:0; pointer-events:none; transform:translateY(10px);
     transition:opacity .18s ease, transform .18s ease; display:flex; align-items:center; justify-content:center}
@@ -850,7 +853,7 @@
   </header>
 
   <!-- Floating back-to-top button (shows after scrolling; hidden on the TV wall + in print) -->
-  <button id="toTopBtn" class="totop" onclick="scrollToTop()" title="Back to top" aria-label="Back to top">↑</button>
+  <button id="toTopBtn" class="totop" onclick="event.stopPropagation(); scrollToTop()" title="Back to top" aria-label="Back to top">↑</button>
 
   <!-- ===================== PRINT STYLESHEET ===================== -->
   <style>
@@ -1543,12 +1546,12 @@
     <div class="modal" style="max-width:580px">
       <button class="modal-close" onclick="closeHols()" title="Close">×</button>
       <h3>📅 Manage Holidays</h3>
-      <div class="msub">Add a company holiday — it shows as a soft marker (with a 🇺🇸/🇨🇦 flag, name on hover) on <b>every</b> schedule so the team can plan around it. <b>Informational only — it never blocks scheduling.</b> Standard US &amp; Canada holidays are always shown. Saves to the workbook (applies within ~15 min). <i>Admin only.</i></div>
+      <div class="msub">Add a company holiday — it shows as a soft shaded band on the day (hover shows the name + US/CA) on <b>every</b> schedule when you're zoomed in, so the team can plan around it. <b>Informational only — it never blocks scheduling.</b> Standard US &amp; Canada holidays are always shown. Saves to the workbook (applies within ~15 min). <i>Admin only.</i></div>
       <div class="addform">
         <div class="addrow3">
           <div><label>Holiday name</label><input id="hoName" autocomplete="off" placeholder="e.g. Shop Closed — Inventory"></div>
           <div><label>Date</label><input id="hoDate" type="date"></div>
-          <div><label>Country</label><select id="hoCountry"><option value="US">🇺🇸 US</option><option value="CA">🇨🇦 Canada</option><option value="BOTH">🇺🇸🇨🇦 Both</option></select></div>
+          <div><label>Country</label><select id="hoCountry"><option value="US">US</option><option value="CA">Canada</option><option value="BOTH">US + Canada</option></select></div>
         </div>
         <div style="display:flex; gap:8px; align-items:center; margin-top:6px">
           <button class="btn-primary" onclick="addHolidayBtn()">Add holiday</button>
@@ -1902,9 +1905,9 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
     <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. The highlight is a clean <b>white outline</b>; adjacent tasks merge into one continuous band so it reads over any bar color. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
-    <p>Every Gantt shows dated gridlines on the <b>1st &amp; 15th</b> of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. <span style="color:var(--amber)">◆</span> = milestone gate, <span style="color:var(--red)">▏</span> = today, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:#60a5fa">┊</span> = a holiday (flag 🇺🇸/🇨🇦 in the date axis, hover for the name).</p></div>
+    <p>Every Gantt shows dated gridlines on the <b>1st &amp; 15th</b> of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. <span style="color:var(--amber)">◆</span> = milestone gate, <span style="color:var(--red)">▏</span> = today, <span style="color:#93c5fd">blue band</span> = this week, a faint <b>shaded band</b> marks a holiday (hover it for the name).</p></div>
   <div class="hsec"><h4>⑱ᵇ 📅 Holidays on the schedule</h4>
-    <p>Standard <b>US &amp; Canada</b> holidays show on <b>every</b> Gantt as a soft dashed line with a <b>🇺🇸/🇨🇦 flag</b> in the date axis — <b>hover the flag for the holiday name</b>. They're <b>informational only and never block scheduling</b>, so you can still book work on a holiday when you need to. <b>Admins</b> can add company-specific days (e.g. <i>Shop Closed — Inventory</i>) from <span class="k">☰ Menu ▸ 📅 Manage holidays</span> — give it a name, date and country; remove your own added ones any time. The standard set is built in and always on.</p></div>
+    <p>Standard <b>US &amp; Canada</b> holidays show on <b>every</b> Gantt as a <b>soft shaded band</b> on the day — <b>hover it for the holiday name + US/CA</b>. To keep the wide all-year view clean they appear only once you're <b>zoomed in to ~4 months or tighter</b>. They're <b>informational only and never block scheduling</b>, so you can still book work on a holiday when you need to. <b>Admins</b> can add company-specific days (e.g. <i>Shop Closed — Inventory</i>) from <span class="k">☰ Menu ▸ 📅 Manage holidays</span> — name, date and country; remove your own added ones any time. The standard set is built in and always on.</p></div>
   <div class="hsec"><h4>⑱ᶜ 📍 Today &amp; ↑ Back to top</h4>
     <p>In a project's <b>detailed view</b> (click a Gantt bar), the <span class="k">📍 Today</span> button (next to 🔍 zoom / ↔ scroll / All) jumps the timeline to today — handy on a long schedule (it zooms in if you were viewing the whole project). And on any long page, a round <span class="k">↑</span> button appears at the <b>bottom-right</b> once you scroll down — click it to pop back to the top.</p></div>
   <div class="hsec"><h4>⑲ ⚠ Spotting at-risk projects</h4>
@@ -1958,8 +1961,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"4.74", date:"2026-06-20", title:"Holidays on every Gantt · 📍 Today · ↑ Back to top", items:[
-    "<b>📅 Holidays</b> — standard <b>US &amp; Canada</b> holidays now flag on <b>every</b> schedule as a soft dashed line with a 🇺🇸/🇨🇦 flag in the date axis (hover for the name). They're <b>informational only</b> — they never block scheduling, so you can still book work on them when you need to. Admins can add company-specific days (e.g. <i>Shop Closed</i>) via <span class=\"k\">☰ Menu ▸ 📅 Manage holidays</span>.",
+  { rev:"4.75", date:"2026-06-20", title:"Holidays on every Gantt · 📍 Today · ↑ Back to top", items:[
+    "<b>📅 Holidays</b> — standard <b>US &amp; Canada</b> holidays now show on <b>every</b> schedule as a <b>soft shaded band</b> on the day (hover it for the name + US/CA). To keep the wide all-year view clean they appear only when you're <b>zoomed in to ~4 months or tighter</b>. <b>Informational only</b> — they never block scheduling, so you can still book work on them when you need to. Admins can add company-specific days (e.g. <i>Shop Closed</i>) via <span class=\"k\">☰ Menu ▸ 📅 Manage holidays</span>.",
     "<b>📍 Today</b> — the project detail view (click a Gantt bar) has a new <b>Today</b> button next to 🔍/↔/All that scrolls the timeline to today (and zooms in if you were viewing the whole project).",
     "<b>↑ Back to top</b> — a floating button appears bottom-right once you scroll down a long page; click it to jump back to the top.",
     "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) for admin-added holidays to save — the standard set shows with no setup." ] },
@@ -2455,6 +2458,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop();
   const mm=document.getElementById('mapModal'); if(mm) mm.classList.remove('show');
   const sm=document.getElementById('searchModal'); if(sm) sm.classList.remove('show');
+  if(typeof _toTopSync==='function') _toTopSync();
 } });
 // Press "/" to open global search (unless you're typing in a field)
 document.addEventListener('keydown',e=>{ if(e.key!=='/'||e.metaKey||e.ctrlKey||e.altKey) return;
@@ -3680,7 +3684,7 @@ function renderHolidaysList(){
   const box=document.getElementById('hoList');
   let h=`<div style="color:var(--muted); font-size:11px; margin:2px 0 6px">Your added holidays${HO_ROWS.length?(' ('+HO_ROWS.length+')'):''} — standard US &amp; Canada holidays already show on every schedule.</div>`;
   if(!HO_ROWS.length){ h+=`<div class="empty">No custom holidays yet — add one above. (The standard US &amp; Canada set is already flagged.)</div>`; }
-  else h+= HO_ROWS.map((x,i)=>`<div class="trow"><div class="tlead">${holFlag(x.country||'US')} ${esc(x.name||'(holiday)')}<div style="color:var(--muted); font-size:11px">${esc(fmtMDY(x.dateISO))}</div></div>`+
+  else h+= HO_ROWS.map((x,i)=>`<div class="trow"><div class="tlead"><span style="color:var(--muted); font-size:10px; font-weight:700">${holFlag(x.country||'US')}</span> ${esc(x.name||'(holiday)')}<div style="color:var(--muted); font-size:11px">${esc(fmtMDY(x.dateISO))}</div></div>`+
       `<div class="tright"><button class="btn-ghost" style="padding:2px 8px; font-size:11px; border-color:rgba(239,68,68,.5); color:#fca5a5" onclick="removeHolidayIdx(${i})" title="Remove ${escA(x.name||'')}">🗑</button></div></div>`).join('');
   box.innerHTML=h;
 }
@@ -4404,7 +4408,7 @@ function holidaysForYear(y){ const D=dt=>localISO(dt.getTime());
     {name:"Christmas Day",             dateISO:D(new Date(y,11,25)),       country:'BOTH'},
     {name:"Boxing Day (CA)",           dateISO:D(new Date(y,11,26)),       country:'CA'} ];
 }
-function holFlag(c){ return c==='CA'?'🇨🇦':(c==='BOTH'?'🇺🇸🇨🇦':'🇺🇸'); }
+function holFlag(c){ return c==='CA'?'CA':(c==='BOTH'?'US+CA':'US'); }   // plain text — country-flag emoji don't render on Windows
 function holLabel(c){ return c==='CA'?'Canada holiday':(c==='BOTH'?'US & Canada holiday':'US holiday'); }
 // Merged, de-duplicated holidays for rendering (seed for last yr..+2, plus admin-added; same-date names combine).
 function getHolidays(){
@@ -4416,30 +4420,42 @@ function getHolidays(){
   (((window.MRA_DATA||{}).holidays)||[]).forEach(add);
   return Object.keys(byDate).sort().map(k=>({dateISO:k, name:byDate[k].names.join(' / '), country:byDate[k].country}));
 }
-function holidayMarks(win){ return getHolidays().map(h=>{ const d=parseISO(h.dateISO); if(!d) return null;
-    const pos=(d.getTime()+DAY/2-win.startMs)/(win.days*DAY)*100; if(pos<0||pos>100) return null;
-    return {pos, name:h.name, country:h.country, dateISO:h.dateISO}; }).filter(Boolean); }
+const HOL_MAX_WIN_DAYS=130;   // only flag holidays when zoomed to ~4 months or tighter — keeps the wide all-year view clean
+function holidayMarks(win){ if(!win || win.days>HOL_MAX_WIN_DAYS) return [];
+  const W=100/win.days;       // one day's width, in %
+  return getHolidays().map(h=>{ const d=parseISO(h.dateISO); if(!d) return null;
+    const ds=d.getTime(), de=ds+DAY; if(de<=win.startMs || ds>=win.endMs) return null;
+    let left=(ds-win.startMs)/(win.days*DAY)*100, width=W;
+    if(left<0){ width+=left; left=0; } if(left+width>100) width=100-left;
+    return {left, width, name:h.name, country:h.country, dateISO:h.dateISO}; }).filter(Boolean); }
 
 /* ---------- Back-to-top floating button ---------- */
-function scrollToTop(){ try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); } }
+// Works on the main page (window scroll) AND inside the full-screen detail/expanded view,
+// which scrolls internally via .gfs-body. Whichever is active is the one we track + scroll.
+function _activeScroller(){ const fs=document.getElementById('ganttFS');
+  return (fs && fs.classList.contains('show')) ? fs.querySelector('.gfs-body') : null; }   // null = window
+function scrollToTop(){ const sc=_activeScroller();
+  try{ if(sc) sc.scrollTo({top:0,behavior:'smooth'}); else window.scrollTo({top:0,behavior:'smooth'}); }
+  catch(e){ if(sc) sc.scrollTop=0; else window.scrollTo(0,0); } }
 function _toTopSync(){ const b=document.getElementById('toTopBtn'); if(!b) return;
-  const overlayOpen=!!document.querySelector('.modal-overlay.show, .gfs-overlay[style*="flex"], #ganttFS.show');
-  b.classList.toggle('show', (window.scrollY||document.documentElement.scrollTop||0)>420 && !overlayOpen); }
+  if(document.querySelector('.modal-overlay.show')){ b.classList.remove('show'); return; }   // a popup is up — don't float over it
+  const sc=_activeScroller();
+  const top = sc ? sc.scrollTop : (window.scrollY||document.documentElement.scrollTop||0);
+  b.classList.toggle('show', top>420); }
 window.addEventListener('scroll', _toTopSync, {passive:true});
 window.addEventListener('resize', _toTopSync, {passive:true});
+{ const gb=document.querySelector('.gfs-body'); if(gb) gb.addEventListener('scroll', _toTopSync, {passive:true}); }
 
 function renderGantt(el, rows, win, opts){ opts=opts||{};
   const bands = (win.weekends||[]).map(w=>`<div class="g-weekend" style="left:${w.pos}%;width:${w.width}%"></div>`).join('')
     + (win.curWeek?`<div class="g-curweek" style="left:${win.curWeek.pos}%;width:${win.curWeek.width}%"></div>`:'');
   const hmarks = holidayMarks(win);
-  const holLines = hmarks.map(h=>`<div class="g-holiday" style="left:${h.pos}%"></div>`).join('');
-  const holTicks = hmarks.map(h=>`<div class="g-holtick" style="left:${h.pos}%" title="${escA(h.name+' · '+holLabel(h.country)+' · '+fmtMDY(h.dateISO))}">${holFlag(h.country)}</div>`).join('');
-  const grid = bands + win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
+  const holBands = hmarks.map(h=>`<div class="g-holiday" style="left:${h.left}%;width:${h.width}%" title="${escA(h.name+' · '+holLabel(h.country)+' · '+fmtMDY(h.dateISO))}"></div>`).join('');
+  const grid = bands + holBands + win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
     + (opts.mlines||[]).map(p=>`<div class="g-msline" style="left:${p}%"></div>`).join('')
-    + holLines
     + (win.todayPos>=0&&win.todayPos<=100?`<div class="g-today" style="left:${win.todayPos}%"></div>`:'');
   let html = `<div class="g-axisrow"><div class="g-gutter"></div><div class="g-track">`
-    + win.ticks.map(t=>`<div class="g-tick" style="left:${t.pos}%">${t.label}</div>`).join('') + holTicks + `</div></div>`;
+    + win.ticks.map(t=>`<div class="g-tick" style="left:${t.pos}%">${t.label}</div>`).join('') + `</div></div>`;
   if(!rows.length){ html += `<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">no items in this range</div></div></div>`; }
   rows.forEach(r=>{
     const g=barGeom(r.startISO,r.endISO,win);
@@ -6550,19 +6566,19 @@ function findBayConflicts(jobs){
   });
   return {rows,pairs};
 }
-function openGantt(which){ GFS=which; document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); }
+function openGantt(which){ GFS=which; document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); _toTopSync(); }
 // Click a Gantt BAR → open a full-screen DETAILED view of that one project (its tasks as bars).
 function openProjectDetail(ev, name){ if(ev&&ev.stopPropagation) ev.stopPropagation();
   if(!name) return; GFS='project'; GFS_PROJECT=name;
   if(name!==PD_UNDO_PROJ){ PD_UNDO=[]; PD_REDO=[]; PD_UNDO_PROJ=name; PD_WIN_DAYS=null; PD_PAN=null; }   // undo history + zoom are per project
-  document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); }
+  document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); _toTopSync(); }
 // Floor bars: open the project detail if this job is a tracked project (has tasks), else the popover.
 function barProjectOrPop(ev, popKey, projName){ if(ev&&ev.stopPropagation) ev.stopPropagation();
   const p = projName && (((window.MRA_DATA||{}).projects)||[]).find(x=>x.name===projName && (x.tasks||[]).length);
   if(p) openProjectDetail(ev, projName);
   else if(popKey) showBarPop(ev, popKey); }
 function closeGantt(e){ if(!e || e.target.id==='ganttFS' || e.target.classList.contains('gfs-close')){
-  document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop(); } }
+  document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop(); _toTopSync(); } }
 /* ---------- Drag a task bar in the project-detail view to reschedule it (edit mode) ----------
    Middle = move (shift start + finish), left end = change start, right end = change finish.
    Snaps to whole days; writes back like any other task edit. */
