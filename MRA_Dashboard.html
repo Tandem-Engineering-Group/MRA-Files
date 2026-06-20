@@ -531,6 +531,8 @@
   .fladded{display:inline-block; cursor:pointer; color:#86efac; font-weight:700; font-size:10px; line-height:1;
     border:1px solid rgba(34,197,94,.5); border-radius:4px; padding:1px 5px; margin-right:5px; user-select:none; white-space:nowrap}
   .fladded:hover{background:rgba(34,197,94,.18); border-color:#22c55e}
+  .wotag{display:inline-block; font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    background:rgba(167,139,250,.18); color:#c4b5fd; border:1px solid rgba(167,139,250,.5); border-radius:4px; padding:1px 5px; margin-right:5px; white-space:nowrap}
   .tasklist.fleetlist{margin-top:4px; border-top:1px dashed rgba(56,189,248,.3); padding-top:3px}
   .expandbtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
   .rb.mraHlBtn.active, .rb.mraHlBtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
@@ -1082,12 +1084,12 @@
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="panel" id="fp-issues">
-        <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span></h2>
-        <div id="fIssues"></div>
+        <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span><button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fIssues')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
+        <div id="fIssues" class="fscroll"></div>
       </div>
       <div class="panel" id="fp-wos">
-        <h2>📋 Open Work Orders <span class="count" id="fWoCount"></span></h2>
-        <div id="fWorkOrders"></div>
+        <h2>📋 Open Work Orders <span class="count" id="fWoCount"></span><button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fWorkOrders')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
+        <div id="fWorkOrders" class="fscroll"></div>
       </div>
     </div>
     <div class="panel" id="fp-trailers">
@@ -1843,6 +1845,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.58", date:"2026-06-20", title:"FLEETIO: cap Open Issues/Work Orders to a scroll box + label work orders", items:[
+    "The long <b>Open Issues</b> and <b>Open Work Orders</b> lists now sit in a fixed-height <b>scroll box</b> with an <b>⤢ Expand</b> button (remembered per device), so the FLEETIO tab isn't a mile long.",
+    "On the <b>In the Shop</b> panel, work-order rows now carry a clear <b>Work Order #</b> label so they're not mistaken for a duplicate issue." ] },
   { rev:"4.57", date:"2026-06-19", title:"In the Shop: assigned Fleetio issues show who + link to the Floor", items:[
     "On the FLEETIO <b>In the Shop</b> panel, a Fleetio issue you've already added as a shop task now shows a green <b>✓ &lt;who&gt; →</b> chip (e.g. <b>✓ Doug →</b>) that jumps to the <b>FLOOR board</b> — instead of still offering the ➕ add (which would double it). Issues not yet added keep the ➕ (still code-gated — unchanged)." ] },
   { rev:"4.56", date:"2026-06-19", title:"Fleetio ↗ links in every hover (KPIs, bars, unit popover)", items:[
@@ -4657,7 +4662,7 @@ function setupProjectsCollapse(){ setupCollapse('#projectsView','prjcol_'); appl
 function toggleFScroll(btn,id){ const el=document.getElementById(id); if(!el) return;
   const exp=el.classList.toggle('exp'); if(btn) btn.textContent=exp?'⤡ Less':'⤢ Expand';
   try{ localStorage.setItem('fexp_'+id, exp?'1':'0'); }catch(e){} }
-function applyFScroll(){ ['fAttention','fByAssignee','progress','team','projAttention'].forEach(id=>{ const el=document.getElementById(id); if(!el) return;
+function applyFScroll(){ ['fAttention','fByAssignee','progress','team','projAttention','fIssues','fWorkOrders'].forEach(id=>{ const el=document.getElementById(id); if(!el) return;
   let exp=false; try{ exp=localStorage.getItem('fexp_'+id)==='1'; }catch(e){}
   el.classList.toggle('exp',exp);
   const pl=el.closest('.panel'); const btn=pl&&pl.querySelector('.fexp'); if(btn) btn.textContent=exp?'⤡ Less':'⤢ Expand'; }); }
@@ -4948,7 +4953,7 @@ function renderInBayFleetio(D){
         : `<span class="fladd" onclick="addFleetioTask(${j.row},'${escA(inum)}')" title="Add as an assignable Shop Task">➕</span>`;
       lines+=`<div class="taskline fleet" title="${escA((i.detail||i.summary||'').slice(0,300))}">${lead}⚠ ${esc(i.summary||('Issue #'+i.num))}${ov}${fioArrow('issue',i.num)}</div>`; });
     b.wo.forEach(w=>{ const st=w.status?` <span class="badge ${/pend/i.test(w.status)?'amber':'blue'}">${esc(w.status)}</span>`:'';
-      lines+=`<div class="taskline fleet" title="${escA((w.detail||w.summary||'').slice(0,300))}">📋 ${esc(w.summary||('WO '+(w.num||'')))}${st}${fioArrow('wo',w.num)}</div>`; });
+      lines+=`<div class="taskline fleet" title="${escA((w.detail||w.summary||'').slice(0,300))}"><span class="wotag">Work Order${w.num?(' #'+esc(w.num)):''}</span>${esc(w.summary||('WO '+(w.num||'')))}${st}${fioArrow('wo',w.num)}</div>`; });
     b.svc.forEach(s=>{ const fs=fleetState(s.dueISO,today);
       const bd=fs.overdue?` <span class="badge red">overdue</span>`:(fs.soon?` <span class="badge amber">due soon</span>`:(s.dueISO?` <span class="badge grey">${fmtMD(s.dueISO)}</span>`:''));
       lines+=`<div class="taskline fleet" title="${escA(s.service||'Service')}">🔧 ${esc(s.service||'Service')}${bd}${fioArrow('svc','')}</div>`; });
