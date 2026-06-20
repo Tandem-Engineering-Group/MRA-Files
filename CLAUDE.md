@@ -100,8 +100,11 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
   today the board is a PUBLIC static blob site (code only gates editing). Real sign-in needs an
   auth-capable host: **Azure Static Web Apps (built-in Entra ID login + roles)** OR embed in
   **Teams/SharePoint** (auto-authenticates the org). This is a HOSTING change, not just a feature.
-  (b) **Role-based tabs** — once it knows the user (Entra/M365 groups), show/hide tabs: shop crew see
-  only FLOOR, managers see all, Rich = admin. (c) **Teams/Outlook/Planner** — native once data is in
+  (b) **Roles (Rich confirmed 2026-06-20: Admin / Editor / Viewer):** **Admin** = manage logins/codes
+  + everything (today hardcoded to "Rich Miller"; make it grantable via a `Role` column on the Users
+  list so Rich can promote others); **Editor** = can edit the board (today = anyone with a code);
+  **Viewer** = read-only (today = the public view). Plus **role-based tabs** — show/hide by role:
+  shop crew see only FLOOR, managers see all, Rich = admin. (c) **Teams/Outlook/Planner** — native once data is in
   Lists: Power Automate off List changes → email assignee (Outlook) + assigned Planner task (lands in
   their Teams Tasks/phone) + channel posts; embed the dash as a Teams tab. Reliable once OFF the
   Excel/Office-Script path (kills the "Who" blank gremlin). Each step makes the next easier: 1-3 get
