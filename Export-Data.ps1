@@ -229,6 +229,8 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     $pEstDays  = ([string](Resolve-Cell $pc['R'] $shared)).Trim()   # Est Days (col R)
     $pEstHours = ([string](Resolve-Cell $pc['S'] $shared)).Trim()   # Est Hours (col S)
     $pBudget   = (([string](Resolve-Cell $pc['T'] $shared)).Trim()) -replace '[$,]',''   # Budget $ (col T)
+    $pParent   = ([string](Resolve-Cell $pc['U'] $shared)).Trim()   # Parent Task ID (col U) - explicit subtask parent (blank = top-level)
+    if ($pParent -match '^\d+\.0+$') { $pParent = $pParent -replace '\.0+$','' }   # numeric cell safety
     if ($pTaskId -match '^\d+\.0+$')  { $pTaskId  = $pTaskId  -replace '\.0+$','' }   # numeric cell safety
     if ($pDur -match '^\d+\.0+$') { $pDur = $pDur -replace '\.0+$','' }
     $psd = Get-CellDate $pc['E']
@@ -288,6 +290,7 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
         cm    = $pComments
         pred  = $pPred
         sub   = ($pSub -match '^[xX]')
+        parent = $pParent
         subRes = $pSubRes
         ord   = $(if ($pOrder    -match '^-?\d+(\.\d+)?$') { [double]$pOrder    } else { $null })
         eD    = $(if ($pEstDays  -match '^-?\d+(\.\d+)?$') { [double]$pEstDays  } else { $null })

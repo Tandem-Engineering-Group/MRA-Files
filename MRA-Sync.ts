@@ -9,6 +9,7 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         oldAssignee?: string; newAssignee?: string;
         oldName?: string; newName?: string;
         id?: string | number; phase?: string; type?: string; finish?: string; pred?: string;
+        parentId?: string | number;
         ord?: string | number; estDays?: string | number; estHours?: string | number; budget?: string | number;
         pin?: string; user?: string;
         // bulk upload of a whole project (action "importProject")
@@ -244,7 +245,8 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         const base = used.getRowIndex(), cnt = used.getRowCount();
         const PROJECT = 0, PHASE = 1, TYPE = 2, TASK = 3, START = 4, FINISH = 5,
             ASSIGNED = 7, STATUS = 8, MILE = 10, COMMENTS = 11, ID = 12, PRED = 13,
-            ORDER = 16, ESTDAYS = 17, ESTHOURS = 18, BUDGET = 19;   // Q / R / S / T
+            SUB = 14, ORDER = 16, ESTDAYS = 17, ESTHOURS = 18, BUDGET = 19, PARENT = 20;   // O / Q / R / S / T / U
+        const parentIdStr = String(p.parentId == null ? "" : p.parentId).trim();   // explicit subtask parent (Task ID), blank = top-level
         const pr = String(p.project || "").trim().toLowerCase();
         const mileVal = (m: string | undefined) => (m === "Yes" ? "Yes" : "No");
         const setPDate = (rowAbs: number, col: number, iso: string) => {
@@ -277,6 +279,8 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
             pws.getCell(r, COMMENTS).setValue(p.comments || "");
             pws.getCell(r, ID).setValue(newId);
             pws.getCell(r, PRED).setValue(p.pred || "");
+            pws.getCell(r, PARENT).setValue(parentIdStr);            // U = explicit parent Task ID (blank = top-level)
+            pws.getCell(r, SUB).setValue(parentIdStr ? "x" : "");    // O = subtask flag, mirrors having a parent
             if (p.ord !== undefined) setPNum(r, ORDER, p.ord);
             if (p.estDays !== undefined) setPNum(r, ESTDAYS, p.estDays);
             if (p.estHours !== undefined) setPNum(r, ESTHOURS, p.estHours);
@@ -315,6 +319,11 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
             if (p.milestone !== undefined) pws.getCell(rowAbs, MILE).setValue(mileVal(p.milestone));
             if (p.comments !== undefined) pws.getCell(rowAbs, COMMENTS).setValue(p.comments);
             if (p.pred !== undefined) pws.getCell(rowAbs, PRED).setValue(p.pred);
+            if (p.parentId !== undefined) {                          // re-parent / un-parent this task
+                pws.getCell(rowAbs, PARENT).setValue(parentIdStr);   // U = parent Task ID
+                if (parentIdStr) pws.getCell(rowAbs, SUB).setValue("x");   // gaining a parent -> mark sub
+                // clearing the parent leaves col O (Sub) untouched so legacy subtasks keep their flag
+            }
             if (p.start !== undefined) setPDate(rowAbs, START, p.start);
             if (p.finish !== undefined) setPDate(rowAbs, FINISH, p.finish);
             if (p.ord !== undefined) setPNum(rowAbs, ORDER, p.ord);
