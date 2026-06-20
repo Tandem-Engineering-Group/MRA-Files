@@ -5,7 +5,7 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         jobNum?: string; bay?: string; assigned?: string; milestone?: string; comments?: string;
         client?: string; pm?: string;
         row?: number; status?: string; start?: string; completion?: string; notes?: string;
-        newProject?: string; newJobNum?: string;
+        newProject?: string; newJobNum?: string; oldProject?: string;
         id?: string | number; phase?: string; type?: string; finish?: string; pred?: string;
         ord?: string | number; estDays?: string | number; estHours?: string | number; budget?: string | number;
         pin?: string; user?: string;
@@ -156,6 +156,14 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         if (p.project !== undefined && String(ws.getRange("B" + r).getValue()).trim().toLowerCase() !== (p.project || "").trim().toLowerCase()) { console.log("Stale row"); return; }
         ws.getRange("A" + r).getEntireRow().delete(ExcelScript.DeleteShiftDirection.Up);
         logIt("Delete job", p.project || "", "row " + r); return;
+    }
+    if (p.action === "renameProject") {
+        const oldP = (p.oldProject || "").trim(), newP = (p.newProject || "").trim();
+        if (!oldP || !newP || newP === oldP) { console.log("rename: no-op"); return; }
+        renameCol("Project Tasks", 0, oldP, newP);   // Project Tasks col A = Project
+        renameCol("Input", 1, oldP, newP);           // Input col B = Project (the floor job)
+        renameCol("Shop Tasks", 0, oldP, newP);      // Shop Tasks col A = Project
+        logIt("Rename project", oldP, "-> " + newP); return;
     }
 
     // ===== PROJECT TASKS (the long-term "Project Tasks" sheet: cols A..T) =====

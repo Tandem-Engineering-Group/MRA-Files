@@ -1451,6 +1451,7 @@
       </div>
       <div style="display:flex; gap:8px; align-items:center; margin:6px 0 8px; flex-wrap:wrap">
         <button class="btn-primary" onclick="openProjTaskNew()">➕ Add task</button>
+        <button class="btn-ghost" onclick="renameProjectBtn()" title="Rename this project everywhere — its tasks, the Gantt/Progress, and the matching floor job (nothing orphans)">✎ Rename</button>
         <span id="peCount" style="color:var(--muted); font-size:12px"></span>
         <span style="margin-left:auto; display:flex; gap:6px">
           <button class="btn-ghost" id="peHideDoneBtn" style="padding:3px 9px; font-size:11px" onclick="peToggleHideDone()" title="Hide completed tasks to make scrolling easier">✓ Hide completed</button>
@@ -1849,6 +1850,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.63", date:"2026-06-20", title:"Rename a project from the Projects tab", items:[
+    "The ✎ Edit Project Tasks popup now has a <b>✎ Rename</b> button — rename a whole project and it updates <b>everywhere</b>: all its tasks, the Gantt/Progress, and the <b>matching floor job + its Shop Tasks</b> (cascade, so nothing orphans). Mirrors the job rename.",
+    "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) — it adds the renameProject action." ] },
   { rev:"4.62", date:"2026-06-20", title:"Edit job: rename it + edit Job # / Client / PM (no Excel)", items:[
     "The ✎ Edit job form now lets you change the <b>Project name</b>, <b>Job #</b>, <b>Client</b> and <b>Program Development</b> — not just bay/dates/status/notes. Renaming a job <b>also renames its tasks</b> (Shop Tasks + Project Tasks) so nothing orphans off the board.",
     "<b>Needs the updated Office Script</b> (paste the new MRA-Sync into <i>MRA Sync 2</i>) for the rename/cascade to save." ] },
@@ -3291,6 +3295,20 @@ function peProjectChange(){
   document.getElementById('peNewProjWrap').style.display = (document.getElementById('peProject').value==='__new__')?'':'none';
   PE_EXPANDED = new Set();   // start each project collapsed for a clean overview
   renderProjTaskList();
+}
+// Rename the whole project everywhere — its Project Tasks, the matching floor job + Shop Tasks (cascade, no orphans).
+function renameProjectBtn(){
+  const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('rename a project')) return;
+  const nn=(prompt('Rename this project — updates it everywhere (its tasks, the Gantt/Progress, and the matching floor job):\n\n'+name, name)||'').trim();
+  if(!nn || nn===name) return;
+  const D=window.MRA_DATA||{};
+  (D.projects||[]).forEach(p=>{ if(p.name===name) p.name=nn; });          // optimistic rename across projects + floor jobs
+  (D.jobs||[]).forEach(j=>{ if((j.project||'')===name) j.project=nn; });
+  if(typeof shopWrite==='function') shopWrite({ action:'renameProject', oldProject:name, newProject:nn, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  if(typeof renderAll==='function') renderAll();
+  openProjectEditor(nn);   // reopen on the renamed project
 }
 
 /* ---- render the task list for the selected project ---- */
