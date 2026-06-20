@@ -1,308 +1,124 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MRA Logistics — Prototype</title>
-<style>
-  :root{--bg:#0b0e13;--panel:#161c26;--panel2:#1d2632;--line:#2a3543;--txt:#e8edf3;--muted:#8b9bb0;--faint:#5d6b7e;
-        --green:#22c55e;--blue:#3b82f6;--amber:#f59e0b;--red:#ef4444;--brand:#e11d2a;}
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
-       padding:16px 20px 40px;-webkit-font-smoothing:antialiased}
-  .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:6px}
-  h1{font-size:21px;font-weight:800;letter-spacing:.4px}.mra{color:var(--brand)}
-  .pvtag{display:inline-block;background:rgba(225,29,42,.15);border:1px solid rgba(225,29,42,.5);color:#fca5a5;
-         font-size:10.5px;font-weight:700;letter-spacing:.5px;padding:3px 9px;border-radius:20px;text-transform:uppercase}
-  .sub{color:var(--muted);font-size:12.5px;margin:4px 0 14px;line-height:1.5;max-width:1000px}
-  .tabs{display:flex;gap:7px;margin-bottom:16px;flex-wrap:wrap}
-  .tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:13px;
-       padding:8px 15px;border-radius:9px;cursor:pointer}
-  .tab.on{background:var(--brand);border-color:var(--brand);color:#fff}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 17px;margin-bottom:16px}
-  .panel h2{font-size:13px;letter-spacing:1px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:11px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .view{display:none}.view.on{display:block}
-  /* timeline */
-  .tl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
-  .tl{min-width:1080px;position:relative}
-  .tl-axis{display:flex;height:24px;border-bottom:1px solid var(--line);position:relative;margin-left:150px}
-  .tl-mo{position:absolute;top:4px;font-size:10.5px;color:var(--muted);border-left:1px solid var(--line);padding-left:5px;height:100%}
-  .tl-row{display:flex;align-items:stretch;border-bottom:1px solid rgba(255,255,255,.05);min-height:34px}
-  .tl-row:last-child{border-bottom:none}
-  .tl-name{flex:0 0 150px;width:150px;padding:7px 10px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px}
-  .tl-track{position:relative;flex:1 1 auto;min-height:34px}
-  .tl-today{position:absolute;top:0;bottom:0;width:2px;background:var(--red);opacity:.7;z-index:5}
-  .tl-grid{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.06)}
-  .bar{position:absolute;top:6px;height:22px;border-radius:5px;display:flex;align-items:center;padding:0 7px;
-       font-size:10.5px;font-weight:600;color:#06121f;white-space:nowrap;overflow:hidden;cursor:default;z-index:2}
-  .bar.free{background:rgba(34,197,94,.14)!important;border:1px dashed rgba(34,197,94,.5);color:#86efac;z-index:1}
-  .legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:11px;font-size:11px;color:var(--muted)}
-  .lg{display:inline-flex;align-items:center;gap:5px}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
-  .ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
-  input[type=date],select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 9px;font-family:inherit;font-size:13px}
-  .chip{display:inline-block;background:rgba(34,197,94,.16);border:1px solid rgba(34,197,94,.5);color:#86efac;border-radius:20px;padding:3px 11px;font-size:12px;font-weight:600;margin:3px}
-  .chip.busy{background:var(--panel2);border-color:var(--line);color:var(--muted)}
-  /* tours */
-  .tcard{border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:11px;background:var(--panel2)}
-  .tcard .th{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-  .tcard .nm{font-size:15px;font-weight:700}.tcard .me{color:var(--muted);font-size:12px}
-  .dep{display:grid;grid-template-columns:160px 1fr;gap:2px 12px;font-size:12.5px;padding:5px 0;border-top:1px dashed rgba(255,255,255,.06)}
-  .dep .d{color:var(--muted)}
-  /* run of show */
-  .ros{background:#fff;color:#1b2330;border-radius:10px;max-width:780px;margin-top:12px;overflow:hidden;border:1px solid #cdd5df}
-  .ros .band{background:var(--brand);color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;gap:14px}
-  .ros .band .t{font-size:21px;font-weight:900;letter-spacing:.5px}
-  .ros .band .s{font-size:12.5px;opacity:.95;margin-top:2px;font-weight:600}
-  .ros .band .r{text-align:right;font-size:11px;line-height:1.5}
-  .ros .pad{padding:16px 22px 20px}
-  .ros .grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 26px;font-size:12.5px;margin-bottom:13px}
-  .ros .grid .k{color:#6b7480;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px}
-  .ros h3{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--brand);margin:14px 0 6px;border-bottom:2px solid #eee;padding-bottom:4px}
-  .ros .venue{font-size:13.5px;font-weight:700}.ros .addr{font-size:12.5px;color:#46505f;line-height:1.5}
-  .ros table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px}
-  .ros td{padding:6px 8px;border-bottom:1px solid #eef0f2;vertical-align:top}.ros td.d{white-space:nowrap;font-weight:700;width:150px}
-  .ros .note{font-size:12px;color:#46505f;line-height:1.5}
-  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 13px;font-weight:600;font-size:12.5px;cursor:pointer}
-  .btn.p{background:var(--brand);border-color:var(--brand);color:#fff}
-  .soon{font-size:12px;color:var(--faint);line-height:1.6;margin-top:6px}
-  .soon b{color:var(--muted)}
-  @media print{ body *{visibility:hidden} #rosDoc,#rosDoc *{visibility:visible} #rosDoc{position:absolute;left:0;top:0;width:100%} .noprint{display:none!important} }
-</style>
-</head>
-<body>
-  <div class="top">
-    <h1><span class="mra">MRA</span> Logistics</h1>
-    <span class="pvtag">Prototype · sample data · not live</span>
-  </div>
-  <div class="sub">A first cut to react to — built from your Backfill calendar, the ABB <i>J1407</i> deployment tab, and the Logistics Review deck.
-    <b>All names/dates here are sample.</b> Three pieces: the supervisor's <b>Master Driver Schedule</b> (spot lulls → assign backfill), a <b>Tours</b> overview, and a printable <b>Run of Show</b> (the per-show driver doc that replaces the microsites). Tell me what's missing and we tune it, then wire it to real data.</div>
-
-  <div class="tabs">
-    <div class="tab on" data-v="master" onclick="setView('master')">📊 Master Driver Schedule</div>
-    <div class="tab" data-v="tours" onclick="setView('tours')">🚚 Tours</div>
-    <div class="tab" data-v="ros" onclick="setView('ros')">📋 Run of Show</div>
-  </div>
-
-  <!-- MASTER -->
-  <div class="view on" id="v-master">
-    <div class="panel">
-      <h2>📊 Master Driver Schedule — Jan–Sep 2026
-        <span class="ctl" style="margin-left:auto">🔎 Backfill: who's free the week of
-          <input type="date" id="wk" value="2026-07-20" onchange="renderMaster()">
-          <span id="freeOut"></span></span>
-      </h2>
-      <div class="tl-wrap"><div class="tl" id="tl"></div></div>
-      <div class="legend" id="legend"></div>
-      <div class="soon" style="margin-top:10px">Each bar = a driver's deployment on a tour. <b>Empty stretches = open</b> for a backfill / mini-tour / time off. Hover a bar for dates. (Sample uses one bar per deployment; the real one will also show per-day stops, drive hours &amp; generator hours from the driver logs.)</div>
-    </div>
-  </div>
-
-  <!-- TOURS -->
-  <div class="view" id="v-tours">
-    <div class="panel"><h2>🚚 Tours &amp; deployments</h2><div id="tours"></div></div>
-  </div>
-
-  <!-- RUN OF SHOW -->
-  <div class="view" id="v-ros">
-    <div class="panel">
-      <h2 class="noprint">📋 Run of Show — pick a show
-        <select id="rosPick" onchange="renderRos()" style="margin-left:auto"></select>
-        <button class="btn p noprint" onclick="window.print()">🖨 Print / PDF</button>
-      </h2>
-      <div id="rosDoc"></div>
-      <div class="soon noprint" style="margin-top:12px">This is the per-show driver packet (venue, address, load-in/out, day-by-day, contacts, power/generator). It's the same info that lives on the <b>MyMobileTour</b> + Richmond-Day <b>microsites</b> (3 Siemens + Hyperfine, Cindy Irland) — the goal is to generate it here and retire those sites.</div>
-    </div>
-    <div class="panel noprint">
-      <h2>🧭 On the roadmap (captured, not in this prototype)</h2>
-      <div class="soon">
-        <b>• Microsites →</b> fold MyMobileTour + the 3 Siemens &amp; Hyperfine sites into these tour/run-of-show pages (coordinate with Brand Crosson's Siemens work).<br>
-        <b>• Affiliation Report (timesheet) →</b> AE travel time logging (B2C under Jes files weekly) as a module on the same Tours/People data.<br>
-        <b>• Driver logs →</b> per-day location, drive hours, generator hours feeding the Master + reports.<br>
-        <b>• AE calendars →</b> step 1 keeps each AE's current calendar; we sync them into this Master, then migrate to one shared system over time.
-      </div>
-    </div>
-  </div>
-
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MRA Logistics — Prototype</title><style>
+:root{--bg:#0b0e13;--panel:#161c26;--panel2:#1d2632;--line:#2a3543;--txt:#e8edf3;--muted:#8b9bb0;--faint:#5d6b7e;--green:#22c55e;--brand:#e11d2a}
+*{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,Arial,sans-serif;padding:14px 18px 50px}
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}h1{font-size:20px;font-weight:800}.mra{color:var(--brand)}
+.pvtag{background:rgba(225,29,42,.15);border:1px solid rgba(225,29,42,.5);color:#fca5a5;font-size:10px;font-weight:700;letter-spacing:.5px;padding:3px 9px;border-radius:20px;text-transform:uppercase}
+.sub{color:var(--muted);font-size:12px;margin:5px 0 12px;line-height:1.5;max-width:1050px}
+.tabs{display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap}.tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:12.5px;padding:8px 14px;border-radius:9px;cursor:pointer}.tab.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:14px 16px;margin-bottom:15px}
+.panel h2{font-size:12.5px;letter-spacing:1px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.view{display:none}.view.on{display:block}
+label{font-size:11px;color:var(--muted);font-weight:600;margin-right:5px}
+select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;font-family:inherit;font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg button{background:var(--panel2);color:var(--muted);border:0;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer}.seg button.on{background:var(--brand);color:#fff}
+.tlwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.tl{min-width:1150px;position:relative}
+.tl-axis{display:flex;height:22px;border-bottom:1px solid var(--line);position:relative;margin-left:230px}
+.tl-mo{position:absolute;top:3px;font-size:10px;color:var(--muted);border-left:1px solid var(--line);padding-left:4px;height:100%}
+.grp{background:#11161f;border-top:1px solid var(--line);padding:5px 10px;font-size:11px;font-weight:800;letter-spacing:.04em;color:#cdd8e6;text-transform:uppercase}
+.row{display:flex;align-items:stretch;border-top:1px solid rgba(255,255,255,.05);min-height:30px}
+.nm{flex:0 0 230px;width:230px;padding:5px 9px;font-size:11.5px;line-height:1.2;overflow:hidden}
+.nm b{font-weight:700}.nm .d{color:var(--muted);font-size:10px}
+.trk{position:relative;flex:1 1 auto;min-height:30px;border-left:1px solid var(--line)}
+.gl{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.05)}
+.tdy{position:absolute;top:0;bottom:0;width:2px;background:var(--brand);opacity:.7;z-index:4}
+.bar{position:absolute;top:6px;height:18px;border-radius:5px;display:flex;align-items:center;padding:0 7px;font-size:10px;font-weight:600;color:#06121f;white-space:nowrap;overflow:hidden}
+.tbd{position:absolute;top:7px;left:6px;font-size:10px;color:var(--faint);font-style:italic}
+.legend{display:flex;flex-wrap:wrap;gap:7px 13px;margin-top:10px;font-size:11px;color:var(--muted)}
+.lg{display:inline-flex;align-items:center;gap:5px}.sw{width:11px;height:11px;border-radius:3px}
+table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+.pill{display:inline-block;font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:10px;color:#06121f}
+.flag{color:#fca5a5;font-size:11px}.ok{color:#86efac}
+.grpr td{background:#11161f;font-weight:800;text-transform:uppercase;font-size:10.5px;letter-spacing:.04em;color:#cdd8e6}
+.ros{background:#fff;color:#1b2330;border-radius:10px;max-width:780px;margin-top:10px;overflow:hidden;border:1px solid #cdd5df}
+.ros .band{background:var(--brand);color:#fff;padding:15px 20px;display:flex;justify-content:space-between;gap:12px}
+.ros .band .t{font-size:20px;font-weight:900}.ros .band .s{font-size:12px;opacity:.95;margin-top:2px;font-weight:600}
+.ros .pad{padding:14px 20px 18px}.ros .g{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:12px;margin-bottom:11px}.ros .k{color:#6b7480;font-size:10px;text-transform:uppercase}
+.ros h3{font-size:11.5px;text-transform:uppercase;color:var(--brand);margin:12px 0 5px;border-bottom:2px solid #eee;padding-bottom:3px}
+.ros .venue{font-weight:700;font-size:13px}.ros .addr{color:#46505f;font-size:12px}.ros table td{border-color:#eef0f2;color:#1b2330}.ros td.dd{white-space:nowrap;font-weight:700;width:120px}.ros .note{font-size:12px;color:#46505f;line-height:1.5}
+.soon{font-size:11.5px;color:var(--faint);line-height:1.7}.soon b{color:var(--muted)}
+svg text{font-family:Segoe UI,Arial}
+</style></head><body>
+<div class="top"><h1><span class="mra">MRA</span> Logistics</h1><span class="pvtag">Prototype · live data from your sheets · sample layout</span></div>
+<div class="sub">Built from your <b>Tour Fleet Tracking</b> + <b>Fleetio Assignments by AE</b> sheets — real tours, assets, AEs, directors, drivers, return dates and maintenance. Slice it by <b>AE / Driver / Director / Business</b>, as a <b>Calendar</b> or a <b>List</b>. The <b>Backfill</b> tab is Vicki's. Tell me what's missing.</div>
+<div class="tabs">
+ <div class="tab on" data-v="master" onclick="setView('master')">📊 Master Schedule</div>
+ <div class="tab" data-v="fleet" onclick="setView('fleet')">🚚 Fleet &amp; Tours</div>
+ <div class="tab" data-v="mra" onclick="setView('mra')">🏠 Arriving / Maintenance</div>
+ <div class="tab" data-v="backfill" onclick="setView('backfill')">👤 Backfill (Vicki)</div>
+ <div class="tab" data-v="ros" onclick="setView('ros')">📋 Run of Show</div>
+</div>
+<div class="view on" id="v-master"><div class="panel">
+ <h2>📊 Master Schedule — 2026
+  <span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+   <span class="seg"><button id="mCal" class="on" onclick="setMode('cal')">🗓 Calendar</button><button id="mList" onclick="setMode('list')">☰ List</button></span>
+   <label>View by</label><select id="dim" onchange="fillPick();renderTL()"><option value="ae">Account Exec</option><option value="driver">Driver</option><option value="director">Director</option><option value="biz">Business</option></select>
+   <label style="margin-left:4px">Show</label><select id="pick" onchange="renderTL()"></select></span></h2>
+ <div id="calWrap"><div class="tlwrap"><div class="tl" id="tl"></div></div><div class="legend" id="legend"></div></div>
+ <div id="listWrap" style="display:none"></div>
+ <div class="soon" style="margin-top:8px">Bar = a tour's run (start → end / return), colored by business line, labeled with its driver. Tours without firm dates show as “dates TBD”. <b>Next:</b> driver-level lanes that show each person's open gaps for backfill.</div>
+</div></div>
+<div class="view" id="v-fleet"><div class="panel"><h2>🚚 Fleet &amp; Tours <span style="margin-left:auto"><label>Group by</label><select id="fdim" onchange="renderFleet()"><option value="ae">Account Exec</option><option value="director">Director</option><option value="biz">Business</option></select></span></h2><div id="fleet"></div></div></div>
+<div class="view" id="v-mra"><div class="panel"><h2>🏠 Arriving at MRA / Maintenance</h2><div class="soon" style="margin-bottom:8px">Trailers due back at MRA — plan shop capacity and close out open issues. <span class="flag">red = maintenance flagged</span>.</div><div id="mra"></div></div></div>
+<div class="view" id="v-backfill"><div class="panel"><h2>👤 Backfill — Vicki</h2>
+ <div class="soon" style="margin-bottom:10px">The supervisor's view: who's driving what, and the moves that need a <b>second driver / backfill</b>. (Driver open-gap lanes will come from the Backfill + APL calendars once wired.)</div>
+ <h2 style="margin-top:6px">🚚 Driver roster — current assignments</h2><div id="roster"></div>
+ <h2 style="margin-top:14px">🅿 Moves needing a 2nd driver — SHA (live from “Assistance Needed”)</h2><div id="assist"></div>
+</div></div>
+<div class="view" id="v-ros"><div class="panel"><h2>📋 Run of Show <span style="margin-left:auto"><select id="rpick" onchange="renderRos()"></select></span></h2><div id="rosDoc"></div>
+ <div class="soon" style="margin-top:10px">The per-show driver packet (venue, address, parking/directions, schedule, contacts, power/generator) — replaces the MyMobileTour + Richmond-Day microsites.</div></div>
+ <div class="panel"><h2>🧭 Captured for later</h2><div class="soon"><b>• APLs</b> — the Driver APL calendar (Becky Murphy, Jeff King, Rasmussens…).<br><b>• Affiliation Report</b> — AE travel timesheets (B2C under Jes, weekly).<br><b>• Microsites</b> — fold MyMobileTour + 3 Siemens + Hyperfine (Cindy Irland) into the Run-of-Show pages.<br><b>• Driver logs</b> — per-day location, drive hours, generator hours.</div></div>
+</div>
 <script>
-const DAY=86400000;
-const WIN_START=new Date(2026,0,1).getTime(), WIN_END=new Date(2026,8,30).getTime();
-const TODAY=new Date(2026,5,24).getTime();
-const SPAN=WIN_END-WIN_START;
-
-const DRIVERS=["Mike Reddick","John Olszewski","Cliff Siler","Jay Whetsel","Dan Ohnsman","Paul Elmore","Chas Hickox","Norwood Henderson","Mike Bare","Tammy Kiel"];
-const TOURS={
-  smri:{name:"Siemens Mobile MRI",ae:"Cindy Irland",client:"Siemens Healthineers",color:"#14b8a6"},
-  sdi: {name:"Siemens DI Roadshow",ae:"Cindy Irland",client:"Siemens",color:"#3b82f6"},
-  hyp: {name:"Hyperfine",ae:"Cindy Irland",client:"Hyperfine",color:"#06b6d4"},
-  abb: {name:"ABB (J1407)",ae:"Sam Reyes",client:"ABB",color:"#22c55e"},
-  bac: {name:"BAC",ae:"Jes Conroy",client:"BAC",color:"#f59e0b"},
-  war: {name:"Warhammer",ae:"Jes Conroy",client:"Games Workshop",color:"#a855f7"},
-  dur: {name:"Duracell",ae:"Jes Conroy",client:"Duracell",color:"#b45309"},
-  cal: {name:"Callaway",ae:"Sam Reyes",client:"Callaway Golf",color:"#84cc16"},
-  sen: {name:"Seno Medical",ae:"Sam Reyes",client:"Seno",color:"#ec4899"},
-  swc: {name:"SWC NY#1",ae:"Sam Reyes",client:"SWC",color:"#ef4444"}
-};
-const D=(s)=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d).getTime();};
-// driver, tour, start, end (sample, non-overlapping per driver, with gaps)
-const DEP=[
- ["Mike Reddick","bac","2026-01-11","2026-01-22","Palm Springs, CA"],
- ["Mike Reddick","sen","2026-03-02","2026-03-22","Phoenix, AZ"],
- ["Mike Reddick","war","2026-06-05","2026-07-04","Baton Rouge, LA"],
- ["Mike Reddick","bac","2026-08-15","2026-09-12","Charlotte, NC"],
- ["John Olszewski","swc","2026-01-12","2026-01-26","Rochester, NY"],
- ["John Olszewski","sdi","2026-03-10","2026-05-23","Multi-city"],
- ["John Olszewski","cal","2026-06-15","2026-07-10","Carlsbad, CA"],
- ["John Olszewski","sen","2026-08-20","2026-09-15","Salt Lake City, UT"],
- ["Cliff Siler","swc","2026-01-10","2026-01-24","Fairport, NY"],
- ["Cliff Siler","dur","2026-02-15","2026-03-10","Bethel, CT"],
- ["Cliff Siler","hyp","2026-04-25","2026-06-30","Northeast"],
- ["Cliff Siler","war","2026-09-01","2026-09-25","Chicago, IL"],
- ["Jay Whetsel","sen","2026-01-13","2026-02-20","Orlando, FL"],
- ["Jay Whetsel","smri","2026-03-05","2026-05-10","Buffalo, NY"],
- ["Dan Ohnsman","smri","2026-05-11","2026-07-30","Northeast"],
- ["Dan Ohnsman","smri","2026-08-25","2026-09-30","Midwest"],
- ["Paul Elmore","war","2026-01-10","2026-02-02","Atlanta, GA"],
- ["Paul Elmore","dur","2026-06-10","2026-07-05","Boston, MA"],
- ["Paul Elmore","bac","2026-08-01","2026-08-20","Daytona Beach, FL"],
- ["Chas Hickox","abb","2026-02-08","2026-02-24","Daytona Beach, FL"],
- ["Chas Hickox","abb","2026-03-20","2026-03-27","Baton Rouge, LA"],
- ["Chas Hickox","abb","2026-04-08","2026-04-13","Mt. Juliet, TN"],
- ["Chas Hickox","bac","2026-06-01","2026-06-20","Indianapolis, IN"],
- ["Chas Hickox","cal","2026-08-03","2026-08-22","Scottsdale, AZ"],
- ["Norwood Henderson","abb","2026-04-19","2026-04-24","Grand Rapids, MI"],
- ["Norwood Henderson","abb","2026-04-25","2026-05-23","Coronado, CA"],
- ["Norwood Henderson","abb","2026-06-06","2026-06-30","Mt. Juliet, TN"],
- ["Norwood Henderson","abb","2026-08-25","2026-09-30","Fall tour"],
- ["Mike Bare","sdi","2026-01-09","2026-01-12","APL — Detroit, MI"],
- ["Mike Bare","sdi","2026-02-13","2026-02-21","APL — Cleveland, OH"],
- ["Mike Bare","smri","2026-06-01","2026-06-12","Columbus, OH"],
- ["Tammy Kiel","sdi","2026-01-18","2026-01-24","APL — Nashville, TN"],
- ["Tammy Kiel","hyp","2026-03-15","2026-04-20","Southeast"],
- ["Tammy Kiel","dur","2026-08-10","2026-08-28","Pittsburgh, PA"]
-].map(r=>({driver:r[0],tour:r[1],s:D(r[2]),e:D(r[3]),loc:r[4]}));
-
-// sample run-of-show shows
-const SHOWS=[
- {id:0,tour:"abb",name:"ABB — Mt. Juliet, TN",driver:"Norwood Henderson",unit:"53' Expandable — Unit 1407",
-  venue:"ABB",addr:"648 Couchville Pike, Mt. Juliet, TN 37122",lot:"Behind Bldg B",
-  dir:"From I-40 E take exit 226B (Mt. Juliet); right on Couchville Pike ~2 mi, site on the left. Use the service gate on the east side; trailer staging behind Building B. Watch the speed bumps on the main drive.",
-  rows:[["Mon Jun 8","Arrive & stage — load-in 8:00 AM (shore power on site)"],["Tue Jun 9","Event 8:30 AM – 2:00 PM"],["Tue Jun 9","Load-out after 2:00 PM; depart"]],
-  contact:"Site: J. Carter (615) 555-0142 · AE: Sam Reyes",note:"≈600 mi prior leg. Generator backup; log generator hours daily. Park trailers behind building B."},
- {id:1,tour:"bac",name:"BAC — Daytona Beach, FL",driver:"Mike Reddick",unit:"48' Display Trailer — Unit 22",
-  venue:"Daytona International Speedway",addr:"1801 W International Speedway Blvd, Daytona Beach, FL 32114",lot:"Lot G",
-  dir:"From I-95 take exit 261 (US-92 / Speedway Blvd) east ~1 mi. Credential check at Gate 40; oversize vehicles use the west tunnel, then proceed to Lot G for trailer staging.",
-  rows:[["Thu","Drive in (≈1,200 mi)"],["Fri","Load-in 9:00 – 10:00 AM"],["Sat–Sun","Event — hours TBD"],["Mon","Load-out / depart after 8:00 AM"]],
-  contact:"AE: Jes Conroy",note:"Parking: Lot G. Confirm credentials at gate 40. Power: house drop + generator."},
- {id:2,tour:"smri",name:"Siemens Mobile MRI — Buffalo, NY",driver:"Dan Ohnsman",unit:"53' MRI Coach",
-  venue:"Buffalo General Medical Center",addr:"100 High St, Buffalo, NY 14203",lot:"Hospital dock",
-  dir:"From I-190 take the High St exit. Hospital loading dock is on the north side; call the site contact 24h ahead to reserve the dock window. MRI coach needs a level pad + 200A shore power.",
-  rows:[["Mon–Thu","On-site testing / calibration"],["Fri","Event day"],["Sat","Load-out"]],
-  contact:"AE: Cindy Irland",note:"Valid medical card required. Generator hours logged daily. Coordinate hospital dock time 24h ahead."},
- {id:3,tour:"war",name:"Warhammer — Baton Rouge, LA",driver:"Mike Reddick",unit:"48' Trailer",
-  venue:"Topgolf Baton Rouge",addr:"10955 N Mall Dr, Baton Rouge, LA 70809",lot:"North lot",
-  dir:"From I-10 take the College Dr exit north to N Mall Dr; Topgolf on the right. Stage in the north lot near the main entrance; tight turn, watch the low canopy at the south entrance.",
-  rows:[["Fri","Arrive 5:00 PM"],["Sat","Activation 9:00 AM – 2:00 PM"],["Sat","Depart — 5 mi to next stop"]],
-  contact:"AE: Jes Conroy",note:"Tight turn to next city. Confirm dumpster + water access."}
-];
-
-// Dummy site/parking map (sample art — a real map / driver upload / link goes here later).
-function parkMap(venue, lot){
- const stalls=[0,1,2,3,4,5,6].map(i=>`<line x1="${360+i*42}" y1="112" x2="${360+i*42}" y2="172" stroke="#c2cad6" stroke-width="1"/>`).join('');
- return `<svg viewBox="0 0 700 230" width="100%" style="display:block;border:1px solid #cdd5df;border-radius:8px;background:#eef1f5" font-family="Segoe UI,Arial,sans-serif">
-  <text x="674" y="20" font-size="11" fill="#6b7480" text-anchor="middle">N</text>
-  <line x1="674" y1="24" x2="674" y2="40" stroke="#6b7480" stroke-width="2"/><polygon points="674,21 670,30 678,30" fill="#6b7480"/>
-  <rect x="0" y="188" width="700" height="42" fill="#9aa3b0"/>
-  <line x1="0" y1="209" x2="700" y2="209" stroke="#fff" stroke-width="2" stroke-dasharray="16 12"/>
-  <text x="14" y="223" font-size="10" fill="#eef1f5">Main Rd - GPS to the address above</text>
-  <rect x="40" y="40" width="250" height="120" rx="6" fill="#cdd6e1" stroke="#aab4c1"/>
-  <text x="165" y="94" font-size="14" font-weight="700" fill="#46505f" text-anchor="middle">${venue}</text>
-  <text x="165" y="114" font-size="10" fill="#6b7480" text-anchor="middle">Venue / building</text>
-  <rect x="330" y="40" width="330" height="140" fill="#e3e8ef" stroke="#c2cad6"/>
-  <text x="345" y="56" font-size="10" fill="#8a93a0">Parking</text>${stalls}
-  <line x1="345" y1="112" x2="645" y2="112" stroke="#c2cad6" stroke-width="1"/>
-  <rect x="350" y="66" width="150" height="34" rx="4" fill="rgba(225,29,42,.14)" stroke="#e11d2a" stroke-width="1.5"/>
-  <text x="425" y="87" font-size="11" font-weight="700" fill="#b91c1c" text-anchor="middle">MRA TRAILER</text>
-  <text x="508" y="84" font-size="10" fill="#8a93a0">${lot}</text>
-  <line x1="500" y1="188" x2="500" y2="150" stroke="#15803d" stroke-width="3"/><polygon points="500,142 492,156 508,156" fill="#15803d"/>
-  <text x="514" y="172" font-size="10" fill="#15803d">Service gate / entrance</text>
- </svg>
- <div style="font-size:10px;color:#8a93a0;margin-top:3px">Sample site map - not to scale (dummy). Real version: per-show map image, driver upload, or maps link.</div>`;
-}
-function fmt(ms){const d=new Date(ms);return (d.getMonth()+1)+"/"+d.getDate()+"/"+String(d.getFullYear()).slice(2);}
-function setView(v){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));
-  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
-  document.getElementById('v-'+v).classList.add('on');
-  if(v==='master')renderMaster(); if(v==='tours')renderTours(); if(v==='ros')renderRos();}
-
-function renderMaster(){
-  const tl=document.getElementById('tl');
-  // month gridlines + labels
-  let grid='<div class="tl-axis">';
-  for(let m=0;m<9;m++){const ms=new Date(2026,m,1).getTime();const pos=(ms-WIN_START)/SPAN*100;
-    grid+=`<div class="tl-mo" style="left:${pos}%">${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep"][m]}</div>`;}
-  grid+='</div>';
-  const gridlines=()=>{let g='';for(let m=0;m<9;m++){const pos=(new Date(2026,m,1).getTime()-WIN_START)/SPAN*100;g+=`<div class="tl-grid" style="left:${pos}%"></div>`;}
-    const tp=(TODAY-WIN_START)/SPAN*100;g+=`<div class="tl-today" style="left:${tp}%" title="Today"></div>`;return g;};
-  // week-free calc
-  const wk=document.getElementById('wk').value; let mon=null;
-  if(wk){const [y,mo,d]=wk.split("-").map(Number);const dt=new Date(y,mo-1,d);const off=(dt.getDay()+6)%7;mon=new Date(y,mo-1,d-off).getTime();}
-  const wkEnd=mon!=null?mon+7*DAY:null;
-  let rows='';
-  DRIVERS.forEach(dr=>{
-    const mine=DEP.filter(x=>x.driver===dr);
-    let bars=gridlines();
-    mine.forEach(x=>{const left=Math.max(0,(x.s-WIN_START)/SPAN*100);const right=Math.min(100,(x.e+DAY-WIN_START)/SPAN*100);
-      const w=Math.max(right-left,1.2);const c=TOURS[x.tour].color;
-      bars+=`<div class="bar" style="left:${left}%;width:${w}%;background:${c}" title="${TOURS[x.tour].name} · ${fmt(x.s)}–${fmt(x.e)}${x.loc?' · '+x.loc:''}">${TOURS[x.tour].name}</div>`;});
-    // free this week?
-    let free=true; if(mon!=null) free=!mine.some(x=>x.s<wkEnd && mon<x.e+DAY);
-    rows+=`<div class="tl-row"><div class="tl-name">${free&&mon!=null?'<span style="color:var(--green)">●</span>':'<span style="color:var(--faint)">●</span>'} ${dr}</div><div class="tl-track">${bars}</div></div>`;
-  });
-  tl.innerHTML=grid+rows;
-  // legend
-  document.getElementById('legend').innerHTML=Object.values(TOURS).map(t=>`<span class="lg"><span class="sw" style="background:${t.color}"></span>${t.name}</span>`).join('')+`<span class="lg" style="margin-left:10px"><span style="color:var(--red)">▏</span> today</span>`;
-  // free drivers list
-  if(mon!=null){const freeD=DRIVERS.filter(dr=>!DEP.some(x=>x.driver===dr && x.s<wkEnd && mon<x.e+DAY));
-    document.getElementById('freeOut').innerHTML = freeD.length
-      ? freeD.map(d=>`<span class="chip">${d}</span>`).join('')
-      : '<span class="chip busy">everyone booked</span>';}
-}
-function renderTours(){
-  const el=document.getElementById('tours');
-  el.innerHTML=Object.keys(TOURS).map(id=>{const t=TOURS[id];const deps=DEP.filter(x=>x.tour===id).sort((a,b)=>a.s-b.s);
-    return `<div class="tcard"><div class="th"><span class="sw" style="width:14px;height:14px;border-radius:4px;background:${t.color}"></span>
-      <span class="nm">${t.name}</span><span class="me">· ${t.client} · AE: ${t.ae} · ${deps.length} deployment${deps.length===1?'':'s'}</span></div>`
-      + deps.map(x=>`<div class="dep"><div>${x.driver}</div><div class="d">${fmt(x.s)} → ${fmt(x.e)} · ${Math.round((x.e-x.s)/DAY)+1}d${x.loc?' · '+x.loc:''}</div></div>`).join('')
-      + `</div>`;}).join('');
-}
-function renderRos(){
-  const sel=document.getElementById('rosPick');
-  if(!sel.options.length) sel.innerHTML=SHOWS.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  const s=SHOWS[+sel.value||0];const t=TOURS[s.tour];
-  document.getElementById('rosDoc').innerHTML=`<div class="ros" id="rosCard">
-    <div class="band"><div><div class="t">RUN OF SHOW</div><div class="s">${t.name} — ${s.name}</div></div>
-      <div class="r"><b>MRA</b> mobile.experiential<br>Logistics packet</div></div>
-    <div class="pad">
-      <div class="grid">
-        <div><div class="k">Driver</div>${s.driver}</div>
-        <div><div class="k">Unit / Trailer</div>${s.unit}</div>
-        <div><div class="k">Client</div>${t.client}</div>
-        <div><div class="k">Account Exec</div>${t.ae}</div>
-      </div>
-      <h3>Venue</h3>
-      <div class="venue">${s.venue}</div><div class="addr">${s.addr}</div>
-      <h3>Parking &amp; Directions</h3>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
-        <div style="flex:2 1 360px;min-width:300px">${parkMap(s.venue, s.lot||'Trailer staging')}</div>
-        <div style="flex:1 1 210px;min-width:200px" class="note"><b>Trailer staging:</b> ${s.lot||'—'}<br><br>${s.dir||'Directions provided per site.'}</div>
-      </div>
-      <h3>Schedule</h3>
-      <table><tbody>${s.rows.map(r=>`<tr><td class="d">${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</tbody></table>
-      <h3>Contacts</h3><div class="note">${s.contact}</div>
-      <h3>Notes · Power / Generator</h3><div class="note">${s.note}</div>
-    </div></div>`;
-}
-renderMaster();
-</script>
-</body>
-</html>
+const DB={"tours": [{"job": "J1373", "njob": "J1373", "asset": "84/7056", "biz": "B2B", "name": "Hershey", "ae": "Alex Karam", "director": "Sherri Washington", "op": "Ken Walters", "opCur": "Ken Walters", "status": "x", "start": "2026-01-15", "startApprox": true, "end": "2025-12-03", "mra": "2025-10-29", "mraRaw": "2025-10-29", "maint": "Maintenance is scheduled/Smartsheet", "drivers": ["Ken Walters"]}, {"job": "J1507", "njob": "J1507", "asset": "0325/6160", "biz": "Medical", "name": "Boston Scientific - DX", "ae": "Alex Karam", "director": "Cindy Irland", "op": "John Mordas 0325/6160", "opCur": "John Mordas 0325/6160", "status": "x", "start": "2025-01-12", "startApprox": false, "end": "2025-11-20", "mra": "2025-12-15", "mraRaw": "2025-12-15", "maint": "Tractor stairs install & TBD", "drivers": ["John Mordas 0325"]}, {"job": "J1540", "njob": "J1540", "asset": "723", "biz": "B2B", "name": "Cornell Medicine - NY Specific", "ae": "Alex Karam", "director": "Sherri Washington", "op": "John Muller", "opCur": "John Muller", "status": "x", "start": "2026-01-05", "startApprox": true, "end": "2025-12-17", "mra": "", "mraRaw": "Stays in NY", "maint": "", "drivers": ["John Muller"]}, {"job": "J1541", "njob": "J1541", "asset": "2560", "biz": "B2B", "name": "Seno Medical", "ae": "Alex Karam", "director": "Sherri Washington", "op": "Delaney Brown 6/14-7/4", "opCur": "TBD", "status": "x", "start": "2026-01-15", "startApprox": true, "end": "2025-12-05", "mra": "", "mraRaw": "Potential storage out West", "maint": "Maintenance is scheduled/ Smartsheet", "drivers": ["Delaney Brown 6"]}, {"job": "J1462", "njob": "J1462", "asset": "2874", "biz": "B2B", "name": "Ferguson FFF Tradeshow Tour", "ae": "Alyssa Aubin", "director": "Sherri Washington", "op": "Mike Reddick", "opCur": "Mike Reddick", "status": "x", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Mike Reddick"]}, {"job": "J1557", "njob": "J1557", "asset": "Doug", "biz": "B2B", "name": "Ferguson BizBox", "ae": "Alyssa Aubin", "director": "Sherri Washington", "op": "Mike Reddick", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Mike Reddick"]}, {"job": "J1407", "njob": "J1407", "asset": "2451/4614", "biz": "B2B", "name": "ABB 53\u2019 Trailer", "ae": "Brandon Kosal", "director": "Sherri Washington", "op": "Norwood Henderson", "opCur": "Norwood Henderson", "status": "x", "start": "2026-01-15", "startApprox": true, "end": "2025-12-09", "mra": "2025-12-12", "mraRaw": "2025-12-12", "maint": "Roof leak & TBD", "drivers": ["Norwood Henderson"]}, {"job": "J1421", "njob": "J1421", "asset": "TBD", "biz": "B2B", "name": "Road Dog / Tim McGraw", "ae": "Brandon Kosal", "director": "Sherri Washington", "op": "????", "opCur": "TBD", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1461", "njob": "J1461", "asset": "0893/4613", "biz": "B2B", "name": "BioMerieux", "ae": "Brandon Kosal", "director": "Sherri Washington", "op": "Al Kale", "opCur": "Al Kale", "status": "x", "start": "2026-01-26", "startApprox": false, "end": "2025-11-06", "mra": "2025-11-08", "mraRaw": "2025-11-08", "maint": "TBD", "drivers": ["Al Kale"]}, {"job": "J1491", "njob": "J1491", "asset": "", "biz": "Medical", "name": "Boston Scientific-Client Owned", "ae": "Brandon Kosal", "director": "Cindy Irland", "op": "Unassigned", "opCur": "Unassigned", "status": "DOWN 6.18-7.5", "start": "2026-02-15", "startApprox": true, "end": "", "mra": "", "mraRaw": "N/A", "maint": "N/A", "drivers": []}, {"job": "J1496", "njob": "J1496", "asset": "17/3765", "biz": "Medical", "name": "Boston Scientific - SX", "ae": "Brandon Kosal", "director": "Cindy Irland", "op": "Delaney Brown", "opCur": "Delaney Brown", "status": "x", "start": "2026-01-05", "startApprox": false, "end": "2025-12-06", "mra": "2025-12-13", "mraRaw": "2025-12-13", "maint": "TBD", "drivers": ["Delaney Brown"]}, {"job": "J1486", "njob": "J1486", "asset": "1151", "biz": "CE/EO", "name": "SWC-California", "ae": "Devan Latta", "director": "Jesica Wasczenski", "op": "Jeff King", "opCur": "Jeff King", "status": "", "start": "2026-01-05", "startApprox": true, "end": "2025-12-19", "mra": "", "mraRaw": "not coming back to MRA", "maint": "TBD-repairs and PM done in CA", "drivers": ["Jeff King"]}, {"job": "J1487", "njob": "J1487", "asset": "4568", "biz": "CE/EO", "name": "SWC-New York #1", "ae": "Devan Latta", "director": "Jesica Wasczenski", "op": "Tammy Kieil", "opCur": "Tammy Kieil", "status": "x", "start": "2026-01-05", "startApprox": true, "end": "2025-12-19", "mra": "2025-11-26", "mraRaw": "2025-11-26", "maint": "NY1 will be back for repairs in Nov, see smartsheets. will using FL rv for remainder of the year", "drivers": ["Tammy Kieil"]}, {"job": "J1488", "njob": "J1488", "asset": "1547/6528", "biz": "CE/EO", "name": "SWC-New York #2", "ae": "Devan Latta", "director": "Jesica Wasczenski", "op": "Chris Burton", "opCur": "Chris Burton", "status": "x", "start": "2026-01-05", "startApprox": true, "end": "2025-12-11", "mra": "2025-12-12", "mraRaw": "2025-12-12", "maint": "See smartsheets, production is aware of items that need to be done", "drivers": ["Chris Burton"]}, {"job": "J1512", "njob": "J1512", "asset": "None", "biz": "CE/EO", "name": "SWC-Hawaii", "ae": "Devan Latta", "director": "Jesica Wasczenski", "op": "", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1535", "njob": "J1535", "asset": "0267/5018", "biz": "CE/B2C", "name": "Dolce & Gabanna-US", "ae": "Devan Latta", "director": "Jesica Wasczenski", "op": "Jay Wetzel", "opCur": "Brandon Hopkins", "status": "x", "start": "2026-05-05", "startApprox": true, "end": "2025-12-07", "mra": "2025-12-12", "mraRaw": "2025-12-12", "maint": "PM. Exhibit Revamp, waiting for confirmed updates from client", "drivers": ["Jay Wetzel", "Brandon Hopkins"]}, {"job": "J1552", "njob": "J1552", "asset": "4642", "biz": "CE/EO", "name": "SWC-MA", "ae": "Devan Latta", "director": "Jesica Wasczenski", "op": "Suzanne Brown", "opCur": "", "status": "x", "start": "2026-01-05", "startApprox": true, "end": "", "mra": "", "mraRaw": "TBD", "maint": "N/A- Farber/Client owned", "drivers": ["Suzanne Brown"]}, {"job": "J1560", "njob": "J1560", "asset": "1214/3659", "biz": "CE/EO", "name": "Climate Action Campaign", "ae": "Devan Latta", "director": "Jesica Wasczenski", "op": "Mike Reddick 6/10-17", "opCur": "Unassigned", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Mike Reddick 6"]}, {"job": "J1410", "njob": "J1410", "asset": "83/2729", "biz": "B2B", "name": "FM Global", "ae": "Dionne Mance", "director": "Sherri Washington", "op": "Red Corbett", "opCur": "Red Corbett", "status": "x", "start": "2026-02-13", "startApprox": false, "end": "2025-11-18", "mra": "2025-11-20", "mraRaw": "2025-11-20", "maint": "Production / Rebuild", "drivers": ["Red Corbett"]}, {"job": "J1555", "njob": "J1555", "asset": "9396", "biz": "B2B", "name": "Baltimore Air Coil", "ae": "Dionne Mance", "director": "Sherri Washington", "op": "Chas Hickox 6/16-6/19, Tex", "opCur": "Tex Blevil", "status": "x", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Chas Hickox 6", "Tex", "Tex Blevil"]}, {"job": "J1383", "njob": "J1383", "asset": "129/7080", "biz": "B2B", "name": "Duracell", "ae": "Frank Mancina", "director": "Frank Mancina", "op": "Chas Hickox until july 6", "opCur": "Kevin Calvin", "status": "here 6.21-6.25", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Chas Hickox 6", "Kevin Calvin"]}, {"job": "J1484", "njob": "J1484", "asset": "Client", "biz": "B2B", "name": "Callaway", "ae": "Frank Mancina / Mark St. Jean", "director": "Frank Mancina", "op": "NONE", "opCur": "NONE", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1217", "njob": "J1217", "asset": "1064", "biz": "CE/B2C", "name": "AWS", "ae": "Heather Maloney", "director": "Jesica Wasczenski", "op": "Brandon Hopkins", "opCur": "Brandon Hopkins", "status": "x", "start": "2026-04-15", "startApprox": true, "end": "2025-11-19", "mra": "2025-11-19", "mraRaw": "2025-11-19", "maint": "See smartsheets", "drivers": ["Brandon Hopkins"]}, {"job": "J1420", "njob": "J1420", "asset": "6821/3010", "biz": "CE/EO", "name": "Oakland Schools", "ae": "Heather Maloney", "director": "Jesica Wasczenski", "op": "Unassign", "opCur": "Dan Reddick", "status": "x", "start": "2026-01-05", "startApprox": true, "end": "2025-12-12", "mra": "2025-12-12", "mraRaw": "2025-12-12", "maint": "TBD", "drivers": ["Unassign", "Dan Reddick"]}, {"job": "J1428", "njob": "J1428", "asset": "6042/634", "biz": "CE/EO", "name": "MOTT", "ae": "Heather Maloney", "director": "Jesica Wasczenski", "op": "Jeff sellers, Kevin on 27th", "opCur": "Jeff Sellers june 34th", "status": "x", "start": "2026-01-15", "startApprox": true, "end": "2025-12-05", "mra": "2025-12-08", "mraRaw": "2025-12-08", "maint": "air leak.", "drivers": ["Jeff sellers", "Kevin on 27th", "Jeff Sellers 34th"]}, {"job": "J1538", "njob": "J1538", "asset": "3012/3766", "biz": "CE/EO", "name": "Catholic Charities USA", "ae": "Heather Maloney", "director": "Jesica Wasczenski", "op": "Brandon Irvine", "opCur": "Corey Boinkin", "status": "x", "start": "2026-03-15", "startApprox": true, "end": "", "mra": "", "mraRaw": "now", "maint": "build", "drivers": ["Brandon Irvine", "Corey Boinkin"]}, {"job": "J1543", "njob": "J1543", "asset": "54/7220", "biz": "CE/EO", "name": "Washtenaw", "ae": "Heather Maloney", "director": "Jesica Wasczenski", "op": "Dan Reddick", "opCur": "", "status": "x", "start": "2026-05-01", "startApprox": false, "end": "", "mra": "", "mraRaw": "now", "maint": "build", "drivers": ["Dan Reddick"]}, {"job": "J1553", "njob": "J1553", "asset": "TBD", "biz": "CE/EO", "name": "Medtronic", "ae": "Heather Maloney", "director": "Jesica Wasczenski", "op": "TBD", "opCur": "TBD", "status": "", "start": "2026-07-15", "startApprox": true, "end": "", "mra": "", "mraRaw": "now", "maint": "build", "drivers": []}, {"job": "J1537", "njob": "J1537", "asset": "482", "biz": "Canada", "name": "Aga Khan (AKFC)", "ae": "Kaytlyn Cooper", "director": "Frank Mancina", "op": "Unassigned", "opCur": "Brendon Badza", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Brendon Badza"]}, {"job": "J1399", "njob": "J1399", "asset": "6012", "biz": "Canada", "name": "Sobeys 27' Food Truck", "ae": "Mark St. Jean", "director": "Frank Mancina", "op": "Unassigned", "opCur": "Unassigned", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1400", "njob": "J1400", "asset": "2124/23003", "biz": "Canada", "name": "Sobeys 53'", "ae": "Mark St. Jean", "director": "Frank Mancina", "op": "", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1448", "njob": "J1448", "asset": "3381", "biz": "Canada", "name": "Foodland Food Truck", "ae": "Mark St. Jean", "director": "Frank Mancina", "op": "Unassigned", "opCur": "Unassigned", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1500", "njob": "J1500", "asset": "45/261", "biz": "Canada", "name": "Age of Union", "ae": "Mark St. Jean", "director": "Frank Mancina", "op": "Unassigned", "opCur": "Unassigned", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1479", "njob": "J1479", "asset": "6918", "biz": "Canada", "name": "WFCU-Bus", "ae": "Mark St. Jean/Sherrill Buchan", "director": "Frank Mancina", "op": "Unassigned", "opCur": "Unassigned", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1434", "njob": "J1434", "asset": "8014/9994", "biz": "CE/B2C", "name": "Warhammer", "ae": "Matt Dunn", "director": "Cindy Irland", "op": "Brandon Hopkins until june 27", "opCur": "Brandon Hopkins", "status": "x", "start": "2026-01-05", "startApprox": false, "end": "2025-11-23", "mra": "2025-12-02", "mraRaw": "2025-12-02", "maint": "", "drivers": ["Brandon Hopkins 27", "Brandon Hopkins"]}, {"job": "J1446", "njob": "J1446", "asset": "23005/6822", "biz": "B2B", "name": "Omnicell", "ae": "Matt Dunn", "director": "Sherri Washington", "op": "Zach Berkes", "opCur": "Zach Berkes", "status": "x", "start": "", "startApprox": false, "end": "2025-09-05", "mra": "2025-09-06", "mraRaw": "2025-09-06", "maint": "", "drivers": ["Zach Berkes"]}, {"job": "J1453", "njob": "J1453", "asset": "6112", "biz": "Medical", "name": "Hyperfine-East (#6112)", "ae": "Matt Dunn", "director": "Cindy Irland", "op": "Matthew Scieszka", "opCur": "Matthew Scieszka", "status": "x", "start": "2026-01-25", "startApprox": true, "end": "2025-12-09", "mra": "2025-12-12", "mraRaw": "2025-12-12", "maint": "", "drivers": ["Matthew Scieszka"]}, {"job": "J1542", "njob": "J1542", "asset": "9640", "biz": "B2B", "name": "SMC", "ae": "Matt Dunn", "director": "Sherri Washington", "op": "Unassigned", "opCur": "Unassigned", "status": "", "start": "2026-04-01", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "In Production", "drivers": []}, {"job": "J1556", "njob": "J1556", "asset": "6110", "biz": "Medical", "name": "Hyperfine #2", "ae": "Matt Dunn", "director": "Cindy Irland", "op": "Dan Ohnsman", "opCur": "Unassigned", "status": "x", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Dan Ohnsman"]}, {"job": "J1110-3005", "njob": "J1110-3005", "asset": "3005/9639", "biz": "Siemens", "name": "Siemens DBX W (2)", "ae": "Mitch Schirr / Bob Edwards", "director": "Cindy Irland", "op": "Deann Bowen", "opCur": "", "status": "x", "start": "", "startApprox": false, "end": "2027-09-30", "mra": "2025-12-05", "mraRaw": "2025-12-05", "maint": "Analyzer Swap/ Rust Repair", "drivers": ["Deann Bowen"]}, {"job": "J1110-92", "njob": "J1110-92", "asset": "0326/92", "biz": "Siemens", "name": "Siemens DBX E (1)", "ae": "Mitch Schirr / Bob Edwards", "director": "Cindy Irland", "op": "Dan Lowrey", "opCur": "", "status": "x", "start": "", "startApprox": false, "end": "2027-09-30", "mra": "", "mraRaw": "Now", "maint": "Analyzer Swap/ Rust Repair", "drivers": ["Dan Lowrey"]}, {"job": "J1424", "njob": "J1424", "asset": "0973/9970", "biz": "Siemens", "name": "Siemens Imaging #2 (38\")", "ae": "Mitch Schirr / Bob Edwards", "director": "Cindy Irland", "op": "JOHN Olazewski", "opCur": "", "status": "x", "start": "2025-01-06", "startApprox": false, "end": "2026-12-31", "mra": "", "mraRaw": "Not returning to MRA", "maint": "", "drivers": ["JOHN Olazewski"]}, {"job": "J1480", "njob": "J1480", "asset": "0884/6868", "biz": "Siemens", "name": "Siemens Imaging #3-Live", "ae": "Mitch Schirr / Bob Edwards", "director": "Cindy Irland", "op": "Unassigned", "opCur": "Unassigned", "status": "x", "start": "", "startApprox": false, "end": "2028-05-15", "mra": "2025-11-13", "mraRaw": "2025-11-13", "maint": "", "drivers": []}, {"job": "J1445", "njob": "J1445", "asset": "8129/7221", "biz": "B2B", "name": "Baxter", "ae": "Nicole Jacques", "director": "Sherri Washington", "op": "Keith Crumley", "opCur": "Keith Crumley", "status": "x", "start": "2025-01-06", "startApprox": false, "end": "2025-12-10", "mra": "2025-12-15", "mraRaw": "2025-12-15", "maint": "Yes / Inspection requested - Smartsheet", "drivers": ["Keith Crumley"]}, {"job": "J1497", "njob": "J1497", "asset": "3003", "biz": "B2B", "name": "Schaeffler", "ae": "Nicole Jacques", "director": "Sherri Washington", "op": "down 6.18 client schedule needed", "opCur": "Chas Hickox", "status": "x", "start": "2026-04-01", "startApprox": false, "end": "2025-11-13", "mra": "2025-11-17", "mraRaw": "2025-11-17", "maint": "List sent to maintenance/Smartsheet", "drivers": ["down client schedule needed", "Chas Hickox"]}, {"job": "J1524", "njob": "J1524", "asset": "6154", "biz": "Siemens", "name": "Siemens DI", "ae": "Nicole Jacques", "director": "Cindy Irland", "op": "Eddie Huntley", "opCur": "Eddie Huntley", "status": "x", "start": "2026-01-01", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "In Production", "drivers": ["Eddie Huntley"]}, {"job": "J1558", "njob": "J1558", "asset": "TBD", "biz": "B2B", "name": "Cisco", "ae": "Nicole Jacques", "director": "Sherri Washington", "op": "TBD", "opCur": "TBD", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1559", "njob": "J1559", "asset": "4489", "biz": "CE/B2C", "name": "On Running", "ae": "send to vicki", "director": "Jesica Wasczenski", "op": "Unassigned", "opCur": "Unassigned", "status": "x", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1467", "njob": "J1467", "asset": "TBD/85G", "biz": "Canada", "name": "County of Essex (MMS)", "ae": "Sherrill Buchan", "director": "Frank Mancina", "op": "Unassigned", "opCur": "Unassigned", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1545", "njob": "J1545", "asset": "TBD", "biz": "Canada", "name": "Saskatchewan Health Authority East", "ae": "Sherrill Buchan", "director": "Frank Mancina", "op": "", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1545", "njob": "J1545", "asset": "", "biz": "Canada", "name": "Saskatchewan Health Authority West", "ae": "Sherrill Buchan", "director": "Frank Mancina", "op": "", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1547", "njob": "J1547", "asset": "TBD", "biz": "Canada", "name": "Winnipeg Health Authority", "ae": "Sherrill Buchan", "director": "Frank Mancina", "op": "", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1422", "njob": "J1422", "asset": "1303", "biz": "CE/EO", "name": "SWC-Illinois", "ae": "Stephanie Hardie", "director": "Jesica Wasczenski", "op": "Rebekah Murphy", "opCur": "Rebekah Murphy", "status": "x", "start": "2026-01-05", "startApprox": true, "end": "2025-12-17", "mra": "2025-12-18", "mraRaw": "2025-12-18", "maint": "TBD", "drivers": ["Rebekah Murphy"]}, {"job": "J1508", "njob": "J1508", "asset": "8529/4037", "biz": "CE/B2C", "name": "Impact XM (PSEG)", "ae": "Stephanie Hardie", "director": "Jesica Wasczenski", "op": "Unassigned 6/17", "opCur": "Chuck Weir", "status": "x", "start": "2026-04-15", "startApprox": true, "end": "", "mra": "", "mraRaw": "current at MRA", "maint": "See smartsheets", "drivers": ["Unassigned 6", "Chuck Weir"]}, {"job": "J1514", "njob": "J1514", "asset": "1545", "biz": "CE/EO", "name": "SWC-Florida #1", "ae": "Stephanie Hardie", "director": "Jesica Wasczenski", "op": "Unassigned", "opCur": "Unassigned", "status": "x", "start": "2026-01-15", "startApprox": true, "end": "2025-12-18", "mra": "2025-12-22", "mraRaw": "2025-12-22", "maint": "we are currently using the FL2 rv for the FL1 tour. Richard will drive FL2 back from tour prior to the hoilidays and take FL1 back down for 2026 tour.", "drivers": []}, {"job": "", "njob": "", "asset": "TBD", "biz": "CE/EO", "name": "SWC-Illinois #2", "ae": "Stephanie Hardie", "director": "Jesica Wasczenski", "op": "TBD", "opCur": "TBD", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1408", "njob": "J1408", "asset": "7821", "biz": "CE/B2C", "name": "ASICS (IDL Worldwide/Marks)", "ae": "Stephanie Hardie", "director": "Jesica Wasczenski", "op": "Unassigned", "opCur": "Unassigned", "status": "x", "start": "", "startApprox": false, "end": "2025-12-31", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "J1515", "njob": "J1515", "asset": "1546", "biz": "CE/EO", "name": "SWC-Florida #2", "ae": "Stephanie Hardie", "director": "Jesica Wasczenski", "op": "Richard Bonham", "opCur": "Richard Bonham", "status": "x", "start": "", "startApprox": false, "end": "", "mra": "2025-12-22", "mraRaw": "2025-12-22", "maint": "FL2 rv will be at MRA early 2026 for production updates- production is aware of items that need to be done", "drivers": ["Richard Bonham"]}, {"job": "J1526", "njob": "J1526", "asset": "6834", "biz": "CE/EO", "name": "Jewish Federation San Diego", "ae": "Stephanie Hardie", "director": "Jesica Wasczenski", "op": "Kevin Villalava", "opCur": "Kevin Villalava", "status": "", "start": "2026-03-15", "startApprox": true, "end": "", "mra": "", "mraRaw": "now", "maint": "build", "drivers": ["Kevin Villalava"]}, {"job": "J1551", "njob": "J1551", "asset": "TBD", "biz": "Canada", "name": "Thunder Bay", "ae": "TBD", "director": "Frank Mancina", "op": "Unassigned", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}, {"job": "", "njob": "", "asset": "", "biz": "Other", "name": "CALLAWAY", "ae": "TBD", "director": "", "op": "Dan Rasmussen 18-222  then Red Corbett 23-26", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Dan Rasmussen 18-222", "Red Corbett 23-26"]}, {"job": "", "njob": "", "asset": "", "biz": "Other", "name": "CALLAWAY", "ae": "TBD", "director": "", "op": "Unassinged big", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": ["Unassinged"]}, {"job": "", "njob": "", "asset": "", "biz": "Other", "name": "hyperfine", "ae": "TBD", "director": "", "op": "", "opCur": "", "status": "", "start": "", "startApprox": false, "end": "", "mra": "", "mraRaw": "", "maint": "", "drivers": []}], "meta": {"aes": ["Alex Karam", "Alyssa Aubin", "Brandon Kosal", "Devan Latta", "Dionne Mance", "Frank Mancina", "Frank Mancina / Mark St. Jean", "Heather Maloney", "Kaytlyn Cooper", "Mark St. Jean", "Mark St. Jean/Sherrill Buchan", "Matt Dunn", "Mitch Schirr / Bob Edwards", "Nicole Jacques", "Sherrill Buchan", "Stephanie Hardie"], "dirs": ["Cindy Irland", "Frank Mancina", "Jesica Wasczenski", "Sherri Washington"], "biz": ["B2B", "CE/B2C", "CE/EO", "Canada", "Medical", "Other", "Siemens"], "drivers": ["Al Kale", "Brandon Hopkins", "Brandon Hopkins 27", "Brandon Irvine", "Brendon Badza", "Chas Hickox", "Chas Hickox 6", "Chris Burton", "Chuck Weir", "Corey Boinkin", "Dan Lowrey", "Dan Ohnsman", "Dan Rasmussen 18-222", "Dan Reddick", "Deann Bowen", "Delaney Brown", "Delaney Brown 6", "Eddie Huntley", "JOHN Olazewski", "Jay Wetzel", "Jeff King", "Jeff Sellers 34th", "Jeff sellers", "John Mordas 0325", "John Muller", "Keith Crumley", "Ken Walters", "Kevin Calvin", "Kevin Villalava", "Kevin on 27th", "Matthew Scieszka", "Mike Reddick", "Mike Reddick 6", "Norwood Henderson", "Rebekah Murphy", "Red Corbett", "Red Corbett 23-26", "Richard Bonham", "Suzanne Brown", "Tammy Kieil", "Tex", "Tex Blevil", "Unassign", "Unassigned 6", "Unassinged", "Zach Berkes", "down client schedule needed"]}, "assist": [{"date": "02.20.2026", "type": "Pick up", "loc": "Bengough Health Centre", "addr": "400 2nd St W, Bengough, SK, S0C 0K0", "d1": "87km", "d2": "211km"}, {"date": "02.23.2026", "type": "Drop Off", "loc": "Assiniboia - Southland Coop", "addr": "409 Centre St, Assiniboia, AK, S0H 0B0", "d1": "", "d2": ""}, {"date": "03.06.2026", "type": "Pick up", "loc": "Assiniboia - Southland Coop", "addr": "400 2nd St W, Bengough, SK, S0C 0K0", "d1": "67km", "d2": "372km"}, {"date": "03.09.2026", "type": "Drop Off", "loc": "Gravelbourgh - Curling Rink", "addr": "310 4th Ave E, Gravelbourgh, SK, S0H 1X0", "d1": "", "d2": "386km"}, {"date": "04.24.2026", "type": "Pick up", "loc": "Leader Community Hall", "addr": "402 1st Ave, Leader, SK, S0N 1H0", "d1": "170km", "d2": "697km"}, {"date": "04.27.2025", "type": "Drop Off", "loc": "Rosetown Health Centre", "addr": "SK-4, Rosetown, SK, S0L 2V0", "d1": "", "d2": "549km"}, {"date": "05.08.2025", "type": "Pick up", "loc": "Rosetown Health Centre", "addr": "SK-4, Rosetown, SK, S0L 2V0", "d1": "276km", "d2": "549km"}, {"date": "05.11.2025", "type": "Drop Off", "loc": "Humboldt - Canalta", "addr": "2421 8 Ave, Humboldt, SK, S0K", "d1": "", "d2": ""}, {"date": "06.12.2025", "type": "Pick up", "loc": "Humboldt - Canalta", "addr": "2421 8 Ave, Humboldt, SK, S0K", "d1": "99km", "d2": "242km"}, {"date": "06.15.2025", "type": "Drop Off", "loc": "Wadena - Recreation Centre", "addr": "97 Jim Headington Way, Wadena, SK, S0A 4J0", "d1": "", "d2": "192km"}, {"date": "06.26.2026", "type": "Pick up", "loc": "Wadena - Recreation Centre", "addr": "97 Jim Headington Way, Wadena, SK, S0A 4J0", "d1": "50km", "d2": "129km"}, {"date": "06.29.2026", "type": "Drop Off", "loc": "Wynyard Civic Centre", "addr": "435 Bosworth St, Wynyard, SK, S0A 4T0", "d1": "", "d2": "114km"}, {"date": "07.17.2026", "type": "Pick up", "loc": "PM in Regina", "addr": "???", "d1": "189km", "d2": "288km"}, {"date": "07.20.2026", "type": "Drop Off", "loc": "Lanigan Curling Rink", "addr": "119 Downing Dr, Lanigan, SK, S0K 2M0", "d1": "", "d2": "218km"}, {"date": "07.24.2025", "type": "Pick up", "loc": "Lanigan Curling Rink", "addr": "119 Downing Dr, Lanigan, SK, S0K 2M0", "d1": "53km", "d2": "218km"}, {"date": "07.27.2026", "type": "Drop Off", "loc": "Watrous Civic Centre", "addr": "404 Main St, Watrous, SK, S0K 4T0", "d1": "", "d2": "339km"}, {"date": "08.07.2025", "type": "Pick up", "loc": "Watrous Civic Centre", "addr": "404 Main St, Watrous, SK, S0K 4T0", "d1": "312km", "d2": "339km"}, {"date": "08.10.2025", "type": "Drop Off", "loc": "Spiritwood Health Centre", "addr": "400 1 St E, Spiritwood, SK, S0J 2M0", "d1": "", "d2": "513km"}, {"date": "08.21.2026", "type": "Pick up", "loc": "Spiritwood Health Centre", "addr": "400  1 St E, Spiritwood, SK, S0J 2M0", "d1": "136km", "d2": "746km"}, {"date": "08.24.2026", "type": "Drop Off", "loc": "St. Walburg Health Complex", "addr": "410 3 Ave, St. Walburg, SK, S0M 2T0", "d1": "", "d2": "746km"}, {"date": "09.11.2026", "type": "Pick up", "loc": "Beauval Clinic", "addr": "4801 Lavoie St, Beauval, SK, S0M 0G0", "d1": "152km", "d2": ""}, {"date": "09.14.2026", "type": "Drop Off", "loc": "Meadow Lake - Northwest Community Lodge", "addr": "30600 SK-4, Meadow Lake, SK, S9X 1Z2", "d1": "", "d2": "395km"}, {"date": "10.09.2026", "type": "Pick up", "loc": "Meadow Lake - Northwest Community Lodge", "addr": "30600 SK-4, Meadow Lake, SK, S9X 1Z2", "d1": "310km", "d2": "395km"}, {"date": "10.13.2026", "type": "Drop Off", "loc": "Kerrobert Health Facility", "addr": "115 Manitoba Ave, Kerrobert, SK, S0L 1R0", "d1": "", "d2": "474km"}]}, BIZC={"B2B": "#3b82f6", "Medical": "#14b8a6", "CE/EO": "#f59e0b", "CE/B2C": "#a855f7", "Canada": "#22c55e", "Siemens": "#ef4444", "Other": "#64748b"}, SHOWS=[{"name": "ABB \u2014 Mt. Juliet, TN", "tour": "ABB 53' Trailer (J1407)", "driver": "Norwood Henderson", "unit": "Asset 2451 / 4614", "ae": "Brandon Kosal", "venue": "ABB", "addr": "648 Couchville Pike, Mt. Juliet, TN 37122", "lot": "Behind Bldg B", "dir": "From I-40 E exit 226B; right on Couchville Pike ~2 mi, site on left. Service gate east side; stage behind Building B.", "rows": [["Mon", "Arrive & stage; load-in 8:00 AM (shore power)"], ["Tue", "Event 8:30 AM - 2:00 PM"], ["Tue", "Load-out after 2:00 PM"]], "note": "Open issue: hydraulic leg leaking (5.21.26). Log generator hours daily."}, {"name": "Road Dog - Tim McGraw", "tour": "Road Dog / Tim McGraw (J1421)", "driver": "Jamison Wiersema & Justin Bender", "unit": "Asset 3011", "ae": "Brandon Kosal", "venue": "Tour venue (per show)", "addr": "GPS to each venue from the routing doc", "lot": "Artist compound / production lot", "dir": "Multi-stop concert tour: MRA -> venue city -> next city. Confirm load-in with production; watch arena dock clearances.", "rows": [["Day 1", "Drive to venue city"], ["Day 2", "Load-in / show day"], ["Day 3", "Load-out -> next city"]], "note": "Two-person team. No open issues on asset 3011."}, {"name": "Saskatchewan Health Authority", "tour": "SHA East/West (J1545)", "driver": "Unassigned (needs backfill)", "unit": "TBD", "ae": "Sherrill Buchan", "venue": "Rural health centres (SK)", "addr": "e.g. Bengough Health Centre, 400 2nd St W, Bengough, SK", "lot": "On-site at each clinic", "dir": "Rural circuit across Saskatchewan; several legs need a 2nd driver (see Backfill tab - distances up to ~700 km).", "rows": [["Pick up", "Bengough Health Centre (87 km to drop)"], ["Drop off", "Assiniboia - Southland Coop"], ["Pick up", "Gravelbourg - Curling Rink"]], "note": "Backfill candidate weeks show on the Master when a driver is open."}];
+const WS=new Date(2026,0,1).getTime(), WE=new Date(2026,11,31).getTime(), SPAN=WE-WS, TODAY=new Date(2026,5,20).getTime(), DAY=86400000;
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+let MODE='cal';
+function setView(v){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));document.getElementById('v-'+v).classList.add('on');if(v==='master')renderTL();if(v==='fleet')renderFleet();if(v==='mra')renderMRA();if(v==='backfill')renderBackfill();if(v==='ros')renderRos();}
+function setMode(m){MODE=m;document.getElementById('mCal').classList.toggle('on',m==='cal');document.getElementById('mList').classList.toggle('on',m==='list');document.getElementById('calWrap').style.display=m==='cal'?'':'none';document.getElementById('listWrap').style.display=m==='list'?'':'none';renderTL();}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(iso){if(!iso)return'';const d=new Date(iso+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2);}
+function fillPick(){const dim=document.getElementById('dim').value,m=DB.meta;const list=dim==='ae'?m.aes:dim==='driver'?m.drivers:dim==='director'?m.dirs:m.biz;
+ document.getElementById('pick').innerHTML='<option value="__all">— All —</option>'+list.map(x=>`<option>${esc(x)}</option>`).join('');}
+function matches(t,dim,val){if(val==='__all')return true;if(dim==='driver')return (t.drivers||[]).includes(val);return (t[dim]||'')===val;}
+function filtered(){const dim=document.getElementById('dim').value,val=document.getElementById('pick').value||'__all';return {dim,val,ts:DB.tours.filter(t=>matches(t,dim,val))};}
+function renderTL(){const {dim,val,ts}=filtered();
+ if(MODE==='list'){let h='<table><thead><tr><th>Tour</th><th>Job#</th><th>Asset</th><th>Business</th><th>Driver</th><th>AE</th><th>Director</th><th>Start</th><th>End/Return</th></tr></thead><tbody>';
+  ts.forEach(t=>{const c=BIZC[t.biz]||BIZC.Other;h+=`<tr><td><b>${esc(t.name)}</b></td><td>${esc(t.job)}</td><td>${esc(t.asset)}</td><td><span class="pill" style="background:${c}">${esc(t.biz)}</span></td><td>${esc(t.op||'—')}</td><td>${esc(t.ae)}</td><td>${esc(t.director)}</td><td>${esc(t.start?fmt(t.start):(t.startApprox?'~':'TBD'))}</td><td>${esc(t.end?fmt(t.end):(t.mra?fmt(t.mra):'TBD'))}</td></tr>`;});
+  document.getElementById('listWrap').innerHTML=h+'</tbody></table>';return;}
+ let axis='<div class="tl-axis">';for(let m=0;m<12;m++)axis+=`<div class="tl-mo" style="left:${(new Date(2026,m,1)-WS)/SPAN*100}%">${MON[m]}</div>`;axis+='</div>';
+ const gl=()=>{let g='';for(let m=0;m<12;m++)g+=`<div class="gl" style="left:${(new Date(2026,m,1)-WS)/SPAN*100}%"></div>`;g+=`<div class="tdy" style="left:${(TODAY-WS)/SPAN*100}%"></div>`;return g;};
+ const barFor=t=>{let s=t.start?new Date(t.start+'T00:00:00').getTime():null,e=t.end?new Date(t.end+'T00:00:00').getTime():(t.mra?new Date(t.mra+'T00:00:00').getTime():null);
+  if(s&&!e)e=s+45*DAY;if(e&&!s)s=e-45*DAY;if(!s)return `<div class="tbd">dates TBD</div>`;
+  let L=Math.max(0,(s-WS)/SPAN*100),R=Math.min(100,(e-WS)/SPAN*100);if(R<=L)R=L+0.8;const c=BIZC[t.biz]||BIZC.Other,drv=(t.drivers&&t.drivers[0])||t.op||'';
+  return `<div class="bar" style="left:${L}%;width:${(R-L).toFixed(2)}%;background:${c}" title="${esc(t.name)} · ${esc(t.biz)} · ${fmt(t.start)}→${fmt(t.end||t.mra)} · ${esc(drv)}">${esc(drv||t.name)}</div>`;};
+ const rowFor=t=>`<div class="row"><div class="nm"><b>${esc(t.name)}</b><div class="d">${esc(t.job)}${t.asset?' · '+esc(t.asset):''}${t.op?' · '+esc(t.op):''}</div></div><div class="trk">${gl()}${barFor(t)}</div></div>`;
+ let body='';if(val==='__all'){const gk=dim==='driver'?'ae':dim,gs={};ts.forEach(t=>{(gs[t[gk]||'TBD']=gs[t[gk]||'TBD']||[]).push(t);});Object.keys(gs).sort().forEach(g=>{body+=`<div class="grp">${esc(g)} <span style="color:var(--faint)">(${gs[g].length})</span></div>`+gs[g].map(rowFor).join('');});}
+ else body=ts.map(rowFor).join('')||'<div class="row"><div class="nm">No tours</div><div class="trk"></div></div>';
+ document.getElementById('tl').innerHTML=axis+body;
+ document.getElementById('legend').innerHTML=Object.keys(BIZC).map(b=>`<span class="lg"><span class="sw" style="background:${BIZC[b]}"></span>${b}</span>`).join('')+`<span class="lg"><span style="color:var(--brand)">▏</span>today</span>`;}
+function renderFleet(){const dim=document.getElementById('fdim').value,gs={};DB.tours.forEach(t=>{(gs[t[dim]||'TBD']=gs[t[dim]||'TBD']||[]).push(t);});
+ let h='<table><thead><tr><th>Tour</th><th>Job#</th><th>Asset</th><th>Business</th><th>Driver / Operator</th><th>'+(dim==='ae'?'Director':'AE')+'</th><th>Status / Maint</th></tr></thead><tbody>';
+ Object.keys(gs).sort().forEach(g=>{h+=`<tr class="grpr"><td colspan="7">${esc(g)} (${gs[g].length})</td></tr>`;gs[g].forEach(t=>{const c=BIZC[t.biz]||BIZC.Other,mf=t.maint&&!/^(tbd|n\/a|)$/i.test(t.maint);h+=`<tr><td><b>${esc(t.name)}</b></td><td>${esc(t.job)}</td><td>${esc(t.asset)}</td><td><span class="pill" style="background:${c}">${esc(t.biz)}</span></td><td>${esc(t.op||'—')}</td><td>${esc(dim==='ae'?t.director:t.ae)}</td><td class="${mf?'flag':'ok'}">${esc(t.maint||t.status||'')}</td></tr>`;});});
+ document.getElementById('fleet').innerHTML=h+'</tbody></table>';}
+function renderMRA(){const rows=DB.tours.filter(t=>t.mra||t.mraRaw).map(t=>({t,k:t.mra||'9999'})).sort((a,b)=>a.k.localeCompare(b.k));
+ let h='<table><thead><tr><th>Est. at MRA</th><th>Tour</th><th>Asset</th><th>AE</th><th>Maintenance / Issues</th></tr></thead><tbody>';
+ rows.forEach(({t})=>{const mf=t.maint&&!/^(tbd|n\/a|)$/i.test(t.maint);h+=`<tr><td><b>${esc(t.mra?fmt(t.mra):t.mraRaw)}</b></td><td>${esc(t.name)}</td><td>${esc(t.asset)}</td><td>${esc(t.ae)}</td><td class="${mf?'flag':'ok'}">${esc(t.maint||'—')}</td></tr>`;});
+ document.getElementById('mra').innerHTML=h+'</tbody></table>';}
+function renderBackfill(){
+ // roster: driver -> tours
+ const map={};DB.tours.forEach(t=>(t.drivers||[]).forEach(d=>{(map[d]=map[d]||[]).push(t);}));
+ const names=Object.keys(map).sort();
+ let h='<table><thead><tr><th>Driver</th><th>Current tour(s)</th><th>AE</th><th>Business</th></tr></thead><tbody>';
+ names.forEach(d=>{const ts=map[d];h+=`<tr><td><b>${esc(d)}</b></td><td>${ts.map(t=>esc(t.name)+' <span style="color:var(--faint)">('+esc(t.job)+')</span>').join('<br>')}</td><td>${[...new Set(ts.map(t=>t.ae))].map(esc).join(', ')}</td><td>${[...new Set(ts.map(t=>t.biz))].map(esc).join(', ')}</td></tr>`;});
+ document.getElementById('roster').innerHTML=h+'</tbody></table>';
+ let a='<table><thead><tr><th>Date</th><th>Pick up / Drop off</th><th>Location</th><th>Address</th><th>Dist→drop</th><th>Dist from other</th></tr></thead><tbody>';
+ (DB.assist||[]).forEach(x=>{a+=`<tr><td><b>${esc(x.date)}</b></td><td>${esc(x.type)}</td><td>${esc(x.loc)}</td><td style="color:var(--muted)">${esc(x.addr)}</td><td>${esc(x.d1)}</td><td>${esc(x.d2)}</td></tr>`;});
+ document.getElementById('assist').innerHTML=a+'</tbody></table>';}
+function renderRos(){const sel=document.getElementById('rpick');if(!sel.options.length)sel.innerHTML=SHOWS.map((s,i)=>`<option value="${i}">${esc(s.name)}</option>`).join('');const s=SHOWS[+sel.value||0];
+ const map=`<svg viewBox="0 0 680 150" width="100%" style="border:1px solid #cdd5df;border-radius:8px;background:#eef1f5"><rect x="0" y="120" width="680" height="30" fill="#9aa3b0"/><text x="10" y="140" font-size="9" fill="#eef1f5">Main Rd — GPS to address</text><rect x="30" y="25" width="220" height="80" rx="6" fill="#cdd6e1" stroke="#aab4c1"/><text x="140" y="68" font-size="13" font-weight="700" fill="#46505f" text-anchor="middle">${esc(s.venue)}</text><rect x="300" y="25" width="330" height="92" fill="#e3e8ef" stroke="#c2cad6"/><text x="312" y="40" font-size="9" fill="#8a93a0">Parking</text><rect x="320" y="48" width="150" height="30" rx="4" fill="rgba(225,29,42,.14)" stroke="#e11d2a"/><text x="395" y="67" font-size="10" font-weight="700" fill="#b91c1c" text-anchor="middle">MRA TRAILER</text><text x="476" y="66" font-size="9" fill="#8a93a0">${esc(s.lot)}</text><line x1="470" y1="120" x2="470" y2="92" stroke="#15803d" stroke-width="3"/><polygon points="470,86 463,98 477,98" fill="#15803d"/><text x="484" y="110" font-size="9" fill="#15803d">Service gate</text></svg><div style="font-size:10px;color:#8a93a0;margin-top:3px">Sample site map — not to scale.</div>`;
+ document.getElementById('rosDoc').innerHTML=`<div class="ros"><div class="band"><div><div class="t">RUN OF SHOW</div><div class="s">${esc(s.tour)} — ${esc(s.name)}</div></div><div style="text-align:right;font-size:11px"><b>MRA</b> mobile.experiential</div></div><div class="pad"><div class="g"><div><div class="k">Driver</div>${esc(s.driver)}</div><div><div class="k">Unit / Asset</div>${esc(s.unit)}</div><div><div class="k">Account Exec</div>${esc(s.ae)}</div><div><div class="k">Venue</div>${esc(s.venue)}</div></div><h3>Parking &amp; Directions</h3><div style="display:flex;gap:12px;flex-wrap:wrap"><div style="flex:2 1 340px;min-width:280px">${map}</div><div style="flex:1 1 190px;min-width:180px" class="note"><b>${esc(s.addr)}</b><br><br><b>Staging:</b> ${esc(s.lot)}<br><br>${esc(s.dir)}</div></div><h3>Schedule</h3><table><tbody>${s.rows.map(r=>`<tr><td class="dd">${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`).join('')}</tbody></table><h3>Notes · Power / Generator</h3><div class="note">${esc(s.note)}</div></div></div>`;}
+fillPick();renderTL();
+</script></body></html>
