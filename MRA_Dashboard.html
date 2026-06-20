@@ -1479,7 +1479,7 @@
       <div class="msub">Merge variant spellings into ONE canonical name across <b>all</b> project tasks and shop-floor tasks — writes back to the workbook (board updates within ~15 min). Names that look like typos or aren't on the approved list are flagged ⚠.</div>
       <div class="addform">
         <div class="addrow2">
-          <div><label>Rename / merge</label><select id="asgFrom"></select></div>
+          <div><label>Rename / merge</label><select id="asgFrom" onchange="asgFromChange()"></select></div>
           <div><label>Into</label><input id="asgTo" list="asgCanonList" autocomplete="off" placeholder="canonical name"><datalist id="asgCanonList"></datalist></div>
         </div>
         <div style="display:flex; gap:8px; align-items:center; margin-top:6px">
@@ -1880,6 +1880,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.67", date:"2026-06-20", title:"Standardize Assignees: smarter flags (no more false alarms on real people)", items:[
+    "The ⚠ flag now only fires on names that look like <b>actual typos</b> — a known variant (Electrician → Electricians), a near-duplicate of another name already in use (IXL / TSS vs IXL/TSS), or a compound <b>Group / Person</b> whose group cleans up (Electrician / Ted O'Malley → Electricians / Ted O'Malley). Real, unique names like a new PM no longer get flagged.",
+    "Picking a name to merge now <b>auto-fills the suggested clean name</b>, and merging a name into itself gives a clear message instead of a confusing error." ] },
   { rev:"4.66", date:"2026-06-20", title:"Fix: completing several tasks fast no longer drops any of them", items:[
     "Write-backs are now <b>serialized</b> — when you mark several tasks complete (or fire off several edits) in quick succession, the dashboard sends them <b>one at a time</b> instead of all at once, so two saves can't collide on the workbook and get dropped. Your screen still updates instantly; the saves just queue up behind the scenes. Fixes the case where a couple of completions reverted on the next 15-min refresh." ] },
   { rev:"4.65", date:"2026-06-20", title:"Fix: Standardize Assignees opened behind the editor", items:[
@@ -3397,19 +3400,39 @@ function allAssignees(){
   (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ const w=(t.who||'').trim(); if(w) m[w]=(m[w]||0)+1; }));
   return m;
 }
-// Suggested canonical target: a known group alias (CREW_ALIAS), else a canonical name
-// sharing the normalized key (e.g. "IXL / TSS" -> "IXL/TSS", "combined effort" -> "Combined Effort").
-function asgSuggest(name){
-  const n=(name||'').trim(); if(!n) return '';
-  const a=(typeof CREW_ALIAS!=='undefined')?CREW_ALIAS[n.toLowerCase()]:''; if(a && a!==n) return a;
-  const k=asgCanonKey(n), hit=CANON_ASSIGNEES.find(c=>asgCanonKey(c)===k);
-  return (hit && hit!==n)?hit:'';
+// Canonicalize ONE name part: a known group alias (CREW_ALIAS), else an approved name
+// that shares its normalized key. Returns the part unchanged if it already looks fine.
+function asgCanonPart(part){
+  const n=(part||'').trim(); if(!n) return n;
+  const a=(typeof CREW_ALIAS!=='undefined')?CREW_ALIAS[n.toLowerCase()]:''; if(a) return a;
+  const hit=CANON_ASSIGNEES.find(c=>asgCanonKey(c)===asgCanonKey(n)); return hit||n;
 }
-function asgIsCanon(name){
-  const n=(name||'').trim(); if(!n) return true;
-  if(CANON_ASSIGNEES.some(c=>c===n)) return true;
-  if(typeof CREW_ALIAS!=='undefined' && CREW_ALIAS[n.toLowerCase()]===n) return true;   // already a canonical group target
-  return false;
+// Clusters of same-key variants actually IN USE (to spot near-duplicates like "IXL / TSS" vs "IXL/TSS").
+function asgClusters(){
+  const m=allAssignees(), byKey={};
+  Object.keys(m).forEach(n=>{ const k=asgCanonKey(n); (byKey[k]=byKey[k]||[]).push({name:n,count:m[n]}); });
+  return {counts:m, byKey};
+}
+// Pick the representative for a cluster: an approved name if present, else the most-used.
+function asgRep(cluster){
+  const canon=cluster.find(x=>CANON_ASSIGNEES.some(c=>c===x.name)); if(canon) return canon.name;
+  return cluster.slice().sort((a,b)=> b.count-a.count || a.name.localeCompare(b.name))[0].name;
+}
+// Suggested clean name, or '' if it ALREADY looks fine. Only flags real signals:
+// a compound "Group / Person" whose parts canonicalize (e.g. "Electrician / Ted O'Malley"
+// -> "Electricians / Ted O'Malley"), a known alias, or a near-duplicate of another name in use.
+// A unique, well-formed new name (a real person) is NOT flagged.
+function asgSuggest(name, cl){
+  const n=(name||'').trim(); if(!n) return '';
+  if(/\s+\/\s+/.test(n)){                                   // compound: canonicalize each side
+    const fixed=n.split(/\s+\/\s+/).map(p=>asgCanonPart(p)).join(' / ');
+    return (fixed!==n)?fixed:'';
+  }
+  const a=(typeof CREW_ALIAS!=='undefined')?CREW_ALIAS[n.toLowerCase()]:''; if(a && a!==n) return a;
+  const k=asgCanonKey(n);
+  const canonHit=CANON_ASSIGNEES.find(c=>asgCanonKey(c)===k); if(canonHit && canonHit!==n) return canonHit;
+  if(cl){ const cluster=cl.byKey[k]||[]; if(cluster.length>1){ const rep=asgRep(cluster); if(rep!==n) return rep; } }
+  return '';
 }
 let ASG_ROWS=[];
 function openAssigneeStd(){
@@ -3421,27 +3444,31 @@ function openAssigneeStd(){
 }
 function closeAsgStd(e){ if(!e || e.target.id==='asgStdModal' || e.target.classList.contains('modal-close')) document.getElementById('asgStdModal').classList.remove('show'); }
 function renderAsgList(){
-  const m=allAssignees(), names=Object.keys(m).sort((a,b)=>a.localeCompare(b));
+  const cl=asgClusters(), m=cl.counts, names=Object.keys(m).sort((a,b)=>a.localeCompare(b));
   const sel=document.getElementById('asgFrom');
   sel.innerHTML = names.map(n=>`<option value="${escA(n)}">${esc(n)} (${m[n]})</option>`).join('');
-  ASG_ROWS = names.map(n=>({from:n, to:asgSuggest(n)}));
-  const flagged=names.filter(n=>!asgIsCanon(n));
+  ASG_ROWS = names.map(n=>({from:n, to:asgSuggest(n,cl)}));
+  const flagged=ASG_ROWS.filter(r=>r.to).length;
   const box=document.getElementById('asgList');
   if(!names.length){ box.innerHTML=`<div class="empty">No assignees in use yet.</div>`; return; }
-  let h=`<div style="color:var(--muted); font-size:11px; margin:2px 0 6px">${names.length} assignee name${names.length===1?'':'s'} in use · ${flagged.length} flagged for a look</div>`;
+  let h=`<div style="color:var(--muted); font-size:11px; margin:2px 0 6px">${names.length} assignee name${names.length===1?'':'s'} in use · ${flagged} look like typos</div>`;
   h+= ASG_ROWS.map((r,i)=>{
-    const n=r.from, bad=!asgIsCanon(n);
-    const flag = bad ? `<span class="badge amber">⚠ check</span>` : `<span class="badge green">ok</span>`;
+    const n=r.from, bad=!!r.to;
+    const flag = bad ? `<span class="badge amber">⚠</span>` : `<span class="badge green">ok</span>`;
     const fix = r.to ? `<button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="asgQuickIdx(${i})" title="Merge into ${escA(r.to)} everywhere">→ ${esc(r.to)}</button>` : '';
     return `<div class="trow"><div class="tlead">${esc(n)} <span style="color:var(--muted)">· ${m[n]} task${m[n]===1?'':'s'}</span></div><div class="tright">${flag} ${fix}</div></div>`;
   }).join('');
   box.innerHTML=h;
+  asgFromChange();   // prefill "Into" with the current selection's suggestion (if any)
 }
 function asgQuickIdx(i){ const r=ASG_ROWS[i]; if(r){ document.getElementById('asgFrom').value=r.from; document.getElementById('asgTo').value=r.to; submitAsgMerge(); } }
+// When you pick a name to rename, auto-fill "Into" with its suggested clean name (blank if it looks fine).
+function asgFromChange(){ const f=document.getElementById('asgFrom').value, r=ASG_ROWS.find(x=>x.from===f); document.getElementById('asgTo').value=(r&&r.to)||''; }
 function submitAsgMerge(){
   const from=document.getElementById('asgFrom').value, to=document.getElementById('asgTo').value.trim();
   if(!from){ alert('Pick a name to rename.'); return; }
-  if(!to || to===from){ alert('Type the canonical name to merge it into.'); return; }
+  if(!to){ alert('Pick or type the name to merge it into.'); return; }
+  if(to===from){ alert('"'+from+'" is already that name — nothing to change. If it looks correct, just leave it (the ⚠ only flags possible typos).'); return; }
   if(typeof ensureAuth==='function' && !ensureAuth('standardize assignees')) return;
   const D=window.MRA_DATA||{}; let n=0;
   (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if((t.who||'').trim()===from){ t.who=to; n++; } }));
@@ -4769,7 +4796,7 @@ function renderTeam(D){
     el.innerHTML=`<div class="empty">No assigned project tasks yet — run the updated Export-Data.ps1 to populate this.</div>`;
     document.getElementById('teamCount').textContent="0 people"; return;
   }
-  const flaggedNames=Object.keys(allAssignees()).filter(n=>!asgIsCanon(n));
+  const _acl=asgClusters(); const flaggedNames=Object.keys(_acl.counts).filter(n=>asgSuggest(n,_acl));
   const flagBanner = flaggedNames.length
     ? `<div onclick="openAssigneeStd()" title="Open Standardize Assignees to merge/fix these" style="background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.45); border-radius:6px; padding:6px 9px; margin-bottom:8px; font-size:12px; cursor:pointer">⚠ ${flaggedNames.length} assignee name${flaggedNames.length===1?'':'s'} to standardize: ${flaggedNames.slice(0,6).map(esc).join(', ')}${flaggedNames.length>6?'…':''} — click to fix</div>`
     : '';
