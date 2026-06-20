@@ -8,6 +8,7 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         newProject?: string; newJobNum?: string; oldProject?: string;
         oldAssignee?: string; newAssignee?: string;
         oldName?: string; newName?: string;
+        name?: string; code?: string; date?: string; country?: string;   // users + holidays
         id?: string | number; phase?: string; type?: string; finish?: string; pred?: string;
         parentId?: string | number;
         ord?: string | number; estDays?: string | number; estHours?: string | number; budget?: string | number;
@@ -234,6 +235,43 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         if (!oldN || !newN || newN === oldN) { console.log("renameUser: no-op"); return; }
         renameCol("Users", 0, oldN, newN);               // Users col A = Name (keeps code + active)
         logIt("Rename user", oldN, "-> " + newN); return;
+    }
+
+    // ===== HOLIDAYS (optional 'Holidays' sheet: A=Name B=Date C=Country). Created on first add. =====
+    if (p.action === "setHoliday") {
+        const nm = (p.name || "").trim(), dt = (p.date || p.start || "").trim();
+        const country = ((p.country || "US").trim() || "US").toUpperCase();
+        if (!nm || !dt) { console.log("setHoliday: missing name/date"); return; }
+        let sh = workbook.getWorksheet("Holidays");
+        if (!sh) { sh = workbook.addWorksheet("Holidays"); sh.getCell(0, 0).setValue("Name"); sh.getCell(0, 1).setValue("Date"); sh.getCell(0, 2).setValue("Country"); }
+        const used = sh.getUsedRange();
+        let vals: (string | number | boolean)[][] = [], base = 0, count = 1;
+        if (used) { vals = used.getValues(); base = used.getRowIndex(); count = used.getRowCount(); }
+        const wantSer = serialOf(dt);
+        let row = -1;
+        for (let i = 1; i < vals.length; i++) {                          // match same name + same date -> update; else append
+            if (String(vals[i][0]).trim().toLowerCase() !== nm.toLowerCase()) continue;
+            if (wantSer !== "" && Number(vals[i][1]) === wantSer) { row = base + i; break; }
+        }
+        if (row < 0) row = base + count;
+        sh.getCell(row, 0).setValue(nm);                                 // A = Name
+        const dc = sh.getCell(row, 1);                                   // B = Date
+        if (wantSer === "") dc.setValue(dt); else { dc.setValue(wantSer); dc.setNumberFormatLocal([["m/d/yyyy"]]); }
+        sh.getCell(row, 2).setValue(country);                            // C = Country (US / CA / BOTH)
+        logIt("Set holiday", nm, dt + " (" + country + ")"); return;
+    }
+    if (p.action === "deleteHoliday") {
+        const nm = (p.name || "").trim(), dt = (p.date || p.start || "").trim();
+        if (!nm) { console.log("deleteHoliday: no name"); return; }
+        const sh = workbook.getWorksheet("Holidays"); if (!sh) { console.log("No Holidays sheet"); return; }
+        const used = sh.getUsedRange(); if (!used) return;
+        const vals = used.getValues(), base = used.getRowIndex(), want = serialOf(dt);
+        for (let i = 1; i < vals.length; i++) {
+            if (String(vals[i][0]).trim().toLowerCase() !== nm.toLowerCase()) continue;
+            if (dt && want !== "" && Number(vals[i][1]) !== want) continue;   // if a date is given, only that row
+            sh.getRangeByIndexes(base + i, 0, 1, 3).clear(ExcelScript.ClearApplyTo.Contents);
+        }
+        logIt("Delete holiday", nm, dt); return;
     }
 
     // ===== PROJECT TASKS (the long-term "Project Tasks" sheet: cols A..T) =====
