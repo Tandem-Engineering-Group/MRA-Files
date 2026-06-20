@@ -83,10 +83,16 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
   (~hourly); the repository_dispatch from the shuttle is the reliable 15-min trigger.** See
   `CLOUD-EXPORT-SETUP.md`. ⚠️ The PAT expires (~1 yr) — remind Rich to rotate it.
 - **🔜 STEP 2 — close the last edits that still force Excel:** (1) move a task to a different
-  project/job; (2) add subtasks in the editor; (3) bulk-add a whole new project (Upload tab /
-  intake); (4) move/reorder shop tasks between trailers; (5) manage login Users/codes from the
+  project/job; (2) add subtasks in the editor; (3) **🗑 Delete a whole project in one click** —
+  cascade (its Project Tasks + the matching floor job/Shop Tasks); CLEAR contents (don't
+  delete-shift rows) to protect the Project Gantt's absolute-row mirror; needs a new
+  `deleteProject` Office Script action. *(Rich asked 2026-06-20 — only per-task 🗑 exists today.)*
+  (4) move/reorder shop tasks between trailers; (5) manage login Users/codes from the
   dashboard; (6) bring the **logistics "arriving" calendars** into the dashboard (today the
   `renderReturns` "Coming Back to MRA" panel is ORPHANED — function exists, no DOM home/call).
+  ✅ **Upload a whole new project via the "Upload Filled" tab = ALREADY WORKING** (confirmed
+  2026-06-20: parses the filled template client-side → `importProject` action → lands on the board
+  next cycle; same-name = replace, new name = add).
 - **🏁 STEP 3 — kill the .xlsx:** move the data off the workbook entirely → **SharePoint Lists**
   (Jobs / ShopTasks / ProjectTasks / Users), so there's no Excel file to open. Platform handles
   concurrency (the write-collision class disappears).
