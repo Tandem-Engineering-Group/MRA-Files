@@ -824,6 +824,7 @@
         <button class="mi" id="btnWall" onclick="toggleWall(this)" title="Wall/TV mode: fit bays + assignee tables on one screen, auto-scroll">📺 Wall mode</button>
         <button class="mi" id="btnTheme" onclick="toggleTheme(this)" title="Switch light / dark — remembered on this device">☀️ Light</button>
         <a class="mi" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" onclick="closeDrops()" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
+        <button class="mi" onclick="closeDrops(); openUsers()" title="Add / edit / remove who can log in to edit, and set their codes (admin only)">👥 Manage logins</button>
         <div class="mi-div">Quick links</div>
         <div id="linksPop"></div>
       </div>
@@ -1500,6 +1501,26 @@
     </div>
   </div>
 
+  <!-- ===================== MANAGE LOGINS (admin: who can edit + their codes) ===================== -->
+  <div class="modal-overlay" id="usersModal" onclick="closeUsers(event)">
+    <div class="modal" style="max-width:560px">
+      <button class="modal-close" onclick="closeUsers()" title="Close">×</button>
+      <h3>👥 Manage Logins</h3>
+      <div class="msub">Add a person, change someone's code, or remove a login. Codes are stored <b>hashed</b> — for security they're never shown, so to change one you just set a new code. Saves to the workbook (applies within ~15 min). <i>Admin only. Real per-person sign-in + roles come in a later step.</i></div>
+      <div class="addform">
+        <div class="addrow2">
+          <div><label>Name</label><input id="usName" autocomplete="off" placeholder="e.g. Luc Tremblay"></div>
+          <div><label>Code</label><input id="usCode" autocomplete="off" placeholder="e.g. 4821"></div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:6px">
+          <button class="btn-primary" onclick="addUserBtn()">Add / update</button>
+          <span id="usMsg" style="color:var(--muted); font-size:12px"></span>
+        </div>
+      </div>
+      <div id="usList" style="max-height:46vh; overflow:auto; margin-top:10px"></div>
+    </div>
+  </div>
+
   <!-- ===================== PROJECT TASK FORM (add / edit one task) ===================== -->
   <div class="modal-overlay" id="projTaskModal" onclick="closePT(event)">
     <div class="modal" style="max-width:580px">
@@ -1894,6 +1915,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.71", date:"2026-06-20", title:"Manage logins from the dashboard (admin)", items:[
+    "New <b>👥 Manage logins</b> in the ☰ Menu (admin only): <b>add</b> a person who can edit, <b>set / change their code</b>, or <b>remove</b> a login — no more editing the Users sheet in Excel. You see everyone's <b>name</b>; codes are stored <b>hashed</b> so they're never shown (to change one, just set a new code).",
+    "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) — it adds the setUser + deleteUser actions." ] },
   { rev:"4.70", date:"2026-06-20", title:"Delete a whole project in one click", items:[
     "The ✎ Edit Project Tasks popup now has a <b>🗑 Delete project</b> button — removes the <b>entire</b> project at once: all its tasks, the Gantt/Progress entry, and the <b>matching floor job + Shop Tasks</b> (cascade). No more deleting tasks one by one. Code-gated, asks you to confirm; can't be undone (re-upload the template to restore).",
     "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) — it adds the deleteProject action." ] },
@@ -3515,6 +3539,63 @@ function submitAsgMerge(){
   document.getElementById('asgTo').value='';
   renderAsgList();
   if(typeof renderAll==='function') renderAll();
+}
+
+/* ===== Manage logins (admin/Rich only): add / change-code / remove who can edit ===== */
+const ADMIN_USER='Rich Miller';
+function isAdmin(){ return CURRENT_USER===ADMIN_USER; }
+let US_ROWS=[];
+function openUsers(){
+  if(typeof ensureAuth==='function' && !ensureAuth('manage logins')) return;
+  if(!isAdmin()){ alert('Only '+ADMIN_USER+' can manage logins for now.'); return; }
+  document.getElementById('usName').value=''; document.getElementById('usCode').value='';
+  document.getElementById('usMsg').textContent='';
+  renderUsersList();
+  document.getElementById('usersModal').classList.add('show');
+}
+function closeUsers(e){ if(!e || e.target.id==='usersModal' || e.target.classList.contains('modal-close')) document.getElementById('usersModal').classList.remove('show'); }
+function renderUsersList(){
+  US_ROWS=(((window.MRA_DATA||{}).users)||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  const box=document.getElementById('usList');
+  if(!US_ROWS.length){ box.innerHTML=`<div class="empty">No logins published yet — add the first one above.</div>`; return; }
+  let h=`<div style="color:var(--muted); font-size:11px; margin:2px 0 6px">${US_ROWS.length} login${US_ROWS.length===1?'':'s'} who can edit</div>`;
+  h+= US_ROWS.map((u,i)=>{
+    const me=String(u.name||'')===CURRENT_USER;
+    return `<div class="trow"><div class="tlead">${esc(u.name||'(unnamed)')}${me?' <span class="badge green">you</span>':''}</div>`+
+      `<div class="tright"><button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="changeUserCodeIdx(${i})" title="Set a new code for ${escA(u.name||'')}">🔑 New code</button> `+
+      `<button class="btn-ghost" style="padding:2px 8px; font-size:11px; border-color:rgba(239,68,68,.5); color:#fca5a5" onclick="removeUserIdx(${i})" title="Remove ${escA(u.name||'')}"${me?' disabled':''}>🗑</button></div></div>`;
+  }).join('');
+  box.innerHTML=h;
+}
+function addUserBtn(){
+  if(!isAdmin()){ alert('Only '+ADMIN_USER+' can manage logins.'); return; }
+  const name=document.getElementById('usName').value.trim(), code=document.getElementById('usCode').value.trim();
+  if(!name){ alert('Enter a name.'); return; }
+  if(!code){ alert("Enter a code (the number they'll type to log in)."); return; }
+  const D=window.MRA_DATA||{}; D.users=D.users||[];                  // optimistic (store hash so it works right away)
+  const ex=D.users.find(u=>String(u.name||'')===name); if(ex){ ex.h=pinHash(code); } else { D.users.push({name:name, h:pinHash(code)}); }
+  if(typeof shopWrite==='function') shopWrite({ action:'setUser', name:name, code:code, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  document.getElementById('usMsg').textContent=(ex?('Updated '+name+"'s code.") : ('Added '+name+'.'))+' Saves within ~15 min.';
+  document.getElementById('usName').value=''; document.getElementById('usCode').value='';
+  renderUsersList();
+}
+function changeUserCodeIdx(i){ const u=US_ROWS[i]; if(!u || !isAdmin()) return;
+  const code=(prompt('Set a NEW code for '+(u.name||'')+' (the number they type to log in):')||'').trim(); if(!code) return;
+  const D=window.MRA_DATA||{}; const ex=(D.users||[]).find(x=>String(x.name||'')===u.name); if(ex) ex.h=pinHash(code);
+  if(typeof shopWrite==='function') shopWrite({ action:'setUser', name:u.name, code:code, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  document.getElementById('usMsg').textContent='Updated '+(u.name||'')+"'s code. Saves within ~15 min.";
+  renderUsersList();
+}
+function removeUserIdx(i){ const u=US_ROWS[i]; if(!u || !isAdmin()) return;
+  if(String(u.name||'')===CURRENT_USER){ alert("You can't remove yourself while you're logged in."); return; }
+  if(!confirm('Remove login for "'+(u.name||'')+'"? They will no longer be able to edit.')) return;
+  const D=window.MRA_DATA||{}; if(D.users) D.users=D.users.filter(x=>String(x.name||'')!==u.name);
+  if(typeof shopWrite==='function') shopWrite({ action:'deleteUser', name:u.name, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  document.getElementById('usMsg').textContent='Removed '+(u.name||'')+'. Saves within ~15 min.';
+  renderUsersList();
 }
 
 /* ---- render the task list for the selected project ---- */

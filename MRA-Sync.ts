@@ -206,6 +206,27 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         clearRowsWhere("Shop Tasks", 0, proj);      // its shop tasks
         logIt("Delete project", proj, "(cleared everywhere)"); return;
     }
+    if (p.action === "setUser") {
+        const nm = (p.name || "").trim(), code = (p.code || "").trim();
+        if (!nm || !code) { console.log("setUser: missing name/code"); return; }
+        const sh = workbook.getWorksheet("Users"); if (!sh) { console.log("No Users sheet"); return; }
+        const used = sh.getUsedRange();
+        let vals: (string | number | boolean)[][] = [], base = 0, count = 1;
+        if (used) { vals = used.getValues(); base = used.getRowIndex(); count = used.getRowCount(); }
+        let row = -1;
+        for (let i = 1; i < vals.length; i++) if (String(vals[i][0]).trim().toLowerCase() === nm.toLowerCase()) { row = base + i; break; }
+        if (row < 0) row = base + count;                 // append below the last used row
+        sh.getCell(row, 0).setValue(nm);                 // A = Name
+        const cc = sh.getCell(row, 1); cc.setNumberFormatLocal([["@"]]); cc.setValue(code);  // B = Code (force text so leading zeros / digits hash exactly)
+        sh.getCell(row, 2).setValue("Yes");              // C = Active
+        logIt("Set user", nm, row < base + count ? "(updated)" : "(added)"); return;
+    }
+    if (p.action === "deleteUser") {
+        const nm = (p.name || "").trim();
+        if (!nm) { console.log("deleteUser: no name"); return; }
+        clearRowsWhere("Users", 0, nm);                  // clear that login's row (Name col A)
+        logIt("Delete user", nm, ""); return;
+    }
 
     // ===== PROJECT TASKS (the long-term "Project Tasks" sheet: cols A..T) =====
     if (p.action === "addProjectTask" || p.action === "editProjectTask" || p.action === "deleteProjectTask"
