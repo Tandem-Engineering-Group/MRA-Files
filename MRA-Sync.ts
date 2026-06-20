@@ -6,6 +6,7 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         client?: string; pm?: string;
         row?: number; status?: string; start?: string; completion?: string; notes?: string;
         newProject?: string; newJobNum?: string; oldProject?: string;
+        oldAssignee?: string; newAssignee?: string;
         id?: string | number; phase?: string; type?: string; finish?: string; pred?: string;
         ord?: string | number; estDays?: string | number; estHours?: string | number; budget?: string | number;
         pin?: string; user?: string;
@@ -75,6 +76,15 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         const used = sh.getUsedRange(); if (!used) return;
         const vals = used.getValues(), base = used.getRowIndex();
         for (let i = 1; i < vals.length; i++) if (String(vals[i][col]).trim().toLowerCase() === ov) sh.getCell(base + i, col).setValue(newVal);
+    };
+    // Set a target column to a value on every row whose matchCol equals matchVal
+    // (used to push one PM onto all of a project's rows, on Project Tasks + Input).
+    const setColWhere = (sheetName: string, matchCol: number, matchVal: string, targetCol: number, value: string) => {
+        const mv = (matchVal || "").trim().toLowerCase(); if (!mv) return;
+        const sh = workbook.getWorksheet(sheetName); if (!sh) return;
+        const used = sh.getUsedRange(); if (!used) return;
+        const vals = used.getValues(), base = used.getRowIndex();
+        for (let i = 1; i < vals.length; i++) if (String(vals[i][matchCol]).trim().toLowerCase() === mv) sh.getCell(base + i, targetCol).setValue(value);
     };
 
     if (p.action === "addTask") {
@@ -164,6 +174,20 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         renameCol("Input", 1, oldP, newP);           // Input col B = Project (the floor job)
         renameCol("Shop Tasks", 0, oldP, newP);      // Shop Tasks col A = Project
         logIt("Rename project", oldP, "-> " + newP); return;
+    }
+    if (p.action === "setProjectPM") {
+        const proj = (p.project || "").trim(), pm = (p.pm || "").trim();
+        if (!proj) { console.log("setProjectPM: no project"); return; }
+        setColWhere("Project Tasks", 0, proj, 9, pm);   // Project Tasks col J = PM, set on every row of this project
+        setColWhere("Input", 1, proj, 10, pm);          // Input col K = PM on the matching floor job
+        logIt("Set project PM", proj, pm || "(cleared)"); return;
+    }
+    if (p.action === "renameAssignee") {
+        const oldA = (p.oldAssignee || "").trim(), newA = (p.newAssignee || "").trim();
+        if (!oldA || !newA || newA === oldA) { console.log("renameAssignee: no-op"); return; }
+        renameCol("Project Tasks", 7, oldA, newA);   // Project Tasks col H = Assigned To
+        renameCol("Shop Tasks", 4, oldA, newA);      // Shop Tasks col E = Assigned
+        logIt("Rename assignee", oldA, "-> " + newA); return;
     }
 
     // ===== PROJECT TASKS (the long-term "Project Tasks" sheet: cols A..T) =====

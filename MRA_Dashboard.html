@@ -450,6 +450,11 @@
   #fleetioKpis .kpi.fon{outline:2px solid var(--brand); outline-offset:-2px}
   #fleetioKpis .kpi .kgo{font-size:10px; color:var(--muted); margin-top:6px; font-weight:600; opacity:.7}
   .panel.hl{box-shadow:0 0 0 2px var(--brand); transition:box-shadow .3s}
+  .job.hl{box-shadow:0 0 0 2px var(--brand); border-radius:8px; transition:box-shadow .3s}
+  /* clickable rows inside a hover popover (KPI tile lists jump to the item) */
+  .barpop .pgo{cursor:pointer; border-radius:4px; padding:1px 4px; margin:0 -4px}
+  .barpop .pgo:hover{background:rgba(255,255,255,.10)}
+  body.light .barpop .pgo:hover{background:rgba(0,0,0,.06)}
   .ffnote{font-size:12px; color:var(--muted); margin:0 0 8px}
   .ffnote a{color:var(--blue); cursor:pointer; text-decoration:underline}
   .ftools{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:2px 0 12px}
@@ -1452,6 +1457,8 @@
       <div style="display:flex; gap:8px; align-items:center; margin:6px 0 8px; flex-wrap:wrap">
         <button class="btn-primary" onclick="openProjTaskNew()">➕ Add task</button>
         <button class="btn-ghost" onclick="renameProjectBtn()" title="Rename this project everywhere — its tasks, the Gantt/Progress, and the matching floor job (nothing orphans)">✎ Rename</button>
+        <button class="btn-ghost" id="pePMBtn" onclick="setProjectPMBtn()" title="Set the Program Development lead for this project — applies to all its tasks and the matching floor job (no Excel)">👤 Set PM</button>
+        <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
         <span id="peCount" style="color:var(--muted); font-size:12px"></span>
         <span style="margin-left:auto; display:flex; gap:6px">
           <button class="btn-ghost" id="peHideDoneBtn" style="padding:3px 9px; font-size:11px" onclick="peToggleHideDone()" title="Hide completed tasks to make scrolling easier">✓ Hide completed</button>
@@ -1460,6 +1467,26 @@
         </span>
       </div>
       <div id="peList" style="max-height:58vh; overflow:auto; margin:0 -4px; padding:0 4px"></div>
+    </div>
+  </div>
+
+  <!-- ===================== STANDARDIZE ASSIGNEES (merge variants + flag unknowns) ===================== -->
+  <div class="modal-overlay" id="asgStdModal" onclick="closeAsgStd(event)">
+    <div class="modal" style="max-width:680px">
+      <button class="modal-close" onclick="closeAsgStd()" title="Close">×</button>
+      <h3>👥 Standardize Assignees</h3>
+      <div class="msub">Merge variant spellings into ONE canonical name across <b>all</b> project tasks and shop-floor tasks — writes back to the workbook (board updates within ~15 min). Names that look like typos or aren't on the approved list are flagged ⚠.</div>
+      <div class="addform">
+        <div class="addrow2">
+          <div><label>Rename / merge</label><select id="asgFrom"></select></div>
+          <div><label>Into</label><input id="asgTo" list="asgCanonList" autocomplete="off" placeholder="canonical name"><datalist id="asgCanonList"></datalist></div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:6px">
+          <button class="btn-primary" onclick="submitAsgMerge()">Apply everywhere</button>
+          <span id="asgMsg" style="color:var(--muted); font-size:12px"></span>
+        </div>
+      </div>
+      <div id="asgList" style="max-height:50vh; overflow:auto; margin-top:10px"></div>
     </div>
   </div>
 
@@ -1794,7 +1821,9 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented). Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule — handy for a "what's left" handout.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
-    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. <b>Subtasks</b> (the <b>Sub</b> column in the workbook) sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).</p></div>
+    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. <b>Subtasks</b> (the <b>Sub</b> column in the workbook) sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names.</p></div>
+  <div class="hsec"><h4>⑯ᵇ 🖱️ Click a KPI hover to jump</h4>
+    <p>Hover a top KPI tile to see its list — on <b>PROJECTS</b> (In progress / Upcoming / Completed / At risk / Milestones) and on the <b>FLOOR</b> job tiles, each item is now <b>clickable</b>: click a <b>project</b> to open its full‑screen detail view, or a <b>floor job</b> to switch to the Floor board and flash its card. Move the mouse onto the popover before clicking — it stays open so the links are live.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
     <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. The highlight is a clean <b>white outline</b>; adjacent tasks merge into one continuous band so it reads over any bar color. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
@@ -1850,6 +1879,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.64", date:"2026-06-20", title:"Set a project's PM · standardize assignees · click KPI hovers to jump", items:[
+    "<b>👤 Set PM</b> in the ✎ Edit Project Tasks popup — set the Program Development lead for a whole project; it applies to all its tasks <b>and</b> the matching floor job (no Excel). The button shows the current PM.",
+    "<b>👥 Assignees</b> (same popup) — a <b>Standardize Assignees</b> tool: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across <b>every</b> project + shop task in one click. It lists every assignee in use with a task count, suggests fixes, and <b>flags</b> names that look like typos or aren't on the approved list (also shown as a ⚠ note on 👥 Team Capacity).",
+    "<b>Click‑through KPI hovers</b> — on the PROJECTS tiles (In progress / Upcoming / Completed / At risk / Milestones) and the FLOOR job tiles, each item in the hover list is now <b>clickable</b>: a project opens its detail view, a floor job jumps to and flashes its card on the board.",
+    "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) — it adds the setProjectPM + renameAssignee actions." ] },
   { rev:"4.63", date:"2026-06-20", title:"Rename a project from the Projects tab", items:[
     "The ✎ Edit Project Tasks popup now has a <b>✎ Rename</b> button — rename a whole project and it updates <b>everywhere</b>: all its tasks, the Gantt/Progress, and the <b>matching floor job + its Shop Tasks</b> (cascade, so nothing orphans). Mirrors the job rename.",
     "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) — it adds the renameProject action." ] },
@@ -2921,6 +2955,12 @@ function submitEditTask(){
 const SHOP_WRITE_URL = CLOSE_FLOW_URL;   // Add + Edit/Move reuse the existing close flow (its script now handles all 3 actions)
 const BAY_OPTIONS = ['Bay 2 Front','Bay 2 Back / Loading Dock','Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back','Parking Lot','On Hold','Next Up'];
 const ASSIGNEE_OPTIONS = ['Sal','Wrap Team','Electricians','Doug','Josh','Jeff','Vendor'];
+// Approved ("canonical") assignee names for standardization — floor crew + the project
+// orgs/people Rich confirmed. Anything in use that isn't here (and isn't a known group
+// target) gets flagged for a look. Editable as the roster evolves.
+const CANON_ASSIGNEES = ['Sal','Wrap Team','Electricians','Doug','Josh','Jeff','Vendor',
+  'MRA','MRA Shop','MRA Design','Maintenance','Megan Fraser','Al Karloff','Gino Bitonti',
+  'Medtronic','Learning Undefeated','IXL/TSS','Brinkbit','Combined Effort','Siemens DI','Heitek'];
 // Jump from Edit job → the proper assignable task add, prefilled for this job.
 function addTaskForJob(){ const proj=window._ejProj; document.getElementById('editModal').classList.remove('show'); openAddTask(proj); }
 // Add a general crew task (no trailer) — opens the add form on the "🛠 General" lane.
@@ -3310,6 +3350,87 @@ function renameProjectBtn(){
   if(typeof renderAll==='function') renderAll();
   openProjectEditor(nn);   // reopen on the renamed project
 }
+// Set the Program Development lead for the whole project — applies to all its tasks + the matching floor job.
+function setProjectPMBtn(){
+  const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('set the Program Development lead')) return;
+  const p=oProj(name); const cur=(p&&p.pm)||'';
+  const nn=(prompt('Set the Program Development lead for "'+name+'" — applies to all its tasks and the matching floor job (blank clears it):', cur)||'').trim();
+  if(nn===cur) return;
+  const D=window.MRA_DATA||{};
+  (D.projects||[]).forEach(pp=>{ if(pp.name===name){ pp.pm=nn; (pp.tasks||[]).forEach(t=>{ if('pm' in t) t.pm=nn; }); } });
+  (D.jobs||[]).forEach(j=>{ if((j.project||'')===name) j.pm=nn; });
+  if(typeof shopWrite==='function') shopWrite({ action:'setProjectPM', project:name, pm:nn, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  if(typeof renderAll==='function') renderAll();
+  renderProjTaskList();
+}
+
+/* ===== Standardize assignees — merge variant spellings + flag typos/unknowns ===== */
+function asgCanonKey(s){ return (s||'').trim().toLowerCase().replace(/[^a-z0-9]/g,''); }   // normalize for near-dup clustering
+// Distinct assignee cell-values across project tasks + shop-floor tasks, with task counts.
+function allAssignees(){
+  const D=window.MRA_DATA||{}, m={};
+  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ const w=(t.who||'').trim(); if(w) m[w]=(m[w]||0)+1; }));
+  (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ const w=(t.who||'').trim(); if(w) m[w]=(m[w]||0)+1; }));
+  return m;
+}
+// Suggested canonical target: a known group alias (CREW_ALIAS), else a canonical name
+// sharing the normalized key (e.g. "IXL / TSS" -> "IXL/TSS", "combined effort" -> "Combined Effort").
+function asgSuggest(name){
+  const n=(name||'').trim(); if(!n) return '';
+  const a=(typeof CREW_ALIAS!=='undefined')?CREW_ALIAS[n.toLowerCase()]:''; if(a && a!==n) return a;
+  const k=asgCanonKey(n), hit=CANON_ASSIGNEES.find(c=>asgCanonKey(c)===k);
+  return (hit && hit!==n)?hit:'';
+}
+function asgIsCanon(name){
+  const n=(name||'').trim(); if(!n) return true;
+  if(CANON_ASSIGNEES.some(c=>c===n)) return true;
+  if(typeof CREW_ALIAS!=='undefined' && CREW_ALIAS[n.toLowerCase()]===n) return true;   // already a canonical group target
+  return false;
+}
+let ASG_ROWS=[];
+function openAssigneeStd(){
+  document.getElementById('asgCanonList').innerHTML = CANON_ASSIGNEES.map(c=>`<option>${esc(c)}</option>`).join('');
+  document.getElementById('asgTo').value='';
+  document.getElementById('asgMsg').textContent='';
+  renderAsgList();
+  document.getElementById('asgStdModal').classList.add('show');
+}
+function closeAsgStd(e){ if(!e || e.target.id==='asgStdModal' || e.target.classList.contains('modal-close')) document.getElementById('asgStdModal').classList.remove('show'); }
+function renderAsgList(){
+  const m=allAssignees(), names=Object.keys(m).sort((a,b)=>a.localeCompare(b));
+  const sel=document.getElementById('asgFrom');
+  sel.innerHTML = names.map(n=>`<option value="${escA(n)}">${esc(n)} (${m[n]})</option>`).join('');
+  ASG_ROWS = names.map(n=>({from:n, to:asgSuggest(n)}));
+  const flagged=names.filter(n=>!asgIsCanon(n));
+  const box=document.getElementById('asgList');
+  if(!names.length){ box.innerHTML=`<div class="empty">No assignees in use yet.</div>`; return; }
+  let h=`<div style="color:var(--muted); font-size:11px; margin:2px 0 6px">${names.length} assignee name${names.length===1?'':'s'} in use · ${flagged.length} flagged for a look</div>`;
+  h+= ASG_ROWS.map((r,i)=>{
+    const n=r.from, bad=!asgIsCanon(n);
+    const flag = bad ? `<span class="badge amber">⚠ check</span>` : `<span class="badge green">ok</span>`;
+    const fix = r.to ? `<button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="asgQuickIdx(${i})" title="Merge into ${escA(r.to)} everywhere">→ ${esc(r.to)}</button>` : '';
+    return `<div class="trow"><div class="tlead">${esc(n)} <span style="color:var(--muted)">· ${m[n]} task${m[n]===1?'':'s'}</span></div><div class="tright">${flag} ${fix}</div></div>`;
+  }).join('');
+  box.innerHTML=h;
+}
+function asgQuickIdx(i){ const r=ASG_ROWS[i]; if(r){ document.getElementById('asgFrom').value=r.from; document.getElementById('asgTo').value=r.to; submitAsgMerge(); } }
+function submitAsgMerge(){
+  const from=document.getElementById('asgFrom').value, to=document.getElementById('asgTo').value.trim();
+  if(!from){ alert('Pick a name to rename.'); return; }
+  if(!to || to===from){ alert('Type the canonical name to merge it into.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('standardize assignees')) return;
+  const D=window.MRA_DATA||{}; let n=0;
+  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if((t.who||'').trim()===from){ t.who=to; n++; } }));
+  (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ if((t.who||'').trim()===from){ t.who=to; n++; } }));
+  if(typeof shopWrite==='function') shopWrite({ action:'renameAssignee', oldAssignee:from, newAssignee:to, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  document.getElementById('asgMsg').textContent = `Merged “${from}” → “${to}” on ${n} task${n===1?'':'s'} here; workbook updates within ~15 min.`;
+  document.getElementById('asgTo').value='';
+  renderAsgList();
+  if(typeof renderAll==='function') renderAll();
+}
 
 /* ---- render the task list for the selected project ---- */
 function projStatusBadge(t){
@@ -3322,6 +3443,7 @@ function projStatusBadge(t){
 }
 function renderProjTaskList(){
   const name=peCurrentProject(), p=oProj(name);
+  const pmBtn=document.getElementById('pePMBtn'); if(pmBtn) pmBtn.textContent=(p&&p.pm)?('👤 PM: '+p.pm):'👤 Set PM';
   const list=document.getElementById('peList'), cnt=document.getElementById('peCount');
   const tasks=(p&&p.tasks)||[];
   if(!p || !tasks.length){
@@ -4148,7 +4270,7 @@ function renderFloor(D){
     // so a single job (e.g. WFCU in Bay 5 Front) can be shrunk on its own.
     const jcaret = (!WALL && (j.openCount>0 || fl.length))
       ? `<span class="job-collapse" onclick="toggleJob(${j.row})" title="Collapse / expand this job">${jOpen?'▾':'▸'}</span>` : '';
-    return `<div class="job${jc}"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
+    return `<div class="job${jc}" id="floorjob-${j.row}"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
@@ -4341,6 +4463,10 @@ function renderReturns(D){
   }
 }
 function goReturns(){ setView('floor'); const el=document.getElementById('fp-returns'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+// Jump from a floor KPI hover to that job's card on the Floor board (switch view, scroll, flash).
+function goFloorJob(row){ closeBarPop(); setView('floor');
+  setTimeout(()=>{ const el=document.getElementById('floorjob-'+row);
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('hl'); setTimeout(()=>el.classList.remove('hl'),1800); } }, 90); }
 
 /* ---------- PROJECTS view ---------- */
 function projStatus(p, today){
@@ -4378,7 +4504,7 @@ function riskListPop(title, list){
   h+=`<div class="pp-sub">${list.length} need attention</div><div class="pp-ms">`;
   h+= list.slice(0,24).map(x=>{const p=x.p, hh=x.h;
     const tag=hh.state==='late'?'past due':(hh.behindBy!=null?hh.behindBy+'% behind':'behind');
-    return `<div>• ${esc(p.name)} <span style="color:var(--muted)">— ${esc(p.pm||'—')} · ${p.pct}% · ${tag}</span></div>`;}).join('');
+    return `<div class="pgo" onclick="openProjectDetail(event,'${escJsAttr(p.name)}');closeBarPop()" title="Open ${escA(p.name||'')}">• ${esc(p.name)} <span style="color:var(--muted)">— ${esc(p.pm||'—')} · ${p.pct}% · ${tag}</span></div>`;}).join('');
   if(list.length>24) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-24} more…</div>`;
   return h+`</div>`;
 }
@@ -4386,7 +4512,7 @@ function projListPop(title, list){
   let h=`<h4>${esc(title)}</h4>`;
   if(!list||!list.length){ h+=`<div class="pp-sub">none</div>`; return h; }
   h+=`<div class="pp-sub">${list.length} total</div><div class="pp-ms">`;
-  h+= list.slice(0,24).map(p=>`<div>• ${esc(p.name||'—')} <span style="color:var(--muted)">— ${esc(p.pm||'—')}${p.pct!=null?' · '+p.pct+'%':''}</span></div>`).join('');
+  h+= list.slice(0,24).map(p=>`<div class="pgo" onclick="openProjectDetail(event,'${escJsAttr(p.name)}');closeBarPop()" title="Open ${escA(p.name||'')}">• ${esc(p.name||'—')} <span style="color:var(--muted)">— ${esc(p.pm||'—')}${p.pct!=null?' · '+p.pct+'%':''}</span></div>`).join('');
   if(list.length>24) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-24} more…</div>`;
   return h+`</div>`;
 }
@@ -4394,7 +4520,7 @@ function msListPop(title, list){
   let h=`<h4>${esc(title)}</h4>`;
   if(!list||!list.length){ h+=`<div class="pp-sub">none</div>`; return h; }
   h+=`<div class="pp-sub">${list.length} upcoming</div><div class="pp-ms">`;
-  h+= list.slice(0,24).map(m=>`<div>◆ ${esc(m.name||'—')} <span style="color:var(--muted)">— ${esc(m.proj||'')} · ${fmtMDY(m.dateISO)}</span></div>`).join('');
+  h+= list.slice(0,24).map(m=>`<div class="pgo" onclick="openProjectDetail(event,'${escJsAttr(m.proj||'')}');closeBarPop()" title="Open ${escA(m.proj||'')}">◆ ${esc(m.name||'—')} <span style="color:var(--muted)">— ${esc(m.proj||'')} · ${fmtMDY(m.dateISO)}</span></div>`).join('');
   if(list.length>24) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-24} more…</div>`;
   return h+`</div>`;
 }
@@ -4621,7 +4747,11 @@ function renderTeam(D){
     el.innerHTML=`<div class="empty">No assigned project tasks yet — run the updated Export-Data.ps1 to populate this.</div>`;
     document.getElementById('teamCount').textContent="0 people"; return;
   }
-  el.innerHTML=people.map(p=>{
+  const flaggedNames=Object.keys(allAssignees()).filter(n=>!asgIsCanon(n));
+  const flagBanner = flaggedNames.length
+    ? `<div onclick="openAssigneeStd()" title="Open Standardize Assignees to merge/fix these" style="background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.45); border-radius:6px; padding:6px 9px; margin-bottom:8px; font-size:12px; cursor:pointer">⚠ ${flaggedNames.length} assignee name${flaggedNames.length===1?'':'s'} to standardize: ${flaggedNames.slice(0,6).map(esc).join(', ')}${flaggedNames.length>6?'…':''} — click to fix</div>`
+    : '';
+  el.innerHTML=flagBanner + people.map(p=>{
     const meta=[ p.overdue?`<span class="badge red">${p.overdue} overdue</span>`:'',
                  p.soon?`<span class="badge amber">${p.soon} due soon</span>`:'' ]
                .filter(Boolean).join(' ') || `<span class="badge green">on track</span>`;
@@ -6236,7 +6366,7 @@ function jobsPop(title, list, tasks){
     const tag = (tasks&&j.openCount)?` <span class="badge amber">${j.openCount} open</span>`:'';
     const shipped = ((j.status||'').toLowerCase()==='shipped' && j.completionISO)
       ? ` · shipped ${fmtMD(j.completionISO)}` : '';
-    return `<div>• ${esc(j.project||'—')} <span style="color:var(--muted)">— ${esc(j.bay||'')}${j.jobNum?' · '+esc(j.jobNum):''}${shipped}</span>${tag}</div>`;
+    return `<div class="pgo" onclick="goFloorJob(${j.row||0})" title="Jump to ${escA(j.project||'')} on the Floor board">• ${esc(j.project||'—')} <span style="color:var(--muted)">— ${esc(j.bay||'')}${j.jobNum?' · '+esc(j.jobNum):''}${shipped}</span>${tag}</div>`;
   }).join('');
   if(list.length>20) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-20} more…</div>`;
   return h+`</div>`;
