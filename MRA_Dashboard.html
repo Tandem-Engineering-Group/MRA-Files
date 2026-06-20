@@ -1915,6 +1915,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.72", date:"2026-06-20", title:"Manage logins: rename a person too", items:[
+    "The 👥 Manage logins screen now has an <b>✎ rename</b> on each login — fix or change someone's display name (their code stays the same). Adds to the existing add / 🔑 new code / 🗑 remove.",
+    "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) — it adds the renameUser action." ] },
   { rev:"4.71", date:"2026-06-20", title:"Manage logins from the dashboard (admin)", items:[
     "New <b>👥 Manage logins</b> in the ☰ Menu (admin only): <b>add</b> a person who can edit, <b>set / change their code</b>, or <b>remove</b> a login — no more editing the Users sheet in Excel. You see everyone's <b>name</b>; codes are stored <b>hashed</b> so they're never shown (to change one, just set a new code).",
     "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) — it adds the setUser + deleteUser actions." ] },
@@ -3562,7 +3565,8 @@ function renderUsersList(){
   h+= US_ROWS.map((u,i)=>{
     const me=String(u.name||'')===CURRENT_USER;
     return `<div class="trow"><div class="tlead">${esc(u.name||'(unnamed)')}${me?' <span class="badge green">you</span>':''}</div>`+
-      `<div class="tright"><button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="changeUserCodeIdx(${i})" title="Set a new code for ${escA(u.name||'')}">🔑 New code</button> `+
+      `<div class="tright"><button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="renameUserIdx(${i})" title="Rename ${escA(u.name||'')} (keeps their code)">✎</button> `+
+      `<button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="changeUserCodeIdx(${i})" title="Set a new code for ${escA(u.name||'')}">🔑 New code</button> `+
       `<button class="btn-ghost" style="padding:2px 8px; font-size:11px; border-color:rgba(239,68,68,.5); color:#fca5a5" onclick="removeUserIdx(${i})" title="Remove ${escA(u.name||'')}"${me?' disabled':''}>🗑</button></div></div>`;
   }).join('');
   box.innerHTML=h;
@@ -3595,6 +3599,15 @@ function removeUserIdx(i){ const u=US_ROWS[i]; if(!u || !isAdmin()) return;
   if(typeof shopWrite==='function') shopWrite({ action:'deleteUser', name:u.name, pin:CLOSE_PIN, user:CURRENT_USER });
   if(typeof markPending==='function') markPending();
   document.getElementById('usMsg').textContent='Removed '+(u.name||'')+'. Saves within ~15 min.';
+  renderUsersList();
+}
+function renameUserIdx(i){ const u=US_ROWS[i]; if(!u || !isAdmin()) return;
+  const nn=(prompt("Rename this login (changes the display name; their code stays the same):\n\n"+(u.name||''), u.name||'')||'').trim();
+  if(!nn || nn===u.name) return;
+  const D=window.MRA_DATA||{}; const ex=(D.users||[]).find(x=>String(x.name||'')===u.name); if(ex) ex.name=nn;
+  if(typeof shopWrite==='function') shopWrite({ action:'renameUser', oldName:u.name, newName:nn, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  document.getElementById('usMsg').textContent='Renamed to '+nn+'. Saves within ~15 min.';
   renderUsersList();
 }
 

@@ -7,6 +7,7 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         row?: number; status?: string; start?: string; completion?: string; notes?: string;
         newProject?: string; newJobNum?: string; oldProject?: string;
         oldAssignee?: string; newAssignee?: string;
+        oldName?: string; newName?: string;
         id?: string | number; phase?: string; type?: string; finish?: string; pred?: string;
         ord?: string | number; estDays?: string | number; estHours?: string | number; budget?: string | number;
         pin?: string; user?: string;
@@ -226,6 +227,12 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         if (!nm) { console.log("deleteUser: no name"); return; }
         clearRowsWhere("Users", 0, nm);                  // clear that login's row (Name col A)
         logIt("Delete user", nm, ""); return;
+    }
+    if (p.action === "renameUser") {
+        const oldN = (p.oldName || "").trim(), newN = (p.newName || "").trim();
+        if (!oldN || !newN || newN === oldN) { console.log("renameUser: no-op"); return; }
+        renameCol("Users", 0, oldN, newN);               // Users col A = Name (keeps code + active)
+        logIt("Rename user", oldN, "-> " + newN); return;
     }
 
     // ===== PROJECT TASKS (the long-term "Project Tasks" sheet: cols A..T) =====
