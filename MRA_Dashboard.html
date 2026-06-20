@@ -1638,7 +1638,10 @@ function toggleArchived(){ SHOW_ARCHIVED=!SHOW_ARCHIVED; try{localStorage.setIte
   if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); } }
 // A project's "wrapped" date = its matching shipped floor job's ship date, else (if 100% done) its last finish.
 function projDoneISO(p){ if(!p) return null; const D=window.MRA_DATA||{}; const nm=String(p.name||'').trim().toLowerCase();
-  const j=(D.jobs||[]).find(x=>String(x.project||'').trim().toLowerCase()===nm && (x.status||'').toLowerCase()==='shipped');
+  // match the floor trailer by name — forgiving so "Washtenaw" links to "Washtenaw County" (and vice-versa)
+  const j=(D.jobs||[]).find(x=>{ const jn=String(x.project||'').trim().toLowerCase();
+    if(!jn || (x.status||'').toLowerCase()!=='shipped') return false;
+    return jn===nm || (nm.length>=4 && (jn.indexOf(nm)>=0 || nm.indexOf(jn)>=0)); });
   if(j && j.completionISO) return j.completionISO;
   if((p.pct||0)>=100 && p.finishISO) return p.finishISO;
   return null; }
