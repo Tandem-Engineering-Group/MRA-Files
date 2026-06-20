@@ -514,22 +514,23 @@
   .g-axisrow,.g-row{display:flex; align-items:stretch}
   .g-gutter{width:188px; flex:0 0 188px; padding:5px 10px 5px 2px}
   .g-track{position:relative; flex:1 1 auto; min-height:26px; border-left:1px solid var(--line)}
-  .g-axisrow .g-track{height:30px}   /* room for the date tick + holiday name (which can stagger to a 2nd line) */
+  .g-axisrow .g-track{height:22px}
   .g-axisrow .g-gutter{padding-bottom:2px}
   .g-tick{position:absolute; top:3px; font-size:10px; color:var(--muted); transform:translateX(4px); white-space:nowrap}
   .g-grid{position:absolute; top:0; bottom:0; width:1px; background:rgba(255,255,255,.16)}
   .g-today{position:absolute; top:0; bottom:0; width:2px; background:var(--red); opacity:.7; z-index:3}
-  /* Company holidays — a translucent violet column for the day, OVER the bars (so it's visible even on rows that are
-     one long bar) but pointer-events:none so it never blocks a bar click or the detail-view drag. Aligned under its
-     name label in the axis. Informational, never blocks scheduling. */
-  .g-holiday{position:absolute; top:0; bottom:0; background:rgba(167,139,250,.16);
-    border-left:1px solid rgba(167,139,250,.7); border-right:1px solid rgba(167,139,250,.7); z-index:3; pointer-events:none}
-  body.light .g-holiday{background:rgba(124,58,237,.13); border-color:rgba(124,58,237,.6)}
-  /* Holiday name sits just BELOW the date ticks, dimmed so the date stays readable through it. Hover for full name. */
-  .g-holname{position:absolute; top:11px; transform:translateX(-50%); font-size:8.5px; line-height:1.1; font-weight:700;
-    color:rgba(196,181,253,.82); background:transparent; padding:0 3px; cursor:help;
-    white-space:nowrap; max-width:150px; overflow:hidden; text-overflow:ellipsis; pointer-events:auto; z-index:5}
-  body.light .g-holname{color:rgba(91,33,182,.85)}
+  /* Company holidays get their OWN lane directly under the date axis — never overlaps the bars.
+     Each holiday is a small chip at its date; close ones stagger to a 2nd line. Informational only. */
+  .g-holrow{display:flex; align-items:stretch; border-bottom:1px solid var(--line); min-height:28px; background:rgba(167,139,250,.06)}
+  .g-holrow .g-gutter{display:flex; align-items:center}
+  .g-holrow-lbl{font-size:9px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .g-holrow .g-track{min-height:28px}
+  .g-holmk{position:absolute; top:3px; transform:translateX(-50%); font-size:9.5px; font-weight:700; line-height:1.1;
+    color:#c4b5fd; background:rgba(167,139,250,.18); border:1px solid rgba(167,139,250,.45); border-radius:7px;
+    padding:1px 7px; white-space:nowrap; max-width:180px; overflow:hidden; text-overflow:ellipsis; cursor:help}
+  .g-holmk.l2{top:14px}
+  body.light .g-holrow{background:rgba(124,58,237,.05)}
+  body.light .g-holmk{color:#5b21b6; background:rgba(124,58,237,.12); border-color:rgba(124,58,237,.4)}
   /* ‹ › edge arrows to scroll the Gantt timeline left/right (an easier alternative to the pan slider) */
   .gscrollwrap{position:relative}
   .gnav{position:absolute; z-index:6; width:30px; height:30px; border-radius:50%; border:1px solid var(--line);
@@ -1984,8 +1985,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.80", date:"2026-06-20", title:"Holidays now have their own clean lane under the dates", items:[
+    "Holidays moved to a <b>dedicated lane right under the date row</b> — the schedule bumps down one line and the holidays no longer overlap the bars at all. Each one is a small chip at its date (US &amp; Canada; close ones stagger to a 2nd line; hover for the name). Much cleaner.",
+    "The dashboard now always loads the <b>latest version</b> (no more stale cached copy after an update)." ] },
   { rev:"4.79", date:"2026-06-20", title:"Fix: holiday markers were hidden behind the bars", items:[
-    "The holiday columns were drawn <b>behind</b> the Gantt bars, so on rows that are one long bar they were invisible — looked like the holidays were missing. They now draw as a <b>translucent violet column over</b> the chart (still click-through), clearly visible across every row and lined up under the holiday name." ] },
+    "The holiday columns were drawn <b>behind</b> the Gantt bars, so on rows that are one long bar they were invisible — looked like the holidays were missing. (Superseded by 4.80's dedicated holiday lane.)" ] },
   { rev:"4.78", date:"2026-06-20", title:"Gantt ‹ › scroll arrows · holiday labels polished", items:[
     "<b>‹ › scroll arrows</b> on the Gantts — tap the arrow at the left/right edge to slide the timeline; each tap moves about <b>a quarter of the view</b> (not the whole timeline). An easier alternative to the ↔ scroll slider (which is still there). On the Projects Gantt and in the full-screen detail / crew / projects views.",
     "<b>Holiday names</b> sit just under the date and are <b>dimmed/transparent</b> so the date reads through them — and when two holidays fall close together (e.g. Canada Day + Independence Day) their labels <b>stagger to a second line</b> instead of overlapping." ] },
@@ -4480,25 +4484,24 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
     + (win.curWeek?`<div class="g-curweek" style="left:${win.curWeek.pos}%;width:${win.curWeek.width}%"></div>`:'');
   const hmarks = holidayMarks(win);
   const holTitle = h=>escA(h.name+' · '+holLabel(h.country)+' · '+fmtMDY(h.dateISO));
-  const holBands = hmarks.map(h=>`<div class="g-holiday" style="left:${h.left}%;width:${h.width}%" title="${holTitle(h)}"></div>`).join('');
-  // When zoomed in enough to fit text, WRITE the name centered over the band (in the axis row). Holidays close
-  // together (e.g. Canada Day + Independence Day) stagger onto a 2nd line so their labels don't collide.
-  let holNames='';
-  if(win.days<=HOL_LABEL_MAX_DAYS){
+  // Holidays get their OWN lane directly under the date axis — bars bump down, zero overlap. Close ones stagger to a 2nd line.
+  let holLane='';
+  if(hmarks.length){
     const sorted=hmarks.map(h=>({h, c:h.left+h.width/2})).sort((a,b)=>a.c-b.c);
-    let last0=-99, last1=-99; const MINSEP=9;   // % apart below which two labels would overlap
-    holNames=sorted.map(o=>{ let lane=0;
+    let last0=-99, last1=-99; const MINSEP=9;   // % apart below which two chips would overlap
+    const mk=sorted.map(o=>{ let lane=0;
       if(o.c-last0>=MINSEP){ lane=0; last0=o.c; }
       else if(o.c-last1>=MINSEP){ lane=1; last1=o.c; }
       else { lane=0; last0=o.c; }
-      return `<div class="g-holname" style="left:${o.c.toFixed(2)}%;${lane?'top:20px;':''}" title="${holTitle(o.h)}">${esc(o.h.name)}</div>`;
+      return `<div class="g-holmk${lane?' l2':''}" style="left:${o.c.toFixed(2)}%" title="${holTitle(o.h)}">${esc(o.h.name)}</div>`;
     }).join('');
+    holLane=`<div class="g-holrow"><div class="g-gutter"><span class="g-holrow-lbl">Holidays</span></div><div class="g-track">${mk}</div></div>`;
   }
-  const grid = bands + holBands + win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
+  const grid = bands + win.ticks.map(t=>`<div class="g-grid" style="left:${t.pos}%"></div>`).join('')
     + (opts.mlines||[]).map(p=>`<div class="g-msline" style="left:${p}%"></div>`).join('')
     + (win.todayPos>=0&&win.todayPos<=100?`<div class="g-today" style="left:${win.todayPos}%"></div>`:'');
   let html = `<div class="g-axisrow"><div class="g-gutter"></div><div class="g-track">`
-    + win.ticks.map(t=>`<div class="g-tick" style="left:${t.pos}%">${t.label}</div>`).join('') + holNames + `</div></div>`;
+    + win.ticks.map(t=>`<div class="g-tick" style="left:${t.pos}%">${t.label}</div>`).join('') + `</div></div>` + holLane;
   if(!rows.length){ html += `<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">no items in this range</div></div></div>`; }
   rows.forEach(r=>{
     const g=barGeom(r.startISO,r.endISO,win);
