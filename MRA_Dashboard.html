@@ -528,6 +528,9 @@
   .fladd{display:inline-block; cursor:pointer; color:#7dd3fc; font-weight:700; font-size:10px; line-height:1;
     border:1px solid rgba(56,189,248,.45); border-radius:4px; padding:1px 4px; margin-right:5px; user-select:none}
   .fladd:hover{background:rgba(56,189,248,.18); border-color:#38bdf8}
+  .fladded{display:inline-block; cursor:pointer; color:#86efac; font-weight:700; font-size:10px; line-height:1;
+    border:1px solid rgba(34,197,94,.5); border-radius:4px; padding:1px 5px; margin-right:5px; user-select:none; white-space:nowrap}
+  .fladded:hover{background:rgba(34,197,94,.18); border-color:#22c55e}
   .tasklist.fleetlist{margin-top:4px; border-top:1px dashed rgba(56,189,248,.3); padding-top:3px}
   .expandbtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
   .rb.mraHlBtn.active, .rb.mraHlBtn.on{background:rgba(245,158,11,.22); border-color:var(--amber); color:#fde68a}
@@ -1840,6 +1843,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.57", date:"2026-06-19", title:"In the Shop: assigned Fleetio issues show who + link to the Floor", items:[
+    "On the FLEETIO <b>In the Shop</b> panel, a Fleetio issue you've already added as a shop task now shows a green <b>✓ &lt;who&gt; →</b> chip (e.g. <b>✓ Doug →</b>) that jumps to the <b>FLOOR board</b> — instead of still offering the ➕ add (which would double it). Issues not yet added keep the ➕ (still code-gated — unchanged)." ] },
   { rev:"4.56", date:"2026-06-19", title:"Fleetio ↗ links in every hover (KPIs, bars, unit popover)", items:[
     "Added the <b>↗ open-in-Fleetio</b> link to every spot that listed issues / work orders / service without one: the FLEETIO <b>KPI hovers</b> (Open & Overdue issues, Work orders, Service), the <b>unit hover</b> popover, and the <b>Open Issues by Type</b> and <b>Top Units</b> <b>bar charts</b> — hover a bar to see its items, each a click-through to view/close it in Fleetio.",
     "(Bay cards, crew queues, Needs Attention, Open Work by Assignee, the In-the-Shop list and global search already had the links.)" ] },
@@ -4931,10 +4936,17 @@ function renderInBayFleetio(D){
   const totalItems=cards.reduce((s,b)=>s+b.iss.length+b.wo.length+b.svc.length,0);
   grid.innerHTML = cards.length ? cards.map(b=>{
     const j=b.job;
+    // Which of this job's Fleetio issues have ALREADY been added as a shop task (and to whom)?
+    const addedBy={}; (j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) addedBy[m[1]]=((typeof shopWho==='function'?shopWho(t):'')||t.who||''); });
     const edge = b.iss.some(i=>i.overdue)?'#ef4444' : (b.iss.length?'#f59e0b' : (b.wo.length?'#3b82f6' : '#22c55e'));
     let lines='';
     b.iss.forEach(i=>{ const ov=i.overdue?' <span class="badge red">overdue</span>':'';
-      lines+=`<div class="taskline fleet" title="${escA((i.detail||i.summary||'').slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(i.num))}')" title="Add as an assignable Shop Task">➕</span>⚠ ${esc(i.summary||('Issue #'+i.num))}${ov}${fioArrow('issue',i.num)}</div>`; });
+      const inum=String(i.num), aw=addedBy[inum];
+      // Already assigned/added -> show who + link to the Floor board, instead of the ➕ add control.
+      const lead = (inum in addedBy)
+        ? `<span class="fladded" onclick="setView('floor')" title="Already a shop task${aw?(' — assigned to '+escA(aw)):''}. Click to open it on the Floor board.">✓${aw?(' '+esc(aw)):''} →</span>`
+        : `<span class="fladd" onclick="addFleetioTask(${j.row},'${escA(inum)}')" title="Add as an assignable Shop Task">➕</span>`;
+      lines+=`<div class="taskline fleet" title="${escA((i.detail||i.summary||'').slice(0,300))}">${lead}⚠ ${esc(i.summary||('Issue #'+i.num))}${ov}${fioArrow('issue',i.num)}</div>`; });
     b.wo.forEach(w=>{ const st=w.status?` <span class="badge ${/pend/i.test(w.status)?'amber':'blue'}">${esc(w.status)}</span>`:'';
       lines+=`<div class="taskline fleet" title="${escA((w.detail||w.summary||'').slice(0,300))}">📋 ${esc(w.summary||('WO '+(w.num||'')))}${st}${fioArrow('wo',w.num)}</div>`; });
     b.svc.forEach(s=>{ const fs=fleetState(s.dueISO,today);
