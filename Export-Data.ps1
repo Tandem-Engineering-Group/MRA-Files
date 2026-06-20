@@ -9,7 +9,10 @@ $ErrorActionPreference = 'Stop'
 
 # --- Config -----------------------------------------------------------------
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Workbook  = Join-Path (Split-Path -Parent $ScriptDir) 'MRA_Shop_Board_v6_9_7.xlsx'
+# Workbook path: an env override (MRA_WORKBOOK) lets the cloud job point at a downloaded
+# copy; with no env set this falls back to the local path (one level up), so the PC
+# pipeline is unchanged.
+$Workbook  = if ($env:MRA_WORKBOOK) { $env:MRA_WORKBOOK } else { Join-Path (Split-Path -Parent $ScriptDir) 'MRA_Shop_Board_v6_9_7.xlsx' }
 $OutFile   = Join-Path $ScriptDir 'data.js'
 $SheetName = 'Input'
 

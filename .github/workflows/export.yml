@@ -1,0 +1,71 @@
+name: Cloud export (data.js)
+
+# Runs Export-Data.ps1 in the cloud so the dashboard stays fresh without Rich's PC.
+# A small Power Automate flow copies the workbook to the private "pipeline" blob
+# container every ~15 min; this job downloads it, runs the EXISTING export script
+# (workbook + Fleetio + Samsara), and the script pushes data.js to the live site.
+# See CLOUD-EXPORT-SETUP.md for the one-time setup (secrets + shuttle flow + container).
+
+on:
+  workflow_dispatch:          # manual "Run workflow" button (works from any branch)
+  schedule:
+    - cron: '*/15 * * * *'    # every 15 min (GitHub may delay under load; schedule runs from the DEFAULT branch only)
+
+concurrency:
+  group: mra-cloud-export
+  cancel-in-progress: false   # never interrupt a run mid-write; let it finish
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest   # the script is Windows-authored (az CLI is preinstalled here)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage secrets (token files the script expects, never committed)
+        shell: pwsh
+        env:
+          FLEETIO_API_KEY:       ${{ secrets.FLEETIO_API_KEY }}
+          FLEETIO_ACCOUNT_TOKEN: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
+          SAMSARA_TOKEN:         ${{ secrets.SAMSARA_TOKEN }}
+          AZURE_STORAGE_KEY:     ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          if ($env:FLEETIO_API_KEY) { "$env:FLEETIO_API_KEY`r`n$env:FLEETIO_ACCOUNT_TOKEN" | Set-Content -Path fleetio.txt -Encoding ascii -NoNewline }
+          if ($env:SAMSARA_TOKEN)   { $env:SAMSARA_TOKEN     | Set-Content -Path samsara.txt   -Encoding ascii -NoNewline }
+          if ($env:AZURE_STORAGE_KEY) { $env:AZURE_STORAGE_KEY | Set-Content -Path azure-key.txt -Encoding ascii -NoNewline }
+          else { Write-Error "AZURE_STORAGE_KEY secret is required"; exit 1 }
+
+      - name: Download the workbook from the pipeline blob
+        shell: pwsh
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage blob download `
+            --account-name mrashopdash `
+            --account-key "$env:AZURE_STORAGE_KEY" `
+            --container-name pipeline `
+            --name MRA_Shop_Board.xlsx `
+            --file "$env:GITHUB_WORKSPACE\workbook.xlsx" `
+            --only-show-errors
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE\workbook.xlsx")) { Write-Error "Workbook was not downloaded - is the shuttle flow running and the 'pipeline' container populated?"; exit 1 }
+
+      - name: Run the export (builds + pushes data.js)
+        shell: pwsh
+        env:
+          MRA_WORKBOOK: ${{ github.workspace }}\workbook.xlsx
+        run: |
+          ./Export-Data.ps1
+
+      - name: Confirm the run finished OK
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path export-last-run.txt) {
+            $r = (Get-Content export-last-run.txt -Raw).Trim()
+            Write-Host "Last run: $r"
+            if ($r -notmatch '\bOK\b') { Write-Error "Export did not finish cleanly (data.js may not have published)."; exit 1 }
+          } else {
+            Write-Error "No export-last-run.txt was produced - the script did not complete."; exit 1
+          }
