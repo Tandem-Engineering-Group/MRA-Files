@@ -1382,6 +1382,14 @@
       <div class="msub" id="ejSub">Move it to another bay, change the dates, or tweak the notes. Saves to the <b>Input</b> sheet — board updates within ~15 min.</div>
       <div class="addform">
         <div class="addrow2">
+          <div><label>Project <span style="color:var(--faint);font-weight:400">— renaming also renames its tasks</span></label><input id="ejProject" autocomplete="off"></div>
+          <div><label>Job #</label><input id="ejJob" autocomplete="off"></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Client</label><input id="ejClient" autocomplete="off" placeholder="optional"></div>
+          <div><label>Program Development</label><input id="ejPM" autocomplete="off" placeholder="optional"></div>
+        </div>
+        <div class="addrow2">
           <div><label>Bay</label><select id="ejBay"></select></div>
           <div><label>Status</label><select id="ejStatus"></select></div>
         </div>
@@ -1841,6 +1849,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.62", date:"2026-06-20", title:"Edit job: rename it + edit Job # / Client / PM (no Excel)", items:[
+    "The ✎ Edit job form now lets you change the <b>Project name</b>, <b>Job #</b>, <b>Client</b> and <b>Program Development</b> — not just bay/dates/status/notes. Renaming a job <b>also renames its tasks</b> (Shop Tasks + Project Tasks) so nothing orphans off the board.",
+    "<b>Needs the updated Office Script</b> (paste the new MRA-Sync into <i>MRA Sync 2</i>) for the rename/cascade to save." ] },
   { rev:"4.61", date:"2026-06-20", title:"FLEETIO: cap By Trailer & Service lists too (scroll + Expand)", items:[
     "The bottom two FLEETIO panels — <b>By Trailer</b> and <b>Service — Due &amp; Overdue</b> — now use the same fixed-height <b>scroll box + ⤢ Expand</b> as the rest, so the tab no longer runs long at the bottom." ] },
   { rev:"4.60", date:"2026-06-20", title:"FLEETIO tidy-up: search moved up top, In the Shop under the charts", items:[
@@ -2996,6 +3007,10 @@ function openEditJob(row){
   document.getElementById('ejStart').value = j.startISO||"";
   document.getElementById('ejComp').value = j.completionISO||"";
   document.getElementById('ejNotes').value = j.notesRaw||"";
+  document.getElementById('ejProject').value = j.project||"";
+  document.getElementById('ejJob').value = j.jobNum||"";
+  document.getElementById('ejClient').value = j.client||"";
+  document.getElementById('ejPM').value = j.pm||"";
   { const hint=document.getElementById('ejNotesHint'); if(hint) hint.style.display = ((j.tasks||[]).length)?'':'none'; }   // warn when the notes box is ignored (job has a structured task list)
   const bb=document.getElementById('ejBringBack'); if(bb) bb.style.display = DONE_STATUSES.includes((j.status||"").toLowerCase())?'':'none';
   document.getElementById('ejMsg').textContent=""; document.getElementById('ejSubmit').disabled=false;
@@ -3008,13 +3023,18 @@ function submitEditJob(){
   const payload={ action:"editJob", row:row, project:window._ejProj||"", pin:CLOSE_PIN, user:CURRENT_USER,
     bay:document.getElementById('ejBay').value, status:document.getElementById('ejStatus').value,
     start:document.getElementById('ejStart').value, completion:document.getElementById('ejComp').value,
-    notes:document.getElementById('ejNotes').value };
+    notes:document.getElementById('ejNotes').value,
+    newProject:document.getElementById('ejProject').value.trim(),   // rename (cascades to its tasks); blank/unchanged = no-op
+    newJobNum:document.getElementById('ejJob').value.trim(),
+    client:document.getElementById('ejClient').value.trim(), pm:document.getElementById('ejPM').value.trim() };
   const btn=document.getElementById('ejSubmit'); btn.disabled=true; btn.textContent="Saving…";
   const msg=document.getElementById('ejMsg'); msg.style.color='var(--muted)'; msg.textContent='Saving…';
   fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)})
     .then(()=>{
       const j=oJobRow(row); if(j){ j.bay=payload.bay; j.status=payload.status;
-        j.startISO=payload.start||null; j.completionISO=payload.completion||null; j.notesRaw=payload.notes; oRecat(j); }
+        j.startISO=payload.start||null; j.completionISO=payload.completion||null; j.notesRaw=payload.notes;
+        if(payload.newProject){ j.project=payload.newProject; window._ejProj=payload.newProject; }
+        if(payload.newJobNum) j.jobNum=payload.newJobNum; j.client=payload.client; j.pm=payload.pm; oRecat(j); }
       oApply();
       msg.style.color='var(--green)'; msg.textContent='✓ Saved.'; btn.textContent="Save changes";
       setTimeout(()=>document.getElementById('editModal').classList.remove('show'),1100); })

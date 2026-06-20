@@ -5,6 +5,7 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         jobNum?: string; bay?: string; assigned?: string; milestone?: string; comments?: string;
         client?: string; pm?: string;
         row?: number; status?: string; start?: string; completion?: string; notes?: string;
+        newProject?: string; newJobNum?: string;
         id?: string | number; phase?: string; type?: string; finish?: string; pred?: string;
         ord?: string | number; estDays?: string | number; estHours?: string | number; budget?: string | number;
         pin?: string; user?: string;
@@ -67,6 +68,14 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
             if (String(vals[i][0]).trim().toLowerCase() === pr && String(vals[i][3]).trim().toLowerCase() === tk) return i;
         return -1;
     };
+    // Cascade a project/job# rename across a sheet's column so a job's tasks follow it instead of orphaning.
+    const renameCol = (sheetName: string, col: number, oldVal: string, newVal: string) => {
+        const ov = (oldVal || "").trim().toLowerCase(); if (!ov) return;
+        const sh = workbook.getWorksheet(sheetName); if (!sh) return;
+        const used = sh.getUsedRange(); if (!used) return;
+        const vals = used.getValues(), base = used.getRowIndex();
+        for (let i = 1; i < vals.length; i++) if (String(vals[i][col]).trim().toLowerCase() === ov) sh.getCell(base + i, col).setValue(newVal);
+    };
 
     if (p.action === "addTask") {
         if (!table || !p.project || !p.task) { console.log("Missing"); return; }
@@ -117,14 +126,29 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
     if (p.action === "editJob") {
         const r = Number(p.row); if (!r || r < 4) { console.log("Bad row"); return; }
         const ws = workbook.getWorksheet("Input");
-        if (p.project !== undefined && String(ws.getRange("B" + r).getValue()).trim().toLowerCase() !== (p.project || "").trim().toLowerCase()) { console.log("Stale row"); return; }
+        const oldProj = (p.project || "").trim();
+        if (p.project !== undefined && String(ws.getRange("B" + r).getValue()).trim().toLowerCase() !== oldProj.toLowerCase()) { console.log("Stale row"); return; }
+        const oldJob = String(ws.getRange("D" + r).getValue()).trim();
         if (p.bay) ws.getRange("A" + r).setValue(p.bay);
         if (p.status) ws.getRange("G" + r).setValue(p.status);
         if (p.notes !== undefined) ws.getRange("H" + r).setValue(p.notes);
+        if (p.client !== undefined) ws.getRange("C" + r).setValue(p.client);
+        if (p.pm !== undefined) ws.getRange("K" + r).setValue(p.pm);
         const setDate = (col: string, iso: string) => { const cell = ws.getRange(col + r), s = serialOf(iso || ""); if (s === "") cell.clear(ExcelScript.ClearApplyTo.Contents); else { cell.setValue(s); cell.setNumberFormatLocal([["m/d/yyyy"]]); } };
         if (p.start !== undefined) setDate("E", p.start);
         if (p.completion !== undefined) setDate("F", p.completion);
-        logIt("Edit job", p.project || "", "row " + r); return;
+        // Rename (cascade so the job's tasks follow the new name/# instead of orphaning).
+        if (p.newProject !== undefined && p.newProject.trim() !== "" && p.newProject.trim() !== oldProj) {
+            const np = p.newProject.trim();
+            ws.getRange("B" + r).setValue(np);
+            renameCol("Shop Tasks", 0, oldProj, np);      // Shop Tasks col A = Project
+            renameCol("Project Tasks", 0, oldProj, np);   // Project Tasks col A = Project
+        }
+        if (p.newJobNum !== undefined && p.newJobNum.trim() !== "" && p.newJobNum.trim() !== oldJob) {
+            ws.getRange("D" + r).setValue(p.newJobNum.trim());
+            renameCol("Shop Tasks", 1, oldJob, p.newJobNum.trim());   // Shop Tasks col B = Job #
+        }
+        logIt("Edit job", oldProj || "", "row " + r); return;
     }
     if (p.action === "deleteJob") {
         const r = Number(p.row); if (!r || r < 4) { console.log("Bad row"); return; }
