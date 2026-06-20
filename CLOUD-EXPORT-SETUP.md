@@ -32,10 +32,16 @@ GitHub → this repo → **Settings → Secrets and variables → Actions → Ne
 
 These are encrypted and masked in logs — never printed, never committed.
 
-### 2) Make a private "pipeline" container
-This is the private mailbox the flow drops the workbook into.
-- Azure portal → storage account **mrashopdash** → **Containers → + Container** → name `pipeline` → **Private** (no anonymous access) → Create.
-- (Or CLI: `az storage container create --account-name mrashopdash --name pipeline --account-key <KEY>`)
+### 2) The private "pipeline" container — AUTO-CREATED, nothing to do
+The GitHub job creates the `pipeline` container itself using the account key, so
+you do **not** need Azure portal access for this. (If you ever want to make it by
+hand anyway: portal → storage account **mrashopdash** → Containers → + Container →
+`pipeline` → Private.)
+
+> No Azure portal access? You don't need it. Everything Azure-side runs off the
+> **account key** (your `azure-key.txt` / the `AZURE_STORAGE_KEY` secret) — creating
+> the container, the shuttle flow's connection, and the upload/download all use the
+> key, not a portal login. Nothing has to be transferred from your partner.
 
 ### 3) Build the shuttle flow (Power Automate)
 make.powerautomate.com → **+ Create → Scheduled cloud flow**:

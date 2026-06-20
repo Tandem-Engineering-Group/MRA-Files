@@ -37,6 +37,17 @@ jobs:
           if ($env:AZURE_STORAGE_KEY) { $env:AZURE_STORAGE_KEY | Set-Content -Path azure-key.txt -Encoding ascii -NoNewline }
           else { Write-Error "AZURE_STORAGE_KEY secret is required"; exit 1 }
 
+      - name: Ensure the private "pipeline" container exists (no portal needed - uses the key)
+        shell: pwsh
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage container create `
+            --account-name mrashopdash `
+            --account-key "$env:AZURE_STORAGE_KEY" `
+            --name pipeline `
+            --only-show-errors | Out-Null
+
       - name: Download the workbook from the pipeline blob
         shell: pwsh
         env:
