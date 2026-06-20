@@ -67,6 +67,31 @@ This repo (`tandem-engineering-group/mra-files`) holds the deployable dashboard:
 Live site: `https://mrashopdash.z13.web.core.windows.net/`
 See `INSTRUCTIONS.md` for the complete Azure deployment runbook.
 
+## 🎯 Eliminate-Excel roadmap (Rich's north star — "never go to the excel file for anything")
+
+Rich's explicit goal: retire the workbook entirely. Track progress here; don't lose it.
+
+- **✅ STEP 1 DONE (2026-06-20): board runs off-PC.** The export no longer needs Rich's PC.
+  Pipeline: a Power Automate **"MRA workbook shuttle"** flow (every 15 min, his login) copies the
+  workbook to a private Azure blob container **`pipeline`** AND POSTs a `repository_dispatch`
+  (`event_type:"run-export"`) to GitHub; the **`.github/workflows/export.yml`** Action (on the
+  DEFAULT branch `claude/exciting-keller-wm7u2p`) downloads the workbook, runs `Export-Data.ps1`
+  (honors `MRA_WORKBOOK` env override), and pushes `data.js`. Tokens are GitHub repo secrets
+  (`FLEETIO_API_KEY`, `FLEETIO_ACCOUNT_TOKEN`, `SAMSARA_TOKEN`, `AZURE_STORAGE_KEY`). The trigger
+  is a fine-grained PAT (`Contents: write`, resource owner = the org) the shuttle sends via an HTTP
+  step — the org had to allow fine-grained PATs first. **GitHub's `schedule` is a flaky backup
+  (~hourly); the repository_dispatch from the shuttle is the reliable 15-min trigger.** See
+  `CLOUD-EXPORT-SETUP.md`. ⚠️ The PAT expires (~1 yr) — remind Rich to rotate it.
+- **🔜 STEP 2 — close the last edits that still force Excel:** (1) move a task to a different
+  project/job; (2) add subtasks in the editor; (3) bulk-add a whole new project (Upload tab /
+  intake); (4) move/reorder shop tasks between trailers; (5) manage login Users/codes from the
+  dashboard; (6) bring the **logistics "arriving" calendars** into the dashboard (today the
+  `renderReturns` "Coming Back to MRA" panel is ORPHANED — function exists, no DOM home/call).
+- **🏁 STEP 3 — kill the .xlsx:** move the data off the workbook entirely → **SharePoint Lists**
+  (Jobs / ShopTasks / ProjectTasks / Users), so there's no Excel file to open. Platform handles
+  concurrency (the write-collision class disappears).
+
+
 ### ⚠️ Dashboard release checklist (do EVERY time `MRA_Dashboard.html` changes — Rich shouldn't have to remind us)
 
 1. **Build the feature.**
