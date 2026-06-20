@@ -1840,6 +1840,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.56", date:"2026-06-19", title:"Fleetio ↗ links in every hover (KPIs, bars, unit popover)", items:[
+    "Added the <b>↗ open-in-Fleetio</b> link to every spot that listed issues / work orders / service without one: the FLEETIO <b>KPI hovers</b> (Open & Overdue issues, Work orders, Service), the <b>unit hover</b> popover, and the <b>Open Issues by Type</b> and <b>Top Units</b> <b>bar charts</b> — hover a bar to see its items, each a click-through to view/close it in Fleetio.",
+    "(Bay cards, crew queues, Needs Attention, Open Work by Assignee, the In-the-Shop list and global search already had the links.)" ] },
   { rev:"4.55", date:"2026-06-19", title:"Fix: Josh & Jeff now selectable when adding a task", items:[
     "<b>Josh</b> and <b>Jeff</b> were crew columns but weren't in the <b>Assigned to</b> dropdown on the add-task form, so you couldn't assign them work. They're now in the list (for both regular and General tasks), and the task lands in their column." ] },
   { rev:"4.54", date:"2026-06-19", title:"➕ Add task button down by Open Tasks", items:[
@@ -4595,9 +4598,9 @@ function trailerPop(t){
   let h=`<h4>${esc(t.jobNum||t.name)}</h4>`;
   if(t.name && t.name!==t.jobNum) h+=`<div class="pp-sub">${esc(t.name)}</div>`;
   if(t._i && t._i.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">OPEN ISSUES (${t._i.length})</div>`
-    + t._i.slice(0,12).map(i=>`<div>• ${esc(i.summary||('Issue '+i.num))}${i.overdue?' <span class="badge red">overdue</span>':''}</div>${i.detail?`<div class="pp-det">${esc(i.detail)}</div>`:''}`).join('') + `</div>`; }
+    + t._i.slice(0,12).map(i=>`<div>${fioTitle('issue',i.num,i.summary||('Issue '+i.num))}${i.overdue?' <span class="badge red">overdue</span>':''}</div>${i.detail?`<div class="pp-det">${esc(i.detail)}</div>`:''}`).join('') + `</div>`; }
   if(t._w && t._w.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">WORK ORDERS (${t._w.length})</div>`
-    + t._w.slice(0,12).map(w=>`<div>• ${esc(w.summary||('WO '+w.num))}${w.status?' <span class="badge '+(/pend/i.test(w.status)?'amber':'blue')+'">'+esc(w.status)+'</span>':''}</div>${w.detail?`<div class="pp-det">${esc(w.detail)}</div>`:''}`).join('') + `</div>`; }
+    + t._w.slice(0,12).map(w=>`<div>${fioTitle('wo',w.num,w.summary||('WO '+w.num))}${w.status?' <span class="badge '+(/pend/i.test(w.status)?'amber':'blue')+'">'+esc(w.status)+'</span>':''}</div>${w.detail?`<div class="pp-det">${esc(w.detail)}</div>`:''}`).join('') + `</div>`; }
   if(t._s && t._s.length){ h+=`<div class="pp-ms"><div style="color:var(--muted);font-size:10.5px;margin-bottom:3px">SERVICE (${t._s.length})</div>`
     + t._s.slice(0,12).map(s=>`<div>• ${esc(s.service||'Service')} ${s.c&&s.c.overdue?'<span class="badge red">overdue</span>':(s.c&&s.c.soon?'<span class="badge amber">due soon</span>':(s.dueISO?'<span class="badge grey">'+fmtMD(s.dueISO)+'</span>':''))}</div>`).join('') + `</div>`; }
   return h;
@@ -4614,6 +4617,17 @@ function fioHref(kind,num){
 }
 function fioTitle(kind,num,label){ return `<a class="fiotitle" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">${esc(label)}<span class="fioarrow"> ↗</span></a>`; }
 function fioArrow(kind,num){ return ` <a class="fioarrow" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">↗</a>`; }
+// A hover-popover body listing Fleetio items, each a clickable ↗ link (issue / wo / svc).
+// items: [{kind:'issue'|'wo'|'svc', num, label, asset, badge}]
+function fioItemsListPop(title, items){
+  let h=`<h4>${esc(title)}</h4>`;
+  items=items||[];
+  if(!items.length){ return h+`<div class="pp-sub">none</div>`; }
+  h+=`<div class="pp-sub">${items.length} item${items.length>1?'s':''} · click to open in Fleetio</div><div class="pp-ms">`;
+  h+= items.slice(0,20).map(it=>`<div>${fioTitle(it.kind, it.num, it.label||((it.kind==='wo'?'WO ':'Issue ')+(it.num||'')))}${it.asset?` <span style="color:var(--muted)">— ${esc(it.asset)}</span>`:''}${it.badge||''}</div>`).join('');
+  if(items.length>20) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${items.length-20} more…</div>`;
+  return h+`</div>`;
+}
 // Age-banded "open" badge: green <30d, amber 30–90d, red >90d.
 function ageBadge(age){ if(age==null) return ''; const cls=age>90?'red':age>=30?'amber':'green'; return `<span class="badge ${cls}">${age}d open</span>`; }
 // Collapsible panels — decorate each panel header with a ▾ caret, remembered per device.
@@ -4708,12 +4722,15 @@ function renderFleetio(D){
     + `<div class="donutleg"><div><span class="sw" style="background:var(--red)"></span> Overdue <b>${svcOver}</b></div>`
     + `<div><span class="sw" style="background:var(--amber)"></span> Due soon <b>${svcSoon}</b></div></div></div>`
     : `<div class="empty">No service due</div>`;
-  const lc={};
-  issues.forEach(i=>{ const labs=(i.priority||'').split(',').map(s=>s.trim()).filter(Boolean); if(!labs.length) labs.push('(no label)'); labs.forEach(l=>{ lc[l]=(lc[l]||0)+1; }); });
+  const lc={}, lItems={};
+  issues.forEach(i=>{ const labs=(i.priority||'').split(',').map(s=>s.trim()).filter(Boolean); if(!labs.length) labs.push('(no label)'); labs.forEach(l=>{ lc[l]=(lc[l]||0)+1; (lItems[l]=lItems[l]||[]).push(i); }); });
   const larr=Object.keys(lc).map(l=>({l,n:lc[l]})).sort((a,b)=>b.n-a.n).slice(0,7);
   const lmax=Math.max(1,...larr.map(x=>x.n));
-  document.getElementById('fIssueChart').innerHTML = larr.length ? larr.map(x=>
-    `<div class="pmrow"><div class="nm" title="${esc(x.l)}">${esc(x.l)}</div><div class="pmbar"><div class="seg" style="width:${x.n/lmax*100}%;background:var(--brand)"></div></div><div class="v">${x.n}</div></div>`).join('') : `<div class="empty">—</div>`;
+  document.getElementById('fIssueChart').innerHTML = larr.length ? larr.map((x,idx)=>{
+    const key='fty'+idx;
+    KPIPOP[key]=fioItemsListPop(x.l+' - open issues', (lItems[x.l]||[]).map(i=>({kind:'issue',num:i.num,label:i.summary||('Issue '+(i.num||'')),asset:i.asset,badge:i.overdue?' <span class="badge red">overdue</span>':''})));
+    return `<div class="pmrow" onmouseenter="popHoverIn(event,'${key}')" onmouseleave="popHoverOut()" title="Hover for the issues (with Fleetio links)"><div class="nm" title="${esc(x.l)}">${esc(x.l)}</div><div class="pmbar"><div class="seg" style="width:${x.n/lmax*100}%;background:var(--brand)"></div></div><div class="v">${x.n}</div></div>`;
+  }).join('') : `<div class="empty">—</div>`;
   document.getElementById('fLabelCount').textContent = larr.length+' types';
 
   const svcSorted=svcC.slice().sort((a,b)=>(b.c.overdue?1:0)-(a.c.overdue?1:0) || (a.dueISO||'9999').localeCompare(b.dueISO||'9999'));
@@ -4811,13 +4828,19 @@ function renderFleetio(D){
   { const c=document.getElementById('fByAssigneeCount'); if(c) c.textContent=people.length+(people.length===1?' person':' people'); }
 
   // 🚚 Top Units — most open items (issues + WOs + service), click to open in Assets.
-  const uCnt={}; const bumpU=a=>{ if(a) uCnt[a]=(uCnt[a]||0)+1; };
-  issues.forEach(i=>bumpU(i.asset)); wos.forEach(w=>bumpU(w.asset)); svcC.forEach(s=>bumpU(s.asset));
+  const uCnt={}, uItems={};
+  const bumpU=(a,it)=>{ if(!a) return; uCnt[a]=(uCnt[a]||0)+1; (uItems[a]=uItems[a]||[]).push(it); };
+  issues.forEach(i=>bumpU(i.asset,{kind:'issue',num:i.num,label:i.summary||('Issue '+(i.num||'')),badge:i.overdue?' <span class="badge red">overdue</span>':''}));
+  wos.forEach(w=>bumpU(w.asset,{kind:'wo',num:w.num,label:w.summary||('WO '+(w.num||''))}));
+  svcC.forEach(s=>bumpU(s.asset,{kind:'svc',num:'',label:s.service||'Service',badge:(s.c&&s.c.overdue)?' <span class="badge red">overdue</span>':''}));
   const topU=Object.entries(uCnt).map(([asset,n])=>({asset,n})).sort((a,b)=>b.n-a.n).slice(0,10);
   const tmax=Math.max(1,...topU.map(u=>u.n));
   const tuEl=document.getElementById('fTopUnits');
-  if(tuEl) tuEl.innerHTML = topU.length ? topU.map(u=>
-      `<div class="pmrow" onclick="searchGoUnit('${escJsAttr(String(u.asset))}')" style="cursor:pointer" title="Open ${escA(String(u.asset))} in Assets"><div class="nm" title="${escA(String(u.asset))}">${esc(u.asset)}</div><div class="pmbar"><div class="seg" style="width:${u.n/tmax*100}%;background:var(--brand)"></div></div><div class="v">${u.n}</div></div>`).join('')
+  if(tuEl) tuEl.innerHTML = topU.length ? topU.map((u,idx)=>{
+      const key='ftu'+idx;
+      KPIPOP[key]=fioItemsListPop(String(u.asset)+' - open items', uItems[u.asset]||[]);
+      return `<div class="pmrow" onclick="searchGoUnit('${escJsAttr(String(u.asset))}')" onmouseenter="popHoverIn(event,'${key}')" onmouseleave="popHoverOut()" style="cursor:pointer" title="Hover for items (with Fleetio links) · click to open in Assets"><div class="nm" title="${escA(String(u.asset))}">${esc(u.asset)}</div><div class="pmbar"><div class="seg" style="width:${u.n/tmax*100}%;background:var(--brand)"></div></div><div class="v">${u.n}</div></div>`;
+    }).join('')
     : `<div class="empty">—</div>`;
 
   renderTrailerCards();
@@ -6162,10 +6185,11 @@ function flItemsPop(title, list, kind){
   let h=`<h4>${esc(title)}</h4>`;
   if(!list||!list.length){ h+=`<div class="pp-sub">none 🎉</div>`; return h; }
   h+=`<div class="pp-sub">${list.length} total</div><div class="pp-ms">`;
+  const fk = kind==='iss' ? 'issue' : kind;   // fioArrow/fioHref use 'issue' (not 'iss')
   h+= list.slice(0,20).map(x=>{
     const lab = kind==='svc' ? (x.service||'Service') : (x.summary || (kind==='wo'?'WO '+(x.num||''):'Issue '+(x.num||'')));
     const meta = x.asset ? ` <span style="color:var(--muted)">— ${esc(x.asset)}${x.jobNum?' · '+esc(x.jobNum):''}</span>` : '';
-    return `<div>• ${esc(lab)}${meta}</div>`;
+    return `<div>${fioTitle(fk, x.num, lab)}${meta}</div>`;
   }).join('');
   if(list.length>20) h+=`<div style="color:var(--faint);font-size:10.5px;margin-top:4px">+${list.length-20} more…</div>`;
   return h+`</div>`;
