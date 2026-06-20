@@ -86,6 +86,15 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         const vals = used.getValues(), base = used.getRowIndex();
         for (let i = 1; i < vals.length; i++) if (String(vals[i][matchCol]).trim().toLowerCase() === mv) sh.getCell(base + i, targetCol).setValue(value);
     };
+    // Clear (contents only) every row whose matchCol equals matchVal. Used to delete a whole
+    // project: clearing rather than deleting rows protects the Project Gantt's absolute-row mirror.
+    const clearRowsWhere = (sheetName: string, col: number, matchVal: string) => {
+        const mv = (matchVal || "").trim().toLowerCase(); if (!mv) return;
+        const sh = workbook.getWorksheet(sheetName); if (!sh) return;
+        const used = sh.getUsedRange(); if (!used) return;
+        const vals = used.getValues(), base = used.getRowIndex(), cols = used.getColumnCount();
+        for (let i = 1; i < vals.length; i++) if (String(vals[i][col]).trim().toLowerCase() === mv) sh.getRangeByIndexes(base + i, 0, 1, cols).clear(ExcelScript.ClearApplyTo.Contents);
+    };
 
     if (p.action === "addTask") {
         if (!table || !p.project || !p.task) { console.log("Missing"); return; }
@@ -188,6 +197,14 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         renameCol("Project Tasks", 7, oldA, newA);   // Project Tasks col H = Assigned To
         renameCol("Shop Tasks", 4, oldA, newA);      // Shop Tasks col E = Assigned
         logIt("Rename assignee", oldA, "-> " + newA); return;
+    }
+    if (p.action === "deleteProject") {
+        const proj = (p.project || "").trim();
+        if (!proj) { console.log("deleteProject: no project"); return; }
+        clearRowsWhere("Project Tasks", 0, proj);   // all this project's tasks (clear, not delete - protects the Gantt mirror)
+        clearRowsWhere("Input", 1, proj);           // the matching floor job
+        clearRowsWhere("Shop Tasks", 0, proj);      // its shop tasks
+        logIt("Delete project", proj, "(cleared everywhere)"); return;
     }
 
     // ===== PROJECT TASKS (the long-term "Project Tasks" sheet: cols A..T) =====

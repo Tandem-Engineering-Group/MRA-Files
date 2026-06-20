@@ -1468,6 +1468,7 @@
         <button class="btn-ghost" onclick="renameProjectBtn()" title="Rename this project everywhere — its tasks, the Gantt/Progress, and the matching floor job (nothing orphans)">✎ Rename</button>
         <button class="btn-ghost" id="pePMBtn" onclick="setProjectPMBtn()" title="Set the Program Development lead for this project — applies to all its tasks and the matching floor job (no Excel)">👤 Set PM</button>
         <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
+        <button class="btn-ghost" onclick="deleteProjectBtn()" title="Delete this ENTIRE project — all its tasks + the matching floor job (can't be undone; re-upload the template to restore)" style="border-color:rgba(239,68,68,.5); color:#fca5a5">🗑 Delete project</button>
         <span id="peCount" style="color:var(--muted); font-size:12px"></span>
         <span style="margin-left:auto; display:flex; gap:6px">
           <button class="btn-ghost" id="peHideDoneBtn" style="padding:3px 9px; font-size:11px" onclick="peToggleHideDone()" title="Hide completed tasks to make scrolling easier">✓ Hide completed</button>
@@ -1893,6 +1894,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.70", date:"2026-06-20", title:"Delete a whole project in one click", items:[
+    "The ✎ Edit Project Tasks popup now has a <b>🗑 Delete project</b> button — removes the <b>entire</b> project at once: all its tasks, the Gantt/Progress entry, and the <b>matching floor job + Shop Tasks</b> (cascade). No more deleting tasks one by one. Code-gated, asks you to confirm; can't be undone (re-upload the template to restore).",
+    "<b>Needs the updated Office Script</b> (re-paste MRA-Sync into <i>MRA Sync 2</i>) — it adds the deleteProject action." ] },
   { rev:"4.69", date:"2026-06-20", title:"Readable Gantt text in Light mode · two-field assignee picker", items:[
     "<b>Light mode readability</b> — the %s, dates and labels printed on the Gantt bars were white and washed out on the light bars. They're now dark with a white halo so they <b>pop</b> on both the filled and empty parts of every bar (Projects Gantt + the detailed view).",
     "<b>Assign 2-deep without typing</b> — the task editor's <b>Assigned to</b> is now two fields: a group/main box plus an optional <b>+ person</b> box. Fill both and it saves as <i>Group / Person</i> (e.g. Electricians / Ted O'Malley) so the Crew schedule nests the person under the group — no more remembering to type the slash." ] },
@@ -3407,6 +3411,20 @@ function setProjectPMBtn(){
   if(typeof markPending==='function') markPending();
   if(typeof renderAll==='function') renderAll();
   renderProjTaskList();
+}
+// Delete a whole project everywhere — its Project Tasks + the matching floor job + Shop Tasks (cascade).
+function deleteProjectBtn(){
+  const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('delete a project')) return;
+  const p=oProj(name); const n=(p&&p.tasks)?p.tasks.length:0;
+  if(!confirm('Delete the ENTIRE project "'+name+'"'+(n?(' and all '+n+' of its task'+(n===1?'':'s')):'')+'?\n\nThis also removes its matching floor job. It cannot be undone (re-upload the template to restore).')) return;
+  const D=window.MRA_DATA||{};
+  if(D.projects) D.projects=D.projects.filter(pp=>pp.name!==name);          // optimistic remove everywhere
+  if(D.jobs) D.jobs=D.jobs.filter(j=>(j.project||'')!==name);
+  if(typeof shopWrite==='function') shopWrite({ action:'deleteProject', project:name, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  if(typeof renderAll==='function') renderAll();
+  closePE();   // the project's gone — close the editor
 }
 
 /* ===== Standardize assignees — merge variant spellings + flag typos/unknowns ===== */
