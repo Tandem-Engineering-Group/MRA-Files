@@ -90,6 +90,16 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
 - **🏁 STEP 3 — kill the .xlsx:** move the data off the workbook entirely → **SharePoint Lists**
   (Jobs / ShopTasks / ProjectTasks / Users), so there's no Excel file to open. Platform handles
   concurrency (the write-collision class disappears).
+- **🔐 STEP 4 — lock it down + plug into M365 (do AFTER/with Step 3):** (a) **Formal login / SSO** —
+  today the board is a PUBLIC static blob site (code only gates editing). Real sign-in needs an
+  auth-capable host: **Azure Static Web Apps (built-in Entra ID login + roles)** OR embed in
+  **Teams/SharePoint** (auto-authenticates the org). This is a HOSTING change, not just a feature.
+  (b) **Role-based tabs** — once it knows the user (Entra/M365 groups), show/hide tabs: shop crew see
+  only FLOOR, managers see all, Rich = admin. (c) **Teams/Outlook/Planner** — native once data is in
+  Lists: Power Automate off List changes → email assignee (Outlook) + assigned Planner task (lands in
+  their Teams Tasks/phone) + channel posts; embed the dash as a Teams tab. Reliable once OFF the
+  Excel/Office-Script path (kills the "Who" blank gremlin). Each step makes the next easier: 1-3 get
+  off Excel; 4 = sign-in, roles, M365 hooks.
 
 
 ### ⚠️ Dashboard release checklist (do EVERY time `MRA_Dashboard.html` changes — Rich shouldn't have to remind us)
