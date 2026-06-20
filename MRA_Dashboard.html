@@ -551,6 +551,13 @@
   /* dates rendered just OUTSIDE a too-narrow bar (so every bar still shows its range) */
   .g-dout{position:absolute; top:50%; transform:translateY(-50%); font-size:9.5px; font-weight:600; color:#c6d2e2; white-space:nowrap; padding-left:6px; z-index:3; pointer-events:none; text-shadow:0 1px 2px rgba(0,0,0,.55)}
   .g-dout-l{padding-left:0; padding-right:6px; text-align:right}
+  /* LIGHT MODE: the in-bar text was white/pale and vanished on the light bars. Make it
+     near-black with a white halo so the %s, dates and labels POP over both the pale
+     (unfilled) and saturated (filled) parts of a bar. */
+  body.light .g-barlabel, body.light .g-d, body.light .g-mid, body.light .g-pct{ color:#0b1220; opacity:1;
+    text-shadow:0 1px 1px rgba(255,255,255,.95), 0 0 3px rgba(255,255,255,.9), -1px 0 1px rgba(255,255,255,.75), 1px 0 1px rgba(255,255,255,.75) }
+  body.light .g-dout{ color:#334155; text-shadow:0 1px 1px rgba(255,255,255,.85) }
+  body.light .g-check{ color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.5) }
   .g-bay{align-self:flex-start; margin-top:3px; font-size:9px; font-weight:700; background:rgba(34,197,94,.16); color:#86efac; border:1px solid rgba(34,197,94,.5); border-radius:10px; padding:1px 7px; white-space:nowrap}
   .ktag{font-size:9px; font-weight:700; padding:1px 6px; border-radius:10px; margin-left:5px; vertical-align:middle; white-space:nowrap}
   .kproj{background:rgba(59,130,246,.18); color:#93c5fd; border:1px solid rgba(59,130,246,.5)}
@@ -1505,7 +1512,12 @@
           <div><label>Type</label><input id="ptType" autocomplete="off"></div>
         </div>
         <div class="addrow2">
-          <div><label>Assigned to</label><input id="ptAssigned" list="ptAssignList" autocomplete="off"><datalist id="ptAssignList"></datalist></div>
+          <div><label>Assigned to <span style="color:var(--muted); font-weight:400; font-size:10.5px">(group/person · add a person to assign 2-deep)</span></label>
+            <div style="display:flex; gap:6px">
+              <input id="ptAssigned" list="ptAssignList" autocomplete="off" placeholder="e.g. Electricians" style="flex:1">
+              <input id="ptAssigned2" list="ptPersonList" autocomplete="off" placeholder="+ person (optional)" style="flex:1">
+            </div>
+            <datalist id="ptAssignList"></datalist><datalist id="ptPersonList"></datalist></div>
           <div><label>Status</label><select id="ptStatus" onchange="ptStatusChange()"></select></div>
         </div>
         <div><label>% Complete <span id="ptPctVal" style="color:var(--muted); font-weight:400; font-size:11px">0%</span></label>
@@ -1881,6 +1893,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.69", date:"2026-06-20", title:"Readable Gantt text in Light mode · two-field assignee picker", items:[
+    "<b>Light mode readability</b> — the %s, dates and labels printed on the Gantt bars were white and washed out on the light bars. They're now dark with a white halo so they <b>pop</b> on both the filled and empty parts of every bar (Projects Gantt + the detailed view).",
+    "<b>Assign 2-deep without typing</b> — the task editor's <b>Assigned to</b> is now two fields: a group/main box plus an optional <b>+ person</b> box. Fill both and it saves as <i>Group / Person</i> (e.g. Electricians / Ted O'Malley) so the Crew schedule nests the person under the group — no more remembering to type the slash." ] },
   { rev:"4.68", date:"2026-06-20", title:"Project-detail Gantt bars now SHOW completion", items:[
     "In a project's detailed view, each task bar now reads at a glance: <b>completed</b> tasks get a <b>✓ in a green bar</b>, <b>in-progress</b> tasks <b>fill to their % complete</b> (e.g. a 30% bar is 30% filled with the % shown), and not-started/late/at-risk keep their status color. Same ✓/fill treatment carries to the other Gantts." ] },
   { rev:"4.67", date:"2026-06-20", title:"Standardize Assignees: smarter flags (no more false alarms on real people)", items:[
@@ -3579,8 +3594,12 @@ function ptPredPickDate(){
   else if(fin && (!fin.value || fin.value<iso)) fin.value=iso;
   const msg=document.getElementById('ptMsg'); if(msg){ msg.style.color='var(--muted)'; msg.textContent='Start set to the day after “'+((pred.t||'').slice(0,40))+'” finishes.'; }
 }
+// Distinct atomic assignee names (compounds split on " / "), so both pickers offer clean single names.
+function projPeople(){ const s=new Set(); projAssignees().forEach(a=>String(a).split(/\s+\/\s+/).forEach(x=>{ x=x.trim(); if(x) s.add(x); })); return [...s].sort((a,b)=>a.localeCompare(b)); }
 function fillAssignAndPhase(p){
-  document.getElementById('ptAssignList').innerHTML = projAssignees().map(a=>`<option value="${escA(a)}">`).join("");
+  const opts = projPeople().map(a=>`<option value="${escA(a)}">`).join("");
+  document.getElementById('ptAssignList').innerHTML = opts;
+  document.getElementById('ptPersonList').innerHTML = opts;
   document.getElementById('ptPhaseList').innerHTML = projPhases(p).map(ph=>`<option value="${escA(ph)}">`).join("");
   document.getElementById('ptStatus').innerHTML = PROJ_STATUS_OPTIONS.map(s=>`<option>${esc(s)}</option>`).join("");
 }
@@ -3615,7 +3634,7 @@ function openProjTaskNew(){
   document.getElementById('ptSub').innerHTML=`<b>${esc(name)}</b>`;
   fillAssignAndPhase(p); fillPredOptions(p,null);
   document.getElementById('ptTask').value=""; document.getElementById('ptType').value="";
-  document.getElementById('ptPhase').value=""; document.getElementById('ptAssigned').value="";
+  document.getElementById('ptPhase').value=""; document.getElementById('ptAssigned').value=""; document.getElementById('ptAssigned2').value="";
   document.getElementById('ptStatus').value="Not Started"; ptSetPctSilent(0);
   document.getElementById('ptStart').value=""; document.getElementById('ptFinish').value="";
   document.getElementById('ptPred').value=""; document.getElementById('ptMilestone').value="";
@@ -3636,7 +3655,7 @@ function openProjTaskEdit(id){
   document.getElementById('ptTask').value=t.t||"";
   document.getElementById('ptType').value=t.type||"";
   document.getElementById('ptPhase').value=t.phase||"";
-  document.getElementById('ptAssigned').value=t.who||"";
+  { const parts=String(t.who||'').split(/\s+\/\s+/); document.getElementById('ptAssigned').value=(parts[0]||'').trim(); document.getElementById('ptAssigned2').value=parts.slice(1).join(' / ').trim(); }
   { const base=projBaseStatus(t.st); const sd=document.getElementById('ptStatus');
     sd.value=(PROJ_STATUS_OPTIONS.indexOf(base)>=0?base:(projIsDone(t)?'Completed':'Not Started'));
     const pp=projTaskPct(t.st); ptSetPctSilent(pp!=null?pp:(projIsDone(t)?100:0)); }
@@ -3661,8 +3680,10 @@ function submitProjTask(){
   const task=document.getElementById('ptTask').value.trim();
   const msg=document.getElementById('ptMsg');
   if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
+  const _a1=document.getElementById('ptAssigned').value.trim(), _a2=document.getElementById('ptAssigned2').value.trim();
+  const _assigned = _a2 ? (_a1 ? (_a1+' / '+_a2) : _a2) : _a1;   // 2-deep: "Group / Person"
   const f={ task:task, phase:document.getElementById('ptPhase').value.trim(), type:document.getElementById('ptType').value.trim(),
-    assigned:document.getElementById('ptAssigned').value.trim(), status:ptComposeStatus(),
+    assigned:_assigned, status:ptComposeStatus(),
     start:document.getElementById('ptStart').value, finish:document.getElementById('ptFinish').value,
     pred:document.getElementById('ptPred').value, milestone:document.getElementById('ptMilestone').value,
     estDays:document.getElementById('ptEstDays').value, estHours:document.getElementById('ptEstHours').value,
