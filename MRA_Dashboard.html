@@ -868,6 +868,7 @@
             <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
             <div class="mi-div">View</div>
             <button class="mi" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
+            <button class="mi" id="btnTractor" onclick="toggleTractor()" title="Show tractor Fleetio issues on the bay cards too (no code needed). Off = trailers only; they always show on the FLEETIO tab regardless.">🚜 Show tractor issues</button>
           </div>
         </div>
       </h2>
@@ -1845,6 +1846,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.59", date:"2026-06-20", title:"FLOOR: optional 🚜 Show tractor issues on the bay cards", items:[
+    "New <b>🚜 Show tractor issues</b> toggle under FLOOR <b>☰ Actions ▸ View</b> (no code needed). Off by default — bay cards stay trailer-only — flip it on to also surface tractor Fleetio issues on the bay cards. Remembered per device. (Tractor issues always show on the FLEETIO tab regardless.)" ] },
   { rev:"4.58", date:"2026-06-20", title:"FLEETIO: cap Open Issues/Work Orders to a scroll box + label work orders", items:[
     "The long <b>Open Issues</b> and <b>Open Work Orders</b> lists now sit in a fixed-height <b>scroll box</b> with an <b>⤢ Expand</b> button (remembered per device), so the FLEETIO tab isn't a mile long.",
     "On the <b>In the Shop</b> panel, work-order rows now carry a clear <b>Work Order #</b> label so they're not mistaken for a duplicate issue." ] },
@@ -2310,6 +2313,7 @@ document.addEventListener('click',e=>{ const p=document.getElementById('barPop')
 
 const expandedJobs=new Set(), expandedBays=new Set(), collapsedJobs=new Set();
 let SHOWCLOSED=false, SHOWSALCLOSED=false;
+let SHOW_TRACTOR=false; try{ SHOW_TRACTOR=localStorage.getItem('mra_show_tractor')==='1'; }catch(e){}   // bring tractor issues onto the FLOOR bay cards (off by default; they always show on FLEETIO)
 // Normal view: tiles show their tasks by DEFAULT (collapsedJobs tracks the ones you've hidden).
 // Wall/TV view: tiles are count-only and the Fleetio pill expands on demand (expandedJobs).
 function toggleJob(row){
@@ -2327,6 +2331,8 @@ function toggleBayTile(el){ if(document.body.classList.contains('wall')) return;
   if(now) BAY_COLLAPSED.add(bay); else BAY_COLLAPSED.delete(bay);
   try{ localStorage.setItem('mra_bay_collapsed', JSON.stringify([...BAY_COLLAPSED])); }catch(e){} }
 function toggleClosed(){ SHOWCLOSED=!SHOWCLOSED; renderAll(); }
+function setTractorBtn(){ const b=document.getElementById('btnTractor'); if(b){ b.classList.toggle('on',SHOW_TRACTOR); b.textContent=SHOW_TRACTOR?'🚜 Hide tractor issues':'🚜 Show tractor issues'; } }
+function toggleTractor(){ SHOW_TRACTOR=!SHOW_TRACTOR; try{localStorage.setItem('mra_show_tractor',SHOW_TRACTOR?'1':'0');}catch(e){} setTractorBtn(); renderAll(); }   // no code needed — it's a view toggle
 function toggleSalClosed(){ SHOWSALCLOSED=!SHOWSALCLOSED; renderAll(); }
 /* ---------- Wall (TV) mode: bound heights, auto-expand tasks, auto-scroll ---------- */
 let WALL=false, AS_TIMER=null;
@@ -3955,7 +3961,7 @@ function renderFloor(D){
   // Open Fleetio issues indexed by Job# digits, to surface on the matching bay card.
   const flByJob={};
   // Trailer issues only on the bay card — tractor issues (Doug's) stay on the FLEETIO tab.
-  ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(/tractor/i.test(it.asset||"")) return; const k=(((it.jobNum||"").match(/\d{3,}/)||[])[0]); if(k){(flByJob[k]=flByJob[k]||[]).push(it);} });
+  ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(!SHOW_TRACTOR && /tractor/i.test(it.asset||"")) return; const k=(((it.jobNum||"").match(/\d{3,}/)||[])[0]); if(k){(flByJob[k]=flByJob[k]||[]).push(it);} });
   const fleetioFor=j=>{ const out=[],seen={}; (((j.jobNum||"").match(/\d{3,}/g))||[]).forEach(k=>{(flByJob[k]||[]).forEach(it=>{ if(!seen[it.num]){seen[it.num]=1; out.push(it);} });}); return out; };
   const shortAsset=s=>{ s=(s||"").trim(); const m=s.match(/^(.*?)(?:19|20)\d\d/); return (m?m[1]:s).trim().slice(0,26); };
   // Prune locally-remembered closes the export has now confirmed (task no longer open).
@@ -6513,6 +6519,7 @@ renderFleet();
 if(!CLOSE_FLOW_URL){ const _cb=document.getElementById('btnCloseMode'); if(_cb) _cb.style.display='none'; }
 try{ if(localStorage.getItem('mra_theme')==='light') document.body.classList.add('light'); }catch(e){}
 setThemeBtn(document.getElementById('btnTheme')); setThemeBtn(document.getElementById('gfsThemeBtn'));   // labels reflect the saved theme on load
+setTractorBtn();   // reflect saved Show-tractor state on the FLOOR Actions menu
 setThemeBtn(document.getElementById('btnTheme'));
 applyDesignVars();   // apply this screen's saved size/spacing tweaks (Design panel)
 refresh().then(ok=>{ if(!ok) renderAll(); try{ if(localStorage.getItem('mra_wall')){ const b=document.getElementById('btnWall'); if(b && !WALL) toggleWall(b); } }catch(e){} });
