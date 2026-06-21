@@ -1498,6 +1498,13 @@
           <div><label>Milestone?</label><select id="etMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
           <div><label>Comments</label><input id="etComments" autocomplete="off"></div>
         </div>
+        <div id="etMoveRow" style="display:none; border-top:1px solid var(--line); margin-top:6px; padding-top:8px; align-items:center; gap:8px; flex-wrap:wrap">
+          <label style="margin:0">⇄ Move / copy to trailer</label>
+          <select id="etMoveDest" style="min-width:170px"></select>
+          <button class="btn-ghost" onclick="etMoveCopy(false)" title="Copy this task onto the chosen trailer (keeps the original here)">⧉ Copy</button>
+          <button class="btn-ghost" onclick="etMoveCopy(true)" title="Move this task to the chosen trailer (removes it from here)">⇄ Move</button>
+          <span id="etMoveMsg" style="font-size:12px; color:var(--muted)"></span>
+        </div>
         <div id="etMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="closeEditTask()">Cancel</button>
@@ -1871,7 +1878,7 @@ const GENERAL_HELP = `
   <h3>How to use the <span class="mra">MRA</span> Command Center</h3>
   <div class="msub">Everything here builds itself from the Excel workbook — you never edit the dashboard by hand.</div>
   <div class="hsec"><h4>① The tabs up top</h4>
-    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs, staff on leave, and <b>↩️ Coming Back to MRA</b> (trailers arriving back + parked at MRA now, from the logistics calendars).
+    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs, staff on leave, and <b>↩️ Coming Back to MRA</b> (trailers arriving back + parked at MRA now, from the logistics calendars). In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, Program Development load and team capacity. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
@@ -2003,6 +2010,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.84", date:"2026-06-21", title:"Move / copy a shop task between trailers", items:[
+    "Open a shop task (Edit mode → ✎) → <b>⇄ Move / copy to trailer</b>: <b>⧉ Copy</b> puts it on another trailer too; <b>⇄ Move</b> sends it there and removes it from this one. Finishes the move/copy across both project tasks and floor tasks." ] },
   { rev:"4.83", date:"2026-06-21", title:"Move / copy a project task to another project", items:[
     "Open any project task → <b>⇄ Move / copy to</b> another project: <b>⧉ Copy</b> drops a duplicate into the chosen project; <b>⇄ Move</b> sends it there and removes it here. (Predecessor/parent links reset on the new project, since IDs differ.)" ] },
   { rev:"4.82", date:"2026-06-21", title:"Coming Back to MRA — logistics arrivals on the FLOOR", items:[
@@ -3098,6 +3107,34 @@ function reopenTaskBtn(el){
   }).catch(()=>{ el.textContent="↩"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
 }
 function editTaskBtn(el){ if(!ensurePin("edit a task")) return; openEditTask(el.dataset.proj, el.dataset.task); }
+function etMoveCopy(isMove){
+  if(window._etProj==null) return;
+  const src=window._etProj, taskTxt=window._etOld;
+  const sj=oJob(src), t=sj&&(sj.tasks||[]).find(x=>x.t===taskTxt);
+  const destProj=document.getElementById('etMoveDest').value;
+  if(!destProj){ alert("Pick a destination trailer."); return; }
+  if(!ensurePin((isMove?"move":"copy")+" a task")) return;
+  const dj=oJob(destProj); if(!dj){ alert("Couldn't find that trailer — try reloading."); return; }
+  const who=(t&&t.who)||"", ml=(t&&t.ml)||"", cm=(t&&t.cm)||"";
+  const mm=document.getElementById('etMoveMsg'); mm.style.color='var(--muted)'; mm.textContent=(isMove?"Moving":"Copying")+"…";
+  // Copy = add to the destination trailer; Move = add there + delete from source. Existing sync actions only.
+  const add={ action:"addTask", project:dj.project, jobNum:dj.jobNum||"", bay:dj.bay||"", task:taskTxt, assigned:who, milestone:ml, comments:cm, pin:CLOSE_PIN, user:CURRENT_USER };
+  shopWrite(add).then(()=>{
+    const tobj={ t:taskTxt, who:who, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:ml, cm:cm };
+    if(dj){ if(!dj.tasks) dj.tasks=[]; dj.tasks.push(tobj); oRecompute(dj); }
+    pendAdd({kind:'jobTask', project:dj.project, obj:tobj});
+    if(isMove){
+      return shopWrite({ action:"deleteTask", project:src, task:taskTxt, pin:CLOSE_PIN, user:CURRENT_USER }).then(()=>{
+        if(sj&&sj.tasks){ sj.tasks=sj.tasks.filter(x=>x.t!==taskTxt); oRecompute(sj); }
+        pendDrop('jobTask', src, taskTxt);
+      });
+    }
+  }).then(()=>{
+    mm.style.color='var(--green)'; mm.textContent="✓ "+(isMove?"Moved":"Copied")+" to "+(dj.bay||dj.project);
+    oApply();
+    if(isMove) setTimeout(()=>document.getElementById('editTaskModal').classList.remove('show'),900);
+  }).catch(()=>{ mm.style.color='var(--red)'; mm.textContent="Couldn't reach the service — try again."; });
+}
 function openEditTask(proj, raw){
   const D=window.MRA_DATA||{};
   const j=(D.jobs||[]).find(x=>x.project===proj);
@@ -3112,6 +3149,10 @@ function openEditTask(proj, raw){
   document.getElementById('etStatus').value=(t&&t.st)||"Open";
   document.getElementById('etMilestone').value=(t&&/yes/i.test(t.ml||""))?"Yes":"";
   document.getElementById('etComments').value=(t&&t.cm)||"";
+  { const sel=document.getElementById('etMoveDest'), mr=document.getElementById('etMoveRow');
+    if(sel&&mr){ const jobs=(D.jobs||[]).filter(x=>x.project&&x.project!==proj);
+      sel.innerHTML = jobs.length ? jobs.map(x=>`<option value="${escA(x.project)}">${esc(x.bay||x.project)}${x.jobNum?(' · '+esc(x.jobNum)):''}</option>`).join('') : '<option value="">(no other trailers)</option>';
+      mr.style.display = jobs.length ? 'flex' : 'none'; const mm=document.getElementById('etMoveMsg'); if(mm) mm.textContent=''; } }
   document.getElementById('etMsg').textContent=""; document.getElementById('etSubmit').disabled=false;
   document.getElementById('editTaskModal').classList.add('show');
 }
