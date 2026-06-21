@@ -1646,6 +1646,13 @@
           <div><label>Budget ($)</label><input id="ptBudget" type="number" min="0" step="100" inputmode="decimal" autocomplete="off" placeholder="e.g. 5000"></div>
         </div>
         <div><label>Comments</label><input id="ptComments" autocomplete="off"></div>
+        <div id="ptMoveRow" style="display:none; border-top:1px solid var(--line); margin-top:6px; padding-top:8px; align-items:center; gap:8px; flex-wrap:wrap">
+          <label style="margin:0">⇄ Move / copy to</label>
+          <select id="ptMoveDest" style="min-width:170px"></select>
+          <button class="btn-ghost" onclick="ptMoveCopy(false)" title="Copy this task into the chosen project (keeps the original here)">⧉ Copy</button>
+          <button class="btn-ghost" onclick="ptMoveCopy(true)" title="Move this task to the chosen project (removes it from here)">⇄ Move</button>
+          <span id="ptMoveMsg" style="font-size:12px; color:var(--muted)"></span>
+        </div>
         <div id="ptMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="delProjTaskFromForm()" id="ptDelete" style="margin-right:auto; border-color:rgba(239,68,68,.5); color:#fca5a5">🗑 Delete</button>
@@ -1865,7 +1872,7 @@ const GENERAL_HELP = `
   <div class="msub">Everything here builds itself from the Excel workbook — you never edit the dashboard by hand.</div>
   <div class="hsec"><h4>① The tabs up top</h4>
     <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs, staff on leave, and <b>↩️ Coming Back to MRA</b> (trailers arriving back + parked at MRA now, from the logistics calendars).
-    <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, Program Development load and team capacity.
+    <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, Program Development load and team capacity. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
     <span class="k">🔍 Search</span> (top bar, or press <b>/</b>) = find <b>anything</b> across the whole board — a job (open <b>or</b> completed), a project, a unit, an equipment job, a client, a person, or any task wording — and click a result to jump right to it. (This replaced the old History tab.)</p></div>
@@ -1996,6 +2003,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.83", date:"2026-06-21", title:"Move / copy a project task to another project", items:[
+    "Open any project task → <b>⇄ Move / copy to</b> another project: <b>⧉ Copy</b> drops a duplicate into the chosen project; <b>⇄ Move</b> sends it there and removes it here. (Predecessor/parent links reset on the new project, since IDs differ.)" ] },
   { rev:"4.82", date:"2026-06-21", title:"Coming Back to MRA — logistics arrivals on the FLOOR", items:[
     "New <b>↩️ Coming Back to MRA</b> panel on the FLOOR tab: which trailers are <b>arriving back</b> (next 90 days, soonest first) and which are <b>parked at MRA now</b> with their next departure — read straight from the logistics calendars.",
     "Fixes the data so the panel actually fills in (the arrivals were being scanned but not passed through cleanly)." ] },
@@ -3910,6 +3919,7 @@ function openProjTaskNew(){
   if(!ensureAuth("add a project task")) return;
   const p=oProj(name);
   window._ptProj=name; window._ptId=null;
+  { const _mr=document.getElementById('ptMoveRow'); if(_mr) _mr.style.display='none'; }
   document.getElementById('ptTitle').textContent="➕ Add project task";
   document.getElementById('ptSub').innerHTML=`<b>${esc(name)}</b>`;
   fillAssignAndPhase(p); fillPredOptions(p,null); fillParentOptions(p,null);
@@ -3929,6 +3939,10 @@ function openProjTaskEdit(id){
   const name=peCurrentProject(), p=oProj(name), t=projTaskById(p,id);
   if(!t){ alert("Couldn't find that task — try reloading."); return; }
   window._ptProj=name; window._ptId=id;
+  { const mr=document.getElementById('ptMoveRow'), sel=document.getElementById('ptMoveDest');
+    if(mr&&sel){ const names=(((window.MRA_DATA||{}).projects)||[]).map(x=>x.name).filter(n=>n&&n!==name).sort((a,b)=>a.localeCompare(b));
+      sel.innerHTML = names.length ? names.map(n=>`<option>${esc(n)}</option>`).join('') : '<option value="">(no other projects)</option>';
+      mr.style.display = names.length ? 'flex' : 'none'; const mm=document.getElementById('ptMoveMsg'); if(mm) mm.textContent=''; } }
   document.getElementById('ptTitle').textContent="✎ Edit project task";
   document.getElementById('ptSub').innerHTML=`<b>${esc(name)}</b>`;
   fillAssignAndPhase(p); fillPredOptions(p,id); fillParentOptions(p,id);
@@ -4010,6 +4024,36 @@ function delProjTaskBtn(el){
     r.p.tasks=r.p.tasks.filter(x=>String(x.id)!==String(id)); oRecomputeProject(r.p);
     renderProjTaskList(); oApply();
   }).catch(()=>{ el.textContent="🗑"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
+}
+function ptMoveCopy(isMove){
+  if(window._ptId==null) return;
+  const src=oProj(window._ptProj), t=src&&projTaskById(src,window._ptId);
+  if(!t){ alert("Couldn't find that task — try reloading."); return; }
+  const dest=document.getElementById('ptMoveDest').value;
+  if(!dest){ alert("Pick a destination project."); return; }
+  if(!ensureAuth((isMove?"move":"copy")+" a project task")) return;
+  const mm=document.getElementById('ptMoveMsg'); mm.style.color='var(--muted)'; mm.textContent=(isMove?"Moving":"Copying")+"…";
+  // Copy = add the task to the destination project; Move = copy + delete from source. Both use existing sync actions.
+  const add=Object.assign({ action:"addProjectTask", project:dest, pin:CLOSE_PIN, user:CURRENT_USER },{
+    task:t.t, phase:t.phase||"", type:t.type||"", assigned:t.who||"", status:t.st||"",
+    start:t.startISO||"", finish:t.finISO||"", pred:"", milestone:t.ml||"", parentId:"",
+    estDays:(t.eD!=null?t.eD:""), estHours:(t.eH!=null?t.eH:""), budget:(t.bud!=null?t.bud:""), comments:t.cm||"" });
+  shopWrite(add).then(()=>{
+    const dp=oProj(dest);
+    if(dp){ if(!dp.tasks) dp.tasks=[];
+      const obj={ id:"tmp"+Date.now(), t:t.t, phase:t.phase, type:t.type, who:t.who, startISO:t.startISO||null, finISO:t.finISO||null,
+        st:t.st, ml:t.ml, cm:t.cm, pred:"", parent:"", sub:false, eD:t.eD, eH:t.eH, bud:t.bud, done:projIsDone(t) };
+      dp.tasks.push(obj); pendAdd({kind:'projTask', project:dest, obj:obj}); oRecomputeProject(dp); }
+    if(isMove){
+      return shopWrite({ action:"deleteProjectTask", project:src.name, id:window._ptId, task:t.t, pin:CLOSE_PIN, user:CURRENT_USER }).then(()=>{
+        const i=src.tasks.findIndex(x=>String(x.id)===String(window._ptId)); if(i>=0) src.tasks.splice(i,1); oRecomputeProject(src);
+      });
+    }
+  }).then(()=>{
+    mm.style.color='var(--green)'; mm.textContent="✓ "+(isMove?"Moved":"Copied")+" to "+dest;
+    renderProjTaskList(); oApply();
+    if(isMove) setTimeout(()=>document.getElementById('projTaskModal').classList.remove('show'),900);
+  }).catch(()=>{ mm.style.color='var(--red)'; mm.textContent="Couldn't reach the service — try again."; });
 }
 function delProjTaskFromForm(){
   if(window._ptId==null){ closePT(); return; }
