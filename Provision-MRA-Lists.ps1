@@ -2,7 +2,7 @@
   Provision-MRA-Lists.ps1
   STEP 3 (1 of 4): create the SharePoint Lists that replace the Excel workbook.
 
-  Idempotent — safe to re-run; it only creates what's missing.
+  Idempotent - safe to re-run; it only creates what's missing.
 
   PREREQS (one time):
     Install-Module PnP.PowerShell -Scope CurrentUser
@@ -24,7 +24,7 @@ Connect-PnPOnline -Url $SiteUrl -Interactive
 function Ensure-List([string]$Title) {
   $l = Get-PnPList -Identity $Title -ErrorAction SilentlyContinue
   if (-not $l) {
-    Write-Host "Creating list '$Title'…" -ForegroundColor Cyan
+    Write-Host "Creating list '$Title'..." -ForegroundColor Cyan
     $l = New-PnPList -Title $Title -Template GenericList -EnableVersioning
   } else {
     Write-Host "List '$Title' already exists." -ForegroundColor DarkGray
@@ -40,7 +40,7 @@ function Set-TitleLabel([string]$List, [string]$Label) {
 # Add a field if it isn't already there. $Type: Text|Note|Number|Boolean|Choice|DateTime
 function Ensure-Field([string]$List, [string]$Internal, [string]$Display, [string]$Type, [string[]]$Choices) {
   $f = Get-PnPField -List $List -Identity $Internal -ErrorAction SilentlyContinue
-  if ($f) { Write-Host "  · $List.$Internal exists" -ForegroundColor DarkGray; return }
+  if ($f) { Write-Host "  - $List.$Internal exists" -ForegroundColor DarkGray; return }
   Write-Host "  + $List.$Internal ($Type)" -ForegroundColor Green
   if ($Type -eq 'Choice') {
     Add-PnPField -List $List -DisplayName $Display -InternalName $Internal -Type Choice -Choices $Choices -AddToDefaultView | Out-Null
