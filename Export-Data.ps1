@@ -775,7 +775,7 @@ if (Test-Path $SamsaraTokenFile) {
 #   * AT MRA now  -> "at" - reported with arrival date + next move out.
 function Get-MraStatus($dir, $today, $nsMain, $nsRel, $nsPkg) {
     $out = New-Object System.Collections.ArrayList
-    if (-not (Test-Path $dir)) { Write-Output "  -> MRA at-base: folder not found ($dir)"; return @() }
+    if (-not (Test-Path $dir)) { Write-Host "  -> MRA at-base: folder not found ($dir)"; return @() }
     $monthTabs = @('JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC')
     $isMra = { param($t) $t -match '(?i)\bMRA\b|madison heights' }
     $files = @(Get-ChildItem -Path $dir -File -Filter *.xlsx -ErrorAction SilentlyContinue |
@@ -849,7 +849,7 @@ function Get-MraStatus($dir, $today, $nsMain, $nsRel, $nsPkg) {
             }
             $nFiles++
         } catch {
-            Write-Output "  -> MRA at-base: skip '$($f.Name)': $($_.Exception.Message)"
+            Write-Host "  -> MRA at-base: skip '$($f.Name)': $($_.Exception.Message)"
         } finally {
             if ($zip) { $zip.Dispose() }
             if ($usedTmp -and (Test-Path $tmp)) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
@@ -858,10 +858,10 @@ function Get-MraStatus($dir, $today, $nsMain, $nsRel, $nsPkg) {
     $sorted = @($out | Sort-Object @{e={ if ($_.arrivingISO) { $_.arrivingISO } elseif ($_.nextISO) { $_.nextISO } else { '9999-99-99' } }}, job)
     $nArr = (@($sorted | Where-Object { $_.type -eq 'arriving' })).Count
     $nAt  = (@($sorted | Where-Object { $_.type -eq 'at' })).Count
-    Write-Output "  -> MRA logistics: scanned $nFiles calendars, $nArr arriving back, $nAt at MRA now."
+    Write-Host "  -> MRA logistics: scanned $nFiles calendars, $nArr arriving back, $nAt at MRA now."
     foreach ($r in $sorted) {
-        if ($r.type -eq 'arriving') { Write-Output "       arriving $($r.arrivingISO): $($r.job)" }
-        else                        { Write-Output "       at MRA since $($r.sinceISO): $($r.job)" }
+        if ($r.type -eq 'arriving') { Write-Host "       arriving $($r.arrivingISO): $($r.job)" }
+        else                        { Write-Host "       at MRA since $($r.sinceISO): $($r.job)" }
     }
     return ,$sorted
 }
