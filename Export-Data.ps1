@@ -618,10 +618,8 @@ if (Test-Path $FleetioTokenFile) {
             return ,@($docs)
         }
 
-        $dbgIssue = $null
         $fIssues = New-Object System.Collections.ArrayList
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
-            if (-not $dbgIssue) { $dbgIssue = $i }
             $pr = ''
             if ($i.labels) { try { $pr = (@($i.labels | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { $_.name } }) -join ', ') } catch {} }
             $det = ''
@@ -731,19 +729,12 @@ if (Test-Path $FleetioTokenFile) {
         } catch { "FATAL: $($_.Exception.Message)" | Out-File $FleetDbg -Append -Encoding utf8; Write-Output "  -> Fleetio roster build failed: $($_.Exception.Message)" }
 
         $allDocs = @($fIssues | ForEach-Object { $_.docs } | Where-Object { $_ })
-        $docDbg = [PSCustomObject]@{
-            firstIssueKeys = $(if ($dbgIssue) { (@($dbgIssue.PSObject.Properties.Name) -join ',') } else { '' })
-            docsCountField = $(if ($dbgIssue) { "$($dbgIssue.documents_count)/$($dbgIssue.images_count)" } else { '' })
-            docsTotal = $allDocs.Count
-            sample = (@($allDocs)[0])
-        }
         $fleetio = [PSCustomObject]@{
             generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt')
             issues = @($fIssues); workOrders = @($fWos); service = @($fSvc); locations = $fLoc; fleet = @($fleetRoster)
-            docDbg = $docDbg
         }
         $issAssigned = (@($fIssues | Where-Object { @($_.assignees).Count -gt 0 })).Count
-        Write-Output "  -> Fleetio docs: total=$($allDocs.Count) firstIssueKeys=$($docDbg.firstIssueKeys)"
+        Write-Output "  -> Fleetio attachments: $($allDocs.Count) across $((@($fIssues | Where-Object { @($_.docs).Count -gt 0 })).Count) issues"
         Write-Output "  -> Fleetio: $($fIssues.Count) issues ($issAssigned with assignees), $($fWos.Count) work orders, $($fSvc.Count) service due/overdue"
     } catch {
         Write-Output "  -> Fleetio fetch failed: $($_.Exception.Message)"
