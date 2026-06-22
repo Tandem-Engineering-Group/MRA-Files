@@ -2012,6 +2012,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.88", date:"2026-06-22", title:"General tasks can carry a bay", items:[
+    "Adding a <b>General task</b> now has a clean <b>\"General\"</b> bay choice (the default). Leave it for a plain crew task, or pick a real bay and it shows as a <b>📍 Bay tag</b> on the line — handy for giving Josh/Jeff a bay to work from.",
+    "General tasks still live in the <b>Open Tasks by Assignee</b> columns (not as a bay tile up top) — they're crew to-dos, not a trailer." ] },
   { rev:"4.87", date:"2026-06-22", title:"Fix NaN dates + full descriptions on the TV", items:[
     "Fixed Fleetio service dates showing as <b>\"NaN/NaN\"</b> (e.g. Generator PM) — some came through as US-format dates; the board now reads both M/D/YYYY and YYYY-MM-DD everywhere.",
     "<b>Wall (TV) mode</b> now shows the <b>full</b> Fleetio description (it auto-scrolls), since you can't hover on a TV. Normal mode stays compact (2 lines, hover for full)." ] },
@@ -3191,7 +3194,7 @@ function submitEditTask(){
 
 /* ---------- Add a task from the dashboard (PIN-gated, mirrors close) ---------- */
 const SHOP_WRITE_URL = CLOSE_FLOW_URL;   // Add + Edit/Move reuse the existing close flow (its script now handles all 3 actions)
-const BAY_OPTIONS = ['Bay 2 Front','Bay 2 Back / Loading Dock','Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back','Parking Lot','On Hold','Next Up'];
+const BAY_OPTIONS = ['General','Bay 2 Front','Bay 2 Back / Loading Dock','Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back','Parking Lot','On Hold','Next Up'];
 const ASSIGNEE_OPTIONS = ['Sal','Wrap Team','Electricians','Doug','Josh','Jeff','Vendor'];
 // Approved ("canonical") assignee names for standardization — floor crew + the project
 // orgs/people Rich confirmed. Anything in use that isn't here (and isn't a known group
@@ -3242,8 +3245,12 @@ function submitAddTask(){
   const msg=document.getElementById('atMsg');
   if(!proj){ msg.style.color='var(--red)'; msg.textContent='Pick or name a project.'; return; }
   if(!task){ msg.style.color='var(--red)'; msg.textContent='Enter the task.'; return; }
+  // General lane is one shared, trailer-less job — so a chosen Bay would otherwise vanish.
+  // Fold it into the task text as a 📍 location tag so it shows + persists.
+  let taskText=task; const _gbay=document.getElementById('atBay').value;
+  if(proj===GENERAL_PROJ && _gbay && !/^general$/i.test(_gbay)) taskText="📍 "+_gbay+" · "+task;
   const payload={ action:"addTask", project:proj, jobNum:document.getElementById('atJob').value.trim(),
-    bay:document.getElementById('atBay').value, task:task, assigned:document.getElementById('atAssigned').value,
+    bay:document.getElementById('atBay').value, task:taskText, assigned:document.getElementById('atAssigned').value,
     milestone:document.getElementById('atMilestone').value, comments:document.getElementById('atComments').value.trim(),
     pin:CLOSE_PIN, user:CURRENT_USER };
   const btn=document.getElementById('atSubmit'); btn.disabled=true; btn.textContent="Adding…";
