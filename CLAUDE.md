@@ -16,6 +16,16 @@ Guidance for Claude when working in this repository.
   with precise guidance, but he is **not** a developer — avoid raw PowerShell/CLI for
   him where a guided GUI or a flow will do, and anticipate the prompts he'll hit.
 
+### Access / who-has-what (don't ask Rich to fetch these — he can't)
+- **Azure** (the `mrashopdash` storage account, the `AZURE_STORAGE_KEY` / access keys,
+  AzCopy + deploy creds) is owned by **Rich's PARTNER**, not Rich. Rich does **not**
+  have the Azure Portal or the storage key. Anything needing the Azure storage key →
+  the partner provides it (it's the same key the deploy already uses). Don't tell Rich
+  to "grab key1 from the Azure Portal."
+- **M365 admin** (Entra **app registrations**, SharePoint admin consent) → **IT**.
+- So for a step needing a credential: route storage/Azure → partner, Entra/M365 admin →
+  IT, and give Rich the exact ask to forward.
+
 ## Source-of-truth files (reference these ongoing)
 
 The working files for this project live in **SharePoint**, not in this repo.
