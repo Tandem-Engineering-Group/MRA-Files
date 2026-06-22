@@ -1966,7 +1966,7 @@ const GENERAL_HELP = `
       <li>On each task line: <span class="k">✓ close</span>, <span class="k">✎</span> edit (text, assignee, status, milestone, comments), <span class="k">🗑</span> delete. Turn on <span class="k">Show closed</span> and closed tasks get <span class="k">↩</span> reopen + 🗑 delete.</li>
       <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.)</li>
     </ul>
-    <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. A task you <b>add</b> now also sticks on <b>your</b> device through a page reload (handy on an iPad, which reloads tabs on its own) until the workbook catches up — so it won't appear to vanish.</div></div>
+    <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. <b>Everything you change</b> — adds, edits, completes, deletes, moves — now also sticks on <b>your</b> device even if you <b>hit refresh / reload the page</b> (handy on an iPad, which reloads tabs on its own). It holds your changes until the workbook's data.js catches up on the next ~15-min export, then quietly hands off to the real data — so nothing ever appears to vanish when you refresh.</div></div>
   <div class="hsec"><h4>⑭ᵇ 🔄 Bring back a trailer (returns for maintenance)</h4>
     <p>When a trailer that already <b>shipped</b> comes back — a 3–6 month or annual maintenance return — it's hidden from the floor (Shipped jobs roll off on purpose), so adding a task to it won't make it reappear. Use <span class="k">☰ Actions ▸ 🔄 Bring back trailer</span>: pick it from the list of shipped/finished trailers (search by name, job # or client). It opens the job pre-set to <b>Active · Parking Lot · starting today</b>, with its <b>open tasks intact</b> — review and hit <b>Save</b>. The trailer's <b>previous ship date is logged</b> in the notes (<i>🚢 Shipped: 6/12/26 · 8/8/26 …</i>), so you build up a <b>visit history</b> — each ship/return stays on the record. (You can also bring one back from its <span class="k">✎ edit</span> screen — a <span class="k">🔄 Bring back</span> button appears on any shipped job, and the list of past ship dates shows right in the picker.)</p></div>
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
@@ -2034,6 +2034,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.91", date:"2026-06-22", title:"Your edits now survive a page refresh", items:[
+    "Hit <b>refresh / reload</b> after making a change and it <b>no longer disappears</b>. Before, only <i>added</i> tasks stuck through a reload; now <b>everything you do</b> — edits, ✓ completes, deletes, moves — stays on <b>your</b> screen too.",
+    "It holds your changes on your device until the workbook's data.js catches up on the next ~15-min export, then quietly hands off to the real data. The moment a newer export lands, your screen trusts it (so it never masks someone else's update for long). A 12-hour safety limit prevents stale ghosts." ] },
   { rev:"4.90", date:"2026-06-22", title:"Employee of the Month editor is now live", items:[
     "The one-time back-end flow is switched on, so <b>☰ Menu → 🏆 Employee of the Month</b> now saves for real — change the name, drop in a new photo, or turn it on/off and it writes straight to the board + TV. No more Push-Photo.bat." ] },
   { rev:"4.89", date:"2026-06-22", title:"Edit Employee of the Month from the dashboard", items:[
@@ -3064,7 +3067,7 @@ function addFleetioTask(row,num){
 /* ---------- Instant on-screen update: reflect a save immediately, and stop the
    30s poll from reverting it until the workbook's data.js actually regenerates. ---------- */
 let EDIT_PENDING=false, EDIT_BASE_GEN=null;
-function markPending(){ const D=window.MRA_DATA; EDIT_BASE_GEN=(D&&D.generatedAt)||null; EDIT_PENDING=true; }
+function markPending(){ const D=window.MRA_DATA; EDIT_BASE_GEN=(D&&D.generatedAt)||null; EDIT_PENDING=true; snapSave(); }
 function oApply(){ markPending(); if(window.MRA_DATA) renderAll(); }
 
 /* ---------- Pending adds: keep a just-added task on THIS device through a page
@@ -3082,6 +3085,16 @@ function pendFleetNum(s){ const m=String(s||'').match(/🔧\s*#(\d+)/); return m
 function pendDrop(kind, project, taskText){ const fn=pendFleetNum(taskText);
   pendSave(pendLoad().filter(e=> !(e.kind===kind && e.project===project &&
     (pendNorm(e.obj&&e.obj.t)===pendNorm(taskText) || (fn && pendFleetNum(e.obj&&e.obj.t)===fn))))); }
+/* ---------- Device-local edit snapshot: keep ALL your unsynced changes (edits,
+   completes, deletes, moves — not just adds) on THIS screen through a hard page
+   reload, until the workbook's data.js actually regenerates. We stash the whole
+   optimistic board (tagged with the data.js gen it was layered on) and restore it
+   on load while that gen is still current; the moment a newer export lands we drop
+   the stash and trust the server. Safety TTL avoids a permanent ghost. ---------- */
+const SNAP_KEY='mra_edit_snapshot_v1', SNAP_TTL=12*3600*1000;   // 12h
+function snapLoad(){ try{ return JSON.parse(localStorage.getItem(SNAP_KEY)||'null'); }catch(e){ return null; } }
+function snapSave(){ try{ if(EDIT_BASE_GEN && window.MRA_DATA) localStorage.setItem(SNAP_KEY, JSON.stringify({baseGen:EDIT_BASE_GEN, savedAt:Date.now(), data:window.MRA_DATA})); }catch(e){} }
+function snapClear(){ try{ localStorage.removeItem(SNAP_KEY); }catch(e){} }
 function mergePending(D){
   if(!D) return;
   const a=pendLoad(); if(!a.length) return;
@@ -7317,13 +7330,25 @@ async function refresh(){
     const r=await fetch('data.js?t='+Date.now(),{cache:'no-store'});
     const txt=await r.text();
     const incoming=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1));
+    // After a HARD RELOAD (the in-memory edit flags are gone) restore THIS device's
+    // unsynced changes from the saved snapshot — but only while data.js is still the
+    // same gen they were layered on. A newer export means the server has caught up
+    // (or moved on), so we drop the snapshot and trust it.
+    if(!EDIT_PENDING){
+      const snap=snapLoad();
+      if(snap && snap.baseGen && incoming.generatedAt && snap.baseGen===incoming.generatedAt
+         && (Date.now()-(snap.savedAt||0) < SNAP_TTL) && snap.data){
+        window.MRA_DATA=snap.data; EDIT_PENDING=true; EDIT_BASE_GEN=snap.baseGen;
+        renderAll(); return true;
+      }
+    }
     // If you just made an edit and the workbook's data.js hasn't regenerated yet
     // (same generatedAt as when you edited), keep your instant changes on screen
     // instead of reverting. Once the file catches up (generatedAt advances), apply it.
     if(EDIT_PENDING && incoming.generatedAt && EDIT_BASE_GEN && incoming.generatedAt===EDIT_BASE_GEN){
       return true;
     }
-    EDIT_PENDING=false;
+    EDIT_PENDING=false; snapClear();   // export advanced -> trust the server, drop the stash
     window.MRA_DATA=incoming;
     mergePending(incoming);   // re-apply any just-added tasks this device hasn't seen land yet
     renderAll();
