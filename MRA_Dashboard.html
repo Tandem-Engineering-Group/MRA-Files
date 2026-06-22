@@ -1073,6 +1073,11 @@
           <option value="pm">Sort: Program Development</option>
           <option value="name">Sort: A–Z name</option>
         </select>
+        <select id="dateFmtSel" class="projsort" onchange="setDateFmt(this.value)" title="Date format — applies everywhere dates show, remembered on this device">
+          <option value="MDY">📅 M/D/YY</option>
+          <option value="YMD">📅 YYYY-MM-DD</option>
+          <option value="DMY">📅 D/M/YY</option>
+        </select>
         <div class="rangebtns" id="rangeBtns">
           <span class="gwinwrap" title="Zoom — how much time the Gantt shows at once">🔍<input id="gwinSlider" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year of the schedule at once"><span id="gwinLab" class="gwinlab"></span></span>
           <span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="gpanSlider" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider" title="Scroll: slide the window left (earlier) or right (later) through the timeline — the zoom level stays the same"></span>
@@ -1944,6 +1949,8 @@ let PD_UNDO=[], PD_REDO=[], PD_UNDO_PROJ=null;   // undo/redo stacks for drag-re
 let PD_WIN_DAYS=null;   // project-detail Gantt zoom (window length in days); null = fit the whole project
 let PD_HIDEDONE=false; try{ PD_HIDEDONE=localStorage.getItem('mra_pd_hidedone')==='1'; }catch(e){}   // detailed Gantt: hide completed tasks
 function pdToggleHideDone(){ PD_HIDEDONE=!PD_HIDEDONE; try{localStorage.setItem('mra_pd_hidedone',PD_HIDEDONE?'1':'0');}catch(e){} if(typeof renderGanttFS==='function') renderGanttFS(); }
+let PD_SORT='date'; try{ const _s=localStorage.getItem('mra_pd_sort'); if(_s==='manual'||_s==='date') PD_SORT=_s; }catch(e){}   // detailed Gantt order: by date, or keep the list/entry order
+function setPdSort(v){ PD_SORT=(v==='manual')?'manual':'date'; try{localStorage.setItem('mra_pd_sort',PD_SORT);}catch(e){} if(GFS==='project'&&typeof renderGanttFS==='function') renderGanttFS(); }
 let PD_PAN=null;        // project-detail horizontal scroll 0..100; null = anchored at the span start
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
@@ -1959,9 +1966,18 @@ function escA(s){return esc(s).replace(/"/g,'&quot;');}   // attribute-safe (for
 function escJsAttr(s){return escA(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));}   // safe inside onclick="fn('…')"
 function parseISO(s){ if(!s) return null; if(s.indexOf("/")>=0){ const q=s.split("/"); return new Date(+q[2],+q[0]-1,+q[1]); } const p=s.split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
 function todayMid(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
-function fmtMD(iso){ if(!iso) return "TBD"; const d=parseISO(iso); return (d.getMonth()+1)+"/"+d.getDate(); }
-function fmtMDY(iso){ if(!iso) return "TBD"; const d=parseISO(iso);
-  return (d.getMonth()+1)+"/"+d.getDate()+"/"+String(d.getFullYear()).slice(2); }
+// Date display format — applies everywhere dates show. Remembered per device.
+let DATE_FMT='MDY'; try{ const _df=localStorage.getItem('mra_datefmt'); if(_df==='MDY'||_df==='YMD'||_df==='DMY') DATE_FMT=_df; }catch(e){}
+function setDateFmt(v){ DATE_FMT=(v==='YMD'||v==='DMY')?v:'MDY'; try{localStorage.setItem('mra_datefmt',DATE_FMT);}catch(e){}
+  if(window.MRA_DATA && typeof renderAll==='function') renderAll();
+  const fs=document.getElementById('ganttFS'); if(fs && fs.classList.contains('show') && typeof renderGanttFS==='function') renderGanttFS(); }
+const _z2=n=>String(n).padStart(2,'0');
+function fmtMD(iso){ if(!iso) return "TBD"; const d=parseISO(iso); if(!d) return "TBD"; const M=d.getMonth()+1, D=d.getDate();
+  if(DATE_FMT==='YMD') return _z2(M)+'-'+_z2(D); if(DATE_FMT==='DMY') return D+'/'+M; return M+'/'+D; }
+function fmtMDY(iso){ if(!iso) return "TBD"; const d=parseISO(iso); if(!d) return "TBD"; const M=d.getMonth()+1, D=d.getDate(), Y=d.getFullYear();
+  if(DATE_FMT==='YMD') return Y+'-'+_z2(M)+'-'+_z2(D);
+  if(DATE_FMT==='DMY') return D+'/'+M+'/'+String(Y).slice(2);
+  return M+'/'+D+'/'+String(Y).slice(2); }
 // Render a UTC/ISO timestamp in the VIEWER's local timezone (we store UTC, the browser applies the offset).
 function fmtStamp(iso){ if(!iso) return "—"; const d=new Date(iso); if(isNaN(d.getTime())) return String(iso);
   return d.toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}); }
@@ -2109,6 +2125,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"5.3", date:"2026-06-22", title:"Date format + detailed Gantt list-order", items:[
+    "<b>📅 Date format</b> picker (next to the Projects sort) — switch every date on the board between <b>M/D/YY</b>, <b>YYYY-MM-DD</b>, and <b>D/M/YY</b>. Remembered per device.",
+    "Detailed Gantt now has a <b>📅 By date / ▦ List order</b> toggle — <b>List order</b> keeps the project's own task order instead of auto-sorting by date (per Al's ask). (Drag-to-reorder is getting a proper rework next — needs hands-on testing.)" ] },
   { rev:"5.2", date:"2026-06-22", title:"Projects editor + detailed Gantt: quick wins", items:[
     "<b>🔎 Find task</b> box in Edit Project Tasks — filter a project's tasks by text (task, assignee, phase, type, notes); stacks with the 👥 assignee filter.",
     "<b>Type</b> field in the add/edit task form is now a <b>dropdown</b> (autocompletes the types already in use) — and typing a new <b>Phase</b> still auto-creates that phase bucket.",
@@ -5425,6 +5444,7 @@ function renderProjects(D){
   { const ww=document.getElementById('projWhoWrap'); if(ww) ww.innerHTML=projWhoSelHtml('projWhoSel'); }   // assignee filter
   renderGantt(document.getElementById('projGantt'), rows, win, {dates:true, showDays:true});
   { const ss=document.getElementById('projSort'); if(ss) ss.value=PROJ_SORT; }
+  { const df=document.getElementById('dateFmtSel'); if(df) df.value=DATE_FMT; }
   syncMraHlBtns();
   const undated=projects.filter(p=>!p.startISO||!p.finishISO).map(p=>p.name);
   document.getElementById('projGanttNote').textContent=
@@ -7442,7 +7462,9 @@ function renderGanttFS(){
         + `<div class="rb${PD_REDO.length?'':' rbdim'}" onclick="pdRedo()" title="Redo">↷ Redo${PD_REDO.length?(' ('+PD_REDO.length+')'):''}</div>`
         + `<div class="rb" onclick="pdResetOrder()" title="Clear any manual up/down ordering — go back to pure date order">↺ Reset order</div>`
       : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars, add and edit tasks">🔒 Edit / add tasks</div>`)
-      + `<div class="rb${PD_HIDEDONE?' active':''}" onclick="pdToggleHideDone()" title="Hide completed tasks in this detailed view">✓ Hide completed</div>`;
+      + `<div class="rb${PD_HIDEDONE?' active':''}" onclick="pdToggleHideDone()" title="Hide completed tasks in this detailed view">✓ Hide completed</div>`
+      + `<div class="rb${PD_SORT==='date'?' active':''}" onclick="setPdSort('date')" title="Order tasks by date">📅 By date</div>`
+      + `<div class="rb${PD_SORT==='manual'?' active':''}" onclick="setPdSort('manual')" title="Keep the list's own order (don't auto-sort by date)">▦ List order</div>`;
     if(!p || !(p.tasks||[]).length){
       cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
       legEl.innerHTML=''; warnEl.textContent=''; rangeEl.innerHTML=''; return;
@@ -7500,7 +7522,9 @@ function renderGanttFS(){
     };
     // Group lead-up tasks under each milestone GATE (a collapsible header). Tasks stay draggable;
     // a milestone shows as a ◆ gate (with a faint line across the chart) you can collapse/expand.
-    const sorted=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>!(PD_HIDEDONE&&projIsDone(t))).slice().sort((a,b)=>(projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b)));
+    const _plist=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>!(PD_HIDEDONE&&projIsDone(t)));
+    const _pix=new Map(_plist.map((t,i)=>[t,i]));
+    const sorted=_plist.slice().sort((a,b)=> PD_SORT==='manual' ? (_pix.get(a)-_pix.get(b)) : ((projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b))));
     const hasMs=sorted.some(t=>/yes/i.test(t.ml||''));
     const rows=[], mlines=[];
     if(!hasMs){ sorted.forEach(t=>rows.push(taskRow(t))); }
