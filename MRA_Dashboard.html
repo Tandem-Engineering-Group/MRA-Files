@@ -781,6 +781,19 @@
   .linksmenu-pop .mi-div{font-size:9.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--faint);
     padding:8px 11px 3px; border-top:1px solid var(--line); margin-top:4px}
 
+  /* Floating "Actions" button (FLOOR only) — appears bottom-right once you scroll
+     down, so you don't have to go all the way up to the Bay Status menu. */
+  .floatact{position:fixed; right:74px; bottom:18px; z-index:160; opacity:0; pointer-events:none;
+    transform:translateY(8px); transition:opacity .18s ease, transform .18s ease}
+  .floatact.show{opacity:.97; pointer-events:auto; transform:none}
+  .floatact .fabtn{background:var(--blue); color:#fff; border:none; border-radius:24px; padding:11px 18px;
+    font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; box-shadow:0 8px 22px rgba(0,0,0,.5);
+    letter-spacing:.2px; white-space:nowrap}
+  .floatact .fabtn:hover{filter:brightness(1.08)}
+  .floatact #floorActPop{top:auto; bottom:calc(100% + 8px); right:0}
+  @media print{ .floatact{display:none !important} }
+  body.wall .floatact{display:none !important}
+
   @media(max-width:1500px){ .kpis{grid-template-columns:repeat(4,1fr)} }
   @media(max-width:1100px){ .grid{grid-template-columns:1fr} .g-gutter{width:130px;flex-basis:130px} }
 
@@ -882,6 +895,22 @@
 
   <!-- Floating back-to-top button (shows after scrolling; hidden on the TV wall + in print) -->
   <button id="toTopBtn" class="totop" onclick="event.stopPropagation(); scrollToTop()" title="Back to top" aria-label="Back to top">↑</button>
+
+  <!-- Floating Actions menu (FLOOR only; shows after scrolling so you don't go all the way up) -->
+  <div class="floatact linksmenu" id="floorActWrap">
+    <button class="fabtn" onclick="toggleDrop(event,'floorActPop')" title="Bay actions — edit, add, print (same as the menu up top)">☰ Actions ▾</button>
+    <div class="linksmenu-pop" id="floorActPop">
+      <button class="mi" id="btnCloseMode2" onclick="toggleCloseMode(this)" title="Enter your code (1974) to close tasks AND move/edit jobs">🔒 Edit mode</button>
+      <button class="mi" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
+      <button class="mi" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
+      <button class="mi" onclick="openBringBack();closeDrops()" title="Return a shipped/finished trailer to the floor for new maintenance (needs code)">🔄 Bring back trailer</button>
+      <button class="mi" onclick="printBoard();closeDrops()" title="Print the shop board on one page">🖨 Print</button>
+      <button class="mi" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter">✉ Daily Letter</button>
+      <div class="mi-div">View</div>
+      <button class="mi" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
+      <button class="mi" id="btnTractor2" onclick="toggleTractor()" title="Show tractor Fleetio issues on the bay cards too">🚜 Show tractor issues</button>
+    </div>
+  </div>
 
   <!-- ===================== PRINT STYLESHEET ===================== -->
   <style>
@@ -1982,7 +2011,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑱ᵇ 📅 Holidays on the schedule</h4>
     <p>Standard <b>US &amp; Canada</b> holidays show on <b>every</b> Gantt as a <b>soft violet band</b> on the day — and once you <b>zoom in</b> (≈11 weeks or tighter) the <b>holiday name is written right on the timeline</b>; you can always <b>hover a band for the name + US/CA</b>. To keep the wide all-year view clean they appear only once you're <b>zoomed in to ~4 months or tighter</b>. They're <b>informational only and never block scheduling</b>, so you can still book work on a holiday when you need to. <b>Admins</b> can add company-specific days (e.g. <i>Shop Closed — Inventory</i>) from <span class="k">☰ Menu ▸ 📅 Manage holidays</span> — name, date and country; remove your own added ones any time. The standard set is built in and always on.</p></div>
   <div class="hsec"><h4>⑱ᶜ 📍 Today &amp; ↑ Back to top</h4>
-    <p>In a project's <b>detailed view</b> (click a Gantt bar), the <span class="k">📍 Today</span> button (next to 🔍 zoom / ↔ scroll / All) jumps the timeline to today — handy on a long schedule (it zooms in if you were viewing the whole project). And on any long page, a round <span class="k">↑</span> button appears at the <b>bottom-right</b> once you scroll down — click it to pop back to the top.</p></div>
+    <p>In a project's <b>detailed view</b> (click a Gantt bar), the <span class="k">📍 Today</span> button (next to 🔍 zoom / ↔ scroll / All) jumps the timeline to today — handy on a long schedule (it zooms in if you were viewing the whole project). And on any long page, a round <span class="k">↑</span> button appears at the <b>bottom-right</b> once you scroll down — click it to pop back to the top. On the <b>FLOOR</b>, a <span class="k">☰ Actions</span> button floats right next to it when you scroll down — the same Bay-Status actions menu (Edit mode, Add task/job, Print, Daily Letter…) right where you're working, so you don't have to scroll back up.</p></div>
   <div class="hsec"><h4>⑲ ⚠ Spotting at-risk projects</h4>
     <p>The dashboard now flags projects that are slipping. The <span class="k">⚠ AT RISK</span> KPI card counts every project that's <b>behind</b> (less done than it should be by today) or <b>past due</b> (finish date gone, not complete) — hover it for the list. In <b>Project Progress</b>, each project shows an <span class="hchip ok">on track</span> / <span class="hchip behind">behind</span> / <span class="hchip late">⚠ past due</span> chip, any <b>overdue tasks</b>, and a small <b>tick on the progress bar marking where it should be today</b> — if the colored fill is left of the tick, it's behind. At-risk projects sort to the top. A project's <b>overall %</b> is the <b>average of its tasks' own %s</b> (a task set to 25% counts as a quarter done, completed tasks as 100%), so partly-done work shows up — not just finished tasks.</p>
     <p>Under <b>Upcoming Milestones</b>, any <span class="k">⚠ Missed gates</span> (a milestone whose date passed while the project isn't done) are listed first, in red, with how many days late.</p>
@@ -2034,6 +2063,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.92", date:"2026-06-22", title:"Floating Actions button on the FLOOR", items:[
+    "Scroll down the FLOOR and a <b>☰ Actions</b> button now floats at the <b>bottom-right</b> (next to the ↑ back-to-top button) — same menu as the one up in Bay Status (Edit mode, Add task/job, Bring back, Print, Daily Letter, Show closed/tractor). No more scrolling all the way up to reach it.",
+    "Both menus stay in sync — flip Edit mode or tractor issues in either one and both update." ] },
   { rev:"4.91", date:"2026-06-22", title:"Your edits now survive a page refresh", items:[
     "Hit <b>refresh / reload</b> after making a change and it <b>no longer disappears</b>. Before, only <i>added</i> tasks stuck through a reload; now <b>everything you do</b> — edits, ✓ completes, deletes, moves — stays on <b>your</b> screen too.",
     "It holds your changes on your device until the workbook's data.js catches up on the next ~15-min export, then quietly hands off to the real data. The moment a newer export lands, your screen trusts it (so it never masks someone else's update for long). A 12-hour safety limit prevents stale ghosts." ] },
@@ -2601,7 +2633,7 @@ function toggleBayTile(el){ if(document.body.classList.contains('wall')) return;
   if(now) BAY_COLLAPSED.add(bay); else BAY_COLLAPSED.delete(bay);
   try{ localStorage.setItem('mra_bay_collapsed', JSON.stringify([...BAY_COLLAPSED])); }catch(e){} }
 function toggleClosed(){ SHOWCLOSED=!SHOWCLOSED; renderAll(); }
-function setTractorBtn(){ const b=document.getElementById('btnTractor'); if(b){ b.classList.toggle('on',SHOW_TRACTOR); b.textContent=SHOW_TRACTOR?'🚜 Hide tractor issues':'🚜 Show tractor issues'; } }
+function setTractorBtn(){ ['btnTractor','btnTractor2'].forEach(id=>{ const b=document.getElementById(id); if(b){ b.classList.toggle('on',SHOW_TRACTOR); b.textContent=SHOW_TRACTOR?'🚜 Hide tractor issues':'🚜 Show tractor issues'; } }); }
 function toggleTractor(){ SHOW_TRACTOR=!SHOW_TRACTOR; try{localStorage.setItem('mra_show_tractor',SHOW_TRACTOR?'1':'0');}catch(e){} setTractorBtn(); renderAll(); }   // no code needed — it's a view toggle
 function toggleSalClosed(){ SHOWSALCLOSED=!SHOWSALCLOSED; renderAll(); }
 /* ---------- Wall (TV) mode: bound heights, auto-expand tasks, auto-scroll ---------- */
@@ -2993,7 +3025,7 @@ function syncAuthUI(){ const p=document.getElementById('authPill'), n=document.g
 function signOut(){ CLOSE_PIN=null; CURRENT_USER="";
   document.body.classList.remove('closemode');
   document.body.classList.remove('dsopen');
-  const cb=document.getElementById('btnCloseMode'); if(cb){ cb.classList.remove('on'); cb.textContent='🔒 Edit mode'; }
+  if(typeof syncEditModeBtns==='function') syncEditModeBtns(); else { const cb=document.getElementById('btnCloseMode'); if(cb){ cb.classList.remove('on'); cb.textContent='🔒 Edit mode'; } }
   if(_idleT){ clearTimeout(_idleT); _idleT=null; }
   syncAuthUI(); }
 // Auto-logout after 5 min idle (walk-away shop screens lock themselves).
@@ -3001,12 +3033,15 @@ let _idleT=null;
 function _resetIdle(){ if(_idleT){ clearTimeout(_idleT); _idleT=null; } if(CLOSE_PIN) _idleT=setTimeout(()=>{ if(CLOSE_PIN) signOut(); }, 5*60*1000); }
 ['mousemove','keydown','click','touchstart'].forEach(ev=>document.addEventListener(ev,_resetIdle,{passive:true}));
 function authLabel(){ return CURRENT_USER ? (' — '+CURRENT_USER) : ''; }
+// Keep BOTH the top Bay-Status menu and the floating FLOOR menu's Edit-mode buttons in sync.
+function syncEditModeBtns(){ const on=document.body.classList.contains('closemode');
+  ['btnCloseMode','btnCloseMode2'].forEach(id=>{ const b=document.getElementById(id); if(b){ b.classList.toggle('on',on); b.textContent= on ? ('🔒 Edit mode: ON'+authLabel()) : '🔒 Edit mode'; } }); }
 function toggleCloseMode(btn){
   if(!document.body.classList.contains('closemode')){
     if(!ensureAuth("turn on editing (close tasks + move/edit jobs)")) return;
     document.body.classList.add('closemode');
-    if(btn){ btn.classList.add('on'); btn.textContent='🔒 Edit mode: ON'+authLabel(); }
-  } else { document.body.classList.remove('closemode'); if(btn){ btn.classList.remove('on'); btn.textContent='🔒 Edit mode'; } }
+  } else { document.body.classList.remove('closemode'); }
+  syncEditModeBtns();
 }
 // ✓ handle shown (in Close mode) next to an open task that came from a Shop Tasks row.
 function closeHandle(project, raw){
@@ -4669,11 +4704,14 @@ function _activeScroller(){ const fs=document.getElementById('ganttFS');
 function scrollToTop(){ const sc=_activeScroller();
   try{ if(sc) sc.scrollTo({top:0,behavior:'smooth'}); else window.scrollTo({top:0,behavior:'smooth'}); }
   catch(e){ if(sc) sc.scrollTop=0; else window.scrollTo(0,0); } }
-function _toTopSync(){ const b=document.getElementById('toTopBtn'); if(!b) return;
-  if(document.querySelector('.modal-overlay.show')){ b.classList.remove('show'); return; }   // a popup is up — don't float over it
+function _toTopSync(){ const b=document.getElementById('toTopBtn'); const fa=document.getElementById('floorActWrap');
+  const modalUp=!!document.querySelector('.modal-overlay.show');   // a popup is up — don't float over it
   const sc=_activeScroller();
   const top = sc ? sc.scrollTop : (window.scrollY||document.documentElement.scrollTop||0);
-  b.classList.toggle('show', top>420); }
+  const scrolled = top>420;
+  if(b) b.classList.toggle('show', scrolled && !modalUp);
+  if(fa){ const show = scrolled && !modalUp && (typeof VIEW!=='undefined') && VIEW==='floor';
+    fa.classList.toggle('show', show); if(!show){ const p=document.getElementById('floorActPop'); if(p) p.classList.remove('show'); } } }
 window.addEventListener('scroll', _toTopSync, {passive:true});
 window.addEventListener('resize', _toTopSync, {passive:true});
 { const gb=document.querySelector('.gfs-body'); if(gb) gb.addEventListener('scroll', _toTopSync, {passive:true}); }
@@ -6481,6 +6519,8 @@ function setView(v){
   if(v==='history') renderHistory();
   if(v==='assets') setAssetLens(ASSET_LENS);   // show the right lens + render it
   if(_MINI_BY_VIEW[v]) setTimeout(()=>refreshMiniMap(v), 40);   // mount/refresh the unit map once the tab is visible
+  if(typeof closeDrops==='function') closeDrops();              // close any open menu when switching tabs
+  if(typeof _toTopSync==='function') _toTopSync();              // refresh the floating Actions button (FLOOR only)
 }
 function setRange(m){
   RANGE=m; try{localStorage.setItem('mra_range',JSON.stringify(m));}catch(e){}
