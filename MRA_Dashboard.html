@@ -271,6 +271,7 @@
   .tasklist.fleet .fl-h{font-size:9px; letter-spacing:.5px; text-transform:uppercase; color:#fca5a5; font-weight:700; padding:2px 0 3px 2px}
   .taskline.fleet{color:#e7b3b3}
   .taskline.fleet .flnum{color:#fca5a5; font-weight:700; margin-right:5px}
+  .fl-det{font-size:10.5px; color:var(--muted); line-height:1.35; padding:0 0 4px 22px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
   .taskline.fleet .fl-asset{color:var(--faint); font-size:10px; margin-left:6px}
   .morebtn{cursor:pointer; color:#7aa2d6; user-select:none}
   .morebtn:hover{text-decoration:underline}
@@ -2010,6 +2011,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.85", date:"2026-06-22", title:"Fleetio issue descriptions show on the board", items:[
+    "Floor tasks tied to a Fleetio issue (🔧 #NNN) now show the issue's full <b>description</b> right under the task — e.g. #966 ATS now reads \"became extremely hot to the touch…\" instead of just \"ATS\". Pulls from the Fleetio detail we already collect; shows on Fleetio lines and on tasks added from them (hover for the full text)." ] },
   { rev:"4.84", date:"2026-06-21", title:"Move / copy a shop task between trailers", items:[
     "Open a shop task (Edit mode → ✎) → <b>⇄ Move / copy to trailer</b>: <b>⧉ Copy</b> puts it on another trailer too; <b>⇄ Move</b> sends it there and removes it from this one. Finishes the move/copy across both project tasks and floor tasks." ] },
   { rev:"4.83", date:"2026-06-21", title:"Move / copy a project task to another project", items:[
@@ -4655,6 +4658,8 @@ function renderFloor(D){
   const flByJob={};
   // Trailer issues only on the bay card — tractor issues (Doug's) stay on the FLEETIO tab.
   ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(!SHOW_TRACTOR && /tractor/i.test(it.asset||"")) return; const k=(((it.jobNum||"").match(/\d{3,}/)||[])[0]); if(k){(flByJob[k]=flByJob[k]||[]).push(it);} });
+  const fioByNum={}; ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ fioByNum[String(it.num)]=it; });
+  const fioDet=num=>{ const it=fioByNum[String(num)]; const d=(it&&it.detail)?String(it.detail).trim():''; return d?`<div class="fl-det" title="${escA(d)}">${esc(d)}</div>`:''; };
   const fleetioFor=j=>{ const out=[],seen={}; (((j.jobNum||"").match(/\d{3,}/g))||[]).forEach(k=>{(flByJob[k]||[]).forEach(it=>{ if(!seen[it.num]){seen[it.num]=1; out.push(it);} });}); return out; };
   const shortAsset=s=>{ s=(s||"").trim(); const m=s.match(/^(.*?)(?:19|20)\d\d/); return (m?m[1]:s).trim().slice(0,26); };
   // Prune locally-remembered closes the export has now confirmed (task no longer open).
@@ -4773,7 +4778,7 @@ function renderFloor(D){
         const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
         const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
           const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>`; };
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDet(fm[1]):''}`; };
         let inner="";
         gkeys.forEach(k=>{
           if(!onlyUnassigned){
@@ -4787,7 +4792,7 @@ function renderFloor(D){
       if(fl.length){
         tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
           const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
-          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>`;
+          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>${fioDet(it.num)}`;
         }).join("")+`</div>`;
       }
     }
