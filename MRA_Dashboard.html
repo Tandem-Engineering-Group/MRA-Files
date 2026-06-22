@@ -1594,8 +1594,10 @@
         <button class="btn-ghost" onclick="renameProjectBtn()" title="Rename this project everywhere — its tasks, the Gantt/Progress, and the matching floor job (nothing orphans)">✎ Rename</button>
         <button class="btn-ghost" id="pePMBtn" onclick="setProjectPMBtn()" title="Set the Program Development lead for this project — applies to all its tasks and the matching floor job (no Excel)">👤 Set PM</button>
         <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
+        <button class="btn-ghost" onclick="peOpenDetail()" title="Open this project's full-screen Gantt (detailed view)">⛶ Gantt view</button>
         <button class="btn-ghost" onclick="deleteProjectBtn()" title="Delete this ENTIRE project — all its tasks + the matching floor job (can't be undone; re-upload the template to restore)" style="border-color:rgba(239,68,68,.5); color:#fca5a5">🗑 Delete project</button>
         <span id="peCount" style="color:var(--muted); font-size:12px"></span>
+        <input id="peSearch" type="search" oninput="setPeSearch(this.value)" placeholder="🔎 Find task…" autocomplete="off" title="Filter this project's tasks by text — task, assignee, phase, type or notes" style="font-size:11px; padding:4px 8px; max-width:160px; border-radius:7px; border:1px solid var(--line); background:var(--panel); color:var(--txt)">
         <select class="projwhosel" id="peWhoSel" onchange="setPeWho(this.value)" title="Filter to one assignee — handy for reassigning a person's tasks (e.g. Steve K / MRA Design)" style="font-size:11px; padding:3px 8px; max-width:170px"></select>
         <span style="margin-left:auto; display:flex; gap:6px">
           <button class="btn-ghost" id="peHideDoneBtn" style="padding:3px 9px; font-size:11px" onclick="peToggleHideDone()" title="Hide completed tasks to make scrolling easier">✓ Hide completed</button>
@@ -1679,7 +1681,7 @@
         <div><label>Subtask of <span style="color:var(--muted); font-weight:400; font-size:10.5px">(optional — nest under another task; uses that task's phase)</span></label><select id="ptParent"></select></div>
         <div class="addrow2">
           <div><label>Phase</label><input id="ptPhase" list="ptPhaseList" autocomplete="off"><datalist id="ptPhaseList"></datalist></div>
-          <div><label>Type</label><input id="ptType" autocomplete="off"></div>
+          <div><label>Type</label><input id="ptType" list="ptTypeList" autocomplete="off"><datalist id="ptTypeList"></datalist></div>
         </div>
         <div class="addrow2">
           <div><label>Assigned to <span style="color:var(--muted); font-weight:400; font-size:10.5px">(group/person · add a person to assign 2-deep)</span></label>
@@ -1701,6 +1703,7 @@
             <button type="button" class="btn-ghost ptpreset" onclick="ptSetPct(50)">50</button>
             <button type="button" class="btn-ghost ptpreset" onclick="ptSetPct(75)">75</button>
             <button type="button" class="btn-ghost ptpreset" onclick="ptSetPct(100)">100</button>
+            <button type="button" class="btn-ghost" onclick="ptSetPctToday()" style="margin-left:auto; font-size:11px" title="Set % to how far between the Start and Finish dates today falls (e.g. a Jun 1–Jun 30 task on Jun 22 ≈ 70%)">📅 % to Today</button>
           </div>
         </div>
         <div class="addrow2">
@@ -1939,6 +1942,8 @@ let GFS_PROJECT=null;      // when GFS==='project', the single project to detail
 const PD_COLLAPSED=new Set();   // collapsed milestone sections in the project-detail view (project|gate)
 let PD_UNDO=[], PD_REDO=[], PD_UNDO_PROJ=null;   // undo/redo stacks for drag-reschedule (per project)
 let PD_WIN_DAYS=null;   // project-detail Gantt zoom (window length in days); null = fit the whole project
+let PD_HIDEDONE=false; try{ PD_HIDEDONE=localStorage.getItem('mra_pd_hidedone')==='1'; }catch(e){}   // detailed Gantt: hide completed tasks
+function pdToggleHideDone(){ PD_HIDEDONE=!PD_HIDEDONE; try{localStorage.setItem('mra_pd_hidedone',PD_HIDEDONE?'1':'0');}catch(e){} if(typeof renderGanttFS==='function') renderGanttFS(); }
 let PD_PAN=null;        // project-detail horizontal scroll 0..100; null = anchored at the span start
 const SHOP_BAYS=['Bay 3 Front','Bay 3 Back','Bay 4 Front','Bay 4 Back','Bay 5 Front','Bay 5 Back'];
 const expandedProjects=new Set();   // project names currently expanded to milestone rows
@@ -2042,7 +2047,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented). Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule — handy for a "what's left" handout.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
-    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names.</p></div>
+    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text (stacks with the assignee filter); <span class="k">Type</span> is a dropdown; <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt (which now has its own <span class="k">✓ Hide completed</span>); and a task's <b>Finish can't be set before its Start</b>.</p></div>
   <div class="hsec"><h4>⑯ᵇ 🖱️ Click a KPI hover to jump</h4>
     <p>Hover a top KPI tile to see its list — on <b>PROJECTS</b> (In progress / Upcoming / Completed / At risk / Milestones) and on the <b>FLOOR</b> job tiles, each item is now <b>clickable</b>: click a <b>project</b> to open its full‑screen detail view, or a <b>floor job</b> to switch to the Floor board and flash its card. Move the mouse onto the popover before clicking — it stays open so the links are live.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
@@ -2104,6 +2109,13 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"5.2", date:"2026-06-22", title:"Projects editor + detailed Gantt: quick wins", items:[
+    "<b>🔎 Find task</b> box in Edit Project Tasks — filter a project's tasks by text (task, assignee, phase, type, notes); stacks with the 👥 assignee filter.",
+    "<b>Type</b> field in the add/edit task form is now a <b>dropdown</b> (autocompletes the types already in use) — and typing a new <b>Phase</b> still auto-creates that phase bucket.",
+    "<b>📅 % to Today</b> button on a task — sets % complete to how far between Start and Finish today falls.",
+    "<b>⛶ Gantt view</b> button in the editor — jump straight to the project's full-screen detailed Gantt.",
+    "<b>✓ Hide completed</b> toggle in the detailed Gantt view (remembered per device).",
+    "Adding/editing a task now blocks a <b>Finish date earlier than the Start date</b>." ] },
   { rev:"5.1", date:"2026-06-22", title:"Edit Project Tasks: filter by assignee", items:[
     "The <b>✎ Edit Project Tasks</b> popup now has a <b>👥 assignee dropdown</b> — pick a person/crew (e.g. <b>Steve K</b>, <b>MRA Design</b>) and it shows only their tasks in that project, so you can reassign or adjust them without hunting through phases. 'All assignees' clears it." ] },
   { rev:"5.0", date:"2026-06-22", title:"Projects: 📊 Workload graph (open tasks by PM + crew)", items:[
@@ -3668,6 +3680,8 @@ let PE_HIDEDONE = false; try{ PE_HIDEDONE = localStorage.getItem('mra_pe_hidedon
 function peToggleHideDone(){ PE_HIDEDONE=!PE_HIDEDONE; try{localStorage.setItem('mra_pe_hidedone',PE_HIDEDONE?'1':'0');}catch(e){} renderProjTaskList(); }
 let PE_WHO='';   // Edit-Project-Tasks: filter to one assignee (in-memory; self-resets when it's not in the project)
 function setPeWho(v){ PE_WHO=v||''; renderProjTaskList(); }
+let PE_SEARCH='';   // Edit-Project-Tasks: free-text task search
+function setPeSearch(v){ PE_SEARCH=v||''; renderProjTaskList(); }
 function projIsDone(t){ return !!(t && (t.done || /^completed$/i.test(t.st||''))); }
 // Per-task % complete is stored INSIDE the status string (e.g. "In Progress 25%") so it round-trips
 // through the workbook + export with no new column. These read / strip it.
@@ -3696,6 +3710,7 @@ function projWhoSelHtml(id){
   const opts=['<option value="">👥 All assignees</option>'].concat(projWhoList().map(w=>`<option value="${escA(w)}"${w===PROJ_WHO?' selected':''}>${esc(w)}</option>`));
   return `<select class="projwhosel" id="${id}" onchange="setProjWho(this.value)" title="Show only tasks for one person/crew (MRA Design, Wrap Team, a PM, …) across the projects">${opts.join('')}</select>`; }
 function projPhases(p){ const s=new Set(); ((p&&p.tasks)||[]).forEach(t=>{ if(t.phase) s.add(t.phase.trim()); }); return [...s].filter(Boolean); }
+function projTypes(p){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(pp=>(pp.tasks||[]).forEach(t=>{ if(t.type) s.add(String(t.type).trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
 
 // Parse a numeric form value (strips $ , and spaces); '' / non-numeric -> null.
 function numOrNull(v){ v=String(v==null?'':v).replace(/[$,\s]/g,''); if(v==='') return null; const n=Number(v); return isFinite(n)?n:null; }
@@ -3729,6 +3744,9 @@ function openProjectEditor(name){
   peProjectChange();
   document.getElementById('projEditModal').classList.add('show');
 }
+function peOpenDetail(){ const name=peCurrentProject(); if(!name){ return; }   // jump from the editor into the full-screen Gantt detail
+  document.getElementById('projEditModal').classList.remove('show');
+  if(typeof openProjectDetail==='function') openProjectDetail(null, name); }
 function closePE(e){ if(!e || e.target.id==='projEditModal' || e.target.classList.contains('modal-close')){
   document.getElementById('projEditModal').classList.remove('show');
   if(GFS==='project' && typeof renderGanttFS==='function') renderGanttFS(); } }   // reflect add/edit/delete back in the detail bars
@@ -4051,13 +4069,17 @@ function renderProjTaskList(){
     list.innerHTML=`<div class="empty">${name?('No tasks yet for '+esc(name)+' — click ➕ Add task.'):'Pick a project or name a new one, then ➕ Add task.'}</div>`;
     cnt.textContent = p?'0 tasks':''; return;
   }
-  const fTasks = PE_WHO ? tasks.filter(t=>_whoParts(t.who).some(w=>w.toLowerCase()===PE_WHO.toLowerCase())) : tasks;
-  if(PE_WHO && !fTasks.length){
-    list.innerHTML=`<div class="empty">No tasks assigned to <b>${esc(PE_WHO)}</b> in ${esc(name)}.</div>`;
-    cnt.textContent = tasks.length+" task"+(tasks.length===1?"":"s")+" · 0 for "+PE_WHO; return;
+  const _peq=(PE_SEARCH||'').trim().toLowerCase();
+  let fTasks = tasks;
+  if(PE_WHO) fTasks=fTasks.filter(t=>_whoParts(t.who).some(w=>w.toLowerCase()===PE_WHO.toLowerCase()));
+  if(_peq) fTasks=fTasks.filter(t=>(((t.t||'')+' '+(t.who||'')+' '+(t.phase||'')+' '+(t.type||'')+' '+(t.cm||'')).toLowerCase().indexOf(_peq)>=0));
+  { const sb=document.getElementById('peSearch'); if(sb && sb.value!==PE_SEARCH && document.activeElement!==sb) sb.value=PE_SEARCH; }
+  if((PE_WHO||_peq) && !fTasks.length){
+    list.innerHTML=`<div class="empty">No tasks${PE_WHO?(' for <b>'+esc(PE_WHO)+'</b>'):''}${_peq?(' matching “'+esc(PE_SEARCH.trim())+'”'):''} in ${esc(name)}.</div>`;
+    cnt.textContent = tasks.length+" task"+(tasks.length===1?"":"s")+" · 0 shown"; return;
   }
   const tot=[]; if(p.budget) tot.push('$'+Number(p.budget).toLocaleString()); if(p.estDays) tot.push(p.estDays+'d'); if(p.estHours) tot.push(p.estHours+'h');
-  cnt.textContent = tasks.length+" task"+(tasks.length===1?"":"s")+" · "+p.doneCount+" done ("+p.pct+"%)"+(tot.length?(' · '+tot.join(' · ')):'')+(PE_HIDEDONE?" · hiding completed":"")+(PE_WHO?(" · "+fTasks.length+" for "+PE_WHO):"");
+  cnt.textContent = tasks.length+" task"+(tasks.length===1?"":"s")+" · "+p.doneCount+" done ("+p.pct+"%)"+(tot.length?(' · '+tot.join(' · ')):'')+(PE_HIDEDONE?" · hiding completed":"")+((PE_WHO||_peq)?(" · "+fTasks.length+" shown"):"");
   const hb=document.getElementById('peHideDoneBtn'); if(hb){ hb.textContent=PE_HIDEDONE?'✓ Show completed':'✓ Hide completed'; hb.classList.toggle('on',PE_HIDEDONE); }
   const byId={}; tasks.forEach(t=>{ if(t.id!=null && t.id!=='') byId[String(t.id)]=t; });
   const order=[], groups={};
@@ -4160,6 +4182,7 @@ function fillAssignAndPhase(p){
   document.getElementById('ptAssignList').innerHTML = opts;
   document.getElementById('ptPersonList').innerHTML = opts;
   document.getElementById('ptPhaseList').innerHTML = projPhases(p).map(ph=>`<option value="${escA(ph)}">`).join("");
+  document.getElementById('ptTypeList').innerHTML = projTypes(p).map(ty=>`<option value="${escA(ty)}">`).join("");
   document.getElementById('ptStatus').innerHTML = PROJ_STATUS_OPTIONS.map(s=>`<option>${esc(s)}</option>`).join("");
 }
 // ---- % Complete control (slider + number box), kept in light sync with the Status dropdown ----
@@ -4167,6 +4190,13 @@ function ptSetPctSilent(p){ p=Math.max(0,Math.min(100,Math.round((parseInt(p,10)
   const sl=document.getElementById('ptPct'), nb=document.getElementById('ptPctNum'), lab=document.getElementById('ptPctVal');
   if(sl) sl.value=p; if(nb) nb.value=p; if(lab) lab.textContent=p+'%';
   document.querySelectorAll('.ptpreset').forEach(b=>b.classList.toggle('on', parseInt(b.textContent,10)===p)); }
+// "📅 % to Today" — set % complete to how far between Start and Finish today falls.
+function ptSetPctToday(){ const s=document.getElementById('ptStart').value, f=document.getElementById('ptFinish').value, msg=document.getElementById('ptMsg');
+  if(!s||!f){ if(msg){ msg.style.color='var(--red)'; msg.textContent='Add a Start and Finish date first, then "% to Today".'; } return; }
+  const sd=new Date(s+'T00:00:00'), fd=new Date(f+'T00:00:00'), now=new Date(); now.setHours(0,0,0,0);
+  if(fd<=sd){ ptSetPct(now>=fd?100:0); return; }
+  let pct=Math.round((now-sd)/(fd-sd)*100); pct=Math.max(0,Math.min(100,pct));
+  ptSetPct(pct); if(msg){ msg.style.color='var(--muted)'; msg.textContent='Set to '+pct+'% (today vs the Start→Finish span).'; } }
 function ptSetPct(v){ let p=Math.max(0,Math.min(100,parseInt(v,10)||0)); ptSetPctSilent(p);
   const sd=document.getElementById('ptStatus'); if(sd){ const cur=sd.value;   // nudge the status to match
     if(p>=100) sd.value='Completed';
@@ -4245,6 +4275,8 @@ function submitProjTask(){
   const task=document.getElementById('ptTask').value.trim();
   const msg=document.getElementById('ptMsg');
   if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
+  { const _ds=document.getElementById('ptStart').value, _df=document.getElementById('ptFinish').value;
+    if(_ds && _df && _ds>_df){ msg.style.color='var(--red)'; msg.textContent='Finish date can’t be before the Start date.'; return; } }
   const _a1=document.getElementById('ptAssigned').value.trim(), _a2=document.getElementById('ptAssigned2').value.trim();
   const _assigned = _a2 ? (_a1 ? (_a1+' / '+_a2) : _a2) : _a1;   // 2-deep: "Group / Person"
   const _parent=document.getElementById('ptParent').value;       // "Subtask of" Task ID (blank = top-level)
@@ -7409,7 +7441,8 @@ function renderGanttFS(){
         + `<div class="rb${PD_UNDO.length?'':' rbdim'}" onclick="pdUndo()" title="Undo the last change — date move OR reorder (Ctrl/⌘+Z)">↶ Undo${PD_UNDO.length?(' ('+PD_UNDO.length+')'):''}</div>`
         + `<div class="rb${PD_REDO.length?'':' rbdim'}" onclick="pdRedo()" title="Redo">↷ Redo${PD_REDO.length?(' ('+PD_REDO.length+')'):''}</div>`
         + `<div class="rb" onclick="pdResetOrder()" title="Clear any manual up/down ordering — go back to pure date order">↺ Reset order</div>`
-      : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars, add and edit tasks">🔒 Edit / add tasks</div>`);
+      : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars, add and edit tasks">🔒 Edit / add tasks</div>`)
+      + `<div class="rb${PD_HIDEDONE?' active':''}" onclick="pdToggleHideDone()" title="Hide completed tasks in this detailed view">✓ Hide completed</div>`;
     if(!p || !(p.tasks||[]).length){
       cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
       legEl.innerHTML=''; warnEl.textContent=''; rangeEl.innerHTML=''; return;
@@ -7467,7 +7500,7 @@ function renderGanttFS(){
     };
     // Group lead-up tasks under each milestone GATE (a collapsible header). Tasks stay draggable;
     // a milestone shows as a ◆ gate (with a faint line across the chart) you can collapse/expand.
-    const sorted=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).slice().sort((a,b)=>(projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b)));
+    const sorted=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>!(PD_HIDEDONE&&projIsDone(t))).slice().sort((a,b)=>(projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b)));
     const hasMs=sorted.some(t=>/yes/i.test(t.ml||''));
     const rows=[], mlines=[];
     if(!hasMs){ sorted.forEach(t=>rows.push(taskRow(t))); }
