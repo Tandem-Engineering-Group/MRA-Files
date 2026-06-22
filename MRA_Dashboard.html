@@ -1875,12 +1875,18 @@ function toggleArchived(){ SHOW_ARCHIVED=!SHOW_ARCHIVED; try{localStorage.setIte
   if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS) renderGanttFS(); } }
 // A project's "wrapped" date = its matching shipped floor job's ship date, else (if 100% done) its last finish.
 function projDoneISO(p){ if(!p) return null; const D=window.MRA_DATA||{}; const nm=String(p.name||'').trim().toLowerCase();
-  // match the floor trailer by name — forgiving so "Washtenaw" links to "Washtenaw County" (and vice-versa)
-  const j=(D.jobs||[]).find(x=>{ const jn=String(x.project||'').trim().toLowerCase();
-    if(!jn || (x.status||'').toLowerCase()!=='shipped') return false;
-    return jn===nm || (nm.length>=4 && (jn.indexOf(nm)>=0 || nm.indexOf(jn)>=0)); });
-  if(j && j.completionISO) return j.completionISO;
+  // The project's OWN progress is the primary "done" signal.
   if((p.pct||0)>=100 && p.finishISO) return p.finishISO;
+  // Match floor trailers by name — forgiving so "Washtenaw" links to "Washtenaw County" (and vice-versa).
+  // A project is only "done" if EVERY matching trailer has shipped: a single shipped sub-event (a client
+  // visit, one shipped unit) must NOT archive a still-active multi-trailer project (e.g. Oakland, Medtronic).
+  const matches=(D.jobs||[]).filter(x=>{ const jn=String(x.project||'').trim().toLowerCase();
+    if(!jn || x.category==='leave') return false;
+    return jn===nm || (nm.length>=4 && (jn.indexOf(nm)>=0 || nm.indexOf(jn)>=0)); });
+  if(matches.length && matches.every(x=>(x.status||'').toLowerCase()==='shipped')){
+    const ds=matches.map(x=>x.completionISO).filter(Boolean).sort();
+    if(ds.length) return ds[ds.length-1];
+  }
   return null; }
 function projArchived(p){ const d=projDoneISO(p); if(!d) return false; const a=daysAgo(d); return a!=null && a>PROJ_ARCHIVE_DAYS; }
 const PALETTE = ['#3b82f6','#22c55e','#f59e0b','#a78bfa','#2dd4bf','#ef4444',
@@ -2084,6 +2090,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.99", date:"2026-06-22", title:"Fix: active projects wrongly auto-archiving", items:[
+    "Projects with a shipped <b>sub-event</b> (a client visit, one shipped unit) were getting auto-archived even though the project itself was still active — e.g. <b>Oakland Schools</b> and <b>Medtronic</b> dropped off the Gantt. A project now only auto-archives when it's <b>100%</b> or <b>every</b> matching trailer has shipped, so an active multi-trailer project stays on the board." ] },
   { rev:"4.98", date:"2026-06-22", title:"Projects Gantt: sticky dates + filter by assignee", items:[
     "<b>The date row (and the holidays row) now stays pinned to the top</b> as you scroll a long Gantt — on the Projects Gantt, the full-screen ⛶ Expand, and a project's detailed view — so you always see which dates the bars line up with.",
     "<b>New 👥 assignee filter</b> above the Gantt (and in the Expand view) — like the shop crews. Pick <b>MRA Design</b>, <b>Wrap Team</b>, a PM, etc. and the Gantt narrows to just that person/crew: in a project's <b>detailed view</b> it shows <b>only their tasks</b>; on the all-projects view it shows <b>only the projects they're on</b>. Pick 'All assignees' to clear. Remembered per device." ] },
