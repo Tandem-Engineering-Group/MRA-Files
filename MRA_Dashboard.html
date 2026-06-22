@@ -152,6 +152,8 @@
   .g-holiday{position:absolute; top:0; bottom:0; background:rgba(245,158,11,.13); z-index:0; pointer-events:none}
   body.light .g-holiday{background:rgba(245,158,11,.18)}
   .holpicklbl{font-size:13px; opacity:.85; align-self:center; margin:0 3px 0 2px}
+  .projwhosel{background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:5px 9px; font-size:11.5px; font-weight:600; max-width:180px; cursor:pointer}
+  .gfs-head .projwhosel{font-size:12px}
   .g-bar.done{opacity:.6}
   .g-row.g-subrow .g-gutter{padding-left:24px}
   .g-row.g-subrow .g-lbl{font-weight:500; color:var(--muted); font-size:11px}
@@ -523,7 +525,12 @@
   .lg-t::before{color:var(--amber)} .lg-d::before{color:var(--red)}
 
   /* ---------- Gantt ---------- */
-  .gantt{font-size:11.5px; overflow:hidden}
+  .gantt{font-size:11.5px; overflow:visible}
+  /* Keep the date axis (and the holidays row) pinned to the top while you scroll a long Gantt. */
+  .g-axisrow{position:sticky; top:0; z-index:6; background:var(--panel)}
+  .g-holrow{position:sticky; top:22px; z-index:5;
+    background:linear-gradient(0deg, rgba(167,139,250,.06), rgba(167,139,250,.06)), var(--panel)}
+  body.light .g-holrow{background:linear-gradient(0deg, rgba(124,58,237,.05), rgba(124,58,237,.05)), var(--panel)}
   .g-axisrow,.g-row{display:flex; align-items:stretch}
   .g-gutter{width:188px; flex:0 0 188px; padding:5px 10px 5px 2px}
   .g-track{position:relative; flex:1 1 auto; min-height:26px; border-left:1px solid var(--line)}
@@ -1071,6 +1078,7 @@
           <div class="rb" data-m="all" onclick="setRange('all')" title="Show the entire timeline at once">All</div>
         </div>
         <span class="rangebtns" id="projHolPick" title="Which holidays to shade on the Gantt"></span>
+        <span id="projWhoWrap" style="margin-left:8px"></span>
         <button class="expandbtn mraHlBtn" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects — spot over-scheduling. Click to toggle.">🟧 MRA Shop load</button>
         <button id="archToggle" class="expandbtn" onclick="toggleArchived()" title="Wrapped projects (shipped, or 100% done, more than 8 days ago) auto-archive off the active board. Click to show/hide them — they're always in 🔍 search too.">🗄 Show archived</button>
         <button class="expandbtn" onclick="printProjects()" title="Print the projects Gantt + list on one page (11×17 landscape, auto-fit)">🖨 Print</button>
@@ -1327,6 +1335,7 @@
       <div class="rangebtns" id="gfsLevel"></div>
       <div class="rangebtns" id="gfsRange" style="margin-left:12px"></div>
       <div class="rangebtns" id="gfsHolPick" style="margin-left:10px"></div>
+      <span id="gfsWhoWrap" style="margin-left:10px"></span>
       <div class="gfs-warn" id="gfsWarn"></div>
       <button class="gfs-theme" onclick="event.stopPropagation(); printGanttFS()" title="Print this Gantt on one 11×17 landscape page (auto-fit) — or Save as PDF">🖨 Print</button>
       <button class="gfs-theme" id="gfsThemeBtn" onclick="event.stopPropagation(); toggleTheme(this)" title="Switch this view (and the whole dashboard) light / dark — remembered on this device">☀️ Light</button>
@@ -1964,7 +1973,7 @@ const GENERAL_HELP = `
     <span class="k">Everyone / People only</span> toggle hides crews & vendors — your choice is remembered. It's <b>compact by default</b> — scrolls within a fixed height so it doesn't dominate the tab — with an <span class="k">⤢ Expand</span> button to grow it to full height (remembered per device). <b>Project Progress</b> works the same way.</p></div>
   <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
     <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a <b>bar</b> to open that project's <b>detailed view</b> (⑥ᵈ below). The full-screen Projects view has the <b>same</b> <span class="k">🔍 zoom</span> and <span class="k">↔ scroll</span> sliders as the inline Gantt (below) — they stay in sync, plus its own <span class="k">🖨 Print</span> and <span class="k">🎌 holiday</span> picker up top. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p>
-    <p><b>Holidays shade the whole Gantt</b> (amber band, top to bottom) so you can plan around them; the <span class="k">🎌 US</span> and <span class="k">Canada</span> toggles (above the Gantt and in the Expand view) turn each on/off independently — show both, one, or none. Each bar also shows its <b>length in days</b> (e.g. <i>12d</i>). The <span class="k">🖨 Print</span> button in the Expand view prints whatever Gantt you're viewing (including a single project's detailed view) on one 11×17 page.</p></div>
+    <p><b>Holidays shade the whole Gantt</b> (amber band, top to bottom) so you can plan around them; the <span class="k">🎌 US</span> and <span class="k">Canada</span> toggles (above the Gantt and in the Expand view) turn each on/off independently — show both, one, or none. Each bar also shows its <b>length in days</b> (e.g. <i>12d</i>). The <span class="k">🖨 Print</span> button in the Expand view prints whatever Gantt you're viewing (including a single project's detailed view) on one 11×17 page. The <b>date row (and holidays) stays pinned to the top</b> as you scroll, so the dates are always in view. A <span class="k">👥 assignee</span> dropdown narrows the Gantt to one person/crew (e.g. <i>MRA Design</i>, <i>Wrap Team</i>, a PM) — their <b>tasks</b> in a project's detailed view, or just the <b>projects they're on</b> in the all-projects view.</p></div>
   <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
     <p>On the Project Schedules Gantt (inline or full-screen) the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom — or just tap the <span class="k">‹</span> / <span class="k">›</span> <b>arrows</b> at the left/right edge of the Gantt to scroll a step at a time. <span class="k">All</span> snaps to the whole timeline. Your zoom is remembered per device. <span class="k">🖨 Print</span> lays the whole project Gantt + a project list onto one <b>11×17 landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>⑥ᶜ ↕ Sort the Gantt</h4>
@@ -2075,6 +2084,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.98", date:"2026-06-22", title:"Projects Gantt: sticky dates + filter by assignee", items:[
+    "<b>The date row (and the holidays row) now stays pinned to the top</b> as you scroll a long Gantt — on the Projects Gantt, the full-screen ⛶ Expand, and a project's detailed view — so you always see which dates the bars line up with.",
+    "<b>New 👥 assignee filter</b> above the Gantt (and in the Expand view) — like the shop crews. Pick <b>MRA Design</b>, <b>Wrap Team</b>, a PM, etc. and the Gantt narrows to just that person/crew: in a project's <b>detailed view</b> it shows <b>only their tasks</b>; on the all-projects view it shows <b>only the projects they're on</b>. Pick 'All assignees' to clear. Remembered per device." ] },
   { rev:"4.97", date:"2026-06-22", title:"Print Sal tasks: Fleetio photos + attachments", items:[
     "<b>🖨 Print Sal tasks</b> now includes each Fleetio issue's <b>attachments</b> — <b>photos show as thumbnails</b> right on the page, and PDFs / spreadsheets show as <b>📎 click-to-open links</b>. The links open the actual file directly (no Fleetio login needed). Pulled live from Fleetio (43 of the open issues currently have attachments)." ] },
   { rev:"4.96", date:"2026-06-22", title:"Print Sal tasks · Parking Lot + Next Up sorted by date", items:[
@@ -3643,6 +3655,18 @@ function projDnum(t){ const d=(t&&(t.startISO||t.finISO))||''; const m=/^(\d{4})
 function projOrdKey(t){ const o=(t||{}).ord; return (o!=null && o!=='' && isFinite(+o)) ? +o : projDnum(t); }
 function oProj(name){ return (((window.MRA_DATA||{}).projects)||[]).find(p=>p.name===name); }
 function projAssignees(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.who) s.add(t.who.trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
+/* ---------- Projects Gantt: filter by assignee (MRA Design / Wrap Team / a PM / …), like the shop crews ---------- */
+let PROJ_WHO=''; try{ PROJ_WHO=localStorage.getItem('mra_proj_who')||''; }catch(e){}
+function _whoParts(s){ return String(s||'').split(/\s+\/\s+/).map(x=>(typeof crewCanon==='function'?crewCanon(x.trim()):x.trim())).filter(Boolean); }
+function taskWhoMatch(t, who){ if(!who) return true; const w=who.toLowerCase(); return _whoParts(t&&t.who).some(p=>p.toLowerCase()===w); }
+function projHasWho(p, who){ if(!who) return true; return (p&&p.tasks||[]).some(t=>taskWhoMatch(t,who)); }
+function projWhoList(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>_whoParts(t.who).forEach(x=>s.add(x)))); return [...s].sort((a,b)=>a.localeCompare(b)); }
+function setProjWho(v){ PROJ_WHO=v||''; try{localStorage.setItem('mra_proj_who',PROJ_WHO);}catch(e){}
+  if(window.MRA_DATA && typeof renderAll==='function') renderAll();
+  const fs=document.getElementById('ganttFS'); if(fs && fs.classList.contains('show') && typeof renderGanttFS==='function') renderGanttFS(); }
+function projWhoSelHtml(id){
+  const opts=['<option value="">👥 All assignees</option>'].concat(projWhoList().map(w=>`<option value="${escA(w)}"${w===PROJ_WHO?' selected':''}>${esc(w)}</option>`));
+  return `<select class="projwhosel" id="${id}" onchange="setProjWho(this.value)" title="Show only tasks for one person/crew (MRA Design, Wrap Team, a PM, …) across the projects">${opts.join('')}</select>`; }
 function projPhases(p){ const s=new Set(); ((p&&p.tasks)||[]).forEach(t=>{ if(t.phase) s.add(t.phase.trim()); }); return [...s].filter(Boolean); }
 
 // Parse a numeric form value (strips $ , and spaces); '' / non-numeric -> null.
@@ -5318,7 +5342,7 @@ function renderProjects(D){
   { const sl=document.getElementById('gwinSlider'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLab'); if(gl) gl.textContent=gwinLabel(days);
     const ps=document.getElementById('gpanSlider'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
 
-  const dated=projects.filter(p=>p.startISO&&p.finishISO&&projMatch(p)).sort(projSortCmp);
+  const dated=projects.filter(p=>p.startISO&&p.finishISO&&projMatch(p)&&projHasWho(p,PROJ_WHO)).sort(projSortCmp);
   const rows=dated.map(p=>({_p:p})).map(({_p:p})=>({
     label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
     startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
@@ -5328,6 +5352,7 @@ function renderProjects(D){
     _has:!!barGeom(p.startISO,p.finishISO,win)
   })).filter(r=>r._has);
   { const hp=document.getElementById('projHolPick'); if(hp) hp.innerHTML=holPickerHtml(); }   // US/CA holiday picker above the Projects Gantt
+  { const ww=document.getElementById('projWhoWrap'); if(ww) ww.innerHTML=projWhoSelHtml('projWhoSel'); }   // assignee filter
   renderGantt(document.getElementById('projGantt'), rows, win, {dates:true, showDays:true});
   { const ss=document.getElementById('projSort'); if(ss) ss.value=PROJ_SORT; }
   syncMraHlBtns();
@@ -7309,6 +7334,7 @@ function renderGanttFS(){
   const rangeEl=document.getElementById('gfsRange'), levelEl=document.getElementById('gfsLevel'), capEl=document.getElementById('gfsCap');
   warnEl.textContent=''; levelEl.innerHTML=''; capEl.innerHTML='';
   { const hp=document.getElementById('gfsHolPick'); if(hp) hp.innerHTML=holPickerHtml(); }   // US/CA holiday picker in the expand view
+  { const ww=document.getElementById('gfsWhoWrap'); if(ww) ww.innerHTML=(GFS==='project'||GFS==='projects')?projWhoSelHtml('gfsWhoSel'):''; }   // assignee filter (project views only)
   Object.keys(BARPOP).forEach(k=>delete BARPOP[k]); Object.keys(GFS_PKEY).forEach(k=>delete GFS_PKEY[k]);
 
   if(GFS==='project'){
@@ -7383,7 +7409,7 @@ function renderGanttFS(){
     };
     // Group lead-up tasks under each milestone GATE (a collapsible header). Tasks stay draggable;
     // a milestone shows as a ◆ gate (with a faint line across the chart) you can collapse/expand.
-    const sorted=(p.tasks||[]).slice().sort((a,b)=>(projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b)));
+    const sorted=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).slice().sort((a,b)=>(projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b)));
     const hasMs=sorted.some(t=>/yes/i.test(t.ml||''));
     const rows=[], mlines=[];
     if(!hasMs){ sorted.forEach(t=>rows.push(taskRow(t))); }
@@ -7501,7 +7527,7 @@ function renderGanttFS(){
     _panT0=tlo; _panT1=thi; _panDays=days;
     { const sl=document.getElementById('gwinSliderFS'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLabFS'); if(gl) gl.textContent=gwinLabel(days);
       const ps=document.getElementById('gpanSliderFS'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
-    const dated=projects.filter(p=>p.startISO&&p.finishISO && barGeom(p.startISO,p.finishISO,win) && projMatch(p))
+    const dated=projects.filter(p=>p.startISO&&p.finishISO && barGeom(p.startISO,p.finishISO,win) && projMatch(p) && projHasWho(p,PROJ_WHO))
       .sort(projSortCmp);
     const rows=[];
     dated.forEach((p,i)=>{
