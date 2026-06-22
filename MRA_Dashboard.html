@@ -869,6 +869,7 @@
         <a class="mi" href="https://snptechnical.sharepoint.com/sites/MRASiteProject/Shared%20Documents/MRA%20Claude%20Code/01.1%20RL%20Claude%20Bot/MRA_Shop_Board_v6_9_7.xlsx" target="_blank" rel="noopener" onclick="closeDrops()" title="Open the schedule workbook in Excel">✏️ Edit Schedule</a>
         <button class="mi" onclick="closeDrops(); openUsers()" title="Add / edit / remove who can log in to edit, and set their codes (admin only)">👥 Manage logins</button>
         <button class="mi" onclick="closeDrops(); openHolidays()" title="Add or remove company holidays flagged on every schedule (admin only)">📅 Manage holidays</button>
+        <button class="mi" onclick="closeDrops(); openEotmEdit()" title="Change the Employee of the Month name + photo (admin only)">🏆 Employee of the Month</button>
         <div class="mi-div">Quick links</div>
         <div id="linksPop"></div>
       </div>
@@ -1781,6 +1782,27 @@
   </div></div>
 
   <!-- Always-on Employee-of-the-Month badge (wall view only, between pop-ups) -->
+  <!-- Employee of the Month editor (admin only) -->
+  <div class="modal-overlay" id="eotmEditModal" onclick="closeEotmEdit(event)">
+    <div class="modal" style="max-width:460px">
+      <button class="modal-close" onclick="closeEotmEdit()" title="Close">×</button>
+      <h3>🏆 Employee of the Month</h3>
+      <div class="msub">Update the name and/or photo — it goes live on the board (and the TV) within about a minute.</div>
+      <div class="addrow2" style="margin-top:10px">
+        <div><label>Name</label><input id="eoName" autocomplete="off" placeholder="e.g. John Smith"></div>
+        <div><label>Show on the board?</label><select id="eoOn"><option value="on">On</option><option value="off">Off (pause)</option></select></div>
+      </div>
+      <div style="margin-top:10px"><label>Photo <span style="color:var(--faint);font-weight:400">(optional — leave blank to keep the current one)</span></label>
+        <input id="eoPhoto" type="file" accept="image/*" onchange="eotmPreview()"></div>
+      <div id="eoPrevWrap" style="margin-top:10px;display:none"><img id="eoPrev" alt="preview" style="max-width:170px;max-height:170px;border-radius:10px;border:2px solid #ffd24a;object-fit:cover"></div>
+      <div id="eoMsg" style="font-size:12px;min-height:16px;margin-top:8px"></div>
+      <div class="addbtns">
+        <button class="btn-ghost" onclick="closeEotmEdit()">Cancel</button>
+        <button class="btn-primary" id="eoSubmit" onclick="submitEotmEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div id="eotmBadge" class="eotm-badge" title="Employee of the Month">
     <img id="eotmBadgeImg" alt="" onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src='eotm.jpg?v=20260618';}else{this.style.display='none';}">
     <div class="eb-tx"><span class="eb-t">🏆 Employee of the Month</span><span class="eb-n" id="eotmBadgeName"></span></div>
@@ -2012,6 +2034,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.89", date:"2026-06-22", title:"Edit Employee of the Month from the dashboard", items:[
+    "<b>☰ Menu → 🏆 Employee of the Month</b> (admin/your login only): change the <b>name</b>, <b>drop in a new photo</b> (with preview), or turn it <b>on/off</b> — Save and it updates the board + TV in about a minute. Retires the Push-Photo.bat. (Needs the one-time EOTM flow switched on.)" ] },
   { rev:"4.88", date:"2026-06-22", title:"General tasks can carry a bay", items:[
     "Adding a <b>General task</b> now has a clean <b>\"General\"</b> bay choice (the default). Leave it for a plain crew task, or pick a real bay and it shows as a <b>📍 Bay tag</b> on the line — handy for giving Josh/Jeff a bay to work from.",
     "General tasks still live in the <b>Open Tasks by Assignee</b> columns (not as a bay tile up top) — they're crew to-dos, not a trailer." ] },
@@ -2636,7 +2660,7 @@ function setAsgRotateSec(v){ v=parseInt(v,10); if(isNaN(v)) v=15; v=Math.max(5,M
   if(WALL && ASG_ROTATE) startAsgRotate(); }   // re-arm the timer at the new interval
 /* ---------- Employee of the Month: centered card on the wall/TV view, every 5 min ----------
    Swap monthly: change EOTM.name and replace the eotm.jpg image (bump ?v=). */
-const EOTM = { name: "John", photo: "eotm.png?v=20260618", on: true };
+const EOTM = { name: "John", photo: "eotm.png?cb="+Date.now(), on: true };   // cache-buster per load so a new photo shows on refresh
 // Optional eotm.txt (pushed up next to data.js) controls the name + on/off with NO
 // code change: first line = the winner's name (turns it ON); the word "off" (or an
 // empty file) PAUSES it. If eotm.txt is absent, the defaults above are used.
@@ -3718,6 +3742,49 @@ function submitAsgMerge(){
 /* ===== Manage logins (admin/Rich only): add / change-code / remove who can edit ===== */
 const ADMIN_USER='Rich Miller';
 function isAdmin(){ return CURRENT_USER===ADMIN_USER; }
+// ---- Employee of the Month: edit name + photo from the dash (admin only) ----
+const EOTM_WRITE_URL = "";   // paste the "MRA EOTM" Power Automate HTTP-trigger URL here once the flow is built
+function eotmWrite(payload){ return fetch(EOTM_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
+function openEotmEdit(){
+  if(!ensureAuth("edit Employee of the Month")) return;
+  if(!isAdmin()){ alert('Only '+ADMIN_USER+' can edit Employee of the Month.'); return; }
+  document.getElementById('eoName').value=(EOTM.name||'');
+  document.getElementById('eoOn').value=EOTM.on?'on':'off';
+  const f=document.getElementById('eoPhoto'); if(f) f.value='';
+  document.getElementById('eoPrevWrap').style.display='none';
+  document.getElementById('eoMsg').textContent=''; document.getElementById('eoSubmit').disabled=false;
+  window._eoPhotoB64=null; window._eoPhotoType=null;
+  document.getElementById('eotmEditModal').classList.add('show');
+}
+function closeEotmEdit(e){ if(!e || e.target.id==='eotmEditModal' || e.target.classList.contains('modal-close')) document.getElementById('eotmEditModal').classList.remove('show'); }
+function eotmPreview(){
+  const f=document.getElementById('eoPhoto').files[0]; const msg=document.getElementById('eoMsg'); if(!f) return;
+  if(f.size>4*1024*1024){ msg.style.color='var(--red)'; msg.textContent='Photo too big — keep it under 4 MB.'; document.getElementById('eoPhoto').value=''; return; }
+  msg.textContent='';
+  const rd=new FileReader();
+  rd.onload=()=>{ const dataUrl=String(rd.result); window._eoPhotoB64=dataUrl.split(',')[1]||''; window._eoPhotoType=f.type||'image/png';
+    document.getElementById('eoPrev').src=dataUrl; document.getElementById('eoPrevWrap').style.display=''; };
+  rd.readAsDataURL(f);
+}
+function submitEotmEdit(){
+  if(!isAdmin()) return;
+  if(!EOTM_WRITE_URL){ alert("The Employee-of-the-Month flow isn't switched on yet — finish the one-time Power Automate setup first (steps are in the chat)."); return; }
+  const name=document.getElementById('eoName').value.trim();
+  const on=document.getElementById('eoOn').value==='on';
+  const msg=document.getElementById('eoMsg');
+  if(on && !name){ msg.style.color='var(--red)'; msg.textContent='Enter a name (or set it Off to pause).'; return; }
+  const payload={ action:"setEOTM", name:name, on:(on?'on':'off'), pin:CLOSE_PIN, user:CURRENT_USER };
+  if(window._eoPhotoB64){ payload.photoB64=window._eoPhotoB64; payload.contentType=window._eoPhotoType||'image/png'; }
+  const btn=document.getElementById('eoSubmit'); btn.disabled=true; btn.textContent='Saving…';
+  msg.style.color='var(--muted)'; msg.textContent='Saving…';
+  eotmWrite(payload).then(()=>{
+    EOTM.on=on; if(name) EOTM.name=name; eotmSetup();
+    if(window._eoPhotoB64){ const url='data:'+(window._eoPhotoType||'image/png')+';base64,'+window._eoPhotoB64;
+      const a=document.getElementById('eotmImg'),b=document.getElementById('eotmBadgeImg'); if(a){a.src=url;a.style.display='';} if(b){b.src=url;b.style.display='';} }
+    msg.style.color='var(--green)'; msg.textContent='✓ Saved — live on the board in ~a minute.'; btn.textContent='Save';
+    setTimeout(()=>document.getElementById('eotmEditModal').classList.remove('show'),1200);
+  }).catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent='Save'; btn.disabled=false; });
+}
 let US_ROWS=[];
 function openUsers(){
   if(typeof ensureAuth==='function' && !ensureAuth('manage logins')) return;
