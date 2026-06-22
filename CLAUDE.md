@@ -4,12 +4,14 @@ Guidance for Claude when working in this repository.
 
 ## How Rich likes instructions (standing preference — follow every time)
 
-- **Step-by-step, numbered.** When something needs Rich (or IT) to do it, write it
-  as explicit numbered clicks/steps — not a high-level summary. He'll say so bluntly
-  if it slips back into summary mode.
-- **Send the actual files.** When a step involves a file (templates, scripts,
-  spreadsheets, photos), **deliver the file to him via the file-send tool** so he can
-  download it directly — don't tell him to "grab it from the repo / SharePoint."
+- **Write the instructions IN THE CHAT, numbered step-by-step.** Do NOT put the steps
+  in a committed file/doc and point him at it — he wants to read them right here. Spell
+  out explicit numbered clicks/steps, not a high-level summary. He'll say so bluntly if
+  it slips into summary mode or gets parked in a file.
+- **Send files only when a step needs a downloadable file** (a template, script,
+  spreadsheet, photo) — deliver it via the file-send tool so he can grab it directly.
+  Files are for downloads, the chat is for the steps. (Don't tell him to "open the repo
+  doc.")
 - He's comfortable building Power Automate flows and clicking through SharePoint/M365
   with precise guidance, but he is **not** a developer — avoid raw PowerShell/CLI for
   him where a guided GUI or a flow will do, and anticipate the prompts he'll hit.
