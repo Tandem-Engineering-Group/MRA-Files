@@ -2,6 +2,18 @@
 
 Guidance for Claude when working in this repository.
 
+## How Rich likes instructions (standing preference — follow every time)
+
+- **Step-by-step, numbered.** When something needs Rich (or IT) to do it, write it
+  as explicit numbered clicks/steps — not a high-level summary. He'll say so bluntly
+  if it slips back into summary mode.
+- **Send the actual files.** When a step involves a file (templates, scripts,
+  spreadsheets, photos), **deliver the file to him via the file-send tool** so he can
+  download it directly — don't tell him to "grab it from the repo / SharePoint."
+- He's comfortable building Power Automate flows and clicking through SharePoint/M365
+  with precise guidance, but he is **not** a developer — avoid raw PowerShell/CLI for
+  him where a guided GUI or a flow will do, and anticipate the prompts he'll hit.
+
 ## Source-of-truth files (reference these ongoing)
 
 The working files for this project live in **SharePoint**, not in this repo.
