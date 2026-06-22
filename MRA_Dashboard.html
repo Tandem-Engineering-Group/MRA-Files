@@ -271,7 +271,7 @@
   .tasklist.fleet .fl-h{font-size:9px; letter-spacing:.5px; text-transform:uppercase; color:#fca5a5; font-weight:700; padding:2px 0 3px 2px}
   .taskline.fleet{color:#e7b3b3}
   .taskline.fleet .flnum{color:#fca5a5; font-weight:700; margin-right:5px}
-  .fl-det{font-size:10.5px; color:var(--muted); line-height:1.35; padding:0 0 4px 22px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
+  .fl-det{font-size:10px; color:var(--muted); line-height:1.3; padding:0 0 3px 22px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
   .taskline.fleet .fl-asset{color:var(--faint); font-size:10px; margin-left:6px}
   .morebtn{cursor:pointer; color:#7aa2d6; user-select:none}
   .morebtn:hover{text-decoration:underline}
@@ -2011,6 +2011,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"4.86", date:"2026-06-22", title:"Fleetio descriptions everywhere + compact", items:[
+    "The Fleetio issue <b>description</b> now also shows in the <b>Open Tasks by Assignee</b> panel (not just the bay cards) — consistent everywhere a 🔧 #NNN task appears.",
+    "Kept it <b>compact</b>: trimmed to 2 lines so tiles don't get taller — hover any description for the full text." ] },
   { rev:"4.85", date:"2026-06-22", title:"Fleetio issue descriptions show on the board", items:[
     "Floor tasks tied to a Fleetio issue (🔧 #NNN) now show the issue's full <b>description</b> right under the task — e.g. #966 ATS now reads \"became extremely hot to the touch…\" instead of just \"ATS\". Pulls from the Fleetio detail we already collect; shows on Fleetio lines and on tasks added from them (hover for the full text)." ] },
   { rev:"4.84", date:"2026-06-21", title:"Move / copy a shop task between trailers", items:[
@@ -4658,8 +4661,6 @@ function renderFloor(D){
   const flByJob={};
   // Trailer issues only on the bay card — tractor issues (Doug's) stay on the FLEETIO tab.
   ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(!SHOW_TRACTOR && /tractor/i.test(it.asset||"")) return; const k=(((it.jobNum||"").match(/\d{3,}/)||[])[0]); if(k){(flByJob[k]=flByJob[k]||[]).push(it);} });
-  const fioByNum={}; ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ fioByNum[String(it.num)]=it; });
-  const fioDet=num=>{ const it=fioByNum[String(num)]; const d=(it&&it.detail)?String(it.detail).trim():''; return d?`<div class="fl-det" title="${escA(d)}">${esc(d)}</div>`:''; };
   const fleetioFor=j=>{ const out=[],seen={}; (((j.jobNum||"").match(/\d{3,}/g))||[]).forEach(k=>{(flByJob[k]||[]).forEach(it=>{ if(!seen[it.num]){seen[it.num]=1; out.push(it);} });}); return out; };
   const shortAsset=s=>{ s=(s||"").trim(); const m=s.match(/^(.*?)(?:19|20)\d\d/); return (m?m[1]:s).trim().slice(0,26); };
   // Prune locally-remembered closes the export has now confirmed (task no longer open).
@@ -4778,7 +4779,7 @@ function renderFloor(D){
         const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
         const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
           const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDet(fm[1]):''}`; };
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}`; };
         let inner="";
         gkeys.forEach(k=>{
           if(!onlyUnassigned){
@@ -4792,7 +4793,7 @@ function renderFloor(D){
       if(fl.length){
         tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
           const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
-          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>${fioDet(it.num)}`;
+          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>${fioDetHtml(it.num)}`;
         }).join("")+`</div>`;
       }
     }
@@ -4929,7 +4930,7 @@ function renderSal(D){
   };
   const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
-    `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw); const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):''; return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${fa}</li>`;}).join("")}</ol></div>`;
+    `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw); const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):''; return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
   let pageBTot=0;
   GROUPS.forEach(g=>{
     const cards=build(g.re);
@@ -5338,6 +5339,8 @@ function fioHref(kind,num){
   if(kind==='svc') return FLEETIO_BASE+'/service_reminders';   // no per-item number — open the reminders list
   return FLEETIO_BASE+'/issues'+((num!=null&&num!=='')?('/'+encodeURIComponent(num)):'');
 }
+function fioIssue(num){ const D=window.MRA_DATA||{}; return (((D.fleetio&&D.fleetio.issues)||[]).find(i=>String(i.num)===String(num)))||null; }
+function fioDetHtml(num){ const it=fioIssue(num); const d=(it&&it.detail)?String(it.detail).trim():''; return d?`<div class="fl-det" title="${escA(d)}">${esc(d)}</div>`:''; }
 function fioTitle(kind,num,label){ return `<a class="fiotitle" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">${esc(label)}<span class="fioarrow"> ↗</span></a>`; }
 function fioArrow(kind,num){ return ` <a class="fioarrow" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">↗</a>`; }
 // A hover-popover body listing Fleetio items, each a clickable ↗ link (issue / wo / svc).
