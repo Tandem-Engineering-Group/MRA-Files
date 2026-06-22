@@ -563,6 +563,34 @@ if (Test-Path $FleetioTokenFile) {
             foreach ($p in @('reported_by','issued_by','created_by')) { $c = $obj.$p; if ($c -and $c.name) { return ([string]$c.name).Trim() } }
             return ''
         }
+        # Attachments (documents + images) on an issue -> [{n,url,mime}]. Tries the fields already on the
+        # index payload first; only if a *_count says there are some AND none were embedded does it do one
+        # extra show call. Fully guarded so a hiccup never aborts the export.
+        function Get-FleetDocs($obj, $headers) {
+            $docs = New-Object System.Collections.ArrayList
+            $harvest = {
+                param($src)
+                foreach ($c in @('documents','images','photos')) {
+                    if ($src.$c) { foreach ($d in @($src.$c)) {
+                        $u = $null; foreach ($p in @('file_url','url','public_url')) { if ($d.$p) { $u = [string]$d.$p; break } }
+                        if (-not $u) { continue }
+                        $n = ''; foreach ($p in @('name','file_name','description')) { if ($d.$p) { $n = [string]$d.$p; break } }
+                        if (-not $n) { $n = 'attachment' }
+                        $mime = ''; foreach ($p in @('content_type','file_mime_type','mime_type')) { if ($d.$p) { $mime = [string]$d.$p; break } }
+                        if (-not ($docs | Where-Object { $_.url -eq $u })) { [void]$docs.Add([PSCustomObject]@{ n = $n; url = $u; mime = $mime }) }
+                    } }
+                }
+            }
+            & $harvest $obj
+            $cnt = 0; foreach ($p in @('documents_count','images_count','photos_count','attachments_count')) { if ($obj.$p) { $cnt += [int]$obj.$p } }
+            if ($docs.Count -eq 0 -and $obj.id -and $cnt -gt 0) {
+                try {
+                    $r = Invoke-WebRequest -Uri "https://secure.fleetio.com/api/v1/issues/$($obj.id)" -Headers $headers -UseBasicParsing -Method GET -TimeoutSec 30
+                    & $harvest ($r.Content | ConvertFrom-Json)
+                } catch {}
+            }
+            return ,@($docs)
+        }
 
         $fIssues = New-Object System.Collections.ArrayList
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
@@ -575,6 +603,7 @@ if (Test-Path $FleetioTokenFile) {
                 asset = $i.vehicle_name; jobNum = (Get-FleetJob $i.vehicle_name)
                 priority = $pr; openedISO = (FleetD10 $i.reported_at); overdue = [bool]$i.overdue
                 detail = $det; reporter = (Get-FleetReporter $i); assignees = (Get-FleetAssignees $i)
+                docs = (Get-FleetDocs $i $fhead)
             })
         }
         $fWos = New-Object System.Collections.ArrayList
@@ -673,11 +702,13 @@ if (Test-Path $FleetioTokenFile) {
             Write-Output "  -> Fleetio: $($veh.Count) vehicles; roster built ($($fleetRoster.Count)) -> fleetio-debug.txt"
         } catch { "FATAL: $($_.Exception.Message)" | Out-File $FleetDbg -Append -Encoding utf8; Write-Output "  -> Fleetio roster build failed: $($_.Exception.Message)" }
 
+        $allDocs = @($fIssues | ForEach-Object { $_.docs } | Where-Object { $_ })
         $fleetio = [PSCustomObject]@{
             generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt')
             issues = @($fIssues); workOrders = @($fWos); service = @($fSvc); locations = $fLoc; fleet = @($fleetRoster)
         }
         $issAssigned = (@($fIssues | Where-Object { @($_.assignees).Count -gt 0 })).Count
+        Write-Output "  -> Fleetio attachments: $($allDocs.Count) across $((@($fIssues | Where-Object { @($_.docs).Count -gt 0 })).Count) issues"
         Write-Output "  -> Fleetio: $($fIssues.Count) issues ($issAssigned with assignees), $($fWos.Count) work orders, $($fSvc.Count) service due/overdue"
     } catch {
         Write-Output "  -> Fleetio fetch failed: $($_.Exception.Message)"
