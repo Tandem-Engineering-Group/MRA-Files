@@ -229,6 +229,26 @@ Treat help + rev as PART OF the feature, not an afterthought.
   NOTE: write-back itself WORKS (edits save); only the `Who` column is cosmetically blank, so
   the log is a usable audit trail (action / time / project) minus the name. Parked at Rich's request.
 
+## Shipped 2026-06-22
+
+- **🏆 Employee of the Month editor = LIVE** (rev 4.90). `☰ Menu → 🏆 Employee of the Month`
+  (admin/Rich only) edits the name + photo + on/off straight from the board — retires
+  `Push-Photo.bat`. Back end = a Power Automate HTTP flow **"MRA EOTM"** (workflow id
+  `6710721766a14785bbda0d27567e5219`): trigger **"Who can trigger the flow? = Anyone"** (so the
+  dashboard's no-cors `fetch` can post anonymously), gated by **`pin == 1974`** in a Condition,
+  then **two Azure Blob "Create blob (V2)"** actions writing `eotm.txt` (name or "off") + `eotm.png`
+  (`base64ToBinary(photoB64)`) into the **`$web`** container. URL is in `EOTM_WRITE_URL` in
+  `MRA_Dashboard.html`. ⚠️ LESSON: the NEW Power Automate (`*.environment.api.powerplatform.com`)
+  HTTP trigger defaults to **"Any user in my tenant"** (OAuth-only, no `sig=` in URL → our anon post
+  fails); must switch to **"Anyone"** + **Save** to get the SAS-signed URL (`…&sig=…`). Also fought a
+  connection-binding gremlin: a deleted Azure Blob connection (`8ac11228…`) kept getting re-bound to
+  new actions → "problem using … connection"; fix = **Change connection** on each blob action to a
+  live "mrashopdash key" connection (do NOT mass-delete connections — one runs the 15-min workbook
+  shuttle). Also wired the orphaned logistics **"↩️ Coming Back to MRA"** panel onto FLOOR (rev 4.82),
+  **move/copy a project task** to another project (4.83) and **move/copy a shop task** between
+  trailers (4.84), **Fleetio descriptions** on the board everywhere (4.85-4.87), **General-task bay
+  tag** (4.88).
+
 ## Shipped 2026-06-17 (morning)
 
 - **MRA Shop load highlight = white outline, picker removed** (rev 3.12). Rich tried the color
