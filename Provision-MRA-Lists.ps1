@@ -67,6 +67,9 @@ Ensure-Field $j 'JobNum'      'JobNum'      'Text'
 Ensure-Field $j 'JobStatus'   'JobStatus'   'Choice' @('Active','Scheduled','On Hold','Shipped','Leave','TBD')
 Ensure-Field $j 'Category'    'Category'    'Text'
 Ensure-Field $j 'ShipISO'     'ShipISO'     'Text'
+Ensure-Field $j 'StartISO'    'StartISO'    'Text'
+Ensure-Field $j 'PM'          'PM'          'Text'
+Ensure-Field $j 'Notes'       'Notes'       'Note'
 Ensure-Field $j 'SortOrder'   'SortOrder'   'Number'
 Ensure-Field $j 'PhysicalBay' 'PhysicalBay' 'Boolean'
 
@@ -79,6 +82,8 @@ Ensure-Field $st 'Assigned'  'Assigned'  'Text'
 Ensure-Field $st 'Status'    'Status'    'Choice' @('Open','In Progress','Done','N/A')
 Ensure-Field $st 'Milestone' 'Milestone' 'Boolean'
 Ensure-Field $st 'Comments'  'Comments'  'Note'
+Ensure-Field $st 'Opened'    'Opened'    'Text'
+Ensure-Field $st 'Closed'    'Closed'    'Text'
 Ensure-Field $st 'SortOrder' 'SortOrder' 'Number'
 
 # ---- MRA Project Tasks -------------------------------------------------------

@@ -14,6 +14,37 @@ reading `data.js`. We only swap what *produces* `data.js` and what *writes* edit
 
 ---
 
+## CURRENT STATUS (2026-06-22) — everything ready, waiting on IT
+
+- ✅ **Lists created + data loaded** (Rich, via SharePoint "From Excel" import + a
+  Power Automate "load table" flow): **MRA Users (4), MRA Jobs (54), MRA Shop Tasks
+  (165), MRA Project Tasks (557)**. (Lists were made by GUI import, so column internal
+  names may be the display names — the reader maps them tolerantly.)
+- ✅ **Read path staged + CI-green:** `Export-FromLists.ps1` (Graph app-only auth) builds
+  a candidate `data.js` from the Lists; `Compare-DataJs.ps1` diffs it vs the live
+  Excel-built `data.js` (jobs/projects/users/holidays only). Fleet + logistics are
+  passed through from the existing `data.js`.
+- ⏳ **Blocked on IT:** the **Entra app registration** (`SHAREPOINT-READ-SETUP.md` — the
+  forwardable email was given to Rich). IT returns Tenant/Client ID + secret → Rich adds
+  GitHub secrets `SP_TENANT_ID` / `SP_CLIENT_ID` / `SP_CLIENT_SECRET`.
+- ⚠️ **Backfill needed before the diff matches:** the GUI import didn't carry three Jobs
+  fields the board uses — **PM, StartISO (start date), Notes** — and the Shop Tasks
+  **Opened/Closed** dates. These columns are now in `Provision-MRA-Lists.ps1` +
+  `Migrate-Data-To-Lists.ps1`. Backfill options once creds land: (a) re-run the migration
+  for Jobs/Shop Tasks (`Migrate-Data-To-Lists.ps1 -Fresh`), or (b) a one-time column
+  import from the current `data.js` (which still has them). Until backfilled, expect the
+  compare to flag PM/startISO/notes diffs on jobs — that's expected, not a code bug.
+
+### When IT delivers (the flip, ~30 min)
+1. Rich adds the 3 GitHub secrets.
+2. Claude runs `Export-FromLists.ps1 -OutFile data.fromlists.js` then
+   `Compare-DataJs.ps1 data.js data.fromlists.js`.
+3. Backfill PM/Start/Notes (+ Opened/Closed) until the compare says **MATCH**.
+4. Wire the read into `export.yml` (Lists source), keep Excel path as rollback.
+5. Then the **write path** (Power Automate Switch → List items) per the mapping below.
+
+---
+
 ## Architecture (chosen)
 
 ```
@@ -63,6 +94,9 @@ Date-ish fields are **Text** holding `YYYY-MM-DD`.
 | JobStatus | JobStatus | Choice | Active/Scheduled/On Hold/Shipped/Leave/TBD |
 | Category | Category | Text | e.g. `general` / `floor` |
 | ShipISO | ShipISO | Text | YYYY-MM-DD (optional) |
+| StartISO | StartISO | Text | YYYY-MM-DD (added 2026-06-22 — board uses it) |
+| PM | PM | Text | project manager (added 2026-06-22) |
+| Notes | Notes | Note | job notes / Notes-cell fallback (added 2026-06-22) |
 | SortOrder | SortOrder | Number | board order |
 | PhysicalBay | PhysicalBay | Yes/No | is this a real bay |
 
@@ -75,6 +109,8 @@ Date-ish fields are **Text** holding `YYYY-MM-DD`.
 | Status | Status | Choice | Open / In Progress / Done / N/A |
 | Milestone | Milestone | Yes/No | |
 | Comments | Comments | Note | |
+| Opened | Opened | Text | YYYY-MM-DD (added 2026-06-22) |
+| Closed | Closed | Text | YYYY-MM-DD; drives the "(closed m/d/yy)" tag (added 2026-06-22) |
 | SortOrder | SortOrder | Number | |
 
 ### `MRA Project Tasks`  (one item per project task)
@@ -115,11 +151,12 @@ Date-ish fields are **Text** holding `YYYY-MM-DD`.
 
 1. **Provision** — run `Provision-MRA-Lists.ps1` (creates the Lists + columns,
    idempotent). *[script ready in this repo]*
-2. **Migrate** — run `Migrate-Workbook-To-Lists.ps1` once: reads the current workbook
-   and fills the Lists. Spot-check a project + a trailer against the board. *[next]*
+2. **Migrate** — run `Migrate-Data-To-Lists.ps1` once: reads the current `data.js` and
+   fills the Lists. Spot-check a project + a trailer against the board. *[DONE via GUI
+   import; re-run for the new Jobs PM/Start/Notes + Shop Tasks Opened/Closed backfill]*
 3. **Read swap** — point the export at the Lists: `Export-FromLists.ps1` emits the same
-   `data.js`. Run it side-by-side and diff against the current `data.js` until they
-   match, then wire it into `export.yml`. *[next]*
+   `data.js`; `Compare-DataJs.ps1 data.js data.fromlists.js` diffs them until they
+   match, then wire it into `export.yml`. *[staged + CI-green; needs the app reg]*
 4. **Write swap** — in the existing Power Automate flow, replace **Run Office Script**
    with a **Switch (action)** → SharePoint item ops (see mapping below). Test each
    action from the dashboard.
@@ -159,8 +196,9 @@ gone** because there's no Office Script in the path anymore.
 
 ## Who does what
 
-- **Claude (me):** all the scripts (`Provision`, `Migrate`, `Export-FromLists`), the
-  exact flow step list, the `export.yml` change, and verification diffs.
+- **Claude (me):** all the scripts (`Provision`, `Migrate`, `Export-FromLists`,
+  `Compare-DataJs`), the exact flow step list, the `export.yml` change, and verification
+  diffs.
 - **Rich (M365 — I can't do these from the web session):**
   1. Run `Provision-MRA-Lists.ps1` once (you're a site owner).
   2. Run `Migrate-Workbook-To-Lists.ps1` once.

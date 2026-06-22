@@ -65,6 +65,9 @@ foreach ($j in $D.jobs) {
       JobStatus   = $j.status
       Category    = $j.category
       ShipISO     = $j.completionISO
+      StartISO    = $j.startISO
+      PM          = $j.pm
+      Notes       = $j.notesRaw
       SortOrder   = (AsNum $j.row)
       PhysicalBay = $false
     }) | Out-Null
@@ -79,6 +82,8 @@ foreach ($j in $D.jobs) {
         Status    = $st
         Milestone = (IsYes $t.ml)
         Comments  = $t.cm
+        Opened    = $t.op
+        Closed    = $t.cl
       }) | Out-Null
     $nST++
   }

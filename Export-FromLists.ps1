@@ -134,15 +134,18 @@ foreach ($it in (Items 'MRA Shop Tasks')) {
   $task = FF $f @('Title')
   if ($task -eq '') { continue }
   $proj = FF $f @('Project','Project0')
+  $op = FF $f @('Opened')
+  $cl = FF $f @('Closed')
   $rec = [PSCustomObject]@{
     task = $task
     who  = (FF $f @('Assigned','AssignedTo','Assigned_x0020_To'))
     st   = (FF $f @('Status'))
     ml   = $(if (FFBool $f @('Milestone')) { 'Yes' } else { '' })
     cm   = (FF $f @('Comments'))
-    op   = $null; cl = $null
+    op   = $(if ($op -ne '') { $op } else { $null })
+    cl   = $(if ($cl -ne '') { $cl } else { $null })
   }
-  $rec | Add-Member done ([bool]($rec.st -match '(?i)done|complete'))
+  $rec | Add-Member done ([bool](($rec.st -match '(?i)done|complete') -or ($null -ne $rec.cl)))
   $key = NormGen $proj
   if (-not $shopByProj.ContainsKey($key)) { $shopByProj[$key] = New-Object System.Collections.ArrayList }
   [void]$shopByProj[$key].Add($rec)
@@ -159,7 +162,9 @@ function Build-TasksFromRows($rows) {
     $label = if ($who -ne '') { "$who - $($r.task)" } else { [string]$r.task }
     if ($r.done) {
       $doneCount++
-      [void]$done.Add($label)
+      $cdisp = ''
+      if ($r.cl) { $p = ([string]$r.cl).Split('-'); if ($p.Count -eq 3) { $cdisp = "  (closed " + [int]$p[1] + "/" + [int]$p[2] + "/" + $p[0].Substring(2) + ")" } }
+      [void]$done.Add($label + $cdisp)
     } else {
       $n++
       [void]$open.Add("$n. $label")
