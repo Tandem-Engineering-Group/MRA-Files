@@ -1962,7 +1962,7 @@ const GENERAL_HELP = `
     <span class="k">Everyone / People only</span> toggle hides crews & vendors — your choice is remembered. It's <b>compact by default</b> — scrolls within a fixed height so it doesn't dominate the tab — with an <span class="k">⤢ Expand</span> button to grow it to full height (remembered per device). <b>Project Progress</b> works the same way.</p></div>
   <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
     <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a <b>bar</b> to open that project's <b>detailed view</b> (⑥ᵈ below). The full-screen Projects view has the <b>same</b> <span class="k">🔍 zoom</span> and <span class="k">↔ scroll</span> sliders as the inline Gantt (below) — they stay in sync, plus its own <span class="k">🖨 Print</span> and <span class="k">🎌 holiday</span> picker up top. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p>
-    <p><b>Holidays shade the whole Gantt</b> (amber band, top to bottom) so you can plan around them; the <span class="k">🎌 US + CA / US / CA</span> picker (above the Gantt and in the Expand view) chooses which to show. Each bar also shows its <b>length in days</b> (e.g. <i>12d</i>). The <span class="k">🖨 Print</span> button in the Expand view prints whatever Gantt you're viewing (including a single project's detailed view) on one 11×17 page.</p></div>
+    <p><b>Holidays shade the whole Gantt</b> (amber band, top to bottom) so you can plan around them; the <span class="k">🎌 US</span> and <span class="k">Canada</span> toggles (above the Gantt and in the Expand view) turn each on/off independently — show both, one, or none. Each bar also shows its <b>length in days</b> (e.g. <i>12d</i>). The <span class="k">🖨 Print</span> button in the Expand view prints whatever Gantt you're viewing (including a single project's detailed view) on one 11×17 page.</p></div>
   <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
     <p>On the Project Schedules Gantt (inline or full-screen) the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom — or just tap the <span class="k">‹</span> / <span class="k">›</span> <b>arrows</b> at the left/right edge of the Gantt to scroll a step at a time. <span class="k">All</span> snaps to the whole timeline. Your zoom is remembered per device. <span class="k">🖨 Print</span> lays the whole project Gantt + a project list onto one <b>11×17 landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>⑥ᶜ ↕ Sort the Gantt</h4>
@@ -2073,9 +2073,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"4.94", date:"2026-06-22", title:"Gantt: print the expand view · full holidays + US/CA picker · day counts", items:[
+  { rev:"4.95", date:"2026-06-22", title:"Gantt: print the expand view · full holidays + US/Canada toggles · day counts", items:[
     "<b>🖨 Print in the ⛶ Expand view</b> — the full-screen Gantt (a project's detailed view, or the expanded Projects / Floor / Crew) now has a Print button up top, same one-page 11×17 landscape print as the normal views.",
-    "<b>Holidays now shade the WHOLE Gantt</b> top-to-bottom (not just a strip up top), on the normal and detailed project Gantts. A new <b>🎌 US + CA / US / CA picker</b> (above the Gantt and in the Expand view) lets you choose which holidays to shade — both or just one. Remembered per device.",
+    "<b>Holidays now shade the WHOLE Gantt</b> top-to-bottom (not just a strip up top), on the normal and detailed project Gantts. Two independent <b>🎌 US</b> and <b>Canada</b> toggles (above the Gantt and in the Expand view) turn each on/off — show both, one, or none. Remembered per device.",
     "<b>Day counts on the bars</b> — each project task / project bar now shows how many <b>days</b> it spans (e.g. <i>12d</i>), on the bar or just past it, in both the normal and detailed project Gantts (and on the prints).",
     "A Fleetio issue that's already a task on one job no longer also nags as \"unassigned\" on a sibling entry that just shares the job number (e.g. an Equipment Return on the same J####)." ] },
   { rev:"4.93", date:"2026-06-22", title:"Collapse all / Expand all bays in one click", items:[
@@ -4712,18 +4712,19 @@ function getHolidays(){
   for(let y=Y-1;y<=Y+2;y++) holidaysForYear(y).forEach(add);
   (((window.MRA_DATA||{}).holidays)||[]).forEach(add);
   return Object.keys(byDate).sort().map(k=>({dateISO:k, name:byDate[k].names.join(' / '), country:byDate[k].country}))
-    .filter(h=> HOL_COUNTRY==='BOTH' ? true : (HOL_COUNTRY==='US' ? h.country!=='CA' : h.country!=='US'));
+    .filter(h=> h.country==='US' ? HOL_US : (h.country==='CA' ? HOL_CA : (HOL_US||HOL_CA)));   // BOTH-day shows if either toggle is on
 }
-// Which holidays to shade on the Gantts: BOTH (default) / US only / CA only. Remembered per device.
-let HOL_COUNTRY='BOTH'; try{ const _hc=localStorage.getItem('mra_hol_country'); if(_hc==='US'||_hc==='CA'||_hc==='BOTH') HOL_COUNTRY=_hc; }catch(e){}
-function setHolCountry(c){ HOL_COUNTRY=(c==='US'||c==='CA')?c:'BOTH'; try{localStorage.setItem('mra_hol_country',HOL_COUNTRY);}catch(e){}
+// Which holidays to shade on the Gantts: two independent toggles, US and Canada (either, both, or none). Remembered per device.
+let HOL_US=true, HOL_CA=true;
+try{ const u=localStorage.getItem('mra_hol_us'); if(u!==null) HOL_US=(u==='1'); const c=localStorage.getItem('mra_hol_ca'); if(c!==null) HOL_CA=(c==='1'); }catch(e){}
+function setHolShow(which){ if(which==='US') HOL_US=!HOL_US; else if(which==='CA') HOL_CA=!HOL_CA;
+  try{ localStorage.setItem('mra_hol_us',HOL_US?'1':'0'); localStorage.setItem('mra_hol_ca',HOL_CA?'1':'0'); }catch(e){}
   if(window.MRA_DATA && typeof renderAll==='function') renderAll();
   const fs=document.getElementById('ganttFS'); if(fs && fs.classList.contains('show') && typeof renderGanttFS==='function') renderGanttFS(); }
-function holPickerHtml(){ const o=(c,l,t)=>`<div class="rb${HOL_COUNTRY===c?' active':''}" onclick="setHolCountry('${c}')" title="${t}">${l}</div>`;
-  return `<span class="holpicklbl" title="Choose which holidays are shaded on the Gantt">🎌</span>`
-    + o('BOTH','US + CA','Shade both US and Canadian holidays')
-    + o('US','US','Shade US holidays only')
-    + o('CA','CA','Shade Canadian holidays only'); }
+function holPickerHtml(){ const o=(c,on,l,t)=>`<div class="rb${on?' active':''}" onclick="setHolShow('${c}')" title="${t}">${l}</div>`;
+  return `<span class="holpicklbl" title="Toggle which holidays are shaded on the Gantt — click each on/off (both, one, or none)">🎌</span>`
+    + o('US',HOL_US,'US','Shade US holidays — click to toggle on/off')
+    + o('CA',HOL_CA,'Canada','Shade Canadian holidays — click to toggle on/off'); }
 // Inclusive day-span of a bar (start & end both count): a same-day task = 1 day.
 function dayspan(a,b){ const s=parseISO(a), e=parseISO(b||a); if(!s||!e) return null; const d=Math.round((e.getTime()-s.getTime())/DAY)+1; return d>0?d:1; }
 const HOL_MAX_WIN_DAYS=130;   // only flag holidays when zoomed to ~4 months or tighter — keeps the wide all-year view clean
