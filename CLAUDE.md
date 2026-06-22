@@ -106,17 +106,26 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
   step — the org had to allow fine-grained PATs first. **GitHub's `schedule` is a flaky backup
   (~hourly); the repository_dispatch from the shuttle is the reliable 15-min trigger.** See
   `CLOUD-EXPORT-SETUP.md`. ⚠️ The PAT expires (~1 yr) — remind Rich to rotate it.
-- **🔜 STEP 2 — close the last edits that still force Excel:** (1) move a task to a different
-  project/job; (2) add subtasks in the editor; (3) **🗑 Delete a whole project in one click** —
-  cascade (its Project Tasks + the matching floor job/Shop Tasks); CLEAR contents (don't
-  delete-shift rows) to protect the Project Gantt's absolute-row mirror; needs a new
-  `deleteProject` Office Script action. *(Rich asked 2026-06-20 — only per-task 🗑 exists today.)*
-  (4) move/reorder shop tasks between trailers; (5) manage login Users/codes from the
-  dashboard; (6) bring the **logistics "arriving" calendars** into the dashboard (today the
-  `renderReturns` "Coming Back to MRA" panel is ORPHANED — function exists, no DOM home/call).
+- **🔜 STEP 2 — close the last edits that still force Excel:** (1) ✅ **move/copy a task to a
+  different project/job DONE** (rev 4.83 project tasks, 4.84 shop tasks); (2) add subtasks in the
+  editor *(still open)*; (3) ✅ **🗑 Delete a whole project in one click DONE** — `deleteProjectBtn()`
+  → `deleteProject` action → script cascade-CLEARS (not delete-shift) the project's Project Tasks +
+  matching floor job (Input) + Shop Tasks, protecting the Project Gantt's absolute-row mirror.
+  *(2026-06-22: also fixed per-task `deleteProjectTask` to CLEAR instead of delete-shift, same mirror
+  rule.)* (4) ✅ **move/reorder shop tasks between trailers DONE** (rev 4.84 move/copy); (5) manage
+  login Users/codes from the dashboard *(setUser/deleteUser/renameUser actions exist + UI; verify
+  live)*; (6) ✅ **logistics "arriving" calendars DONE** — `renderReturns` "Coming Back to MRA" panel
+  wired onto FLOOR (rev 4.82, no longer orphaned).
   ✅ **Upload a whole new project via the "Upload Filled" tab = ALREADY WORKING** (confirmed
   2026-06-20: parses the filled template client-side → `importProject` action → lands on the board
   next cycle; same-name = replace, new name = add).
+  ⚠️ **DELETE/EDIT ALL DEPEND ON THE LIVE OFFICE SCRIPT BEING CURRENT.** Every dashboard action
+  (delete project/task/job/user/holiday, move/copy, importProject) is handled in `MRA-Sync.ts` AND
+  the dashboard sends it — BUT it only works if the Office Script the Power Automate save-flow runs
+  is the latest `MRA-Sync.ts`. If Rich pasted an older script, the newer buttons (deleteProject,
+  importProject, move/copy) fire from the UI but silently no-op → he'd still go to Excel. Re-paste
+  `MRA-Sync.ts` + Save when in doubt. (setEOTM is the one action NOT in this script — it has its own
+  EOTM blob flow, by design.)
 - **🏁 STEP 3 — kill the .xlsx:** move the data off the workbook entirely → **SharePoint Lists**
   (Jobs / ShopTasks / ProjectTasks / Users), so there's no Excel file to open. Platform handles
   concurrency (the write-collision class disappears).

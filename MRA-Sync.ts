@@ -336,7 +336,9 @@ function main(workbook: ExcelScript.Workbook, payload: string) {
         const rowAbs = base + idx;
 
         if (p.action === "deleteProjectTask") {
-            pws.getCell(rowAbs, 0).getEntireRow().delete(ExcelScript.DeleteShiftDirection.Up);
+            // Clear the row's cells (do NOT delete/shift) - the Project Gantt mirrors this
+            // sheet by absolute row, so shifting rows up would drift it. Same rule as deleteProject.
+            pws.getRangeByIndexes(rowAbs, 0, 1, used.getColumnCount()).clear(ExcelScript.ClearApplyTo.Contents);
             logIt("Delete project task", p.project || "", String(p.task || wantId)); return;
         }
         if (p.action === "closeProjectTask") {
