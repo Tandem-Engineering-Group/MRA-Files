@@ -152,6 +152,7 @@
   .g-holiday{position:absolute; top:0; bottom:0; background:rgba(245,158,11,.13); z-index:0; pointer-events:none}
   body.light .g-holiday{background:rgba(245,158,11,.18)}
   .holpicklbl{font-size:13px; opacity:.85; align-self:center; margin:0 3px 0 2px}
+  .wlsub{font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin:2px 0 9px}
   .projwhosel{background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:5px 9px; font-size:11.5px; font-weight:600; max-width:180px; cursor:pointer}
   .gfs-head .projwhosel{font-size:12px}
   .g-bar.done{opacity:.6}
@@ -1115,6 +1116,16 @@
       </div>
     </div>
 
+    <div class="panel" id="workloadPanel">
+      <h2>📊 Workload — open tasks <span class="count" id="wlCount"></span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">a fuzzy gauge of remaining work (open‑task counts) — <span style="color:var(--red)">overdue in red</span>. Fill Est. Hours per task to weight by real effort.</span>
+      </h2>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div><div class="wlsub">By Program Development (PM)</div><div id="wlPM"></div></div>
+        <div><div class="wlsub">By Resource / Crew</div><div id="wlRes"></div></div>
+      </div>
+    </div>
+
     <div class="grid" style="grid-template-columns:minmax(260px,1fr) 2fr">
       <div class="panel">
         <h2>🩺 Portfolio Health</h2>
@@ -1973,6 +1984,8 @@ const GENERAL_HELP = `
     <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show completed</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). The picker is <b>two-level</b>: a group (MRA Design, MRA Shop, Electricians, Wrap Team, Maintenance) <b>rolls up everyone</b> ("MRA Design — all") with each member indented under it ("› Steve K") — pick the group to see all of it, or a person to drill in. Members come from the workbook's <b>Sub-Resource</b> column (Assigned To = group, Sub-Resource = person); until that's filled, the board reads them from existing "Group / Person" assignments. Name variants are still merged (e.g. <b>MasterWraps → Wrap Team</b>, <b>Electrician → Electricians</b>). <span class="k">🖨 Print</span> lays the Gantt + full task list on one <b>11×17 (tabloid) landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>④ᶜ ✉ Daily Shop Letter</h4>
     <p>In the FLOOR <span class="k">☰ Actions</span> menu, <span class="k">✉ Daily Letter</span> writes a clean end-of-day shop update — each bay's job with its <b>open task lines</b>, a <b>Recently Completed (last 7 days)</b> list, open tasks per crew, trailers coming back to MRA in the next 14 days, projects at-risk + milestones due this week, and fleet service flags. Pick a <b>date</b>, then <b>📋 Copy text</b> to paste it into an email or <b>🖨 Print / PDF</b>. No login needed.</p></div>
+  <div class="hsec"><h4>④ᵈ 📊 Workload — open tasks</h4>
+    <p>Under <b>Program Development Load</b>. Where that panel counts <i>projects</i>, this gauges <b>how much work is left</b>: comparative bars of <b>open tasks per PM</b> (left) and <b>per resource / crew</b> (right — MRA Shop, MRA Design, Wrap Team, Electricians, …), longest bar = most loaded. <b>Overdue tasks show in red</b> (with the overdue count in parentheses). It's a <i>fuzzy</i> gauge by open‑task count today; once tasks carry <b>Est. Hours</b> it can weight by real effort instead.</p></div>
   <div class="hsec"><h4>⑤ 👥 Team Capacity (Projects tab)</h4>
     <p>Groups every open <b>Project Task</b> by the person it's <i>assigned</i> to, most-loaded first, with a due-date chip
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
@@ -2090,6 +2103,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"5.0", date:"2026-06-22", title:"Projects: 📊 Workload graph (open tasks by PM + crew)", items:[
+    "New <b>📊 Workload — open tasks</b> panel on PROJECTS (under Program Development Load). Beyond just <i>how many projects</i>, it gauges <b>how much actual work is left</b>: comparative bars of <b>open tasks per PM</b> (Megan, Al, …) and <b>per resource/crew</b> (MRA Shop, MRA Design, Wrap Team, Electricians, …), with <b>overdue shown in red</b>. It's a fuzzy proxy by open‑task count for now — fill in <b>Est. Hours</b> per task and we can switch it to weight by real effort." ] },
   { rev:"4.99", date:"2026-06-22", title:"Fix: active projects wrongly auto-archiving", items:[
     "Projects with a shipped <b>sub-event</b> (a client visit, one shipped unit) were getting auto-archived even though the project itself was still active — e.g. <b>Oakland Schools</b> and <b>Medtronic</b> dropped off the Gantt. A project now only auto-archives when it's <b>100%</b> or <b>every</b> matching trailer has shipped, so an active multi-trailer project stays on the board." ] },
   { rev:"4.98", date:"2026-06-22", title:"Projects Gantt: sticky dates + filter by assignee", items:[
@@ -5383,6 +5398,26 @@ function renderProjects(D){
     `<div class="seg" style="width:${p.upcoming/maxTot*100}%;background:var(--amber)"></div>`+
     `<div class="seg" style="width:${p.done/maxTot*100}%;background:var(--grey)"></div>`+
     `</div><div class="v">${p.tot}</div></div>`).join("");
+
+  // 📊 Workload — open tasks (a fuzzy remaining-work gauge): by PM and by resource/crew.
+  // No Est. Hours exist on tasks yet, so we weight by OPEN task count; overdue (finish < today) shown in red.
+  { const wlPM={}, wlRes={};
+    projects.forEach(p=>{ const pmNm=(p.pm&&p.pm!=="TBD")?p.pm:"Unassigned/TBD";
+      (p.tasks||[]).forEach(t=>{ if(t.done) return; const od=!!(t.finISO&&t.finISO<today);
+        wlPM[pmNm]=wlPM[pmNm]||{tot:0,od:0}; wlPM[pmNm].tot++; if(od) wlPM[pmNm].od++;
+        const parts=_whoParts(t.who); (parts.length?parts:["Unassigned"]).forEach(nm=>{
+          wlRes[nm]=wlRes[nm]||{tot:0,od:0}; wlRes[nm].tot++; if(od) wlRes[nm].od++; }); }); });
+    const wlBars=(obj,topN)=>{ const arr=Object.entries(obj).map(([nm,v])=>({nm,...v})).sort((a,b)=>b.tot-a.tot);
+      const list=topN?arr.slice(0,topN):arr, mx=Math.max(1,...arr.map(x=>x.tot));
+      return list.map(x=>`<div class="pmrow"><div class="nm" title="${escA(x.nm+' — '+x.tot+' open'+(x.od?(', '+x.od+' overdue'):''))}">${esc(x.nm)}</div><div class="pmbar">`+
+        `<div class="seg" style="width:${(x.tot-x.od)/mx*100}%;background:var(--green)"></div>`+
+        `<div class="seg" style="width:${x.od/mx*100}%;background:var(--red)"></div>`+
+        `</div><div class="v">${x.tot}${x.od?` <span style="color:var(--red)">(${x.od})</span>`:''}</div></div>`).join("")
+        || `<div class="empty">— none —</div>`; };
+    const e1=document.getElementById('wlPM'); if(e1) e1.innerHTML=wlBars(wlPM,0);
+    const e2=document.getElementById('wlRes'); if(e2) e2.innerHTML=wlBars(wlRes,14);
+    const totOpen=projects.reduce((s,p)=>s+(p.tasks||[]).filter(t=>!t.done).length,0);
+    const wc=document.getElementById('wlCount'); if(wc) wc.textContent=totOpen+" open"; }
   document.getElementById('pmCount').textContent=pmArr.length+(pmArr.length===1?" person":" people");
 
   // Milestones panel: missed gates first (red), then upcoming 60-day
