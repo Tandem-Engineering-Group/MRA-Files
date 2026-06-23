@@ -2132,7 +2132,8 @@ const FLEETIO_HELP = `
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
   { rev:"6.0", date:"2026-06-23", title:"Detailed Gantt: milestones are now ◆ points (not collapsible gates)", items:[
-    "In a project's detailed Gantt, a <b>milestone</b> now shows as a <b>◆ diamond at its date</b> instead of a collapsible 'gate' that grouped the tasks under it (per Al). Tasks just list in order; milestones sit inline as points. Click a milestone row to edit it. Regular task bars still drag-to-reschedule as before." ] },
+    "In a project's detailed Gantt, a <b>milestone</b> now shows as a <b>◆ diamond at its date</b> instead of a collapsible 'gate' that grouped the tasks under it (per Al). Tasks just list in order; milestones sit inline as points. Click a milestone row to edit it. Regular task bars still drag-to-reschedule as before.",
+    "<b>Drag-to-reschedule tightened</b>: bigger grab-zones on a bar's ends (easier to catch the left/right edge to change Start/Finish), and grabbing the middle now only flips to <b>reorder</b> on a clearly vertical drag — so a slightly diagonal move-the-dates drag no longer reorders by accident." ] },
   { rev:"5.9", date:"2026-06-23", title:"Download a project to Excel (round-trips with Upload)", items:[
     "PROJECTS tab → 📋 Project Intake: new project picker + ⬇ Download a Project. Pick any project and it downloads that project's tasks as an .xlsx in the exact same template format the ⬆ Upload Filled button reads.",
     "Round-trip: download a project, edit or add task rows offline in Excel, then ⬆ Upload Filled to send it back — same project name updates it, a new name creates a new project." ] },
@@ -7405,7 +7406,7 @@ function pdToggleMs(key){ PD_COLLAPSED.has(key)?PD_COLLAPSED.delete(key):PD_COLL
 function pdragHover(e){
   if(GFS!=='project' || !CLOSE_PIN) return;   // only show the drag cursor once you're in edit mode
   const bar=e.target.closest('.g-bar[data-tid]'); if(!bar||bar._dragging) return;
-  const r=bar.getBoundingClientRect(); const z=Math.min(12, r.width/3);
+  const r=bar.getBoundingClientRect(); const z=Math.min(14, r.width*0.4);
   bar.style.cursor=(e.clientX-r.left<z || r.right-e.clientX<z)?'ew-resize':'grab';
 }
 function pdragStart(e){
@@ -7417,7 +7418,7 @@ function pdragStart(e){
   const s0=parseISO(t.startISO), f0=parseISO(t.finISO||t.startISO); if(!s0||!f0) return;
   const track=bar.closest('.g-track'); if(!track) return;
   const trackW=track.getBoundingClientRect().width; if(trackW<=0) return;
-  const r=bar.getBoundingClientRect(); const zone=Math.min(12, r.width/3);
+  const r=bar.getBoundingClientRect(); const zone=Math.min(14, r.width*0.4);
   const edge=(e.clientX-r.left<zone)?'L':(r.right-e.clientX<zone)?'R':'M';
   const pxPerDay=trackW/ctx.win.days, startMs0=s0.getTime(), finMs0=f0.getTime();
   e.preventDefault(); bar._dragging=true; document.body.style.userSelect='none';
@@ -7428,9 +7429,9 @@ function pdragStart(e){
     else if(edge==='L'){ ns=Math.min(startMs0+dd*DAY, finMs0); }
     else { nf=Math.max(finMs0+dd*DAY, startMs0); } };
   const onMove=ev=>{ const dx=ev.clientX-e.clientX, dy=ev.clientY-e.clientY;
-    if(mode===null){                                  // axis-lock the middle drag: vertical → reorder, horizontal → reschedule
-      if(Math.abs(dx)<5 && Math.abs(dy)<5) return;
-      mode=(Math.abs(dy)>Math.abs(dx))?'reorder':'date';
+    if(mode===null){                                  // axis-lock the middle drag: CLEARLY vertical → reorder, else → reschedule dates
+      if(Math.abs(dx)<6 && Math.abs(dy)<6) return;
+      mode=(Math.abs(dy)>Math.abs(dx)*1.4 && Math.abs(dy)>8)?'reorder':'date';
       if(mode==='reorder'){ bar.classList.add('g-reordering'); document.body.style.cursor='grabbing'; } }
     if(mode==='reorder'){ dropIdx=pdReorderHover(ev, bar.getAttribute('data-tid')); }
     else { calc(dx); const g=barGeom(localISO(ns), localISO(nf), ctx.win);
