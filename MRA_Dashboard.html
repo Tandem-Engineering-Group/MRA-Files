@@ -2097,7 +2097,7 @@ const GENERAL_HELP = `
     <p>Every panel on the PROJECTS tab has a <span class="k">▾</span> in its header — click it to <b>collapse</b> that panel down to just its title (click <span class="k">▸</span> to reopen). <b>Project Progress</b> and <b>👥 Team Capacity</b> are also <b>compact</b> by default (they scroll within a fixed height) with an <span class="k">⤢ Expand</span> button to grow them to full height. All of it is remembered per device, so each screen keeps the layout you like.</p></div>
   <div class="hsec"><h4>⑳ 📤 Status Report</h4>
     <p>Click <span class="k">📤 Status Report</span> (PROJECTS tab) for a one-click snapshot of every active project — %, health, next gate and overdue items. <b>📋 Copy text</b> drops it on your clipboard to paste into an email.</p>
-    <p><b>🖨 Print / PDF</b> opens a polished, branded report: an <b>MRA logo header</b> with the date and a summary strip (Active · Need attention · Overdue tasks), then a <b>card per project</b> — status badge, progress bar, and the project's <b>Start, End, Duration, Tasks done/total, Phases, Milestones, Overdue</b> and next gate. Use your browser's <b>Save as PDF</b>.</p></div>
+    <p><b>🖨 Print / PDF</b> opens a polished, branded <b>one-page</b> report: an <b>MRA logo header</b> with the date and a summary strip (Active · Need attention · Overdue tasks), then a tidy <b>table — one row per project</b> with status, PM, a progress bar, and the project's <b>Start, End, Days, Tasks done/total, Phases, Milestones, Overdue</b> and next gate. Use your browser's <b>Save as PDF</b>.</p></div>
   <div class="hsec"><h4>㉑ 🖱 Click a Gantt bar</h4>
     <p>On the Projects Gantt, <b>click any project bar</b> (or its name) to jump straight into that project's task editor.</p></div>
   <div class="hsec"><h4>⑲ 🔧 Fleetio issues on a bay card (FLOOR)</h4>
@@ -2141,6 +2141,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.4", date:"2026-06-23", title:"📤 Status Report: now a one-page report (dense table, same data)", items:[
+    "The printable <b>📤 Status Report</b> is condensed to a <b>single page</b> — every active project is now <b>one row</b> in a clean table instead of a tall card, so the whole portfolio fits on one sheet (all the same data is kept).",
+    "Each row shows <b>Status, PM, a mini progress bar, Start, End, Days, Tasks done/total, Phases, Milestones, Overdue, and the Next gate</b>, under the same MRA logo header + summary strip. Open <span class=\"k\">📤 Status Report</span> → <b>🖨 Print / Save as PDF</b>." ] },
   { rev:"6.3", date:"2026-06-23", title:"📤 Status Report: professional printable layout (logo + per-project stats)", items:[
     "The <b>📤 Status Report</b> print view is rebuilt to look like a real report: an <b>MRA logo header</b> with the date and a summary strip (Active / Need attention / Overdue tasks), then a clean <b>card per project</b>.",
     "Each project card now carries <b>more meat</b> — a colored status badge (PAST DUE / BEHIND / ON TRACK / NOT STARTED), a progress bar, and a stats grid: <b>Start, End, Duration (days), Tasks done/total, Phases, Milestones, Overdue</b>, plus the next gate. Open <span class=\"k\">📤 Status Report</span> → <b>🖨 Print / Save as PDF</b>." ] },
@@ -4648,7 +4651,7 @@ function statusBadge(h){
   const a=m[h.state]||['IN PROGRESS','#2563eb'];
   return `<span class="badge" style="background:${a[1]}1a;color:${a[1]};border:1px solid ${a[1]}55">${a[0]}</span>`;
 }
-// Rich per-project data for the printable Status Report.
+// Rich per-project data for the printable Status Report (dense one-page table).
 function buildStatusReport(){
   const D=window.MRA_DATA||{}, today=D.todayISO||'';
   const odMap=overdueByProject(D);
@@ -4657,8 +4660,7 @@ function buildStatusReport(){
     .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||'9999').localeCompare(b.p.finishISO||'9999')));
   const atRisk=active.filter(x=>x.h.state==='late'||x.h.state==='behind').length;
   let totOd=0; Object.keys(odMap).forEach(k=>totOd+=odMap[k]);
-  let cards='';
-  active.forEach(({p,h})=>{
+  const rows=active.map(({p,h})=>{
     const ng=nextGate(p,today), od=odMap[p.name]||0;
     const tasks=p.taskCount||((p.tasks||[]).length), done=p.doneCount||0;
     const ms=(p.milestones||[]).length;
@@ -4667,61 +4669,68 @@ function buildStatusReport(){
     const dur=(sd&&fd)?(Math.round((fd-sd)/DAY)+1):null;
     const pct=p.pct!=null?p.pct:0;
     const barC=h.state==='late'?'#dc2626':h.state==='behind'?'#d97706':h.state==='upcoming'?'#94a3b8':'#16a34a';
-    const cell=(l,v)=>`<div class="cell"><div class="cl">${l}</div><div class="cv">${v}</div></div>`;
-    cards+=`<div class="card">
-      <div class="chead"><div class="cname">${esc(p.name)}</div>${statusBadge(h)}</div>
-      <div class="cpm">Program Development — <b>${esc(p.pm||'—')}</b>${(h.state==='behind'&&h.behindBy!=null)?` · <span style="color:#b45309;font-weight:700">${h.behindBy}% behind schedule</span>`:''}</div>
-      <div class="pbar"><div class="pfill" style="width:${Math.max(2,Math.min(100,pct))}%;background:${barC}"></div><span class="ptxt">${pct}% complete</span></div>
-      <div class="grid">
-        ${cell('Start', sd?fmtMDY(p.startISO):'—')}
-        ${cell('End', fd?fmtMDY(p.finishISO):'—')}
-        ${cell('Duration', dur!=null?(dur+' days'):'—')}
-        ${cell('Tasks', done+' / '+tasks+' done')}
-        ${cell('Phases', phases||'—')}
-        ${cell('Milestones', ms||'—')}
-        ${cell('Overdue', od?('<span style="color:#dc2626;font-weight:800">'+od+'</span>'):'0')}
-      </div>
-      <div class="gate">Next gate: <b>${ng?(esc(ng.name)+' — '+fmtMDY(ng.dateISO)):'—'}</b></div>
-    </div>`;
+    return { name:p.name, badge:statusBadge(h), pm:p.pm||'—', pct, barC,
+      behind:(h.state==='behind'&&h.behindBy!=null)?h.behindBy:null,
+      start:sd?fmtMDY(p.startISO):'—', end:fd?fmtMDY(p.finishISO):'—',
+      dur:(dur!=null?dur:null), done, tasks, phases, ms, od,
+      gateName:(ng?ng.name:''), gateDate:(ng?fmtMDY(ng.dateISO):'') };
   });
-  if(!active.length) cards='<div class="card">No active projects.</div>';
   const asof=D.generatedAt?fmtStamp(D.generatedAt):(D.generatedText||'');
   return { logo:((location.origin||'')+'/logo.png'), today:fmtMDY(today),
-    nActive:active.length, atRisk, totOd, asof, cards };
+    nActive:active.length, atRisk, totOd, asof, rows };
 }
 function printStatus(){
   const R=buildStatusReport();
   const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
-  const css=`@page{size:letter portrait;margin:.5in}*{box-sizing:border-box}`+
+  const bar=(pct,c)=>`<span class="pb"><span class="pf" style="width:${Math.max(3,Math.min(100,pct))}%;background:${c}"></span></span><span class="pp">${pct}%</span>`;
+  const tr=R.rows.map(r=>`<tr>`+
+      `<td class="pname">${esc(r.name)}</td>`+
+      `<td class="c">${r.badge}</td>`+
+      `<td>${esc(r.pm)}${r.behind!=null?`<div class="sub">${r.behind}% behind</div>`:''}</td>`+
+      `<td class="prog">${bar(r.pct,r.barC)}</td>`+
+      `<td class="c">${r.start}</td>`+
+      `<td class="c">${r.end}</td>`+
+      `<td class="c">${r.dur!=null?r.dur:'—'}</td>`+
+      `<td class="c">${r.done}/${r.tasks}</td>`+
+      `<td class="c">${r.phases||'—'}</td>`+
+      `<td class="c">${r.ms||'—'}</td>`+
+      `<td class="c">${r.od?`<b style="color:#dc2626">${r.od}</b>`:'0'}</td>`+
+      `<td class="gate">${r.gateDate?`<b>${r.gateDate}</b>${r.gateName?` ${esc(r.gateName)}`:''}`:'—'}</td>`+
+    `</tr>`).join('') || `<tr><td colspan="12" class="c">No active projects.</td></tr>`;
+  const css=`@page{size:letter portrait;margin:.4in}*{box-sizing:border-box}`+
     `body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;margin:0;background:#eef1f5}`+
-    `.bar{background:#23272e;color:#fff;padding:11px 18px;font-size:13px;display:flex;gap:14px;align-items:center}`+
+    `.bar{background:#23272e;color:#fff;padding:10px 18px;font-size:13px;display:flex;gap:14px;align-items:center}`+
     `.bar button{background:#e04826;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer}`+
-    `.sheet{max-width:8in;margin:18px auto;background:#fff;padding:.45in .5in;box-shadow:0 1px 10px rgba(0,0,0,.10)}`+
-    `.rhead{display:flex;align-items:center;gap:16px;border-bottom:3px solid #e04826;padding-bottom:14px;margin-bottom:18px}`+
-    `.rlogo{height:48px;width:auto}.rtitle{flex:1}.rtitle h1{margin:0;font-size:23px;color:#23272e}`+
-    `.rsub{font-size:12px;color:#6b7280;margin-top:3px}`+
-    `.rstats{display:flex;gap:20px;text-align:center}.rstats div{display:flex;flex-direction:column}`+
-    `.rstats b{font-size:21px;line-height:1}.rstats span{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}`+
-    `.card{border:1px solid #e5e7eb;border-radius:10px;padding:13px 16px;margin-bottom:12px;page-break-inside:avoid;break-inside:avoid}`+
-    `.chead{display:flex;align-items:center;justify-content:space-between;gap:10px}`+
-    `.cname{font-size:16px;font-weight:700;color:#111827}`+
-    `.badge{font-size:10px;font-weight:800;letter-spacing:.5px;padding:3px 10px;border-radius:999px;white-space:nowrap}`+
-    `.cpm{font-size:12px;color:#4b5563;margin:3px 0 9px}`+
-    `.pbar{position:relative;height:16px;background:#eef2f7;border-radius:999px;overflow:hidden;margin-bottom:11px}`+
-    `.pfill{position:absolute;left:0;top:0;bottom:0;border-radius:999px}`+
-    `.ptxt{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:#374151}`+
-    `.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 14px}`+
-    `.cell .cl{font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px}`+
-    `.cell .cv{font-size:13.5px;color:#111827;font-weight:600;margin-top:2px}`+
-    `.gate{margin-top:11px;padding-top:9px;border-top:1px dashed #e5e7eb;font-size:12.5px;color:#374151}`+
-    `.rfoot{margin-top:16px;font-size:10px;color:#9ca3af;border-top:1px solid #eee;padding-top:8px}`+
-    `@media print{body{background:#fff}.bar{display:none}.sheet{margin:0;box-shadow:none;max-width:none;padding:0}}`;
+    `.sheet{max-width:8in;margin:14px auto;background:#fff;padding:.35in .4in;box-shadow:0 1px 10px rgba(0,0,0,.10)}`+
+    `.rhead{display:flex;align-items:center;gap:14px;border-bottom:3px solid #e04826;padding-bottom:11px;margin-bottom:13px}`+
+    `.rlogo{height:42px;width:auto}.rtitle{flex:1}.rtitle h1{margin:0;font-size:20px;color:#23272e}`+
+    `.rsub{font-size:11px;color:#6b7280;margin-top:2px}`+
+    `.rstats{display:flex;gap:16px;text-align:center}.rstats div{display:flex;flex-direction:column}`+
+    `.rstats b{font-size:18px;line-height:1}.rstats span{font-size:8px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}`+
+    `table{width:100%;border-collapse:collapse;font-size:9.5px;table-layout:auto}`+
+    `thead th{text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.3px;color:#6b7280;border-bottom:2px solid #e04826;padding:0 5px 6px;white-space:nowrap}`+
+    `tbody td{padding:6px 5px;border-bottom:1px solid #eef0f3;vertical-align:middle}`+
+    `tbody tr{page-break-inside:avoid;break-inside:avoid}`+
+    `td.c,th.c{text-align:center;white-space:nowrap}`+
+    `.pname{font-weight:700;color:#111827;font-size:10.5px}`+
+    `.sub{font-size:8px;color:#b45309;font-weight:700;margin-top:1px}`+
+    `.badge{font-size:7.5px;font-weight:800;letter-spacing:.3px;padding:2px 7px;border-radius:999px;white-space:nowrap}`+
+    `.prog{white-space:nowrap}`+
+    `.pb{display:inline-block;width:46px;height:7px;background:#eef2f7;border-radius:999px;overflow:hidden;vertical-align:middle}`+
+    `.pf{display:inline-block;height:7px;border-radius:999px;vertical-align:top}`+
+    `.pp{font-size:8.5px;font-weight:700;color:#374151;margin-left:5px;vertical-align:middle}`+
+    `.gate{font-size:9px;color:#374151;line-height:1.25}`+
+    `.rfoot{margin-top:13px;font-size:9.5px;color:#9ca3af;border-top:1px solid #eee;padding-top:7px}`+
+    `@media print{body{background:#fff}.bar{display:none}.sheet{margin:0;box-shadow:none;max-width:none;padding:0}thead{display:table-header-group}}`;
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MRA Project Status — ${R.today}</title><style>${css}</style></head><body>`+
     `<div class="bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><span>Use your browser's “Save as PDF”.</span></div>`+
     `<div class="sheet"><header class="rhead"><img src="${R.logo}" class="rlogo" onerror="this.style.display='none'">`+
     `<div class="rtitle"><h1>Project Status Report</h1><div class="rsub">MRA Command Center · ${R.today}</div></div>`+
     `<div class="rstats"><div><b>${R.nActive}</b><span>Active</span></div><div><b style="color:#dc2626">${R.atRisk}</b><span>Need attention</span></div><div><b style="color:#dc2626">${R.totOd}</b><span>Overdue tasks</span></div></div>`+
-    `</header>${R.cards}<footer class="rfoot">Generated from the MRA Command Center${R.asof?(' · data as of '+esc(R.asof)):''}</footer></div></body></html>`);
+    `</header>`+
+    `<table><thead><tr><th>Project</th><th class="c">Status</th><th>PM</th><th class="c">Progress</th><th class="c">Start</th><th class="c">End</th><th class="c">Days</th><th class="c">Tasks</th><th class="c">Phases</th><th class="c">Miles</th><th class="c">Overdue</th><th>Next gate</th></tr></thead>`+
+    `<tbody>${tr}</tbody></table>`+
+    `<footer class="rfoot">Generated from the MRA Command Center${R.asof?(' · data as of '+esc(R.asof)):''}</footer></div></body></html>`);
   w.document.close();
 }
 
