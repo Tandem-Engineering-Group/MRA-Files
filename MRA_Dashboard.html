@@ -3198,11 +3198,12 @@ function _wqDrain(){
   (async()=>{
     while(_wq.length){
       const payload=_wq.shift();
-      // Translated (lists) payloads carry .ops -> new flow; everything else -> workbook flow.
-      const _url=(payload && payload.ops && LISTS_WRITE_URL) ? LISTS_WRITE_URL : SHOP_WRITE_URL;
+      // Translated (lists) payloads carry .op/.ops -> new flow; everything else -> workbook flow.
+      const _toLists=(payload && (payload.op||payload.ops) && LISTS_WRITE_URL);
+      const _url=_toLists ? LISTS_WRITE_URL : SHOP_WRITE_URL;
       try{ await fetch(_url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
       catch(e){ /* no-cors: response is opaque; nothing to read */ }
-      if(_wq.length) await new Promise(r=>setTimeout(r,WRITE_GAP_MS));
+      if(_wq.length) await new Promise(r=>setTimeout(r,_toLists?250:WRITE_GAP_MS));
     }
     _wqBusy=false;
   })();
@@ -3291,7 +3292,11 @@ function _listOps(p){
 function shopWrite(payload){
   if(USE_LISTS_WRITE){
     const ops=_listOps(payload);
-    if(ops && ops.length){ payload={ops:ops, pin:payload.pin, user:payload.user}; }
+    if(ops && ops.length){
+      // One op per POST -> the flow needs NO loop (just Parse JSON -> Switch -> HTTP).
+      ops.forEach(op=>_wq.push({op:op, pin:payload.pin, user:payload.user}));
+      _wqDrain(); return Promise.resolve();
+    }
   }
   _wq.push(payload); _wqDrain(); return Promise.resolve();
 }
