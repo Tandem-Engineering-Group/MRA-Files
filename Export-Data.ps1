@@ -451,13 +451,13 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
     foreach ($r in @($L.shopTasks)) {
         $task = (Pick $r @('Title','task')).Trim(); if ($task -eq '') { continue }
         $proj = (Pick $r @('Project','project','field_1')).Trim()
-        $jobn = (Pick $r @('JobNum','jobNum')).Trim()
-        $assigned = (Pick $r @('Assigned','assigned','field_2')).Trim()
-        $od = IsoDay (Pick $r @('Opened','opened'))
-        $cl = IsoDay (Pick $r @('Closed','closed'))
-        $status = (Pick $r @('Status','status','field_3')).Trim()
-        $mile   = (Pick $r @('Milestone','milestone','field_4')).Trim()
-        $cmt    = (Pick $r @('Comments','comments','field_5')).Trim()
+        $jobn = (Pick $r @('JobNum','jobNum','field_2')).Trim()
+        $assigned = (Pick $r @('Assigned','assigned','field_4')).Trim()
+        $od = IsoDay (Pick $r @('Opened','opened','field_6'))
+        $cl = IsoDay (Pick $r @('Closed','closed','field_7'))
+        $status = (Pick $r @('Status','status','field_5')).Trim()
+        $mile   = (Pick $r @('Milestone','milestone','field_8')).Trim()
+        $cmt    = (Pick $r @('Comments','comments','field_9')).Trim()
         $isDone = ($status -match '(?i)done|complete') -or ($null -ne $cl)
         $obj = [PSCustomObject]@{
             task = $task; who = $assigned; opened = $od; closed = $cl
@@ -478,11 +478,11 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
         $bay    = (Pick $jr @('Bay','bay','field_1')).Trim()
         $client = (Pick $jr @('Client','client','field_2')).Trim()
         $job    = (Pick $jr @('JobNum','jobNum','field_3')).Trim()
-        $status = (Pick $jr @('Status','status','field_4')).Trim()
-        $notes  = (Pick $jr @('Notes','notes'))
-        $pm     = (Pick $jr @('PM','pm')).Trim()
-        $startISO = IsoDay (Pick $jr @('Start','start'))
-        $compISO  = IsoDay (Pick $jr @('Finish','finish','field_6'))
+        $status = (Pick $jr @('Status','status','field_6')).Trim()
+        $notes  = (Pick $jr @('Notes','notes','field_8'))
+        $pm     = (Pick $jr @('PM','pm','field_7')).Trim()
+        $startISO = IsoDay (Pick $jr @('Start','start','field_4'))
+        $compISO  = IsoDay (Pick $jr @('Finish','finish','field_5'))
         $startTxt = MdyFromIso $startISO
         $compTxt  = MdyFromIso $compISO
 
