@@ -2124,6 +2124,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"5.6", date:"2026-06-23", title:"On-Hold trailers also drop off the prints", items:[
+    "Following the screen fix: a trailer set to <b>On Hold</b> now also drops off the <b>🖨 Print Sal tasks</b> page, the by-crew page of the main <b>🖨 Print</b>, and the crew counts in the <b>✉ Daily Letter</b> — so the prints match what's on the board. (The board/bay overview still lists on-hold trailers; only the crew lists drop them.)" ] },
   { rev:"5.5", date:"2026-06-23", title:"Collapse / expand bays in Wall (TV) mode", items:[
     "The bay tiles (Bay 2 Front, Bay 3 Back, …) can now be <b>collapsed/expanded on the TV wall</b> too — click a bay's title (▾/▸) to collapse just that one, or use <b>⊟ Collapse all / ⊞ Expand all</b>. Previously this was laptop/desktop only. Remembered per screen, so the TV keeps your layout." ] },
   { rev:"5.4", date:"2026-06-23", title:"On-Hold trailers drop off the crew queues", items:[
@@ -4508,7 +4510,8 @@ function buildNightLetter(dateISO){
   const KNOWN=new RegExp(CREWS.map(g=>g.re.source).join("|"),"i");
   const basisFor=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN.test(who))?who:(who?(who+" "+txt):txt); };
   const crewCount={}; CREWS.forEach(c=>crewCount[c.label]=0);
-  jobs.forEach(j=>{ const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({who:t.who||"",raw:t.t})):(j.openTasks||[]).map(tk=>({who:"",raw:tk}));
+  jobs.forEach(j=>{ if((j.status||"").toLowerCase()==="on hold") return;   // on-hold off the crew open-task counts
+    const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({who:t.who||"",raw:t.t})):(j.openTasks||[]).map(tk=>({who:"",raw:tk}));
     tl.forEach(t=>CREWS.forEach(c=>{ if(c.re.test(basisFor(t.who,t.raw))) crewCount[c.label]++; })); });
   // trailers coming back to MRA (next 14 days)
   const items=((D.mraStatus)||[]);
@@ -6428,7 +6431,8 @@ function printBoard(){
   const basisFor=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN.test(who))?who:(who?(who+" "+txt):txt); };
   const oIdx=b=>{const i=order.indexOf(b); return i<0?99:i;};
   const crewCards=re=>{ const out=[];
-    jobs.forEach(j=>{ const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk}));
+    jobs.forEach(j=>{ if((j.status||"").toLowerCase()==="on hold") return;   // on-hold trailers off the by-crew page (still in the bay overview above)
+      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk}));
       const open=tl.filter(t=>re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
       if(open.length) out.push({bay:j.bay,project:j.project,jobNum:j.jobNum,open}); });
     out.sort((a,b)=>oIdx(a.bay)-oIdx(b.bay)||a.project.localeCompare(b.project)); return out; };
@@ -6482,7 +6486,7 @@ function printBoard(){
 function printCrewTasks(label, re){
   const D=window.MRA_DATA||{};
   if(!(D.jobs&&D.jobs.length)){ alert("The board isn't loaded yet — try again in a moment."); return; }
-  const live=j=>j.category!=="leave" && (j.status||"").toLowerCase()!=="shipped";
+  const live=j=>j.category!=="leave" && !["shipped","on hold"].includes((j.status||"").toLowerCase());   // On-Hold trailers stay off the crew print, matching the screen queues
   const jobs=(D.jobs||[]).filter(live);
   const KNOWN=/\bsal\b|wrap|w2 graphic|\bw2\b|electr|beyer/i;
   const basisFor=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN.test(who))?who:(who?(who+" "+txt):txt); };
