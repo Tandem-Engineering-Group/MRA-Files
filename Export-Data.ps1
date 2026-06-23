@@ -359,34 +359,34 @@ function Pick($o, [string[]]$names) {
 
 # Project-Tasks row from a plain object (Lists path) -> identical output to Add-TaskRow.
 function Add-TaskRowObj($t, $pmap, $teamTasks) {
-    $name = ([string]$t.project).Trim()
+    $name = (Pick $t @('Project','project','field_1')).Trim()
     if ($name -eq '') { return }
-    $pPhase    = ([string]$t.phase).Trim()
-    $pType     = ([string]$t.type).Trim()
-    $pStatus   = ([string]$t.status).Trim()
-    $pPM       = ([string]$t.pm).Trim()
-    $pMileRaw  = ([string]$t.milestone).Trim()
+    $pPhase    = (Pick $t @('Phase','phase','field_3')).Trim()
+    $pType     = (Pick $t @('Type','type','field_4')).Trim()
+    $pStatus   = (Pick $t @('Status','status','field_9')).Trim()
+    $pPM       = (Pick $t @('PM','pm','field_10')).Trim()
+    $pMileRaw  = (Pick $t @('Milestone','milestone','field_11')).Trim()
     $pTask     = (Pick $t @('Title','task')).Trim()
-    $pAssigned = ([string]$t.assigned).Trim()
-    $pComments = ([string]$t.comments).Trim()
-    $pDur      = ([string]$t.duration).Trim()
-    $pTaskId   = (Pick $t @('TaskID','taskId')).Trim()
-    $pPred     = ([string]$t.predecessor).Trim()
-    $pSubRaw   = ([string]$t.sub).Trim()
-    $pSubRes   = ([string]$t.subRes).Trim()
-    $pOrder    = ([string]$t.order).Trim()
-    $pEstDays  = ([string]$t.estDays).Trim()
-    $pEstHours = ([string]$t.estHours).Trim()
-    $pBudget   = (([string]$t.budget).Trim()) -replace '[$,]',''
-    $pParent   = ([string]$t.parent).Trim()
+    $pAssigned = (Pick $t @('Assigned','assigned','field_5')).Trim()
+    $pComments = (Pick $t @('Comments','comments','field_12')).Trim()
+    $pDur      = (Pick $t @('Duration','duration','field_8')).Trim()
+    $pTaskId   = (Pick $t @('TaskID','taskId','field_2')).Trim()
+    $pPred     = (Pick $t @('Predecessor','predecessor','field_13')).Trim()
+    $pSubRaw   = (Pick $t @('Sub','sub','field_14')).Trim()
+    $pSubRes   = (Pick $t @('SubRes','subRes')).Trim()
+    $pOrder    = (Pick $t @('Order','order')).Trim()
+    $pEstDays  = (Pick $t @('EstDays','estDays')).Trim()
+    $pEstHours = (Pick $t @('EstHours','estHours')).Trim()
+    $pBudget   = ((Pick $t @('Budget','budget')).Trim()) -replace '[$,]',''
+    $pParent   = (Pick $t @('Parent','parent')).Trim()
     if ($pParent -match '^\d+\.0+$') { $pParent = $pParent -replace '\.0+$','' }
     if ($pTaskId -match '^\d+\.0+$') { $pTaskId  = $pTaskId  -replace '\.0+$','' }
     if ($pDur    -match '^\d+\.0+$') { $pDur     = $pDur     -replace '\.0+$','' }
     $isMile = ($pMileRaw -match '(?i)^(yes|y|true|1)$')
     $pMile  = if ($isMile) { 'Yes' } else { '' }
     $isSub  = ($pSubRaw  -match '(?i)^(x|yes|true|1)$')
-    $psd = IsoDay $t.start
-    $pfd = IsoDay $t.finish
+    $psd = IsoDay (Pick $t @('Start','start','field_6'))
+    $pfd = IsoDay (Pick $t @('Finish','finish','field_7'))
 
     if (-not $pmap.Contains($name)) {
         $pmap[$name] = [PSCustomObject]@{
@@ -450,14 +450,14 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
     $byProj = @{}; $byJob = @{}; $stAll = New-Object System.Collections.ArrayList
     foreach ($r in @($L.shopTasks)) {
         $task = (Pick $r @('Title','task')).Trim(); if ($task -eq '') { continue }
-        $proj = ([string]$r.project).Trim()
-        $jobn = ([string]$r.jobNum).Trim()
-        $assigned = ([string]$r.assigned).Trim()
-        $od = IsoDay $r.opened
-        $cl = IsoDay $r.closed
-        $status = ([string]$r.status).Trim()
-        $mile   = ([string]$r.milestone).Trim()
-        $cmt    = ([string]$r.comments).Trim()
+        $proj = (Pick $r @('Project','project','field_1')).Trim()
+        $jobn = (Pick $r @('JobNum','jobNum')).Trim()
+        $assigned = (Pick $r @('Assigned','assigned','field_2')).Trim()
+        $od = IsoDay (Pick $r @('Opened','opened'))
+        $cl = IsoDay (Pick $r @('Closed','closed'))
+        $status = (Pick $r @('Status','status','field_3')).Trim()
+        $mile   = (Pick $r @('Milestone','milestone','field_4')).Trim()
+        $cmt    = (Pick $r @('Comments','comments','field_5')).Trim()
         $isDone = ($status -match '(?i)done|complete') -or ($null -ne $cl)
         $obj = [PSCustomObject]@{
             task = $task; who = $assigned; opened = $od; closed = $cl
@@ -475,14 +475,14 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
         $proj = (Pick $jr @('Title','project')).Trim()
         if ($proj -eq '') { continue }
         $rix++
-        $bay    = ([string]$jr.bay).Trim()
-        $client = ([string]$jr.client).Trim()
-        $job    = ([string]$jr.jobNum).Trim()
-        $status = ([string]$jr.status).Trim()
-        $notes  = [string]$jr.notes
-        $pm     = ([string]$jr.pm).Trim()
-        $startISO = IsoDay $jr.start
-        $compISO  = IsoDay $jr.finish
+        $bay    = (Pick $jr @('Bay','bay','field_1')).Trim()
+        $client = (Pick $jr @('Client','client','field_2')).Trim()
+        $job    = (Pick $jr @('JobNum','jobNum','field_3')).Trim()
+        $status = (Pick $jr @('Status','status','field_4')).Trim()
+        $notes  = (Pick $jr @('Notes','notes'))
+        $pm     = (Pick $jr @('PM','pm')).Trim()
+        $startISO = IsoDay (Pick $jr @('Start','start'))
+        $compISO  = IsoDay (Pick $jr @('Finish','finish','field_6'))
         $startTxt = MdyFromIso $startISO
         $compTxt  = MdyFromIso $compISO
 
@@ -554,8 +554,8 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
     # --- Users -> name + hashed code (raw codes never leave) ---
     foreach ($u in @($L.users)) {
         $name = (Pick $u @('Title','name')).Trim()
-        $code = ([string]$u.code).Trim()
-        $act  = ([string]$u.active).Trim()
+        $code = (Pick $u @('Code','code','field_1')).Trim()
+        $act  = (Pick $u @('Active','active','field_3')).Trim()
         if ($name -eq '' -or $code -eq '') { continue }
         if ($act -match '(?i)^(no|n|inactive|0|false)$') { continue }
         if ($code -match '^\d+\.0+$') { $code = $code -replace '\.0+$','' }
