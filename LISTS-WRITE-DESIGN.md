@@ -103,3 +103,28 @@ NOT "From Excel". This is also how the fresh cutover reload happens.
 3. Flip: fresh full reload (loader) -> set `USE_LISTS_WRITE=true` + point reads at lists
    (MRA_LISTS_JSON via the Lists->JSON flow to the pipeline blob + export.yml) -> deploy.
 4. Retire the workbook shuttle/Office-Script path.
+
+## PROGRESS LOG
+- 2026-06-23: **Write pipeline PROVEN.** Built flow **"MRA Lists Write 2"** (workflow id
+  `12d3826052ea4f5584ec2921fc83172c`, trigger "Anyone"). A POSTed `create` op landed a real
+  row in MRA Shop Tasks. Lesson learned the hard way: the new PA designer **auto-wraps any
+  Dynamic-content/array reference in a "For each"** — so build with **fx expressions only**,
+  leave the trigger schema EMPTY, and parse inline with `json(triggerBody())`. The HTTP
+  "Headers"/"Body" fields are hidden under **Advanced parameters -> Show all**.
+- **Working create branch** (the whole flow right now = trigger -> this one action, no Switch/loop):
+  Send an HTTP request to SharePoint, Method POST,
+  Uri `concat('_api/web/lists/getByTitle(''', json(triggerBody())?['op']?['list'], ''')/items')`,
+  Headers Accept + Content-Type = `application/json;odata=nometadata`,
+  Body `json(triggerBody())?['op']?['body']`.
+- **NEXT: add Switch(verb) + update/delete WITHOUT a nested loop** (the For-each was the pain).
+  Match is unique for the common ops, so use `first(...)`:
+  - update: GET `.../items?$filter=<op.filter>&$select=Id&$top=1` -> MERGE to
+    `.../items(@{first(body('HTTP_Get')?['value'])?['Id']})` with headers `IF-MATCH:*`,
+    `X-HTTP-Method:MERGE`, body `json(triggerBody())?['op']?['body']`.
+  - delete: same GET -> POST `.../items(<first Id>)` with `IF-MATCH:*`, `X-HTTP-Method:DELETE`.
+  - create: the POST above.
+  - Wrap the three in a Switch on `json(triggerBody())?['op']?['verb']`.
+  - Cascades (renameProject/setProjectPM/renameAssignee/deleteProject = many rows) need a real
+    loop over all matches -> defer to v2; rare.
+- Then: set `LISTS_WRITE_URL` + `USE_LISTS_WRITE=true` in MRA_Dashboard.html, fresh full reload
+  of the lists, deploy, retire workbook.
