@@ -3214,7 +3214,7 @@ function _wqDrain(){
 function _listToday(){ return (typeof localISO==='function') ? localISO(Date.now()) : new Date().toISOString().slice(0,10); }
 function _defs(o){ const r={}; for(const k in o){ if(o[k]!==undefined && o[k]!==null) r[k]=o[k]; } return r; }
 function _doneStatus(s){ return /done|complete|closed/i.test(s||''); }
-function _listOps(p){
+function _listOpsRaw(p){
   const today=_listToday();
   const a=p.action || (p.closedDate!=null ? 'closeTask' : '');
   const O=(verb,list,match,set)=>({verb,list,match:match?_defs(match):null,set:set?_defs(set):null});
@@ -3263,6 +3263,30 @@ function _listOps(p){
     }
     default: return null;   // unmapped -> fall back to the legacy workbook send
   }
+}
+/* Convert a raw op {verb, list-key, match{friendly}, set{friendly}} into the REST-ready
+   shape the flow uses: {verb, list:"MRA <List>", filter:"<OData>", body:{<internalCol>:val}}.
+   SharePoint maps each list's 1st column to Title and the rest to field_N; this is that map
+   (verified against the live lists). ProjectTasks omits columns the restored list lacks. */
+const _LF = {
+  Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
+  ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Milestone:"field_8",Comments:"field_9"} },
+  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Assigned:"field_5",Start:"field_6",Finish:"field_7",Duration:"field_8",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Predecessor:"field_13",Sub:"field_14"} },
+  Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
+  Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
+};
+function _odEsc(v){ return String(v).replace(/'/g,"''"); }   // OData single-quote escape
+function _listOps(p){
+  const raw=_listOpsRaw(p); if(!raw) return null;
+  const out=[];
+  for(const o of raw){
+    const lf=_LF[o.list]; if(!lf) continue;
+    const r={verb:o.verb, list:lf.list};
+    if(o.match){ r.filter=Object.keys(o.match).map(k=>(lf.cols[k]||k)+" eq '"+_odEsc(o.match[k])+"'").join(' and '); }
+    if(o.set){ const b={}; for(const k in o.set){ if(lf.cols[k]) b[lf.cols[k]]=o.set[k]; } r.body=b; }
+    out.push(r);
+  }
+  return out;
 }
 function shopWrite(payload){
   if(USE_LISTS_WRITE){
