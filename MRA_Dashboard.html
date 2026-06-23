@@ -3107,6 +3107,13 @@ function cleanTask(line, stripSal){
 
 /* ---------- Close a task from the dashboard (Phase 2, PIN-gated) ---------- */
 const CLOSE_FLOW_URL = "https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c7056430c8f645719ac5d29038822b04/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YXL0v51JH_hIax3z1WpKKyxY3BYSQ5bCl7U6O50VSpg";   // Power Automate flow "MRA Sync V2" (rebuilt 2026-06-16 to clear stale-script cache)
+// --- Lists write-side (Step 3 cutover) — DORMANT until the new flow is live. ---
+// When USE_LISTS_WRITE is true, shopWrite() translates each action into list
+// create/update/delete ops (see _listOps + LISTS-WRITE-DESIGN.md) and posts {ops,...}
+// to LISTS_WRITE_URL instead of the workbook flow. Flip true AT cutover only (paired
+// with read-from-lists). While false, every write goes to the workbook exactly as before.
+const USE_LISTS_WRITE = false;
+const LISTS_WRITE_URL = "";   // TODO: paste the new "MRA Lists Write" flow URL at cutover
 let CLOSE_PIN = null;       // current signed-in person's code (this browser session)
 let CURRENT_USER = "";      // current signed-in person's name (display + attribution)
 // Tasks closed from the dashboard this session — kept greyed until the next export confirms
@@ -3191,14 +3198,79 @@ function _wqDrain(){
   (async()=>{
     while(_wq.length){
       const payload=_wq.shift();
-      try{ await fetch(SHOP_WRITE_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
+      // Translated (lists) payloads carry .ops -> new flow; everything else -> workbook flow.
+      const _url=(payload && payload.ops && LISTS_WRITE_URL) ? LISTS_WRITE_URL : SHOP_WRITE_URL;
+      try{ await fetch(_url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)}); }
       catch(e){ /* no-cors: response is opaque; nothing to read */ }
       if(_wq.length) await new Promise(r=>setTimeout(r,WRITE_GAP_MS));
     }
     _wqBusy=false;
   })();
 }
-function shopWrite(payload){ _wq.push(payload); _wqDrain(); return Promise.resolve(); }
+/* ---- Lists write-side translation (Step 3, DORMANT unless USE_LISTS_WRITE) ----
+   Turns each dashboard action into normalized list ops WITHOUT touching any call site.
+   ops = [{verb:'create'|'update'|'delete'|'upsert', list, match:{}, set:{}}]. The new
+   "MRA Lists Write" flow applies them to the 4 lists. See LISTS-WRITE-DESIGN.md. */
+function _listToday(){ return (typeof localISO==='function') ? localISO(Date.now()) : new Date().toISOString().slice(0,10); }
+function _defs(o){ const r={}; for(const k in o){ if(o[k]!==undefined && o[k]!==null) r[k]=o[k]; } return r; }
+function _doneStatus(s){ return /done|complete|closed/i.test(s||''); }
+function _listOps(p){
+  const today=_listToday();
+  const a=p.action || (p.closedDate!=null ? 'closeTask' : '');
+  const O=(verb,list,match,set)=>({verb,list,match:match?_defs(match):null,set:set?_defs(set):null});
+  switch(a){
+    case 'closeTask':        return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Done',Closed:today})];
+    case 'addTask':          return [O('create','ShopTasks',null,{Task:p.task,Project:p.project,JobNum:p.jobNum,Bay:p.bay,Assigned:p.assigned,Opened:today,Status:'Open',Milestone:p.milestone,Comments:p.comments})];
+    case 'editTask':         return [O('update','ShopTasks',{Project:p.project,Task:p.taskOld},{Task:p.task,Assigned:p.assigned,Status:p.status,Milestone:p.milestone,Comments:p.comments,Closed:(_doneStatus(p.status)?today:'')})];
+    case 'deleteTask':       return [O('delete','ShopTasks',{Project:p.project,Task:p.task})];
+    case 'reopenTask':       return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Open',Closed:''})];
+    case 'addJob':           return [O('create','Jobs',null,{Project:p.project,Client:p.client,JobNum:p.jobNum,Bay:p.bay,Start:p.start,Finish:p.completion,Status:p.status,Notes:p.notes,PM:p.pm})];
+    case 'editJob': {
+      const set={Bay:p.bay,Status:p.status,Start:p.start,Finish:p.completion,Notes:p.notes,Client:p.client,PM:p.pm};
+      if(p.newProject) set.Project=p.newProject;
+      if(p.newJobNum)  set.JobNum=p.newJobNum;
+      const ops=[O('update','Jobs',{Project:p.project},set)];
+      if(p.newProject){ ops.push(O('update','ProjectTasks',{Project:p.project},{Project:p.newProject}),
+                                 O('update','ShopTasks',{Project:p.project},{Project:p.newProject})); }
+      if(p.newJobNum){  ops.push(O('update','ShopTasks',{JobNum:p.jobNum},{JobNum:p.newJobNum})); }
+      return ops;
+    }
+    case 'deleteJob':        return [O('delete','Jobs',{Project:p.project})];
+    case 'renameProject':    return [O('update','ProjectTasks',{Project:p.oldProject},{Project:p.newProject}),
+                                     O('update','Jobs',{Project:p.oldProject},{Project:p.newProject}),
+                                     O('update','ShopTasks',{Project:p.oldProject},{Project:p.newProject})];
+    case 'setProjectPM':     return [O('update','ProjectTasks',{Project:p.project},{PM:p.pm}),
+                                     O('update','Jobs',{Project:p.project},{PM:p.pm})];
+    case 'renameAssignee':   return [O('update','ProjectTasks',{Assigned:p.oldAssignee},{Assigned:p.newAssignee}),
+                                     O('update','ShopTasks',{Assigned:p.oldAssignee},{Assigned:p.newAssignee})];
+    case 'deleteProject':    return [O('delete','ProjectTasks',{Project:p.project}),
+                                     O('delete','Jobs',{Project:p.project}),
+                                     O('delete','ShopTasks',{Project:p.project})];
+    case 'setUser':          return [O('upsert','Users',{Name:p.name},{Code:p.code,Active:'Yes'})];
+    case 'deleteUser':       return [O('delete','Users',{Name:p.name})];
+    case 'renameUser':       return [O('update','Users',{Name:p.oldName},{Name:p.newName})];
+    case 'setHoliday':       return [O('upsert','Holidays',{Name:p.name,Date:p.date},{Country:p.country})];
+    case 'deleteHoliday':    return [O('delete','Holidays',{Name:p.name,Date:p.date})];
+    case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    case 'deleteProjectTask':return [O('delete','ProjectTasks',{Project:p.project,TaskID:p.id})];
+    case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Status:'Completed'})];
+    case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Status:'In Progress'})];
+    case 'importProject': {
+      const ops=[]; if(p.replace) ops.push(O('delete','ProjectTasks',{Project:p.project}));
+      (p.tasks||[]).forEach(t=>ops.push(O('create','ProjectTasks',null,{Task:t.task,Project:p.project,Phase:t.phase,Type:t.type,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Duration:t.duration,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,PM:p.pm})));
+      return ops;
+    }
+    default: return null;   // unmapped -> fall back to the legacy workbook send
+  }
+}
+function shopWrite(payload){
+  if(USE_LISTS_WRITE){
+    const ops=_listOps(payload);
+    if(ops && ops.length){ payload={ops:ops, pin:payload.pin, user:payload.user}; }
+  }
+  _wq.push(payload); _wqDrain(); return Promise.resolve();
+}
 
 /* ---------- Fleetio: add an open issue as an assignable Shop Task (trailer issues only) ---------- */
 function addFleetioTask(row,num){
