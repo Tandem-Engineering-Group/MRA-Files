@@ -2096,7 +2096,8 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑲ᵇ ▾ Collapse / compact the Projects panels</h4>
     <p>Every panel on the PROJECTS tab has a <span class="k">▾</span> in its header — click it to <b>collapse</b> that panel down to just its title (click <span class="k">▸</span> to reopen). <b>Project Progress</b> and <b>👥 Team Capacity</b> are also <b>compact</b> by default (they scroll within a fixed height) with an <span class="k">⤢ Expand</span> button to grow them to full height. All of it is remembered per device, so each screen keeps the layout you like.</p></div>
   <div class="hsec"><h4>⑳ 📤 Status Report</h4>
-    <p>Click <span class="k">📤 Status Report</span> (PROJECTS tab) for a one-click snapshot of every active project — %, health, next gate and overdue items. <b>📋 Copy text</b> drops it on your clipboard to paste into an email; <b>🖨 Print / PDF</b> opens a clean page to Save as PDF.</p></div>
+    <p>Click <span class="k">📤 Status Report</span> (PROJECTS tab) for a one-click snapshot of every active project — %, health, next gate and overdue items. <b>📋 Copy text</b> drops it on your clipboard to paste into an email.</p>
+    <p><b>🖨 Print / PDF</b> opens a polished, branded report: an <b>MRA logo header</b> with the date and a summary strip (Active · Need attention · Overdue tasks), then a <b>card per project</b> — status badge, progress bar, and the project's <b>Start, End, Duration, Tasks done/total, Phases, Milestones, Overdue</b> and next gate. Use your browser's <b>Save as PDF</b>.</p></div>
   <div class="hsec"><h4>㉑ 🖱 Click a Gantt bar</h4>
     <p>On the Projects Gantt, <b>click any project bar</b> (or its name) to jump straight into that project's task editor.</p></div>
   <div class="hsec"><h4>⑲ 🔧 Fleetio issues on a bay card (FLOOR)</h4>
@@ -2140,6 +2141,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.3", date:"2026-06-23", title:"📤 Status Report: professional printable layout (logo + per-project stats)", items:[
+    "The <b>📤 Status Report</b> print view is rebuilt to look like a real report: an <b>MRA logo header</b> with the date and a summary strip (Active / Need attention / Overdue tasks), then a clean <b>card per project</b>.",
+    "Each project card now carries <b>more meat</b> — a colored status badge (PAST DUE / BEHIND / ON TRACK / NOT STARTED), a progress bar, and a stats grid: <b>Start, End, Duration (days), Tasks done/total, Phases, Milestones, Overdue</b>, plus the next gate. Open <span class=\"k\">📤 Status Report</span> → <b>🖨 Print / Save as PDF</b>." ] },
   { rev:"6.2", date:"2026-06-23", title:"Detailed Gantt: drag-to-link tasks (predecessors), Smartsheet-style", items:[
     "In a project's detailed Gantt (edit mode), every task bar now has a small <b>\u25cf purple dot</b> on its right end. <b>Drag that dot onto a later task</b> and it <b>links them</b> — the second task's <b>Predecessor</b> is set to the first (a live line follows your cursor; the target highlights). Loops are blocked.",
     "Linked tasks now show <b>purple arrows</b> from each predecessor into its successor, so the dependencies are visible right on the Gantt. (The move/resize drags are unchanged \u2014 the dot is separate from the resize ends.)" ] },
@@ -4639,18 +4643,85 @@ function copyStatus(){
 function fallbackCopy(txt,ok){ const ta=document.createElement('textarea'); ta.value=txt;
   ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
   try{ document.execCommand('copy'); ok&&ok(); }catch(e){} document.body.removeChild(ta); }
+function statusBadge(h){
+  const m={late:['PAST DUE','#dc2626'],behind:['BEHIND','#d97706'],ontrack:['ON TRACK','#16a34a'],upcoming:['NOT STARTED','#64748b']};
+  const a=m[h.state]||['IN PROGRESS','#2563eb'];
+  return `<span class="badge" style="background:${a[1]}1a;color:${a[1]};border:1px solid ${a[1]}55">${a[0]}</span>`;
+}
+// Rich per-project data for the printable Status Report.
+function buildStatusReport(){
+  const D=window.MRA_DATA||{}, today=D.todayISO||'';
+  const odMap=overdueByProject(D);
+  const active=(D.projects||[]).filter(p=>projStatus(p,today)!=='done')
+    .map(p=>({p,h:projHealth(p,today)}))
+    .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||'9999').localeCompare(b.p.finishISO||'9999')));
+  const atRisk=active.filter(x=>x.h.state==='late'||x.h.state==='behind').length;
+  let totOd=0; Object.keys(odMap).forEach(k=>totOd+=odMap[k]);
+  let cards='';
+  active.forEach(({p,h})=>{
+    const ng=nextGate(p,today), od=odMap[p.name]||0;
+    const tasks=p.taskCount||((p.tasks||[]).length), done=p.doneCount||0;
+    const ms=(p.milestones||[]).length;
+    const phases=new Set((p.tasks||[]).map(t=>t.phase).filter(Boolean)).size;
+    const sd=p.startISO?parseISO(p.startISO):null, fd=p.finishISO?parseISO(p.finishISO):null;
+    const dur=(sd&&fd)?(Math.round((fd-sd)/DAY)+1):null;
+    const pct=p.pct!=null?p.pct:0;
+    const barC=h.state==='late'?'#dc2626':h.state==='behind'?'#d97706':h.state==='upcoming'?'#94a3b8':'#16a34a';
+    const cell=(l,v)=>`<div class="cell"><div class="cl">${l}</div><div class="cv">${v}</div></div>`;
+    cards+=`<div class="card">
+      <div class="chead"><div class="cname">${esc(p.name)}</div>${statusBadge(h)}</div>
+      <div class="cpm">Program Development — <b>${esc(p.pm||'—')}</b>${(h.state==='behind'&&h.behindBy!=null)?` · <span style="color:#b45309;font-weight:700">${h.behindBy}% behind schedule</span>`:''}</div>
+      <div class="pbar"><div class="pfill" style="width:${Math.max(2,Math.min(100,pct))}%;background:${barC}"></div><span class="ptxt">${pct}% complete</span></div>
+      <div class="grid">
+        ${cell('Start', sd?fmtMDY(p.startISO):'—')}
+        ${cell('End', fd?fmtMDY(p.finishISO):'—')}
+        ${cell('Duration', dur!=null?(dur+' days'):'—')}
+        ${cell('Tasks', done+' / '+tasks+' done')}
+        ${cell('Phases', phases||'—')}
+        ${cell('Milestones', ms||'—')}
+        ${cell('Overdue', od?('<span style="color:#dc2626;font-weight:800">'+od+'</span>'):'0')}
+      </div>
+      <div class="gate">Next gate: <b>${ng?(esc(ng.name)+' — '+fmtMDY(ng.dateISO)):'—'}</b></div>
+    </div>`;
+  });
+  if(!active.length) cards='<div class="card">No active projects.</div>';
+  const asof=D.generatedAt?fmtStamp(D.generatedAt):(D.generatedText||'');
+  return { logo:((location.origin||'')+'/logo.png'), today:fmtMDY(today),
+    nActive:active.length, atRisk, totOd, asof, cards };
+}
 function printStatus(){
-  const txt=document.getElementById('statusBody').textContent;
+  const R=buildStatusReport();
   const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
-  const css=`@page{size:letter portrait;margin:.6in}body{font-family:'Segoe UI',Arial,sans-serif;color:#23272e;margin:0}`+
+  const css=`@page{size:letter portrait;margin:.5in}*{box-sizing:border-box}`+
+    `body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;margin:0;background:#eef1f5}`+
     `.bar{background:#23272e;color:#fff;padding:11px 18px;font-size:13px;display:flex;gap:14px;align-items:center}`+
     `.bar button{background:#e04826;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer}`+
-    `.sheet{max-width:7.6in;margin:22px auto;padding:0 .2in}h1{font-size:20px;color:#23272e;border-bottom:3px solid #e04826;padding-bottom:8px}`+
-    `pre{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12.5px;line-height:1.55;white-space:pre-wrap}`+
-    `@media print{.bar{display:none}.sheet{margin:0}}`;
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MRA Project Status</title><style>${css}</style></head><body>`+
+    `.sheet{max-width:8in;margin:18px auto;background:#fff;padding:.45in .5in;box-shadow:0 1px 10px rgba(0,0,0,.10)}`+
+    `.rhead{display:flex;align-items:center;gap:16px;border-bottom:3px solid #e04826;padding-bottom:14px;margin-bottom:18px}`+
+    `.rlogo{height:48px;width:auto}.rtitle{flex:1}.rtitle h1{margin:0;font-size:23px;color:#23272e}`+
+    `.rsub{font-size:12px;color:#6b7280;margin-top:3px}`+
+    `.rstats{display:flex;gap:20px;text-align:center}.rstats div{display:flex;flex-direction:column}`+
+    `.rstats b{font-size:21px;line-height:1}.rstats span{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}`+
+    `.card{border:1px solid #e5e7eb;border-radius:10px;padding:13px 16px;margin-bottom:12px;page-break-inside:avoid;break-inside:avoid}`+
+    `.chead{display:flex;align-items:center;justify-content:space-between;gap:10px}`+
+    `.cname{font-size:16px;font-weight:700;color:#111827}`+
+    `.badge{font-size:10px;font-weight:800;letter-spacing:.5px;padding:3px 10px;border-radius:999px;white-space:nowrap}`+
+    `.cpm{font-size:12px;color:#4b5563;margin:3px 0 9px}`+
+    `.pbar{position:relative;height:16px;background:#eef2f7;border-radius:999px;overflow:hidden;margin-bottom:11px}`+
+    `.pfill{position:absolute;left:0;top:0;bottom:0;border-radius:999px}`+
+    `.ptxt{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:#374151}`+
+    `.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 14px}`+
+    `.cell .cl{font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px}`+
+    `.cell .cv{font-size:13.5px;color:#111827;font-weight:600;margin-top:2px}`+
+    `.gate{margin-top:11px;padding-top:9px;border-top:1px dashed #e5e7eb;font-size:12.5px;color:#374151}`+
+    `.rfoot{margin-top:16px;font-size:10px;color:#9ca3af;border-top:1px solid #eee;padding-top:8px}`+
+    `@media print{body{background:#fff}.bar{display:none}.sheet{margin:0;box-shadow:none;max-width:none;padding:0}}`;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MRA Project Status — ${R.today}</title><style>${css}</style></head><body>`+
     `<div class="bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><span>Use your browser's “Save as PDF”.</span></div>`+
-    `<div class="sheet"><h1>📤 MRA Project Status</h1><pre>${esc(txt)}</pre></div></body></html>`);
+    `<div class="sheet"><header class="rhead"><img src="${R.logo}" class="rlogo" onerror="this.style.display='none'">`+
+    `<div class="rtitle"><h1>Project Status Report</h1><div class="rsub">MRA Command Center · ${R.today}</div></div>`+
+    `<div class="rstats"><div><b>${R.nActive}</b><span>Active</span></div><div><b style="color:#dc2626">${R.atRisk}</b><span>Need attention</span></div><div><b style="color:#dc2626">${R.totOd}</b><span>Overdue tasks</span></div></div>`+
+    `</header>${R.cards}<footer class="rfoot">Generated from the MRA Command Center${R.asof?(' · data as of '+esc(R.asof)):''}</footer></div></body></html>`);
   w.document.close();
 }
 
