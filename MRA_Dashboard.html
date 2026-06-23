@@ -227,6 +227,10 @@
   body.light .bay-collapse{color:#586a7e}   /* the light text was invisible on white */
   .bay-head{cursor:pointer}
   .bay-head:hover .bay-collapse{border-color:#7aa2d6; color:#7aa2d6}
+  .jgrip{cursor:grab; color:var(--muted); margin-left:6px; font-size:12px; user-select:none; opacity:.55}
+  .jgrip:hover{opacity:1; color:var(--amber)}
+  .jgrip:active{cursor:grabbing}
+  .bay.dragover{outline:2px dashed var(--amber); outline-offset:-2px; background:rgba(245,158,11,.07)}
   .bay-collapse{display:inline-block}
   .bay.collapsed .bay-body{display:none !important}   /* !important so it beats the wall wrapjobs display:grid on multi-job bays */
   /* Per-job collapse caret (normal view) — shrink a single job's tasks right by its name */
@@ -2131,6 +2135,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.1", date:"2026-06-23", title:"Drag a trailer between bays", items:[
+    "On the FLOOR / Bay Status board, each trailer card now has a small <b>\u2839 grip</b> — <b>drag it onto another bay tile to move that trailer there</b> (needs your code). It rides the same save as the \u270e edit form, so it sticks; the card hops to the new bay right away. Mouse/desktop for now." ] },
   { rev:"6.0", date:"2026-06-23", title:"Detailed Gantt: milestones are now ◆ points (not collapsible gates)", items:[
     "In a project's detailed Gantt, a <b>milestone</b> now shows as a <b>◆ diamond at its date</b> instead of a collapsible 'gate' that grouped the tasks under it (per Al). Tasks just list in order; milestones sit inline as points. Click a milestone row to edit it. Regular task bars still drag-to-reschedule as before.",
     "<b>Drag-to-reschedule tightened</b>: bigger grab-zones on a bar's ends (easier to catch the left/right edge to change Start/Finish), and grabbing the middle now only flips to <b>reorder</b> on a clearly vertical drag — so a slightly diagonal move-the-dates drag no longer reorders by accident." ] },
@@ -2757,6 +2763,26 @@ function setAllBays(collapse){
     c.classList.toggle('collapsed',on); const car=c.querySelector('.bay-collapse'); if(car) car.textContent=on?'▸':'▾'; }); }
 function collapseAllBays(){ setAllBays(true); }
 function expandAllBays(){ setAllBays(false); }
+/* ---- (C) Drag a trailer card from one bay to another — rides the existing editJob save ---- */
+let _jdragRow=null;
+function jobDragStart(e,row){ _jdragRow=row; try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain','job-'+row); }catch(_){} }
+function jobDragEnd(){ _jdragRow=null; document.querySelectorAll('.bay.dragover').forEach(b=>b.classList.remove('dragover')); }
+function jobDragOver(e){ if(_jdragRow==null) return; e.preventDefault(); try{ e.dataTransfer.dropEffect='move'; }catch(_){}
+  const bay=e.currentTarget; if(bay && !bay.classList.contains('dragover')) bay.classList.add('dragover'); }
+function jobDragLeave(e){ const bay=e.currentTarget; if(bay && (!e.relatedTarget || !bay.contains(e.relatedTarget))) bay.classList.remove('dragover'); }
+function jobDrop(e, bay){ e.preventDefault();
+  const row=_jdragRow; _jdragRow=null;
+  document.querySelectorAll('.bay.dragover').forEach(b=>b.classList.remove('dragover'));
+  if(row==null) return;
+  const D=window.MRA_DATA||{}; const j=(D.jobs||[]).find(x=>x.row===row); if(!j) return;
+  if((j.bay||'')===bay) return;                      // dropped on its own bay — nothing to do
+  if(!ensureAuth('move '+(j.project||'this trailer')+' to '+bay)) return;
+  shopWrite({ action:'editJob', row:j.row, project:j.project, bay:bay,
+    status:j.status||'', start:j.startISO||'', completion:j.completionISO||'',
+    notes:j.notesRaw||'', client:j.client||'', pm:j.pm||'', pin:CLOSE_PIN, user:CURRENT_USER });
+  j.bay=bay; if(typeof oRecat==='function') oRecat(j);   // move it on-screen now; persists on the next export
+  oApply();
+}
 function toggleClosed(){ SHOWCLOSED=!SHOWCLOSED; renderAll(); }
 function setTractorBtn(){ ['btnTractor','btnTractor2'].forEach(id=>{ const b=document.getElementById(id); if(b){ b.classList.toggle('on',SHOW_TRACTOR); b.textContent=SHOW_TRACTOR?'🚜 Hide tractor issues':'🚜 Show tractor issues'; } }); }
 function toggleTractor(){ SHOW_TRACTOR=!SHOW_TRACTOR; try{localStorage.setItem('mra_show_tractor',SHOW_TRACTOR?'1':'0');}catch(e){} setTractorBtn(); renderAll(); }   // no code needed — it's a view toggle
@@ -5297,7 +5323,7 @@ function renderFloor(D){
     // so a single job (e.g. WFCU in Bay 5 Front) can be shrunk on its own.
     const jcaret = (!WALL && (j.openCount>0 || fl.length))
       ? `<span class="job-collapse" onclick="toggleJob(${j.row})" title="Collapse / expand this job">${jOpen?'▾':'▸'}</span>` : '';
-    return `<div class="job${jc}" id="floorjob-${j.row}"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span></div>`+
+    return `<div class="job${jc}" id="floorjob-${j.row}"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag to move this trailer to another bay (needs code)">⠿</span>`:''}</div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
@@ -5322,7 +5348,7 @@ function renderFloor(D){
     const bodyCls=(opts.scroll?"bay-body autoscroll":"bay-body")+(list.length>1?" wrapjobs":"");
     const col=BAY_COLLAPSED.has(bay);
     const caret=`<span class="bay-collapse">${col?'▸':'▾'}</span>`;
-    return `<div class="bay ${cls}${col?' collapsed':''}${!list.length?' bay-empty':''}" data-bay="${escA(bay)}"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}</div>`+
+    return `<div class="bay ${cls}${col?' collapsed':''}${!list.length?' bay-empty':''}" data-bay="${escA(bay)}" ondragover="jobDragOver(event)" ondragleave="jobDragLeave(event)" ondrop="jobDrop(event,'${escJsAttr(bay)}')"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}</div>`+
       `<div class="st ${stCls}">${stTxt}</div></div><div class="${bodyCls}">${body}</div></div>`;
   };
 
