@@ -319,17 +319,276 @@ function Add-TaskRow($pc, $shared, $pmap, $teamTasks) {
     })
 }
 
+# ============================================================================
+#  SharePoint Lists source (Step 3 of the eliminate-Excel roadmap)
+#  When $env:MRA_LISTS_JSON points at a JSON file (produced by a Power Automate
+#  flow from the four MRA lists), the board is built from THAT instead of the
+#  workbook. Fleetio / Samsara / logistics below are unchanged either way.
+#  Field contract (clean keys the flow's Select must emit):
+#    jobs[]        : bay, project, client, jobNum, start, finish, status, notes, pm
+#    shopTasks[]   : project, jobNum, bay, task, assigned, status, opened, closed, milestone, comments
+#    projectTasks[]: taskId, project, phase, type, task, start, finish, duration,
+#                    assigned, status, pm, milestone, predecessor, sub, subRes,
+#                    order, estDays, estHours, budget, parent, comments
+#    users[]       : name, code, active(, role)
+#    holidays[]    : name, date, country
+# ============================================================================
+
+# ISO 'yyyy-MM-dd' from any date string the flow emits (SharePoint -> ISO 8601;
+# also tolerates m/d/yyyy). Returns $null when blank/unparseable.
+function IsoDay($s) {
+    $s = ([string]$s).Trim(); if ($s -eq '') { return $null }
+    if ($s -match '^(\d{4})-(\d{2})-(\d{2})') { return $matches[0].Substring(0,10) }
+    try { return ([DateTime]::Parse($s)).ToString('yyyy-MM-dd') } catch { return $null }
+}
+# MM/dd/yy display string from an ISO day (matches the workbook path's startText).
+function MdyFromIso($iso) {
+    if (-not $iso) { return '' }
+    try { return ([DateTime]::ParseExact($iso,'yyyy-MM-dd',$null)).ToString('MM/dd/yy') } catch { return '' }
+}
+
+# Project-Tasks row from a plain object (Lists path) -> identical output to Add-TaskRow.
+function Add-TaskRowObj($t, $pmap, $teamTasks) {
+    $name = ([string]$t.project).Trim()
+    if ($name -eq '') { return }
+    $pPhase    = ([string]$t.phase).Trim()
+    $pType     = ([string]$t.type).Trim()
+    $pStatus   = ([string]$t.status).Trim()
+    $pPM       = ([string]$t.pm).Trim()
+    $pMileRaw  = ([string]$t.milestone).Trim()
+    $pTask     = ([string]$t.task).Trim()
+    $pAssigned = ([string]$t.assigned).Trim()
+    $pComments = ([string]$t.comments).Trim()
+    $pDur      = ([string]$t.duration).Trim()
+    $pTaskId   = ([string]$t.taskId).Trim()
+    $pPred     = ([string]$t.predecessor).Trim()
+    $pSubRaw   = ([string]$t.sub).Trim()
+    $pSubRes   = ([string]$t.subRes).Trim()
+    $pOrder    = ([string]$t.order).Trim()
+    $pEstDays  = ([string]$t.estDays).Trim()
+    $pEstHours = ([string]$t.estHours).Trim()
+    $pBudget   = (([string]$t.budget).Trim()) -replace '[$,]',''
+    $pParent   = ([string]$t.parent).Trim()
+    if ($pParent -match '^\d+\.0+$') { $pParent = $pParent -replace '\.0+$','' }
+    if ($pTaskId -match '^\d+\.0+$') { $pTaskId  = $pTaskId  -replace '\.0+$','' }
+    if ($pDur    -match '^\d+\.0+$') { $pDur     = $pDur     -replace '\.0+$','' }
+    $isMile = ($pMileRaw -match '(?i)^(yes|y|true|1)$')
+    $pMile  = if ($isMile) { 'Yes' } else { '' }
+    $isSub  = ($pSubRaw  -match '(?i)^(x|yes|true|1)$')
+    $psd = IsoDay $t.start
+    $pfd = IsoDay $t.finish
+
+    if (-not $pmap.Contains($name)) {
+        $pmap[$name] = [PSCustomObject]@{
+            name = $name; pm = ''; minStart = $null; maxFinish = $null
+            taskCount = 0; doneCount = 0; pctSum = 0
+            estDays = 0.0; estHours = 0.0; budget = 0.0
+            milestones = (New-Object System.Collections.ArrayList)
+            tasks      = (New-Object System.Collections.ArrayList)
+        }
+    }
+    $o = $pmap[$name]
+    $o.taskCount++
+    if ($pStatus -eq 'Completed') { $o.doneCount++ }
+    $tp = 0
+    if ($pStatus -eq 'Completed') { $tp = 100 }
+    elseif ($pStatus -match '(\d{1,3})\s*%') { $tp = [int]$matches[1]; if ($tp -gt 100) { $tp = 100 } elseif ($tp -lt 0) { $tp = 0 } }
+    $o.pctSum += $tp
+    if ($pEstDays  -match '^-?\d+(\.\d+)?$') { $o.estDays  += [double]$pEstDays }
+    if ($pEstHours -match '^-?\d+(\.\d+)?$') { $o.estHours += [double]$pEstHours }
+    if ($pBudget   -match '^-?\d+(\.\d+)?$') { $o.budget   += [double]$pBudget }
+    if ($pPM -ne '' -and $o.pm -eq '') { $o.pm = $pPM }
+    if ($psd -and ($null -eq $o.minStart  -or $psd -lt $o.minStart))  { $o.minStart  = $psd }
+    if ($pfd -and ($null -eq $o.maxFinish -or $pfd -gt $o.maxFinish)) { $o.maxFinish = $pfd }
+    if ($isMile) {
+        $md = if ($pfd) { $pfd } elseif ($psd) { $psd } else { $null }
+        if ($md) { [void]$o.milestones.Add([PSCustomObject]@{
+            name = $pTask; dateISO = $md
+            owner = $pAssigned; status = $pStatus; phase = $pPhase
+            done = ($pStatus -eq 'Completed') }) }
+    }
+    if ($pAssigned -ne '' -and $pStatus -ne 'Completed') {
+        $dueISO = if ($pfd) { $pfd } elseif ($psd) { $psd } else { $null }
+        [void]$teamTasks.Add([PSCustomObject]@{
+            assignee = $pAssigned; project = $name; task = $pTask
+            dueISO = $dueISO; status = $pStatus
+        })
+    }
+    [void]$o.tasks.Add([PSCustomObject]@{
+        id = $pTaskId; t = $pTask; phase = $pPhase; type = $pType; who = $pAssigned
+        startISO = $psd; finISO = $pfd; dur = $pDur; st = $pStatus; ml = $pMile
+        cm = $pComments; pred = $pPred; sub = $isSub; parent = $pParent; subRes = $pSubRes
+        ord = $(if ($pOrder    -match '^-?\d+(\.\d+)?$') { [double]$pOrder    } else { $null })
+        eD  = $(if ($pEstDays  -match '^-?\d+(\.\d+)?$') { [double]$pEstDays  } else { $null })
+        eH  = $(if ($pEstHours -match '^-?\d+(\.\d+)?$') { [double]$pEstHours } else { $null })
+        bud = $(if ($pBudget   -match '^-?\d+(\.\d+)?$') { [double]$pBudget   } else { $null })
+        done = ($pStatus -eq 'Completed')
+    })
+}
+
+# Build the whole board ($jobs/$projects/$teamTasks/$users/$holidays) from the Lists JSON.
+function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
+    $jobs      = New-Object System.Collections.ArrayList
+    $projects  = New-Object System.Collections.ArrayList
+    $teamTasks = New-Object System.Collections.ArrayList
+    $users     = New-Object System.Collections.ArrayList
+    $holidays  = New-Object System.Collections.ArrayList
+
+    $L = Get-Content -Raw -LiteralPath $jsonPath | ConvertFrom-Json
+
+    # --- Shop Tasks -> byProj / byJob match maps + flat list (parity w/ Read-ShopTasks) ---
+    $byProj = @{}; $byJob = @{}; $stAll = New-Object System.Collections.ArrayList
+    foreach ($r in @($L.shopTasks)) {
+        $task = ([string]$r.task).Trim(); if ($task -eq '') { continue }
+        $proj = ([string]$r.project).Trim()
+        $jobn = ([string]$r.jobNum).Trim()
+        $assigned = ([string]$r.assigned).Trim()
+        $od = IsoDay $r.opened
+        $cl = IsoDay $r.closed
+        $status = ([string]$r.status).Trim()
+        $mile   = ([string]$r.milestone).Trim()
+        $cmt    = ([string]$r.comments).Trim()
+        $isDone = ($status -match '(?i)done|complete') -or ($null -ne $cl)
+        $obj = [PSCustomObject]@{
+            task = $task; who = $assigned; opened = $od; closed = $cl
+            status = $status; milestone = $mile; comments = $cmt; done = $isDone
+            proj = $proj; jobNum = $jobn; matched = $false
+        }
+        [void]$stAll.Add($obj)
+        if ($proj -ne '') { $pk = $proj.ToLower(); if (-not $byProj.ContainsKey($pk)) { $byProj[$pk] = New-Object System.Collections.ArrayList }; [void]$byProj[$pk].Add($obj) }
+        if ($jobn -ne '') { $jk = $jobn.ToLower(); if (-not $byJob.ContainsKey($jk))  { $byJob[$jk]  = New-Object System.Collections.ArrayList }; [void]$byJob[$jk].Add($obj) }
+    }
+
+    # --- Jobs (Input equivalent) ---
+    $rix = 3
+    foreach ($jr in @($L.jobs)) {
+        $proj = ([string]$jr.project).Trim()
+        if ($proj -eq '') { continue }
+        $rix++
+        $bay    = ([string]$jr.bay).Trim()
+        $client = ([string]$jr.client).Trim()
+        $job    = ([string]$jr.jobNum).Trim()
+        $status = ([string]$jr.status).Trim()
+        $notes  = [string]$jr.notes
+        $pm     = ([string]$jr.pm).Trim()
+        $startISO = IsoDay $jr.start
+        $compISO  = IsoDay $jr.finish
+        $startTxt = MdyFromIso $startISO
+        $compTxt  = MdyFromIso $compISO
+
+        $stRows = $null
+        $pk = $proj.ToLower(); $jk = $job.ToLower()
+        if ($proj -ne '' -and $byProj.ContainsKey($pk)) { $stRows = $byProj[$pk] }
+        elseif ($job -ne '' -and $byJob.ContainsKey($jk)) { $stRows = $byJob[$jk] }
+        if ($stRows -and $stRows.Count -gt 0) {
+            foreach ($r in $stRows) { $r.matched = $true }
+            $t = Build-TasksFromRows $stRows
+        } else {
+            $t = Parse-Tasks $notes
+        }
+
+        $category = 'bay'
+        if ($status -eq 'Leave' -or $bay -eq 'APL/Holidays') { $category = 'leave' }
+        elseif ($bay -notin $PhysicalBays) { $category = 'pipeline' }
+
+        $rowKey = if ($null -ne $jr.id -and ([string]$jr.id) -ne '') { $jr.id } else { $rix }
+        [void]$jobs.Add([PSCustomObject]@{
+            row = $rowKey; bay = $bay; project = $proj; client = $client; jobNum = $job
+            status = $status; pm = $pm; startISO = $startISO; completionISO = $compISO
+            startText = $startTxt; completionText = $compTxt; category = $category
+            notesRaw = $notes
+            openTasks = $t.open; openCount = $t.openCount; doneCount = $t.doneCount; salOpen = $t.salOpen; doneTasks = $t.done; tasks = $t.tasks
+        })
+    }
+
+    # General lane: unmatched Shop Tasks whose Project is "General"
+    $genRows = @($stAll | Where-Object { -not $_.matched -and ((([string]$_.proj) -replace '[^\w ]','').Trim().ToLower() -eq 'general') })
+    if ($genRows.Count -gt 0) {
+        foreach ($r in $genRows) { $r.matched = $true }
+        $gt = Build-TasksFromRows $genRows
+        [void]$jobs.Add([PSCustomObject]@{
+            row = 'general'; bay = 'General'; project = "$([char]0xD83D)$([char]0xDEE0) General"; client = ''; jobNum = ''
+            status = ''; pm = ''; startISO = $null; completionISO = $null
+            startText = ''; completionText = ''; category = 'general'; notesRaw = ''
+            openTasks = $gt.open; openCount = $gt.openCount; doneCount = $gt.doneCount; salOpen = $gt.salOpen; doneTasks = $gt.done; tasks = $gt.tasks
+        })
+    }
+
+    # Surface Shop Tasks rows that matched no job (parity with the workbook path).
+    $stOrphans = @($stAll | Where-Object { -not $_.matched })
+    $stLog = Join-Path $ScriptDir 'shoptasks-unmatched.txt'
+    if ($stOrphans.Count -gt 0) {
+        $stMsg = @("=== Shop Tasks rows with NO matching job  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  (Lists source) ===",
+                   "These did NOT appear on the dashboard. Fix Project or Job# to match a job, then re-export.","")
+        $stMsg += $stOrphans | ForEach-Object { "  Project='$($_.proj)'   Job#='$($_.jobNum)'   Task='$($_.task)'" }
+        $stMsg | Out-File $stLog -Encoding utf8
+        Write-Output "  -> WARNING: $($stOrphans.Count) Shop Tasks row(s) matched no job - see shoptasks-unmatched.txt"
+    } elseif (Test-Path $stLog) {
+        Remove-Item $stLog -ErrorAction SilentlyContinue
+    }
+
+    # --- Project Tasks -> portfolio ---
+    $pmap = [ordered]@{}
+    foreach ($pt in @($L.projectTasks)) { Add-TaskRowObj $pt $pmap $teamTasks }
+    foreach ($o in $pmap.Values) {
+        $pct = if ($o.taskCount -gt 0) { [math]::Round($o.pctSum / $o.taskCount) } else { 0 }
+        [void]$projects.Add([PSCustomObject]@{
+            name = $o.name; pm = $o.pm
+            startISO = $o.minStart; finishISO = $o.maxFinish
+            taskCount = $o.taskCount; doneCount = $o.doneCount; pct = $pct
+            estDays = $o.estDays; estHours = $o.estHours; budget = $o.budget
+            milestones = @($o.milestones); tasks = @($o.tasks)
+        })
+    }
+
+    # --- Users -> name + hashed code (raw codes never leave) ---
+    foreach ($u in @($L.users)) {
+        $name = ([string]$u.name).Trim()
+        $code = ([string]$u.code).Trim()
+        $act  = ([string]$u.active).Trim()
+        if ($name -eq '' -or $code -eq '') { continue }
+        if ($act -match '(?i)^(no|n|inactive|0|false)$') { continue }
+        if ($code -match '^\d+\.0+$') { $code = $code -replace '\.0+$','' }
+        [void]$users.Add([PSCustomObject]@{ name = $name; h = (Get-PinHash $code) })
+    }
+
+    # --- Holidays ---
+    foreach ($h in @($L.holidays)) {
+        $name = ([string]$h.name).Trim()
+        $hd   = IsoDay $h.date
+        $ctry = ([string]$h.country).Trim().ToUpper()
+        if ($name -eq '' -or -not $hd) { continue }
+        if ($ctry -notin @('US','CA','BOTH')) { $ctry = 'US' }
+        [void]$holidays.Add([PSCustomObject]@{ name = $name; dateISO = $hd; country = $ctry })
+    }
+
+    return [PSCustomObject]@{ jobs = $jobs; projects = $projects; teamTasks = $teamTasks; users = @($users); holidays = @($holidays) }
+}
+
+# --- Data source: SharePoint Lists JSON (gated) OR the workbook ---------------
+$jobs      = New-Object System.Collections.ArrayList
+$projects  = New-Object System.Collections.ArrayList
+$teamTasks = New-Object System.Collections.ArrayList
+$users     = @()
+$holidays  = @()
+
+$ListsJson = $env:MRA_LISTS_JSON
+if ($ListsJson -and (Test-Path $ListsJson)) {
+    # Read straight from the four SharePoint Lists (shaped to JSON by Power Automate).
+    Write-Output "Reading board from SharePoint Lists JSON: $ListsJson"
+    $built = Build-FromLists $ListsJson $PhysicalBays $ScriptDir
+    $jobs = $built.jobs; $projects = $built.projects; $teamTasks = $built.teamTasks
+    $users = $built.users; $holidays = $built.holidays
+    Write-Output "  -> Lists source: $($jobs.Count) jobs, $($projects.Count) projects, $(@($users).Count) users, $(@($holidays).Count) holidays"
+}
+else {
+
 # --- Copy workbook to temp (avoids any file lock) and open as zip ------------
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("mra_" + [System.IO.Path]::GetFileName($Workbook))
 try { [System.IO.File]::Copy($Workbook, $tmp, $true) }
 catch { $tmp = $Workbook }   # fall back to reading in place
 
 $zip = [System.IO.Compression.ZipFile]::OpenRead($tmp)
-$jobs = New-Object System.Collections.ArrayList
-$projects = New-Object System.Collections.ArrayList
-$teamTasks = New-Object System.Collections.ArrayList
-$users = @()
-$holidays = @()
 try {
     $nsMain = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
     $nsRel  = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
@@ -510,6 +769,8 @@ try {
     $zip.Dispose()
     if ($tmp -ne $Workbook) { try { Remove-Item $tmp -Force -ErrorAction SilentlyContinue } catch {} }
 }
+
+} # --- end workbook-source branch (else of the Lists-JSON gate) ---------------
 
 # --- Write payload ----------------------------------------------------------
 $now = Get-Date
