@@ -225,11 +225,10 @@
   .bay-collapse{display:none; color:#cdd8e6; font-size:12px; font-weight:800; line-height:1; margin-right:8px; padding:2px 7px;
     border:1px solid var(--line); border-radius:6px; background:var(--panel); user-select:none; vertical-align:middle}
   body.light .bay-collapse{color:#586a7e}   /* the light text was invisible on white */
-  body:not(.wall) .bay-head{cursor:pointer}
-  body:not(.wall) .bay-head:hover .bay-collapse{border-color:#7aa2d6; color:#7aa2d6}
-  body:not(.wall) .bay-collapse{display:inline-block}
-  body:not(.wall) .bay.collapsed .bay-body{display:none}
-  body.wall .bayallbtn{display:none !important}   /* collapse-all is a laptop/desktop convenience, not for the TV */
+  .bay-head{cursor:pointer}
+  .bay-head:hover .bay-collapse{border-color:#7aa2d6; color:#7aa2d6}
+  .bay-collapse{display:inline-block}
+  .bay.collapsed .bay-body{display:none}   /* collapse/expand now works in wall (TV) mode too */
   /* Per-job collapse caret (normal view) — shrink a single job's tasks right by its name */
   .job-collapse{cursor:pointer; color:#9fb0c4; font-weight:800; font-size:11px; line-height:1; margin-right:6px; user-select:none; vertical-align:middle}
   .job-collapse:hover{color:#7aa2d6}
@@ -2125,6 +2124,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"5.5", date:"2026-06-23", title:"Collapse / expand bays in Wall (TV) mode", items:[
+    "The bay tiles (Bay 2 Front, Bay 3 Back, …) can now be <b>collapsed/expanded on the TV wall</b> too — click a bay's title (▾/▸) to collapse just that one, or use <b>⊟ Collapse all / ⊞ Expand all</b>. Previously this was laptop/desktop only. Remembered per screen, so the TV keeps your layout." ] },
   { rev:"5.4", date:"2026-06-23", title:"On-Hold trailers drop off the crew queues", items:[
     "Putting a trailer <b>On Hold</b> now removes its tasks from the bottom <b>🧰 Open Tasks by Assignee</b> queues (Sal / Wrap / Electricians / Doug / Josh / Jeff) — so a parked trailer doesn't clutter the active to-do lists. The tasks stay on the trailer's bay card and the Next Up / On Hold tile, and come back the moment you take it off hold." ] },
   { rev:"5.3", date:"2026-06-22", title:"Date format + detailed Gantt list-order", items:[
@@ -2720,7 +2721,7 @@ function toggleJob(row){
 function toggleBay(bay){ expandedBays.has(bay)?expandedBays.delete(bay):expandedBays.add(bay); renderAll(); }
 // Per-tile collapse on the FLOOR (normal view) — remembered per device. Toggles in place (no re-render, no scroll reset).
 let BAY_COLLAPSED=new Set(); try{ BAY_COLLAPSED=new Set(JSON.parse(localStorage.getItem('mra_bay_collapsed')||'[]')); }catch(e){}
-function toggleBayTile(el){ if(document.body.classList.contains('wall')) return;
+function toggleBayTile(el){
   const head=el.classList.contains('bay-head')?el:el.closest('.bay-head'); const card=el.closest('.bay'); if(!card||!head) return;
   const bay=head.dataset.bay; const caret=card.querySelector('.bay-collapse');
   const now=!card.classList.contains('collapsed'); card.classList.toggle('collapsed',now);
@@ -2728,7 +2729,7 @@ function toggleBayTile(el){ if(document.body.classList.contains('wall')) return;
   if(now) BAY_COLLAPSED.add(bay); else BAY_COLLAPSED.delete(bay);
   try{ localStorage.setItem('mra_bay_collapsed', JSON.stringify([...BAY_COLLAPSED])); }catch(e){} }
 // Collapse / expand EVERY bay tile at once (next to the Bay Status Actions menu).
-function setAllBays(collapse){ if(document.body.classList.contains('wall')) return;
+function setAllBays(collapse){
   const cards=document.querySelectorAll('#bays .bay[data-bay]');
   if(collapse){ cards.forEach(c=>{ const b=c.getAttribute('data-bay'); if(b) BAY_COLLAPSED.add(b); }); }
   else { BAY_COLLAPSED.clear(); }
