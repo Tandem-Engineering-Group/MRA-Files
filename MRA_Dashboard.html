@@ -165,6 +165,10 @@
   .g-bar.g-draggable{cursor:grab}
   .g-bar.g-reordering{opacity:.5; outline:2px solid var(--amber); cursor:grabbing}
   .g-msline{position:absolute; top:0; bottom:0; border-left:1.5px dashed rgba(245,158,11,.82); z-index:1; pointer-events:none}
+  .g-link{position:absolute; right:-5px; top:50%; transform:translateY(-50%); width:11px; height:11px; border-radius:50%; background:#a78bfa; border:2px solid #fff; cursor:crosshair; z-index:5; opacity:.85}
+  .g-link:hover{opacity:1; transform:translateY(-50%) scale(1.2)}
+  .g-bar.linktarget{outline:2px solid #a78bfa; outline-offset:1px}
+  #gLinkLine{position:fixed; z-index:340; pointer-events:none; border-top:2px dashed #a78bfa; height:0; transform-origin:0 0}
   .g-row.g-msrow{background:rgba(245,158,11,.09)}
   .g-row.g-msrow .g-lbl{color:#fcd34d; font-weight:700}
   /* ---- Light-mode polish for the Gantt (dark-tuned white rgba washes out / disappears on white) ---- */
@@ -227,7 +231,8 @@
   body.light .bay-collapse{color:#586a7e}   /* the light text was invisible on white */
   .bay-head{cursor:pointer}
   .bay-head:hover .bay-collapse{border-color:#7aa2d6; color:#7aa2d6}
-  .jgrip{cursor:grab; color:var(--muted); margin-left:6px; font-size:12px; user-select:none; opacity:.55}
+  .jgrip{display:none; cursor:grab; color:var(--muted); margin-left:6px; font-size:12px; user-select:none; opacity:.55}
+  body.closemode .jgrip{display:inline-block}
   .jgrip:hover{opacity:1; color:var(--amber)}
   .jgrip:active{cursor:grabbing}
   .bay.dragover{outline:2px dashed var(--amber); outline-offset:-2px; background:rgba(245,158,11,.07)}
@@ -2135,6 +2140,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.2", date:"2026-06-23", title:"Detailed Gantt: drag-to-link tasks (predecessors), Smartsheet-style", items:[
+    "In a project's detailed Gantt (edit mode), every task bar now has a small <b>\u25cf purple dot</b> on its right end. <b>Drag that dot onto a later task</b> and it <b>links them</b> — the second task's <b>Predecessor</b> is set to the first (a live line follows your cursor; the target highlights). Loops are blocked.",
+    "Linked tasks now show <b>purple arrows</b> from each predecessor into its successor, so the dependencies are visible right on the Gantt. (The move/resize drags are unchanged \u2014 the dot is separate from the resize ends.)" ] },
   { rev:"6.1", date:"2026-06-23", title:"Drag a trailer between bays", items:[
     "On the FLOOR / Bay Status board, each trailer card now has a small <b>\u2839 grip</b> — <b>drag it onto another bay tile to move that trailer there</b> (needs your code). It rides the same save as the \u270e edit form, so it sticks; the card hops to the new bay right away. Mouse/desktop for now." ] },
   { rev:"6.0", date:"2026-06-23", title:"Detailed Gantt: milestones are now ◆ points (not collapsible gates)", items:[
@@ -2732,7 +2740,7 @@ document.addEventListener('keydown',e=>{ if(GFS!=='project'||!(e.ctrlKey||e.meta
 document.addEventListener('click',e=>{ const p=document.getElementById('barPop');
   if(p && p.classList.contains('show') && !p.contains(e.target) && !(e.target.closest && e.target.closest('.g-bar'))) closeBarPop(); });
 // Drag-to-reschedule task bars in the single-project detail view (handlers no-op unless GFS==='project').
-{ const gfs=document.getElementById('gfsGantt'); if(gfs){ gfs.addEventListener('mousedown',pdragStart); gfs.addEventListener('mousemove',pdragHover); } }
+{ const gfs=document.getElementById('gfsGantt'); if(gfs){ gfs.addEventListener('mousedown',gLinkStart); gfs.addEventListener('mousedown',pdragStart); gfs.addEventListener('mousemove',pdragHover); } }
 
 const expandedJobs=new Set(), expandedBays=new Set(), collapsedJobs=new Set();
 let SHOWCLOSED=false, SHOWSALCLOSED=false;
@@ -5145,6 +5153,7 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
       } else {
         inner += `<span class="g-barlabel">${esc(r.barLabel||'')}</span>` + (showPct?`<span class="g-pct">${r.pct}%</span>`:'');
       }
+      if(r.linkId!=null) inner+=`<span class="g-link" data-link="${escA(String(r.linkId))}" title="Drag onto the task that comes AFTER this → links them (predecessor)"></span>`;
       bar=`<div class="g-bar${r.conflict?' conflict':''}${r.done?' done':''}${r.dragId!=null?' g-draggable':''}"${onclk}${dragAttr} style="${styleAttr}" title="${ttl}">${inner}</div>${outside}`;
     } else bar=`<div class="g-out">— outside range —</div>`;
     const ms=(r.milestones||[]).map(m=>{const p=msPos(m.dateISO,win);
@@ -7437,6 +7446,7 @@ function pdragHover(e){
 }
 function pdragStart(e){
   if(GFS!=='project' || e.button) return;
+  if(e.target.closest('.g-link')) return;   // (B) the connector dot starts a LINK drag, not a reschedule
   const bar=e.target.closest('.g-bar[data-tid]'); if(!bar) return;
   const ctx=window._pdrag; if(!ctx) return;
   const t=ctx.byId[bar.getAttribute('data-tid')]; if(!t) return;
@@ -7545,6 +7555,62 @@ function pdragSave(project, t, startISO, finISO){
   if(PD_UNDO.length>60) PD_UNDO.shift();
   PD_REDO.length=0;                                   // a fresh change clears the redo trail
   pdApplyDates(project, t.id, startISO, finISO);
+}
+/* ---- (B) Drag-to-link predecessors (Smartsheet-style). Drag a bar's ● connector onto the task that
+   comes AFTER it → that task's predecessor = this one. Live line while dragging + persistent arrows. ---- */
+function gLinkStart(e){
+  if(GFS!=='project' || e.button) return;
+  const dot=e.target.closest('.g-link'); if(!dot) return;
+  const ctx=window._pdrag; if(!ctx) return;
+  const srcId=dot.getAttribute('data-link'); if(!srcId || !ctx.byId[srcId]) return;
+  if(!CLOSE_PIN){ ensureAuth('link tasks'); return; }
+  e.preventDefault(); e.stopPropagation();
+  const dr=dot.getBoundingClientRect(); const x0=dr.left+dr.width/2, y0=dr.top+dr.height/2;
+  const line=document.createElement('div'); line.id='gLinkLine'; document.body.appendChild(line);
+  let target=null;
+  const onMove=ev=>{
+    const dx=ev.clientX-x0, dy=ev.clientY-y0, len=Math.hypot(dx,dy), ang=Math.atan2(dy,dx)*180/Math.PI;
+    line.style.left=x0+'px'; line.style.top=y0+'px'; line.style.width=len+'px'; line.style.transform='rotate('+ang+'deg)'; line.style.display='block';
+    const el=document.elementFromPoint(ev.clientX,ev.clientY); const bar=(el&&el.closest)?el.closest('.g-bar[data-tid]'):null;
+    const tid=bar&&bar.getAttribute('data-tid');
+    if(target && target.bar!==bar){ target.bar.classList.remove('linktarget'); target=null; }
+    if(bar && tid && tid!==String(srcId)){ bar.classList.add('linktarget'); target={bar,tid}; }
+  };
+  const onUp=()=>{ document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp);
+    if(line.parentNode) line.parentNode.removeChild(line);
+    if(target){ target.bar.classList.remove('linktarget'); gLinkApply(ctx, String(srcId), String(target.tid)); } };
+  document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
+}
+function gLinkApply(ctx, srcId, tgtId){
+  if(srcId===tgtId) return;
+  const p=oProj(ctx.project); if(!p) return;
+  const tgt=(p.tasks||[]).find(x=>String(x.id)===tgtId), src=ctx.byId[srcId]; if(!tgt||!src) return;
+  if(String(tgt.pred||'')===srcId) return;                       // already linked
+  let cur=src, hops=0; while(cur && hops++<100){ if(String(cur.id)===tgtId){ alert('That link would make a loop — skipped.'); return; }
+    const pid=cur.pred; cur=(pid!=null&&pid!=='')?ctx.byId[String(pid)]:null; }   // cycle guard
+  tgt.pred=srcId;
+  if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project:ctx.project, pin:CLOSE_PIN, user:CURRENT_USER, id:tgt.id, taskOld:tgt.t, pred:srcId });
+  if(typeof oRecomputeProject==='function') oRecomputeProject(p);
+  renderGanttFS(); if(typeof renderAll==='function') renderAll();
+}
+function pdDrawLinks(){
+  const cont=document.getElementById('gfsGantt'), ctx=window._pdrag; if(!cont||!ctx) return;
+  const old=cont.querySelector('.g-deplines'); if(old) old.remove();
+  const p=oProj(ctx.project); if(!p) return;
+  if(getComputedStyle(cont).position==='static') cont.style.position='relative';
+  const cr=cont.getBoundingClientRect(), sx=cont.scrollLeft, sy=cont.scrollTop;
+  const bars={}; cont.querySelectorAll('.g-bar[data-tid]').forEach(b=>{ bars[b.getAttribute('data-tid')]=b.getBoundingClientRect(); });
+  const segs=[];
+  (p.tasks||[]).forEach(t=>{ const pid=t.pred; if(pid==null||pid==='') return;
+    const a=bars[String(pid)], b=bars[String(t.id)]; if(!a||!b) return;
+    segs.push({ x1:a.right-cr.left+sx, y1:a.top+a.height/2-cr.top+sy, x2:b.left-cr.left+sx, y2:b.top+b.height/2-cr.top+sy }); });
+  if(!segs.length) return;
+  const W=Math.max(cont.scrollWidth,cont.clientWidth), H=Math.max(cont.scrollHeight,cont.clientHeight);
+  let paths='';
+  segs.forEach(s=>{ const midx=Math.max(s.x1+10, Math.min(s.x2-6,(s.x1+s.x2)/2)), ex=Math.max(s.x2-7,s.x1);
+    paths+=`<path d="M${s.x1.toFixed(1)} ${s.y1.toFixed(1)} H${midx.toFixed(1)} V${s.y2.toFixed(1)} H${ex.toFixed(1)}" fill="none" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#gdeparrow)" opacity="0.9"/>`; });
+  cont.insertAdjacentHTML('beforeend',
+    `<svg class="g-deplines" width="${W}" height="${H}" style="position:absolute;left:0;top:0;pointer-events:none;z-index:3;overflow:visible"><defs><marker id="gdeparrow" markerWidth="8" markerHeight="8" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 z" fill="#a78bfa"/></marker></defs>${paths}</svg>`);
 }
 function pdUndo(){ if(!PD_UNDO.length) return; const a=PD_UNDO.pop(); PD_REDO.push(a);
   if(a.kind==='ord') pdApplyOrderById(a.project, a.id, a.oldOrd); else pdApplyDates(a.project, a.id, a.oldStart, a.oldFin); }
@@ -7730,6 +7796,7 @@ function renderGanttFS(){
         startISO:s, endISO:f, color, milestones:[], done, noBar:(!s||bad), cls:t.sub?'g-subrow':'',
         pct:(!done&&!bad&&tp!=null&&tp>0&&tp<100)?tp:undefined,
         dragId:canDrag?t.id:null,
+        linkId:(CLOSE_PIN&&t.id!=null&&t.id!==''&&s&&!bad)?t.id:null,   // (B) connector dot for drag-to-link predecessors (edit mode only)
         gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null,
         barTitle:canDrag?((t.t||'')+'\n'+fmtMDY(s)+' – '+fmtMDY(f)+'\n'+dragHelp):(bad?((t.t||'')+'\n⚠ check this date: '+badDate):null) };
     };
@@ -7753,9 +7820,10 @@ function renderGanttFS(){
     };
     sorted.forEach(t=>{ if(/yes/i.test(t.ml||'')) rows.push(msRow(t)); else rows.push(taskRow(t)); });
     renderGantt(cont, rows, win, {dates:true, showDays:true, mlines});
+    try{ pdDrawLinks(); }catch(_){}   // (B) draw predecessor → successor arrows over the bars
     window._gfsPrint={title:titleEl.textContent, rows, win, today};
     window._pdrag={win, project:p.name, byId};
-    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone (a point at its date — click to edit)</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ edit mode: drag a bar — middle ←/→ moves dates · middle ↑/↓ reorders · ends change start/finish</span>`;
+    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone (a point at its date — click to edit)</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:#a78bfa">● drag this dot (a bar's right end) onto a later task → links them</span><span style="color:var(--muted)">✦ edit mode: drag a bar — middle ←/→ moves dates · middle ↑/↓ reorders · ends change start/finish</span>`;
     warnEl.style.color=flagged?'#fca5a5':'var(--muted)';
     warnEl.textContent=(p.pm?('PM '+p.pm+'  ·  '):'')+((p.taskCount||p.tasks.length)+' tasks')+(p.pct!=null?('  ·  '+p.pct+'% complete'):'')+(flagged?('  ·  ⚠ '+flagged+(flagged>1?' task dates look':' task date looks')+' off — fix in the workbook'):'');
     return;
