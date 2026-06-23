@@ -1053,6 +1053,8 @@
         <span class="tblabel">📋 Project Intake:</span>
         <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260618c" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx) — same columns & look as the schedule (now with a Sub column for subtasks + a how-to note up top), so you can upload it, drop it in the Intake Inbox, or paste straight into Excel">⬇ Download Template</a>
         <button class="editbtn" onclick="openUpload()" title="Upload a filled intake template right here — it loads into the schedule on the next ~15-min cycle">⬆ Upload Filled</button>
+        <select id="dlProjSel" class="editbtn" onmousedown="dlFillProjects()" style="padding:4px 6px" title="Pick a project to download as an editable Excel template"><option value="">— pick a project —</option></select>
+        <button class="editbtn" onclick="downloadProjectXlsx()" title="Download the picked project's tasks as an Excel template (same format as Upload Filled) — edit/add tasks offline, then ⬆ Upload Filled to send it back">⬇ Download a Project</button>
         <button class="editbtn" onclick="openIntakeHow()" title="Step-by-step: how to download, fill, and load a project">ⓘ How to</button>
       </span>
       <span class="tbgroup" style="margin-left:auto">
@@ -2129,6 +2131,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"5.9", date:"2026-06-23", title:"Download a project to Excel (round-trips with Upload)", items:[
+    "PROJECTS tab → 📋 Project Intake: new project picker + ⬇ Download a Project. Pick any project and it downloads that project's tasks as an .xlsx in the exact same template format the ⬆ Upload Filled button reads.",
+    "Round-trip: download a project, edit or add task rows offline in Excel, then ⬆ Upload Filled to send it back — same project name updates it, a new name creates a new project." ] },
   { rev:"5.8", date:"2026-06-23", title:"Project task: Duration (work days) auto-sets Finish", items:[
     "Add/Edit Project Task now has a <b>Duration (work days)</b> field. Type a Start date + a number of work days and it <b>auto-fills the Finish date</b>, skipping weekends and company holidays. Change the dates and it shows the work-day span back. (Al's auto-duration ask.)" ] },
   { rev:"5.7", date:"2026-06-23", title:"Fix: collapsing a multi-job bay in Wall mode", items:[
@@ -4849,6 +4854,47 @@ function submitUpload(){
   }).catch(()=>{ msg.style.color="var(--red)"; msg.textContent="Couldn't reach the service — try again."; btn.textContent="Send to schedule"; btn.disabled=false; });
 }
 
+/* ---- Download ONE project as an editable intake template (round-trips with ⬆ Upload Filled) ---- */
+function dlFillProjects(){
+  const sel=document.getElementById('dlProjSel'); if(!sel) return;
+  const cur=sel.value;
+  const names=(((window.MRA_DATA||{}).projects)||[]).map(p=>p.name).filter(Boolean).sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML='<option value="">— pick a project —</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if(cur) sel.value=cur;
+}
+function downloadProjectXlsx(){
+  const sel=document.getElementById('dlProjSel'); const name=sel?sel.value:'';
+  if(!name){ alert("Pick a project from the dropdown first."); if(sel) sel.focus(); return; }
+  ensureXLSX(err=>{
+    if(err){ alert("Couldn't load the spreadsheet writer (network blocked?). Try again on a connected device."); return; }
+    const p=(((window.MRA_DATA||{}).projects)||[]).find(x=>(x.name||'')===name);
+    if(!p){ alert("Project not found — try refreshing the page."); return; }
+    const pm=p.pm||"";
+    // Header + task layout EXACTLY mirror the upload parser (sheet 'Enter Here', cols A=Project … L=Comments, O=Sub).
+    const H=["Project","Phase","Type","Task","Start","Finish","Duration","Assigned To","Status","PM","Milestone","Comments","Task ID","Predecessor","Sub"];
+    const aoa=[
+      ["MRA Project Intake — edit or add task rows below, then use ⬆ Upload Filled to send it back. Keep the Project name to UPDATE this project; rename it to create a NEW one."],
+      [],
+      ["Project / Client:", p.name],
+      ["Project Manager:", pm],
+      [],
+      H
+    ];
+    (p.tasks||[]).forEach(t=>{
+      const ml=(t.ml===true||t.ml==='Yes'||/^y/i.test(String(t.ml||'')))?"Yes":"";
+      aoa.push([ p.name, t.phase||"", t.type||"", t.t||"", t.startISO||"", t.finISO||"",
+                 (t.dur!=null&&t.dur!==''?String(t.dur):""), t.who||"", t.st||"", pm, ml, t.cm||"",
+                 (t.id!=null?String(t.id):""), t.pred||"", t.sub?"x":"" ]);
+    });
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[{wch:24},{wch:18},{wch:12},{wch:42},{wch:11},{wch:11},{wch:9},{wch:18},{wch:14},{wch:14},{wch:9},{wch:32},{wch:8},{wch:11},{wch:5}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Enter Here");
+    const safe=(name.replace(/[^\w\- ]+/g,'').trim()||"project").slice(0,40);
+    XLSX.writeFile(wb, "MRA_"+safe+".xlsx");
+  });
+}
+
 function classify(job, today){
   const s=(job.status||"").toLowerCase();
   let overdue=false,dueSoon=false,daysLeft=null;
@@ -5507,6 +5553,7 @@ function renderProjects(D){
   const archN=allProjects.filter(projArchived).length;
   const projects = SHOW_ARCHIVED ? allProjects : allProjects.filter(p=>!projArchived(p));   // auto-archive wrapped projects off the active board
   projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
+  try{ dlFillProjects(); }catch(e){}   // keep the ⬇ Download a Project picker current
   { const ab=document.getElementById('archToggle'); if(ab){ ab.classList.toggle('on',SHOW_ARCHIVED);
     ab.textContent = SHOW_ARCHIVED ? '🗄 Hide archived' : ('🗄 Show archived'+(archN?(' ('+archN+')'):'')); } }
 
