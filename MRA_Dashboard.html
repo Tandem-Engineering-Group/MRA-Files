@@ -2131,6 +2131,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.0", date:"2026-06-23", title:"Detailed Gantt: milestones are now ◆ points (not collapsible gates)", items:[
+    "In a project's detailed Gantt, a <b>milestone</b> now shows as a <b>◆ diamond at its date</b> instead of a collapsible 'gate' that grouped the tasks under it (per Al). Tasks just list in order; milestones sit inline as points. Click a milestone row to edit it. Regular task bars still drag-to-reschedule as before." ] },
   { rev:"5.9", date:"2026-06-23", title:"Download a project to Excel (round-trips with Upload)", items:[
     "PROJECTS tab → 📋 Project Intake: new project picker + ⬇ Download a Project. Pick any project and it downloads that project's tasks as an .xlsx in the exact same template format the ⬆ Upload Filled button reads.",
     "Round-trip: download a project, edit or add task rows offline in Excel, then ⬆ Upload Filled to send it back — same project name updates it, a new name creates a new project." ] },
@@ -7704,41 +7706,29 @@ function renderGanttFS(){
         gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null,
         barTitle:canDrag?((t.t||'')+'\n'+fmtMDY(s)+' – '+fmtMDY(f)+'\n'+dragHelp):(bad?((t.t||'')+'\n⚠ check this date: '+badDate):null) };
     };
-    // Group lead-up tasks under each milestone GATE (a collapsible header). Tasks stay draggable;
-    // a milestone shows as a ◆ gate (with a faint line across the chart) you can collapse/expand.
+    // #8 (Al): a milestone is a ◆ POINT at its date — NOT a collapsible gate that groups tasks.
+    // Every task renders in order; milestone tasks show as a diamond (no bar), the rest as bars.
     const _plist=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>!(PD_HIDEDONE&&projIsDone(t)));
     const _pix=new Map(_plist.map((t,i)=>[t,i]));
     const sorted=_plist.slice().sort((a,b)=> PD_SORT==='manual' ? (_pix.get(a)-_pix.get(b)) : ((projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b))));
-    const hasMs=sorted.some(t=>/yes/i.test(t.ml||''));
     const rows=[], mlines=[];
-    if(!hasMs){ sorted.forEach(t=>rows.push(taskRow(t))); }
-    else {
-      let pending=[];
-      const flush=gate=>{
-        if(gate){
-          const key=p.name+'|'+(gate.id!=null&&gate.id!==''?gate.id:gate.t);
-          const collapsed=PD_COLLAPSED.has(key), gd=gate.finISO||gate.startISO;
-          const mp=(gd&&SANE(gd))?msPos(gd,win):null; if(mp!=null) mlines.push(mp);
-          const gs=gate.startISO, gf=gate.finISO||gate.startISO;
-          const gbad=(gate.startISO&&!SANE(gate.startISO))||(gate.finISO&&!SANE(gate.finISO));
-          const gdrag=(gate.id!=null&&gate.id!==''&&gs&&!gbad);   // milestone keeps its own draggable bar
-          rows.push({ label:(collapsed?'▸':'▾')+' ◆ '+(gate.t||'(milestone)'),
-            sub:(gd?fmtMDY(gd):'TBD')+((collapsed&&pending.length)?(' · '+pending.length+' task'+(pending.length>1?'s':'')+' hidden'):''),
-            startISO:gs, endISO:gf, milestones:[], noBar:(!gs||gbad), done:projIsDone(gate),
-            color:gbad?'#a855f7':'#f59e0b', cls:'g-msrow clickable', onclick:`pdToggleMs('${escJsAttr(key)}')`,
-            dragId:gdrag?gate.id:null,
-            barTitle:gdrag?((gate.t||'')+'\n'+fmtMDY(gs)+' – '+fmtMDY(gf)+'\n'+dragHelp+'\n(click the row label to collapse / expand its tasks)'):null });
-          if(!collapsed) pending.forEach(t=>rows.push(taskRow(t)));
-        } else { pending.forEach(t=>rows.push(taskRow(t))); }
-        pending=[];
-      };
-      sorted.forEach(t=>{ if(/yes/i.test(t.ml||'')) flush(t); else pending.push(t); });
-      if(pending.length) flush(null);
-    }
+    const msRow=t=>{
+      const gd=t.finISO||t.startISO;
+      const ok=(gd&&SANE(gd)); const mp=ok?msPos(gd,win):null; if(mp!=null) mlines.push(mp);
+      const canEdit=(t.id!=null&&t.id!=='');
+      const extra=[t.who,t.st].filter(Boolean).join(' · ');
+      return { label:'◆ '+(t.t||'(milestone)'),
+        sub:(gd?fmtMDY(gd):'TBD')+(extra?(' · '+extra):''),
+        startISO:gd, endISO:gd, noBar:true, done:projIsDone(t),
+        milestones:ok?[{dateISO:gd, name:(t.t||'milestone')}]:[],
+        color:'#f59e0b', cls:'g-msrow',
+        gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null };
+    };
+    sorted.forEach(t=>{ if(/yes/i.test(t.ml||'')) rows.push(msRow(t)); else rows.push(taskRow(t)); });
     renderGantt(cont, rows, win, {dates:true, showDays:true, mlines});
     window._gfsPrint={title:titleEl.textContent, rows, win, today};
     window._pdrag={win, project:p.name, byId};
-    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone gate — click to collapse / expand its tasks</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ edit mode: drag a bar — middle ←/→ moves dates · middle ↑/↓ reorders · ends change start/finish</span>`;
+    legEl.innerHTML=`<span style="color:#3b82f6">Not started</span><span style="color:#f59e0b">In progress</span><span style="color:#64748b">Done</span><span style="color:#ef4444">Past due</span><span style="color:var(--amber)">◆ milestone (a point at its date — click to edit)</span><span style="color:#93c5fd">▎this week</span><span style="color:var(--red)">▏today</span><span style="color:var(--muted)">✦ edit mode: drag a bar — middle ←/→ moves dates · middle ↑/↓ reorders · ends change start/finish</span>`;
     warnEl.style.color=flagged?'#fca5a5':'var(--muted)';
     warnEl.textContent=(p.pm?('PM '+p.pm+'  ·  '):'')+((p.taskCount||p.tasks.length)+' tasks')+(p.pct!=null?('  ·  '+p.pct+'% complete'):'')+(flagged?('  ·  ⚠ '+flagged+(flagged>1?' task dates look':' task date looks')+' off — fix in the workbook'):'');
     return;
