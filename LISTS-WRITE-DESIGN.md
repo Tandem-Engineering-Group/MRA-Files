@@ -128,3 +128,21 @@ NOT "From Excel". This is also how the fresh cutover reload happens.
     loop over all matches -> defer to v2; rare.
 - Then: set `LISTS_WRITE_URL` + `USE_LISTS_WRITE=true` in MRA_Dashboard.html, fresh full reload
   of the lists, deploy, retire workbook.
+- 2026-06-23 PM: **create + update + delete ALL PROVEN** end-to-end via curl against
+  "MRA Lists Write 2". Switch routes on verb; update/delete use FindToUpdate/FindToDelete
+  (GET `$filter ...&$select=Id&$top=1`) then MERGE/DELETE to `items(first(...).Id)` with
+  headers `IF-MATCH:*` + `X-HTTP-Method: MERGE|DELETE`. `LISTS_WRITE_URL` now wired in the
+  dashboard (DORMANT — `USE_LISTS_WRITE` still false).
+- REMAINING before cutover:
+  1. **Add `upsert` case** (Users/Holidays setUser/setHoliday) — GET by filter; if found MERGE
+     else POST create. (Or split the dashboard upsert into update+create.)
+  2. **Cascades** (renameProject / setProjectPM / renameAssignee / deleteProject) hit MANY rows
+     -> need a real loop (Get items -> Apply to each -> MERGE/DELETE). Rare; do after.
+  3. **SECURITY: pin-gate the flow** before going live — the trigger is anonymous and the URL
+     ships in the public dashboard. Add: Get items MRA Users `field_1 eq '<pin>'`; if empty,
+     Terminate. (Today's workbook flow is gated inside the Office Script; the lists flow is NOT
+     yet — must add or anyone with the URL can write/delete list items.)
+  4. **Parallel test** with a preview dashboard (USE_LISTS_WRITE=true on a test copy) -> real
+     edits land in lists; live stays on workbook.
+  5. **Cutover:** fresh full reload of lists from workbook (bulk loader, not From-Excel) +
+     flip `USE_LISTS_WRITE=true` + point reads at lists + deploy + retire workbook.
