@@ -1711,8 +1711,13 @@
           </div>
         </div>
         <div class="addrow2">
-          <div><label>Start date</label><input id="ptStart" type="date"></div>
-          <div><label>Finish date</label><input id="ptFinish" type="date"></div>
+          <div><label>Start date</label><input id="ptStart" type="date" onchange="ptDurFromDates()"></div>
+          <div><label>Finish date</label><input id="ptFinish" type="date" onchange="ptDurFromDates()"></div>
+        </div>
+        <div class="addrow2">
+          <div><label>Duration <span style="color:var(--muted); font-weight:400; font-size:10.5px">(work days — skips weekends &amp; holidays; sets Finish)</span></label>
+            <input id="ptDur" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" placeholder="auto" onchange="ptFinishFromDur()" onkeydown="if(event.key==='Enter'){this.blur();}"></div>
+          <div style="align-self:flex-end; font-size:11px; color:var(--muted); padding-bottom:7px" id="ptDurNote"></div>
         </div>
         <div class="addrow2">
           <div><label>Predecessor — starts after…</label><select id="ptPred" onchange="ptPredPickDate()"></select></div>
@@ -2124,6 +2129,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"5.8", date:"2026-06-23", title:"Project task: Duration (work days) auto-sets Finish", items:[
+    "Add/Edit Project Task now has a <b>Duration (work days)</b> field. Type a Start date + a number of work days and it <b>auto-fills the Finish date</b>, skipping weekends and company holidays. Change the dates and it shows the work-day span back. (Al's auto-duration ask.)" ] },
   { rev:"5.7", date:"2026-06-23", title:"Fix: collapsing a multi-job bay in Wall mode", items:[
     "Collapsing a bay on the TV wall (e.g. <b>Bay 2 Back</b>) wasn't actually hiding it — the arrow flipped but the tile stayed open. A wall-mode grid rule was overriding the collapse on multi-job bays; forced the hide so it now collapses properly." ] },
   { rev:"5.6", date:"2026-06-23", title:"On-Hold trailers also drop off the prints", items:[
@@ -4223,6 +4230,24 @@ function ptSetPctToday(){ const s=document.getElementById('ptStart').value, f=do
   if(fd<=sd){ ptSetPct(now>=fd?100:0); return; }
   let pct=Math.round((now-sd)/(fd-sd)*100); pct=Math.max(0,Math.min(100,pct));
   ptSetPct(pct); if(msg){ msg.style.color='var(--muted)'; msg.textContent='Set to '+pct+'% (today vs the Start→Finish span).'; } }
+// ---- Working-day Duration helper (skips weekends + company holidays) ----
+function _holSetISO(){ const s=new Set(); try{ (getHolidays()||[]).forEach(h=>{ if(h&&h.dateISO) s.add(h.dateISO); }); }catch(e){} return s; }
+function _isWorkday(d, hol){ const wd=d.getDay(); if(wd===0||wd===6) return false; return !hol.has(localISO(d.getTime())); }
+function workdaysBetween(sISO,fISO){ const s=parseISO(sISO), f=parseISO(fISO); if(!s||!f||f<s) return null;
+  const hol=_holSetISO(); let n=0; const d=new Date(s.getTime());
+  for(let g=0; g<3000 && d<=f; g++){ if(_isWorkday(d,hol)) n++; d.setDate(d.getDate()+1); } return n; }
+function addWorkdays(sISO,n){ const s=parseISO(sISO); if(!s||!(n>0)) return null;
+  const hol=_holSetISO(); let c=0; const d=new Date(s.getTime());
+  for(let g=0; g<3000; g++){ if(_isWorkday(d,hol)){ c++; if(c>=n) return localISO(d.getTime()); } d.setDate(d.getDate()+1); } return null; }
+function ptDurFromDates(){ const s=document.getElementById('ptStart').value, f=document.getElementById('ptFinish').value,
+    du=document.getElementById('ptDur'), note=document.getElementById('ptDurNote'); if(!du) return;
+  if(s&&f){ const n=workdaysBetween(s,f); if(n!=null){ du.value=n; if(note) note.textContent=n+' work day'+(n===1?'':'s'); }
+    else { du.value=''; if(note) note.textContent=(parseISO(f)<parseISO(s)?'⚠ finish before start':''); } }
+  else { du.value=''; if(note) note.textContent=''; } }
+function ptFinishFromDur(){ const s=document.getElementById('ptStart').value, n=parseInt(document.getElementById('ptDur').value,10),
+    note=document.getElementById('ptDurNote');
+  if(!s){ if(note){ note.textContent='set a Start date first'; } return; }
+  if(n>0){ const f=addWorkdays(s,n); if(f){ document.getElementById('ptFinish').value=f; if(note) note.textContent=n+' work days → '+fmtMDY(f); } } }
 function ptSetPct(v){ let p=Math.max(0,Math.min(100,parseInt(v,10)||0)); ptSetPctSilent(p);
   const sd=document.getElementById('ptStatus'); if(sd){ const cur=sd.value;   // nudge the status to match
     if(p>=100) sd.value='Completed';
@@ -4258,6 +4283,7 @@ function openProjTaskNew(){
   document.getElementById('ptComments').value="";
   document.getElementById('ptDelete').style.display='none';
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Add task";
+  try{ ptDurFromDates(); }catch(e){}
   document.getElementById('projTaskModal').classList.add('show');
 }
 function editProjTaskBtn(el){ if(!ensureAuth("edit a project task")) return; openProjTaskEdit(el.dataset.id); }
@@ -4290,6 +4316,7 @@ function openProjTaskEdit(id){
   document.getElementById('ptComments').value=t.cm||"";
   document.getElementById('ptDelete').style.display=(t.id!=null&&t.id!=='')?'':'none';
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Save";
+  try{ ptDurFromDates(); }catch(e){}
   document.getElementById('projTaskModal').classList.add('show');
 }
 function closePT(e){ if(!e || e.target.id==='projTaskModal' || e.target.classList.contains('modal-close'))
