@@ -346,6 +346,16 @@ function MdyFromIso($iso) {
     if (-not $iso) { return '' }
     try { return ([DateTime]::ParseExact($iso,'yyyy-MM-dd',$null)).ToString('MM/dd/yy') } catch { return '' }
 }
+# First non-empty property among $names (SharePoint maps a list's first column to the
+# built-in 'Title' field, so the name column arrives as Title; the rest keep their header
+# as the internal name). Case-insensitive on PSCustomObjects from ConvertFrom-Json.
+function Pick($o, [string[]]$names) {
+    foreach ($n in $names) {
+        $v = $o.$n
+        if ($null -ne $v -and ([string]$v).Trim() -ne '') { return [string]$v }
+    }
+    return ''
+}
 
 # Project-Tasks row from a plain object (Lists path) -> identical output to Add-TaskRow.
 function Add-TaskRowObj($t, $pmap, $teamTasks) {
@@ -356,11 +366,11 @@ function Add-TaskRowObj($t, $pmap, $teamTasks) {
     $pStatus   = ([string]$t.status).Trim()
     $pPM       = ([string]$t.pm).Trim()
     $pMileRaw  = ([string]$t.milestone).Trim()
-    $pTask     = ([string]$t.task).Trim()
+    $pTask     = (Pick $t @('Title','task')).Trim()
     $pAssigned = ([string]$t.assigned).Trim()
     $pComments = ([string]$t.comments).Trim()
     $pDur      = ([string]$t.duration).Trim()
-    $pTaskId   = ([string]$t.taskId).Trim()
+    $pTaskId   = (Pick $t @('TaskID','taskId')).Trim()
     $pPred     = ([string]$t.predecessor).Trim()
     $pSubRaw   = ([string]$t.sub).Trim()
     $pSubRes   = ([string]$t.subRes).Trim()
@@ -439,7 +449,7 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
     # --- Shop Tasks -> byProj / byJob match maps + flat list (parity w/ Read-ShopTasks) ---
     $byProj = @{}; $byJob = @{}; $stAll = New-Object System.Collections.ArrayList
     foreach ($r in @($L.shopTasks)) {
-        $task = ([string]$r.task).Trim(); if ($task -eq '') { continue }
+        $task = (Pick $r @('Title','task')).Trim(); if ($task -eq '') { continue }
         $proj = ([string]$r.project).Trim()
         $jobn = ([string]$r.jobNum).Trim()
         $assigned = ([string]$r.assigned).Trim()
@@ -462,7 +472,7 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
     # --- Jobs (Input equivalent) ---
     $rix = 3
     foreach ($jr in @($L.jobs)) {
-        $proj = ([string]$jr.project).Trim()
+        $proj = (Pick $jr @('Title','project')).Trim()
         if ($proj -eq '') { continue }
         $rix++
         $bay    = ([string]$jr.bay).Trim()
@@ -543,7 +553,7 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
 
     # --- Users -> name + hashed code (raw codes never leave) ---
     foreach ($u in @($L.users)) {
-        $name = ([string]$u.name).Trim()
+        $name = (Pick $u @('Title','name')).Trim()
         $code = ([string]$u.code).Trim()
         $act  = ([string]$u.active).Trim()
         if ($name -eq '' -or $code -eq '') { continue }
