@@ -48,7 +48,7 @@ LISTS = {
     "B": ("Phase", ["Project Planning", "Creative Design", "Design & Detail",
                     "Fabrication", "Production",
                     "Electrical & Technology", "Graphics",
-                    "Post Production", "Launch"]),
+                    "QA", "Launch", "Warranty / Post-Launch Repairs"]),
     "C": ("Type", ["Meeting", "Hard Date", "Design Task", "Materials",
                    "Production Task", "Client", "Logistics", "QA",
                    "Milestone"]),
@@ -237,7 +237,7 @@ def add_dv(col_letter, src, last=LASTROW - 1):
     ws.add_data_validation(dv)
     dv.add(f"{col_letter}{DATA0}:{col_letter}{last}")
 
-add_dv("B", "=Lists!$B$2:$B$10")   # Phase
+add_dv("B", "=Lists!$B$2:$B$11")   # Phase (10 phases now: …QA, Launch, Warranty / Post-Launch Repairs)
 add_dv("C", "=Lists!$C$2:$C$10")   # Type
 add_dv("H", "=Lists!$G$2:$G$19")   # Assigned To
 add_dv("I", "=Lists!$D$2:$D$5")    # Status
