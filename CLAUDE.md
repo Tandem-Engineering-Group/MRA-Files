@@ -167,8 +167,8 @@ Treat help + rev as PART OF the feature, not an afterthought.
 
 ## Pending / requested (not yet built — remind Rich)
 
-- **🎨 UI batch requested 2026-06-24 (working through in waves; deploy incrementally).** Status: ✅ **all 4 FLEETIO
-  items shipped LIVE (rev 7.1)**; ⏳ Floor (3) + Projects-Gantt (3) still to do.
+- **🎨 UI batch requested 2026-06-24 (working through in waves; deploy incrementally).** Status: ✅ **FLEETIO (4) +
+  Fleetio layout move + Floor FL1/FL2 shipped LIVE (rev 7.1/7.2)**; ⏳ **remaining: Floor FL3 + Projects-Gantt (3)**.
   - **Projects tab / Gantt:**
     1. Project **tasks shown in the Gantt**, **expand/collapse** per project; clicking a project defaults to
        **open (tasks-expanded) mode**. *(task-level Gantt bars — overlaps the long-parked "Task-level Gantt bars")*
@@ -181,10 +181,21 @@ Treat help + rev as PART OF the feature, not an afterthought.
     6. ✅ **Hover a row → highlights yellow** (CSS `:hover` on the fleet panel rows). *(F3)*
     7. ✅ **By Trailer: full unit name inline after the J#** (was tucked underneath). *(F4)*
   - **Floor tab:**
-    8. **Collapse/expand each section's tasks** (per job). *(FL1)*
-    9. **Parking Lot + Next Up tiles default COLLAPSED** (show the jobs, not their tasks); expandable manually. *(FL2)*
-    10. **Bay 3 + Bay 4 MIDDLE tile**, with a **filter to hide them when not in use**; **auto-hide when empty**
-        unless the filter is clicked to show them. *(FL3)*
+    8. ✅ **Per-tile ⊟/⊞ tasks button** — collapse/expand EVERY job's tasks in a tile at once (`toggleTileJobs`);
+       per-job ▾ caret already existed. *(FL1, rev 7.2)*
+    9. ✅ **Parking Lot + Next Up default COLLAPSED** (`DEFCOLL_ROWS` + `opts.defaultCollapsed`; open via `expandedJobs`). *(FL2, rev 7.2)*
+    10. ⏳ **Bay 3 + Bay 4 MIDDLE tile**, with a **filter to hide them when not in use**; **auto-hide when empty**
+        unless the filter is clicked to show them. *(FL3 — still to do)*
+  - **Fleetio layout (Rich 2026-06-24):** ✅ moved **⚠ Open Issues** up to the top (full-width) where **Needs Attention**
+    was, and **removed Needs Attention** (covered by Open Issues). **SVC overdue stays in the dedicated 🔧 Service —
+    Due & Overdue panel** (recommended NOT mixing service records into the issues list; revisit if Rich wants a combined view).
+
+- **🗂 Add the MRA Product Catalogue to the dashboard ☰ menu (Rich 2026-06-24, queued — do after the UI batch).**
+  Uploaded `MRAProductCataloguefullV1.3.3.zip` = a standalone web app: **`MRA-Product-Catalogue-fullV1.3.3 3.html`** (87KB)
+  + data files `mra-product-history.json` (359KB), `mra-reference-lists.json`, `mra-allowed-units.json` + `logo.png`.
+  Today it's "wonky — have to load the file" (likely opened from disk, so it can't `fetch()` its JSONs → manual file-picker).
+  **Plan:** host all 5 files on the Azure **`$web`** site next to the dashboard (add to `deploy.yml` static-asset uploads),
+  make the HTML fetch its JSONs via **relative URLs** (no manual load), then add a **☰ Menu link** that opens it.
 
 - **Standardize Assigned-To names in the workbook (Rich asked 2026-06-18: "go back and fix
   them all the same", and "stop forgetting open items").** The `Project Tasks` `Assigned To`
