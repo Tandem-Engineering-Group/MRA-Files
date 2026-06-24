@@ -2156,6 +2156,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.8", date:"2026-06-24", title:"Status Report sorts by Program Development · TBD always last", items:[
+    "The printable <b>Project Status Report</b> now always orders rows <b>by Program Development (PM), A–Z</b>, with any <b>TBD / Unassigned</b> projects pushed to the <b>bottom</b> (within a PM, the at-risk-first order is kept).",
+    "On the <b>Program Development Load</b> panel, <b>Unassigned/TBD</b> now always sits at the <b>bottom</b> of the list (the rest still order by size)." ] },
   { rev:"6.7", date:"2026-06-24", title:"⬇ Download a Project: formatted Excel (frozen header, filters, shading)", items:[
     "The <b>⬇ Download a Project</b> file is now formatted for real work: the <b>header row stays pinned at the top</b> (freeze) and has <b>filter dropdowns</b> on every column, rows are <b>zebra-shaded</b>, and <b>milestone rows are highlighted gold + bold</b>. Same columns as before, so <b>⬆ Upload Filled</b> still reads it straight back." ] },
   { rev:"6.6", date:"2026-06-24", title:"Unassigned: milestones no longer counted as unassigned", items:[
@@ -4735,6 +4738,10 @@ function buildStatusReport(){
       dur:(dur!=null?dur:null), done, tasks, phases, ms, od,
       gateName:(ng?ng.name:''), gateDate:(ng?fmtMDY(ng.dateISO):'') };
   });
+  // Always order by Program Development (PM): A–Z, with TBD / Unassigned / blank pushed to the very end.
+  // Stable sort keeps the at-risk-first order within each PM as the tiebreak.
+  const _pmTBD=s=>{const v=String(s||'').trim().toLowerCase(); return v===''||v==='—'||v==='tbd'||v==='unassigned'||v==='unassigned/tbd';};
+  rows.sort((a,b)=>{const at=_pmTBD(a.pm),bt=_pmTBD(b.pm); if(at!==bt)return at?1:-1; if(at&&bt)return 0; return String(a.pm).localeCompare(String(b.pm),undefined,{sensitivity:'base'});});
   const asof=D.generatedAt?fmtStamp(D.generatedAt):(D.generatedText||'');
   return { logo:((location.origin||'')+'/logo.png'), today:fmtMDY(today),
     nActive:active.length, atRisk, totOd, asof, rows };
@@ -5844,7 +5851,8 @@ function renderProjects(D){
   projects.forEach(p=>{const pm=(p.pm&&p.pm!=="TBD")?p.pm:"Unassigned/TBD";
     pmMap[pm]=pmMap[pm]||{active:0,upcoming:0,done:0};
     pmMap[pm][projStatus(p,today)]++;});
-  const pmArr=Object.entries(pmMap).map(([nm,v])=>({nm,...v,tot:v.active+v.upcoming+v.done})).sort((a,b)=>b.tot-a.tot);
+  // Sort by total (biggest first), but always keep Unassigned/TBD at the bottom.
+  const pmArr=Object.entries(pmMap).map(([nm,v])=>({nm,...v,tot:v.active+v.upcoming+v.done})).sort((a,b)=>{const at=a.nm==="Unassigned/TBD",bt=b.nm==="Unassigned/TBD"; if(at!==bt)return at?1:-1; return b.tot-a.tot;});
   const maxTot=Math.max(1,...pmArr.map(p=>p.tot));
   document.getElementById('pms').innerHTML=pmArr.map(p=>
     `<div class="pmrow"><div class="nm">${esc(p.nm)}</div><div class="pmbar">`+
