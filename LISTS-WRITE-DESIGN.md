@@ -138,10 +138,19 @@ NOT "From Excel". This is also how the fresh cutover reload happens.
      else POST create. (Or split the dashboard upsert into update+create.)
   2. **Cascades** (renameProject / setProjectPM / renameAssignee / deleteProject) hit MANY rows
      -> need a real loop (Get items -> Apply to each -> MERGE/DELETE). Rare; do after.
-  3. **SECURITY: pin-gate the flow** before going live — the trigger is anonymous and the URL
-     ships in the public dashboard. Add: Get items MRA Users `field_1 eq '<pin>'`; if empty,
-     Terminate. (Today's workbook flow is gated inside the Office Script; the lists flow is NOT
-     yet — must add or anyone with the URL can write/delete list items.)
+  3. ✅ **SECURITY: pin-gate the flow — DONE & VERIFIED 2026-06-24.** Added two actions at the
+     TOP of "MRA Lists Write 2" (before the Switch): **CheckPIN** = "Send an HTTP request to
+     SharePoint" GET
+     `concat('_api/web/lists/getByTitle(''MRA Users'')/items?$select=Id&$top=1&$filter=field_1 eq ''', json(triggerBody())?['pin'], '''')`
+     (Accept/Content-Type `application/json;odata=nometadata`), then a **Condition**
+     `length(body('CheckPIN')?['value']) is equal to 0` → True branch **Terminate (Failed,
+     "Rejected: unknown code")**; False empty → falls through to the Switch. Curl-verified:
+     bad code `0000` → run **Failed** (rejected), real code `1974` → run **Succeeded**.
+     ⚠️ LESSON: `json(triggerBody())` needs the body to arrive as a **string** — the dashboard
+     posts `Content-Type: text/plain;charset=UTF-8` (no-cors), so it works. A request sent with
+     `application/json` makes PA pre-parse the body to an Object and `json()` errors → the run
+     **fails closed** (no write), which is safe. Code column being **text** was fine; no
+     numeric-filter change needed.
   4. **Parallel test** with a preview dashboard (USE_LISTS_WRITE=true on a test copy) -> real
      edits land in lists; live stays on workbook.
   5. **Cutover:** fresh full reload of lists from workbook (bulk loader, not From-Excel) +
