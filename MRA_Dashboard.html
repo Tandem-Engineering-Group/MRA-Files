@@ -1131,11 +1131,7 @@
           <option value="pm">Sort: Program Development</option>
           <option value="name">Sort: A–Z name</option>
         </select>
-        <select id="ganttLod" class="projsort" onchange="setGanttLod(this.value)" title="How much detail to show on the Gantt — projects only, every task, or just milestones">
-          <option value="proj">Detail: Projects</option>
-          <option value="tasks">Detail: + Tasks</option>
-          <option value="ms">Detail: Milestones</option>
-        </select>
+        <span class="gwinwrap" id="ganttLodWrap" title="Detail — slide RIGHT to expand down to every task, LEFT to shrink up to just milestones / projects">📊<input id="ganttLodSlider" type="range" min="0" max="2" step="1" value="0" oninput="setGanttLodSlider(this.value)" class="gwinslider" style="width:84px"><span id="ganttLodLab" class="gwinlab"></span></span>
         <span id="projWhoWrap" style="margin-left:8px"></span>
         <details class="tbmenu" id="viewMenu">
           <summary class="expandbtn" title="View options — date format, zoom, time range, holidays, MRA Shop load, archived">⚙ View ▾</summary>
@@ -1996,14 +1992,21 @@ const GANTT_TASKLEVEL=false;   // task-level Projects Gantt (P1-P3) — DORMANT 
 let GANTT_LOD='proj'; try{ const _gl=localStorage.getItem('mra_gantt_lod'); if(_gl) GANTT_LOD=_gl; }catch(e){}
 const GANTT_EXP=new Set();   // project names manually expanded when LOD='proj'
 function setGanttLod(v){ GANTT_LOD=v||'proj'; try{localStorage.setItem('mra_gantt_lod',GANTT_LOD);}catch(e){} if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
+const _LOD_BY_N={0:'proj',1:'ms',2:'tasks'}, _LOD_N={proj:0,ms:1,tasks:2}, _LOD_LAB={proj:'Projects',ms:'Milestones',tasks:'Tasks'};
+function setGanttLodSlider(v){ setGanttLod(_LOD_BY_N[String(v)]||'proj'); }   // P2 slider: 0=Projects (shrunk) → 1=Milestones → 2=all Tasks (expanded)
 function toggleGanttExp(name){ name=String(name||''); if(GANTT_EXP.has(name)) GANTT_EXP.delete(name); else GANTT_EXP.add(name); if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
-// Map one project task -> a Gantt sub-row (reuses the detail-view shape). Returns null if undated.
-function ganttTaskSubRow(t,p){ const today=(window.MRA_DATA||{}).todayISO||''; const s=t.startISO, f=t.finISO||t.startISO; if(!s) return null;
-  const done=projIsDone(t), isMs=/yes/i.test(t.ml||''), tp=projTaskPct(t.st);
+// Map one project task -> a Gantt sub-row. ALWAYS returns a row: a bar if it has start+finish,
+// a ◆ milestone diamond if it's a milestone, or a label-only (noBar) row when it's undated.
+function ganttTaskSubRow(t,p){ const today=(window.MRA_DATA||{}).todayISO||'';
+  const s=t.startISO, f=t.finISO||t.startISO, hasBar=!!(s&&f);
+  const done=projIsDone(t), isMs=/yes/i.test(t.ml||''), tp=projTaskPct(t.st), mdate=f||s;
   const color=done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6'));
-  return { label:(isMs?'◆ ':'')+(t.t||'(task)'), sub:[t.who,t.st].filter(Boolean).join(' · '),
-    startISO:s, endISO:f, color, done, cls:'g-subrow', pct:(!done&&tp!=null&&tp>0&&tp<100)?tp:undefined,
-    milestones:[], barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }; }
+  return { label:(isMs?'◆ ':'')+(t.t||'(task)'),
+    sub:[t.who,t.st].filter(Boolean).join(' · ')+(hasBar?'':(mdate?(' · '+fmtMDY(mdate)):' · no dates')),
+    startISO:s, endISO:f, color, done, cls:'g-subrow', noBar:!hasBar,
+    pct:(hasBar&&!done&&tp!=null&&tp>0&&tp<100)?tp:undefined,
+    milestones:(isMs&&mdate)?[{name:t.t,dateISO:mdate}]:[],
+    barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }; }
 // Row order for the Projects Gantt (operates on project objects). Start date is the default.
 function projSortCmp(a,b){
   const today=(window.MRA_DATA&&window.MRA_DATA.todayISO)||'';
@@ -6002,7 +6005,7 @@ function renderProjects(D){
         if(PROJ_WHO) tl=tl.filter(t=>taskWhoMatch(t,PROJ_WHO));         // P3: only this assignee's tasks
         if(GANTT_LOD==='ms') tl=tl.filter(t=>/yes/i.test(t.ml||''));    // P2: milestones-only detail
         tl=tl.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')));
-        tl.forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && barGeom(sr.startISO,sr.endISO,win)) rows.push(sr); });
+        tl.forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && (sr.noBar || barGeom(sr.startISO,sr.endISO,win))) rows.push(sr); });
       }
     });
   } else {
@@ -6017,7 +6020,10 @@ function renderProjects(D){
   { const ww=document.getElementById('projWhoWrap'); if(ww) ww.innerHTML=projWhoSelHtml('projWhoSel'); }   // assignee filter
   renderGantt(document.getElementById('projGantt'), rows, win, {dates:true, showDays:true});
   { const ss=document.getElementById('projSort'); if(ss) ss.value=PROJ_SORT; }
-  { const gl=document.getElementById('ganttLod'); if(gl){ gl.value=GANTT_LOD; gl.style.display=GANTT_TASKLEVEL?'':'none'; } }
+  { const sw=document.getElementById('ganttLodWrap'), sl=document.getElementById('ganttLodSlider'), lb=document.getElementById('ganttLodLab');
+    if(sw) sw.style.display=GANTT_TASKLEVEL?'':'none';
+    if(sl) sl.value=(_LOD_N[GANTT_LOD]!=null?_LOD_N[GANTT_LOD]:0);
+    if(lb) lb.textContent=(_LOD_LAB[GANTT_LOD]||'Projects'); }
   { const df=document.getElementById('dateFmtSel'); if(df) df.value=DATE_FMT; }
   syncMraHlBtns();
   const undated=projects.filter(p=>!p.startISO||!p.finishISO).map(p=>p.name);
