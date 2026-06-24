@@ -167,19 +167,19 @@ Treat help + rev as PART OF the feature, not an afterthought.
 
 ## Pending / requested (not yet built — remind Rich)
 
-- **🎨 UI batch requested 2026-06-24 (working through in waves; deploy incrementally).** Status: started.
+- **🎨 UI batch requested 2026-06-24 (working through in waves; deploy incrementally).** Status: ✅ **all 4 FLEETIO
+  items shipped LIVE (rev 7.1)**; ⏳ Floor (3) + Projects-Gantt (3) still to do.
   - **Projects tab / Gantt:**
     1. Project **tasks shown in the Gantt**, **expand/collapse** per project; clicking a project defaults to
        **open (tasks-expanded) mode**. *(task-level Gantt bars — overlaps the long-parked "Task-level Gantt bars")*
     2. A **level-of-detail "scroll"/slider** on the Project Gantt: instead of scrolling, it **shrinks the rows**
        progressively — full tasks → … → just milestones. (Collapse depth control.)
     3. When you **filter by assignee**, still see **all that person's tasks**, expand/collapsible.
-  - **Fleetio tab:**
-    4. **Open-issues tile → clickable to full-screen.** *(F1)*
-    5. **Show the actual Fleetio issue # everywhere a Fleetio task/issue is shown** — board, tiles, by-trailer,
-       added tasks. *(F2 — Rich emphasized "every time, anywhere")*
-    6. **Hover a task → highlight it yellow** so it stands out when going through them one-by-one in meetings. *(F3)*
-    7. **Fleetio "by trailer": show the full trailer name after the J#.** *(F4)*
+  - **Fleetio tab — ✅ ALL DONE (rev 7.1):**
+    4. ✅ **⚠ Open Issues panel → true full-screen** (`toggleIssuesFS`, `.fs-on`; ⤡ Contract / Esc). *(F1)*
+    5. ✅ **Fleetio issue # everywhere** — done in `fioTitle` (`.fionum` span), so it propagates to every panel. *(F2)*
+    6. ✅ **Hover a row → highlights yellow** (CSS `:hover` on the fleet panel rows). *(F3)*
+    7. ✅ **By Trailer: full unit name inline after the J#** (was tucked underneath). *(F4)*
   - **Floor tab:**
     8. **Collapse/expand each section's tasks** (per job). *(FL1)*
     9. **Parking Lot + Next Up tiles default COLLAPSED** (show the jobs, not their tasks); expandable manually. *(FL2)*
