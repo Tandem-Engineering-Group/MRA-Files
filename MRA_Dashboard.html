@@ -2111,7 +2111,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑲ᵇ ▾ Collapse / compact the Projects panels</h4>
     <p>Every panel on the PROJECTS tab has a <span class="k">▾</span> in its header — click it to <b>collapse</b> that panel down to just its title (click <span class="k">▸</span> to reopen). <b>Project Progress</b> and <b>👥 Team Capacity</b> are also <b>compact</b> by default (they scroll within a fixed height) with an <span class="k">⤢ Expand</span> button to grow them to full height. All of it is remembered per device, so each screen keeps the layout you like.</p></div>
   <div class="hsec"><h4>⑳ 📤 Status Report</h4>
-    <p>Click <span class="k">📤 Status Report</span> (PROJECTS tab) for a one-click snapshot of every active project — %, health, next gate and overdue items. <b>📋 Copy text</b> drops it on your clipboard to paste into an email.</p>
+    <p>Click <span class="k">📤 Status Report</span> (PROJECTS tab) for a one-click snapshot of every active project — %, health, next gate and overdue items. <b>📋 Copy text</b> drops it on your clipboard to paste into an email. The printable view (<b>🖨 Print / PDF</b>) sorts by Program Development (PM) and ends with the <b>Program Development Load</b> graph at the bottom.</p>
     <p><b>🖨 Print / PDF</b> opens a polished, branded <b>one-page</b> report: an <b>MRA logo header</b> with the date and a summary strip (Active · Need attention · Overdue tasks), then a tidy <b>table — one row per project</b> with status, PM, a progress bar, and the project's <b>Start, End, Days, Tasks done/total, Phases, Milestones, Overdue</b> and next gate. Use your browser's <b>Save as PDF</b>.</p></div>
   <div class="hsec"><h4>㉑ 🖱 Click a Gantt bar</h4>
     <p>On the Projects Gantt, <b>click any project bar</b> (or its name) to jump straight into that project's task editor.</p></div>
@@ -2156,6 +2156,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.9", date:"2026-06-24", title:"Status Report now includes the Program Development Load graph", items:[
+    "The printable <b>📤 Status Report</b> now ends with the <b>Program Development Load</b> graph — the same stacked bars (in progress / upcoming / done) per PM you see on the PROJECTS tab, with <b>Unassigned/TBD at the bottom</b>. So the PDF carries both the project table and the workload picture on one sheet." ] },
   { rev:"6.8", date:"2026-06-24", title:"Status Report sorts by Program Development · TBD always last", items:[
     "The printable <b>Project Status Report</b> now always orders rows <b>by Program Development (PM), A–Z</b>, with any <b>TBD / Unassigned</b> projects pushed to the <b>bottom</b> (within a PM, the at-risk-first order is kept).",
     "On the <b>Program Development Load</b> panel, <b>Unassigned/TBD</b> now always sits at the <b>bottom</b> of the list (the rest still order by size)." ] },
@@ -4743,8 +4745,15 @@ function buildStatusReport(){
   const _pmTBD=s=>{const v=String(s||'').trim().toLowerCase(); return v===''||v==='—'||v==='tbd'||v==='unassigned'||v==='unassigned/tbd';};
   rows.sort((a,b)=>{const at=_pmTBD(a.pm),bt=_pmTBD(b.pm); if(at!==bt)return at?1:-1; if(at&&bt)return 0; return String(a.pm).localeCompare(String(b.pm),undefined,{sensitivity:'base'});});
   const asof=D.generatedAt?fmtStamp(D.generatedAt):(D.generatedText||'');
+  // Program Development Load (mirror the on-page panel) so the report can draw the same graph:
+  // active/upcoming/done counts per PM, with TBD/Unassigned pushed to the bottom.
+  const _pl={};
+  (D.projects||[]).forEach(p=>{const pm=(p.pm&&p.pm!=="TBD")?p.pm:"Unassigned/TBD";
+    _pl[pm]=_pl[pm]||{active:0,upcoming:0,done:0}; _pl[pm][projStatus(p,today)]++;});
+  const pmLoad=Object.entries(_pl).map(([nm,v])=>({nm,...v,tot:v.active+v.upcoming+v.done}))
+    .sort((a,b)=>{const at=a.nm==="Unassigned/TBD",bt=b.nm==="Unassigned/TBD"; if(at!==bt)return at?1:-1; return b.tot-a.tot;});
   return { logo:((location.origin||'')+'/logo.png'), today:fmtMDY(today),
-    nActive:active.length, atRisk, totOd, asof, rows };
+    nActive:active.length, atRisk, totOd, asof, rows, pmLoad };
 }
 function printStatus(){
   const R=buildStatusReport();
@@ -4764,6 +4773,13 @@ function printStatus(){
       `<td class="c">${r.od?`<b style="color:#dc2626">${r.od}</b>`:'0'}</td>`+
       `<td class="gate">${r.gateDate?`<b>${r.gateDate}</b>${r.gateName?` ${esc(r.gateName)}`:''}`:'—'}</td>`+
     `</tr>`).join('') || `<tr><td colspan="12" class="c">No active projects.</td></tr>`;
+  // Program Development Load graph — same stacked bars as the on-page panel.
+  const pmMax=Math.max(1,...R.pmLoad.map(p=>p.tot),1);
+  const pmRows=R.pmLoad.map(p=>`<div class="pmrow"><div class="pmnm">${esc(p.nm)}</div><div class="pmbar">`+
+      `<span style="width:${p.active/pmMax*100}%;background:#16a34a"></span>`+
+      `<span style="width:${p.upcoming/pmMax*100}%;background:#d97706"></span>`+
+      `<span style="width:${p.done/pmMax*100}%;background:#9ca3af"></span>`+
+    `</div><div class="pmtot">${p.tot}</div></div>`).join('');
   const css=`@page{size:letter portrait;margin:.4in}*{box-sizing:border-box}`+
     `body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;margin:0;background:#eef1f5}`+
     `.bar{background:#23272e;color:#fff;padding:10px 18px;font-size:13px;display:flex;gap:14px;align-items:center}`+
@@ -4788,6 +4804,13 @@ function printStatus(){
     `.pp{font-size:8.5px;font-weight:700;color:#374151;margin-left:5px;vertical-align:middle}`+
     `.gate{font-size:9px;color:#374151;line-height:1.25}`+
     `.rfoot{margin-top:13px;font-size:9.5px;color:#9ca3af;border-top:1px solid #eee;padding-top:7px}`+
+    `.pmload{margin-top:16px;page-break-inside:avoid;break-inside:avoid}`+
+    `.pmload h2{font-size:11px;color:#23272e;text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px;border-bottom:2px solid #e04826;padding-bottom:5px}`+
+    `.pmleg{font-size:8px;color:#6b7280;margin-bottom:7px}.pmleg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 3px 0 10px;vertical-align:middle}`+
+    `.pmrow{display:flex;align-items:center;gap:8px;margin-bottom:4px}`+
+    `.pmnm{width:135px;font-size:9px;color:#374151;font-weight:600;text-align:right;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`+
+    `.pmbar{flex:1;height:11px;background:#eef2f7;border-radius:3px;overflow:hidden;display:flex}.pmbar span{height:11px;display:inline-block}`+
+    `.pmtot{width:22px;font-size:10px;font-weight:700;color:#111827}`+
     `@media print{body{background:#fff}.bar{display:none}.sheet{margin:0;box-shadow:none;max-width:none;padding:0}thead{display:table-header-group}}`;
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MRA Project Status — ${R.today}</title><style>${css}</style></head><body>`+
     `<div class="bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><span>Use your browser's “Save as PDF”.</span></div>`+
@@ -4797,6 +4820,9 @@ function printStatus(){
     `</header>`+
     `<table><thead><tr><th>Project</th><th class="c">Status</th><th>PM</th><th class="c">Progress</th><th class="c">Start</th><th class="c">End</th><th class="c">Days</th><th class="c">Tasks</th><th class="c">Phases</th><th class="c">Milestones</th><th class="c">Overdue</th><th>Next gate</th></tr></thead>`+
     `<tbody>${tr}</tbody></table>`+
+    `<section class="pmload"><h2>Program Development Load</h2>`+
+    `<div class="pmleg"><i style="background:#16a34a"></i>In progress<i style="background:#d97706"></i>Upcoming<i style="background:#9ca3af"></i>Done</div>`+
+    pmRows+`</section>`+
     `<footer class="rfoot">Generated from the MRA Command Center${R.asof?(' · data as of '+esc(R.asof)):''}</footer></div></body></html>`);
   w.document.close();
 }
