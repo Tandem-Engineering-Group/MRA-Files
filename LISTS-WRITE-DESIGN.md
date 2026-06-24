@@ -179,3 +179,46 @@ NOT "From Excel". This is also how the fresh cutover reload happens.
        hands-off after; same team needed for Step 4 SSO).
   5. **Cutover:** fresh full reload of lists from workbook (bulk loader, not From-Excel) +
      flip `USE_LISTS_WRITE=true` + point reads at lists + deploy + retire workbook.
+
+## 2026-06-24 — WRITE PATH PROVEN END-TO-END (no Excel, no IT/Graph)
+Read path went the **Power Automate** route (option B), not Graph: the **"MRA Lists to JSON"** flow
+(Rich's login) writes `lists.json` to the **`pipeline`** blob; **`build_from_lists.py`** (new) decodes it
+to `data.js`. Verified + standing up a side-by-side preview, then a write-enabled preview, drove the
+write test through the **real UI**. All confirmed in the Lists via the row **Modified** timestamps.
+
+**PROVEN (persisted to the Lists):** shop **add** + **close**, project **add** + **close**.
+Preview harness = `deploy.yml` mode **`listspreview`** → publishes `preview-lists2.html` (live dashboard
+pointed at `data.lists.js`, `USE_LISTS_WRITE=true`, build # stamped in the banner) + `data.lists.js`;
+`listspreview-cleanup` removes them. Live board untouched the whole time.
+
+**HARD-WON LESSONS (these shaped the fixes):**
+- **The write flow's `FindToUpdate` can ONLY match by TEXT fields.** A `$filter=Id eq <n>` (internal
+  item id) returns EMPTY → the MERGE then targets `.../items` (collection) → **`SP.ListItemEntityCollection
+  does not support HTTP method`** BadRequest. Text filters (`field_1 eq '..' and Title eq '..'`) work.
+  ⇒ **All matching must be text.** Switched project-task close/edit/delete/reopen to match by
+  **{Project, Title}** (the proven shop-close path). The `_id`/`_ptMatch`/`idOps` "match by item Id"
+  design (and jobs' `{Id:jId}`) is therefore DEAD for writes — see remaining work.
+- **Number columns reject non-numeric writes (`Edm.Double`).** "From Excel" made several columns
+  numeric. Do NOT write them: **ShopTasks `field_8`** (dropped the bogus Milestone map), **ProjectTasks
+  `field_2` (TaskID)** + **`field_13` (Predecessor)** (TaskID is match-only, Predecessor dropped from the
+  write map — needs a Text column to persist).
+- **New project tasks get NO TaskID** — `importProject`/`addProjectTask` create a row but the flow does
+  not assign `field_2`, so it lands empty (saw task 570). Fine for text-matched edits; revisit if TaskID
+  is needed for predecessors/display.
+- **Optimistic UI + cache confusion:** the board shows edits optimistically (localStorage) so a task can
+  look "Completed" without having saved; and stale cached `preview-lists.html` repeatedly served old code.
+  Fixes: publish to a **fresh filename** (`preview-lists2.html`) + **stamp the build # in the banner** so
+  we can verify the loaded code. (Also: editing the LIVE board writes to the workbook, not the Lists.)
+
+**REMAINING before cutover:**
+1. Convert the still-`Id`-matched ops to **text** the same way (they'll hit the same empty-`Id` wall):
+   `editJob`/`deleteJob` ({Id:jId}→{Project} on Title) and the cascades `renameProject` /
+   `deleteProject` / `setProjectPM` / `renameAssignee` / `editJob`(newProject|newJobNum) /
+   `importProject`-replace (currently `idOps` per row by `_id`). ⚠️ Per-row text matching needs distinct
+   keys — within a project, exact-duplicate task **titles** would collide under the flow's `$top=1`
+   (acceptable risk noted; revisit if dupes appear).
+2. Optional hardening: get the flow to support id matching (e.g. `getItemById`) so we can go back to exact
+   item-id matching and kill the dup-title risk — needs flow edits (Rich) we couldn't inspect/test here.
+3. Coordinated cutover: fresh full reload of Lists from the workbook → flip the **live** board to
+   `USE_LISTS_WRITE=true` + point reads at the Lists (`pipeline/lists.json` → build) → deploy → retire the
+   workbook shuttle/Office-Script.
