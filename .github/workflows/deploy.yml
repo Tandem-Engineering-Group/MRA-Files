@@ -74,8 +74,13 @@ jobs:
           # inherit fleet/logistics from the LIVE data.js so the preview's FLEET tab is current
           curl -s "https://mrashopdash.z13.web.core.windows.net/data.js?cb=$GITHUB_RUN_ID" -o base.live.js || cp data.js base.live.js
           python3 build_from_lists.py --lists lists.json --base base.live.js --out data.lists.js
-          BANNER='<div style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#b45309;color:#fff;text-align:center;font:700 12px Segoe UI,Arial,sans-serif;padding:4px 8px">PREVIEW · built from SharePoint Lists — not the live board</div>'
-          sed "s|<script src=\"data.js\"></script>|${BANNER}<script src=\"data.lists.js\"></script>|" MRA_Dashboard.html > preview-lists.html
+          BANNER='<div style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#b45309;color:#fff;text-align:center;font:700 12px Segoe UI,Arial,sans-serif;padding:4px 8px">PREVIEW · reads + writes the SharePoint Lists — edits here do NOT touch the live board</div>'
+          # Build the preview: point it at data.lists.js, add the banner, AND flip USE_LISTS_WRITE=true
+          # so edits on the preview go to the Lists (MRA Lists Write 2) — the live board stays dormant.
+          sed -e "s|<script src=\"data.js\"></script>|${BANNER}<script src=\"data.lists.js\"></script>|" \
+              -e "s|const USE_LISTS_WRITE = false;|const USE_LISTS_WRITE = true;|" \
+              MRA_Dashboard.html > preview-lists.html
+          grep -q "const USE_LISTS_WRITE = true;" preview-lists.html || { echo "::error::failed to enable USE_LISTS_WRITE in the preview"; exit 1; }
           az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
             --container-name '$web' --name data.lists.js --file data.lists.js \
             --content-type 'application/javascript' --content-cache-control 'no-cache, must-revalidate' --overwrite --only-show-errors
