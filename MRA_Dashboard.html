@@ -2216,7 +2216,7 @@ const FLEETIO_HELP = `
   <div class="hsec"><h4>② 📊 At-a-glance charts</h4>
     <p><b>Service Backlog</b> donut = overdue (red) vs due-soon (amber). <b>Open Issues by Type</b> = your Fleetio issue labels, ranked. <b>Top Units</b> = the units with the most open items.</p></div>
   <div class="hsec"><h4>③ ⚠ Open Issues &amp; 📋 Work Orders</h4>
-    <p>The <b>⚠ Open Issues</b> list sits up top (overdue first) — every open Fleetio issue, each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>clicking an issue docks its details (description, photos, files) on the right</b> with an ↗ link to Fleetio for the Resolve button (✕ / Esc closes). <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
+    <p>The <b>⚠ Open Issues</b> list sits up top (overdue first) — every open Fleetio issue, each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>hover an issue and its details (description, photos, files) dock on the right</b> with an ↗ link to Fleetio for the Resolve button (tap on touch; ✕ / Esc closes). <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
     <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio). Honors the 🧤/🍁 flag picker up top.</p></div>
   <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
@@ -2236,8 +2236,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"7.6", date:"2026-06-24", title:"FLEETIO: full-screen Open Issues → click a row to see its details beside the list", items:[
-    "On the <b>⚠ Open Issues</b> panel's <b>⛶ Full screen</b> view, <b>clicking an issue docks its details on the right</b> (split-screen): the <b>description, photos and file attachments</b> we already pull from Fleetio, plus an <b>↗ Open in Fleetio</b> link for the Resolve button. Click another issue to switch; <b>✕ or Esc</b> closes it. Perfect for walking the list in a meeting." ] },
+  { rev:"7.6", date:"2026-06-24", title:"FLEETIO: full-screen Open Issues → hover an issue to see its details beside the list", items:[
+    "On the <b>⚠ Open Issues</b> panel's <b>⛶ Full screen</b> view, just <b>hover an issue and its details appear on the right</b> (no click needed) — <b>description, photos and file attachments</b> we already pull from Fleetio, plus an <b>↗ Open in Fleetio</b> link for the Resolve button. Move down the list and the panel follows your cursor; <b>✕ or Esc</b> closes it. (On a touchscreen, tap instead of hover.)" ] },
   { rev:"7.5", date:"2026-06-24", title:"📖 Product Catalogue in the ☰ Menu", items:[
     "The <b>MRA Product Catalogue</b> is now a link in the <b>☰ Menu</b> — opens in a new tab, fully loaded (no more opening a file off your computer). It's hosted right alongside the dashboard." ] },
   { rev:"7.4", date:"2026-06-24", title:"FLOOR: Bay 3 & Bay 4 Middle tiles (auto-hide + filter)", items:[
@@ -3301,11 +3301,13 @@ function fioIssueDetailHtml(num){ const it=fioIssue(num);
     +(imgs.length?`<div class="fl-detail-imgs">${imgs.map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener"><img src="${escA(x.url)}" alt="${escA(x.n||'photo')}"></a>`).join('')}</div>`:'')
     +(files.length?`<div class="fl-detail-files">${files.map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener">📎 ${esc((x.n||'attachment').slice(0,52))}</a>`).join('')}</div>`:'')
     +`<a class="editbtn" style="margin-top:12px;display:inline-block" href="${fioHref('issue',it.num)}" target="_blank" rel="noopener">↗ Open in Fleetio (Resolve / comment)</a>`; }
-document.addEventListener('click',e=>{ const p=document.querySelector('.panel.fs-on'); if(!p) return; const row=e.target.closest('.row'); if(!row||!p.contains(row)||e.target.closest('a')) return;
-  const num=((row.querySelector('.fionum')||{}).textContent||'').replace(/[^\d]/g,''); if(!num) return;
+function fioShowDetailFor(p,row){ const num=((row.querySelector('.fionum')||{}).textContent||'').replace(/[^\d]/g,''); if(!num||row.classList.contains('fl-selected')) return;
   const dp=document.getElementById('fIssueDetail'); if(dp) dp.innerHTML=fioIssueDetailHtml(num);
   p.classList.add('has-detail');
-  p.querySelectorAll('.row.fl-selected').forEach(r=>r.classList.remove('fl-selected')); row.classList.add('fl-selected'); });
+  p.querySelectorAll('.row.fl-selected').forEach(r=>r.classList.remove('fl-selected')); row.classList.add('fl-selected'); }
+// Full screen: HOVER an issue → its detail auto-loads on the right (no click needed). Click still works for iPad/touch.
+document.addEventListener('mouseover',e=>{ const p=document.querySelector('.panel.fs-on'); if(!p) return; const row=e.target.closest('.row'); if(row&&p.contains(row)) fioShowDetailFor(p,row); });
+document.addEventListener('click',e=>{ const p=document.querySelector('.panel.fs-on'); if(!p) return; const row=e.target.closest('.row'); if(row&&p.contains(row)&&!e.target.closest('a')) fioShowDetailFor(p,row); });
 // Click outside the wall settings popup (and not on its gear) closes it.
 document.addEventListener('click',e=>{ const c=document.getElementById('wallCtl');
   if(!c||!c.classList.contains('show')||!e.target.closest) return;
@@ -6326,6 +6328,7 @@ function ageBadge(age){ if(age==null) return ''; const cls=age>90?'red':age>=30?
 function setupCollapse(rootSel, keyPrefix){
   document.querySelectorAll(rootSel+' .panel').forEach(pl=>{
     const h=pl.querySelector(':scope > h2'); if(!h) return;
+    if(/Project Schedules/i.test(h.textContent||'')){ const ex=h.querySelector('.pcaret'); if(ex) ex.remove(); pl.classList.remove('pcollapsed'); return; }   // no collapse caret on the main Gantt panel (Rich)
     const key=keyPrefix+(pl.id || (h.textContent||'').trim().slice(0,20).replace(/\s+/g,'_'));
     let col=false; try{ col=localStorage.getItem(key)==='1'; }catch(e){}
     pl.classList.toggle('pcollapsed', col);
