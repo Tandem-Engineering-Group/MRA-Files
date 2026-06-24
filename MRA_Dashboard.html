@@ -806,9 +806,23 @@
   .panel.fs-on{ position:fixed; inset:0; z-index:10000; margin:0; border-radius:0; overflow:auto; background:var(--bg); padding:14px 20px 30px; box-shadow:none }
   .panel.fs-on > h2{ position:sticky; top:0; background:var(--bg); z-index:2; padding-top:6px; font-size:18px }
   .panel.fs-on #fIssues{ max-height:none !important; height:auto !important; overflow:visible !important }
-  .panel.fs-on .row{ font-size:14px; padding:9px 6px; cursor:pointer }
-  .panel.fs-on .row:hover::after{ content:"↗ open ticket →"; position:absolute; right:10px; font-size:10px; color:var(--brand); font-weight:700 }
-  .panel.fs-on .row{ position:relative }
+  .panel.fs-on .row{ font-size:14px; padding:9px 6px; cursor:pointer; position:relative }
+  .panel.fs-on .row:hover::after{ content:"details →"; position:absolute; right:10px; font-size:10px; color:var(--brand); font-weight:700 }
+  .panel.fs-on .row.fl-selected{ background:rgba(245,200,30,.16); box-shadow:inset 3px 0 0 var(--brand) }
+  /* full-screen Open Issues: list on the left, the clicked issue's details docked on the right (in-page, from data we already pull) */
+  .fl-fsbody{ display:block }
+  .fl-detailpane{ display:none }
+  .panel.fs-on.has-detail .fl-fsbody{ display:flex; gap:16px; align-items:flex-start }
+  .panel.fs-on.has-detail #fIssues{ flex:1 1 auto; max-height:none !important; overflow:visible !important }
+  .panel.fs-on.has-detail .fl-detailpane{ display:block; flex:0 0 40%; max-width:42%; position:sticky; top:48px; max-height:calc(100vh - 64px); overflow:auto; border-left:1px solid var(--line); padding-left:16px }
+  .fl-detail-h{ display:flex; align-items:flex-start; gap:10px; justify-content:space-between }
+  .fl-detail-t{ font-weight:800; font-size:15px; line-height:1.3 }
+  .fl-detail-m{ font-size:12px; color:var(--muted); margin-top:5px }
+  .fl-detail-d{ font-size:13px; line-height:1.45; margin-top:10px; white-space:pre-wrap; color:var(--txt) }
+  .fl-detail-imgs{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px }
+  .fl-detail-imgs img{ max-height:120px; max-width:100%; border:1px solid var(--line); border-radius:6px }
+  .fl-detail-files{ display:flex; flex-direction:column; gap:4px; margin-top:8px }
+  .fl-detail-files a{ font-size:12px; color:var(--blue) }
   table.flt .typ{font-size:10px; background:#243042; color:#cdd8e6; border-radius:20px; padding:2px 9px; white-space:nowrap}
   table.flt .mut{color:var(--muted)}
   table.flt .ch{display:inline-block; font-size:10px; font-weight:700; padding:2px 9px; border-radius:20px}
@@ -1259,11 +1273,14 @@
     </div>
     <div class="panel" id="fp-issues">
       <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span>
-        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">all open Fleetio issues, overdue first — click one to open &amp; close it in Fleetio</span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">all open Fleetio issues, overdue first — in full screen, click one to see its details beside the list</span>
         <button class="expandbtn fsbtn" style="margin-left:auto" onclick="toggleIssuesFS(this)" title="Open the open-issues list full screen (Esc to exit)">⛶ Full screen</button>
         <button class="expandbtn fexp" onclick="toggleFScroll(this,'fIssues')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
       </h2>
-      <div id="fIssues" class="fscroll"></div>
+      <div class="fl-fsbody">
+        <div id="fIssues" class="fscroll"></div>
+        <div id="fIssueDetail" class="fl-detailpane"></div>
+      </div>
     </div>
     <div class="panel" id="fp-svc">
       <h2>🔧 Service — Due &amp; Overdue <span class="count" id="fSvcCount"></span><button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fService')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
@@ -1991,10 +2008,12 @@ function setProjSort(v){ PROJ_SORT=v||'start'; try{localStorage.setItem('mra_pro
 const GANTT_TASKLEVEL=false;   // task-level Projects Gantt (P1-P3) — DORMANT on live; the `ganttpreview` deploy flips this true. Flip to true + deploy live once Rich approves the preview.
 let GANTT_LOD='proj'; try{ const _gl=localStorage.getItem('mra_gantt_lod'); if(_gl) GANTT_LOD=_gl; }catch(e){}
 const GANTT_EXP=new Set();   // project names manually expanded when LOD='proj'
+const PHASE_OPEN=new Set();  // "project|phase" toggled OPPOSITE the current default (so one set handles expand + collapse)
 function setGanttLod(v){ GANTT_LOD=v||'proj'; try{localStorage.setItem('mra_gantt_lod',GANTT_LOD);}catch(e){} if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
-const _LOD_BY_N={0:'proj',1:'ms',2:'tasks'}, _LOD_N={proj:0,ms:1,tasks:2}, _LOD_LAB={proj:'Projects',ms:'Milestones',tasks:'Tasks'};
-function setGanttLodSlider(v){ setGanttLod(_LOD_BY_N[String(v)]||'proj'); }   // P2 slider: 0=Projects (shrunk) → 1=Milestones → 2=all Tasks (expanded)
+const _LOD_BY_N={0:'proj',1:'phase',2:'tasks'}, _LOD_N={proj:0,phase:1,tasks:2}, _LOD_LAB={proj:'Projects',phase:'Phases',tasks:'Tasks'};
+function setGanttLodSlider(v){ setGanttLod(_LOD_BY_N[String(v)]||'proj'); }   // P2 slider: 0=Projects (shrunk) → 1=Phases (just the section headers) → 2=Tasks (everything)
 function toggleGanttExp(name){ name=String(name||''); if(GANTT_EXP.has(name)) GANTT_EXP.delete(name); else GANTT_EXP.add(name); if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
+function togglePhase(proj,ph){ const k=proj+'|'+ph; if(PHASE_OPEN.has(k)) PHASE_OPEN.delete(k); else PHASE_OPEN.add(k); if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
 // Map one project task -> a Gantt sub-row. ALWAYS returns a row: a bar if it has start+finish,
 // a ◆ milestone diamond if it's a milestone, or a label-only (noBar) row when it's undated.
 function ganttTaskSubRow(t,p){ const today=(window.MRA_DATA||{}).todayISO||'';
@@ -2197,7 +2216,7 @@ const FLEETIO_HELP = `
   <div class="hsec"><h4>② 📊 At-a-glance charts</h4>
     <p><b>Service Backlog</b> donut = overdue (red) vs due-soon (amber). <b>Open Issues by Type</b> = your Fleetio issue labels, ranked. <b>Top Units</b> = the units with the most open items.</p></div>
   <div class="hsec"><h4>③ ⚠ Open Issues &amp; 📋 Work Orders</h4>
-    <p>The <b>⚠ Open Issues</b> list sits up top (overdue first) — every open Fleetio issue, each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>clicking a row docks that Fleetio ticket in a window on the right</b> (split-screen; clicking another issue reuses it). <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
+    <p>The <b>⚠ Open Issues</b> list sits up top (overdue first) — every open Fleetio issue, each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>clicking an issue docks its details (description, photos, files) on the right</b> with an ↗ link to Fleetio for the Resolve button (✕ / Esc closes). <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
     <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio). Honors the 🧤/🍁 flag picker up top.</p></div>
   <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
@@ -2217,8 +2236,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"7.6", date:"2026-06-24", title:"FLEETIO: full-screen Open Issues → click a row to dock the ticket beside it", items:[
-    "On the <b>⚠ Open Issues</b> panel's <b>⛶ Full screen</b> view, <b>clicking a row pulls that Fleetio ticket up in a docked window on the right</b> (split-screen) — clicking another issue reuses the same window. Great for going through the list in a meeting with the real ticket right there. (Fleetio blocks being embedded in-page, so it's a side window rather than a true inset panel.)" ] },
+  { rev:"7.6", date:"2026-06-24", title:"FLEETIO: full-screen Open Issues → click a row to see its details beside the list", items:[
+    "On the <b>⚠ Open Issues</b> panel's <b>⛶ Full screen</b> view, <b>clicking an issue docks its details on the right</b> (split-screen): the <b>description, photos and file attachments</b> we already pull from Fleetio, plus an <b>↗ Open in Fleetio</b> link for the Resolve button. Click another issue to switch; <b>✕ or Esc</b> closes it. Perfect for walking the list in a meeting." ] },
   { rev:"7.5", date:"2026-06-24", title:"📖 Product Catalogue in the ☰ Menu", items:[
     "The <b>MRA Product Catalogue</b> is now a link in the <b>☰ Menu</b> — opens in a new tab, fully loaded (no more opening a file off your computer). It's hosted right alongside the dashboard." ] },
   { rev:"7.4", date:"2026-06-24", title:"FLOOR: Bay 3 & Bay 4 Middle tiles (auto-hide + filter)", items:[
@@ -3260,16 +3279,33 @@ document.addEventListener('click',e=>{ document.querySelectorAll('details.tbmenu
 // ⚠ Open Issues panel → true full screen (F1). Toggles a class so the LIVE list just blows up; Esc/contract exits.
 function toggleIssuesFS(btn){ const p=document.getElementById('fp-issues'); if(!p) return;
   const on=p.classList.toggle('fs-on');
+  if(!on) fioCloseDetail();
   const b=btn||p.querySelector('.fsbtn'); if(b){ b.innerHTML = on?'⤡ Contract':'⛶ Full screen'; b.title = on?'Exit full screen (Esc)':'Open the open-issues list full screen (Esc to exit)'; }
   document.body.style.overflow = on?'hidden':''; }
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ const p=document.querySelector('.panel.fs-on'); if(p) toggleIssuesFS(p.querySelector('.fsbtn')); } });
-// In full-screen Open Issues, click a (highlighted) row to pull up THAT Fleetio ticket in a docked
-// popup window on the RIGHT — split-screen style. (Fleetio sends X-Frame-Options: SAMEORIGIN, so it
-// can't be iframed inside the dashboard; a reused popup window is the way to get it side-by-side.)
-function openFleetioPiP(url){ const aw=screen.availWidth||window.innerWidth||1280, ah=screen.availHeight||window.innerHeight||800;
-  const w=Math.max(480,Math.round(aw*0.46)); window.open(url,'fleetioPiP',`width=${w},height=${ah},left=${aw-w},top=0`); }
-document.addEventListener('click',e=>{ const p=document.querySelector('.panel.fs-on'); if(!p) return; const row=e.target.closest('.row'); if(!row||!p.contains(row)) return;
-  const a=row.querySelector('a.fiotitle'); if(a&&a.href){ e.preventDefault(); openFleetioPiP(a.href); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ const p=document.querySelector('.panel.fs-on'); if(!p) return; if(p.classList.contains('has-detail')) fioCloseDetail(); else toggleIssuesFS(p.querySelector('.fsbtn')); } });
+// In full-screen Open Issues, click a row → dock THAT issue's details (from the data we already pull from
+// Fleetio: summary, description, photos, files) in an in-page panel on the right + an ↗ link to Fleetio
+// for the Resolve button. (Fleetio sends X-Frame-Options: SAMEORIGIN, so we render the details ourselves.)
+function fioCloseDetail(){ const p=document.getElementById('fp-issues'); if(p){ p.classList.remove('has-detail'); p.querySelectorAll('.row.fl-selected').forEach(r=>r.classList.remove('fl-selected')); } }
+function fioIssueDetailHtml(num){ const it=fioIssue(num);
+  if(!it) return `<div class="fl-detail-h"><div class="fl-detail-t">#${esc(num)}</div><button class="expandbtn" onclick="fioCloseDetail()">✕</button></div><div class="empty">Not in the current data.</div>`;
+  const a=fAsg(it), today=(window.MRA_DATA||{}).todayISO||''; const age=it.openedISO?Math.max(0,daysBetween(today,it.openedISO)):(it.ageDays!=null?it.ageDays:null);
+  const docs=it.docs||[], imgs=docs.filter(x=>/^image\//i.test(x.mime||'')), files=docs.filter(x=>!/^image\//i.test(x.mime||''));
+  const chip = it.overdue?'<span class="badge red">overdue</span>':(age!=null?`<span class="badge grey">${age}d open</span>`:'');
+  return `<div class="fl-detail-h"><div class="fl-detail-t"><span class="fionum">#${esc(it.num)}</span> ${esc(it.summary||'Issue')}</div>`
+    +`<button class="expandbtn" onclick="fioCloseDetail()" title="Close (Esc)">✕</button></div>`
+    +`<div class="fl-detail-m">${esc(it.asset||'')}${it.jobNum?' · '+esc(it.jobNum):''} ${chip}</div>`
+    +(a.length?`<div class="fl-detail-m">👤 ${esc(a.join(', '))}</div>`:'')
+    +(it.reporter?`<div class="fl-detail-m">✍ ${esc(it.reporter)}${it.openedISO?' · opened '+fmtMDY(it.openedISO):''}</div>`:'')
+    +(it.detail?`<div class="fl-detail-d">${esc(it.detail)}</div>`:`<div class="fl-detail-d" style="color:var(--faint)">(no description)</div>`)
+    +(imgs.length?`<div class="fl-detail-imgs">${imgs.map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener"><img src="${escA(x.url)}" alt="${escA(x.n||'photo')}"></a>`).join('')}</div>`:'')
+    +(files.length?`<div class="fl-detail-files">${files.map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener">📎 ${esc((x.n||'attachment').slice(0,52))}</a>`).join('')}</div>`:'')
+    +`<a class="editbtn" style="margin-top:12px;display:inline-block" href="${fioHref('issue',it.num)}" target="_blank" rel="noopener">↗ Open in Fleetio (Resolve / comment)</a>`; }
+document.addEventListener('click',e=>{ const p=document.querySelector('.panel.fs-on'); if(!p) return; const row=e.target.closest('.row'); if(!row||!p.contains(row)||e.target.closest('a')) return;
+  const num=((row.querySelector('.fionum')||{}).textContent||'').replace(/[^\d]/g,''); if(!num) return;
+  const dp=document.getElementById('fIssueDetail'); if(dp) dp.innerHTML=fioIssueDetailHtml(num);
+  p.classList.add('has-detail');
+  p.querySelectorAll('.row.fl-selected').forEach(r=>r.classList.remove('fl-selected')); row.classList.add('fl-selected'); });
 // Click outside the wall settings popup (and not on its gear) closes it.
 document.addEventListener('click',e=>{ const c=document.getElementById('wallCtl');
   if(!c||!c.classList.contains('show')||!e.target.closest) return;
@@ -6008,9 +6044,19 @@ function renderProjects(D){
       if(expanded){
         let tl=(p.tasks||[]);
         if(PROJ_WHO) tl=tl.filter(t=>taskWhoMatch(t,PROJ_WHO));         // P3: only this assignee's tasks
-        if(GANTT_LOD==='ms') tl=tl.filter(t=>/yes/i.test(t.ml||''));    // P2: milestones-only detail
-        tl=tl.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')));
-        tl.forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && (sr.noBar || barGeom(sr.startISO,sr.endISO,win))) rows.push(sr); });
+        // group tasks by PHASE (section) in first-appearance order, each phase a collapsible header.
+        const phOrder=[], byPh={};
+        tl.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!(ph in byPh)){ byPh[ph]=[]; phOrder.push(ph); } byPh[ph].push(t); });
+        const phaseDefaultOpen = (GANTT_LOD==='tasks') || !!PROJ_WHO;   // Tasks level / assignee filter → phases open; Phases level → just headers
+        phOrder.forEach(ph=>{
+          const key=p.name+'|'+ph, open = PHASE_OPEN.has(key) ? !phaseDefaultOpen : phaseDefaultOpen;
+          const tks=byPh[ph], doneN=tks.filter(projIsDone).length;
+          rows.push({ label:ph, sub:tks.length+' task'+(tks.length>1?'s':'')+(doneN?(' · '+doneN+' done'):''),
+            noBar:true, cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
+            gutterClick:`togglePhase('${escJsAttr(p.name)}','${escJsAttr(ph)}')` });
+          if(open){ tks.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')))
+            .forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && (sr.noBar || barGeom(sr.startISO,sr.endISO,win))) rows.push(sr); }); }
+        });
       }
     });
   } else {
