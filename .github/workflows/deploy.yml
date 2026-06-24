@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = AzCopy token; cleanup = delete temp preview.html blob; listscand = build data.js FROM the Lists (validation only, no publish)'
+        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = AzCopy token; cleanup = delete temp preview.html blob; listscand = build data.js FROM the Lists (validation only, no publish); listspreview = publish a side-by-side Lists-built board at /preview-lists.html (does NOT touch the live board); listspreview-cleanup = remove that preview'
         type: choice
         options:
           - preview
@@ -21,6 +21,8 @@ on:
           - sas
           - cleanup
           - listscand
+          - listspreview
+          - listspreview-cleanup
         default: preview
 
 jobs:
@@ -55,6 +57,43 @@ jobs:
           name: data-fromlists
           path: data.fromlists.js
           retention-days: 3
+
+      # listspreview: publish a SIDE-BY-SIDE Lists-built board so Rich can eyeball it next to
+      # the live one BEFORE any cutover. Builds data.lists.js from the pipeline/lists.json blob,
+      # makes preview-lists.html = the live dashboard pointed at data.lists.js (+ a PREVIEW banner),
+      # and uploads BOTH to $web. It never touches data.js / index.html / MRA_Dashboard.html.
+      - name: Publish the Lists-built side-by-side preview
+        if: ${{ inputs.mode == 'listspreview' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage container create --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --name pipeline --only-show-errors >/dev/null
+          az storage blob download --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name pipeline --name lists.json --file lists.json --only-show-errors
+          if [ ! -f lists.json ]; then echo "::error::lists.json not in 'pipeline' container — run the MRA Lists to JSON flow first."; exit 1; fi
+          # inherit fleet/logistics from the LIVE data.js so the preview's FLEET tab is current
+          curl -s "https://mrashopdash.z13.web.core.windows.net/data.js?cb=$GITHUB_RUN_ID" -o base.live.js || cp data.js base.live.js
+          python3 build_from_lists.py --lists lists.json --base base.live.js --out data.lists.js
+          BANNER='<div style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#b45309;color:#fff;text-align:center;font:700 12px Segoe UI,Arial,sans-serif;padding:4px 8px">PREVIEW · built from SharePoint Lists — not the live board</div>'
+          sed "s|<script src=\"data.js\"></script>|${BANNER}<script src=\"data.lists.js\"></script>|" MRA_Dashboard.html > preview-lists.html
+          az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name data.lists.js --file data.lists.js \
+            --content-type 'application/javascript' --content-cache-control 'no-cache, must-revalidate' --overwrite --only-show-errors
+          az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name preview-lists.html --file preview-lists.html \
+            --content-type 'text/html' --content-cache-control 'no-cache, must-revalidate' --overwrite --only-show-errors
+          echo "PREVIEW LIVE → https://mrashopdash.z13.web.core.windows.net/preview-lists.html"
+
+      - name: Remove the Lists-built preview
+        if: ${{ inputs.mode == 'listspreview-cleanup' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          for f in preview-lists.html data.lists.js; do
+            az storage blob delete --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+              --container-name '$web' --name "$f" --only-show-errors || true
+          done
+          echo "Removed preview-lists.html + data.lists.js from the live site."
 
       # Generate a long-lived, write-scoped SAS for AzCopy on a no-admin PC.
       # Writes the full upload target URL to an artifact (masked in logs).
