@@ -1992,6 +1992,7 @@ let PROJ_SORT='start'; try{ const _ps=localStorage.getItem('mra_proj_sort'); if(
 function setProjSort(v){ PROJ_SORT=v||'start'; try{localStorage.setItem('mra_proj_sort',PROJ_SORT);}catch(e){} if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS==='projects') renderGanttFS(); } }
 // Projects Gantt detail level (P2) + per-project task expansion (P1). LOD: 'proj' = one bar per project (default),
 // 'tasks' = every project expanded to its task bars, 'ms' = projects + milestone tasks only.
+const GANTT_TASKLEVEL=false;   // task-level Projects Gantt (P1-P3) — DORMANT on live; the `ganttpreview` deploy flips this true. Flip to true + deploy live once Rich approves the preview.
 let GANTT_LOD='proj'; try{ const _gl=localStorage.getItem('mra_gantt_lod'); if(_gl) GANTT_LOD=_gl; }catch(e){}
 const GANTT_EXP=new Set();   // project names manually expanded when LOD='proj'
 function setGanttLod(v){ GANTT_LOD=v||'proj'; try{localStorage.setItem('mra_gantt_lod',GANTT_LOD);}catch(e){} if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
@@ -2193,7 +2194,7 @@ const FLEETIO_HELP = `
   <div class="hsec"><h4>② 📊 At-a-glance charts</h4>
     <p><b>Service Backlog</b> donut = overdue (red) vs due-soon (amber). <b>Open Issues by Type</b> = your Fleetio issue labels, ranked. <b>Top Units</b> = the units with the most open items.</p></div>
   <div class="hsec"><h4>③ ⚠ Open Issues &amp; 📋 Work Orders</h4>
-    <p>The <b>⚠ Open Issues</b> list sits up top (overdue first) — every open Fleetio issue, each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
+    <p>The <b>⚠ Open Issues</b> list sits up top (overdue first) — every open Fleetio issue, each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>clicking anywhere on a row opens that issue in Fleetio</b>. <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
     <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio). Honors the 🧤/🍁 flag picker up top.</p></div>
   <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
@@ -2213,6 +2214,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"7.6", date:"2026-06-24", title:"FLEETIO: in full-screen Open Issues, click a row to open it in Fleetio", items:[
+    "On the <b>⚠ Open Issues</b> panel's <b>⛶ Full screen</b> view, <b>hovering a row</b> shows <b>↗ open in Fleetio</b> and <b>clicking anywhere on the row opens that exact issue in Fleetio</b> — quick to pull up a record while going through the list in a meeting." ] },
   { rev:"7.5", date:"2026-06-24", title:"📖 Product Catalogue in the ☰ Menu", items:[
     "The <b>MRA Product Catalogue</b> is now a link in the <b>☰ Menu</b> — opens in a new tab, fully loaded (no more opening a file off your computer). It's hosted right alongside the dashboard." ] },
   { rev:"7.4", date:"2026-06-24", title:"FLOOR: Bay 3 & Bay 4 Middle tiles (auto-hide + filter)", items:[
@@ -5981,31 +5984,40 @@ function renderProjects(D){
 
   const dated=projects.filter(p=>p.startISO&&p.finishISO&&projMatch(p)&&projHasWho(p,PROJ_WHO)).sort(projSortCmp);
   const rows=[];
-  dated.forEach(p=>{
-    if(!barGeom(p.startISO,p.finishISO,win)) return;   // project bar must fall in the visible window
-    const hasTasks=!!(p.tasks&&p.tasks.length);
-    const expanded = hasTasks && (GANTT_LOD!=='proj' || GANTT_EXP.has(p.name) || !!PROJ_WHO);   // P1/P2/P3
-    rows.push({
-      label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
-      startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
-      barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
-      cls:'clickable', caret: hasTasks?`<span class="gcaret">${expanded?'▾':'▸'}</span>`:'',
-      gutterClick: hasTasks?`toggleGanttExp('${escJsAttr(p.name)}')`:`openProjectEditor('${escJsAttr(p.name)}')`,
-      barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`
+  if(GANTT_TASKLEVEL){
+    dated.forEach(p=>{
+      if(!barGeom(p.startISO,p.finishISO,win)) return;   // project bar must fall in the visible window
+      const hasTasks=!!(p.tasks&&p.tasks.length);
+      const expanded = hasTasks && (GANTT_LOD!=='proj' || GANTT_EXP.has(p.name) || !!PROJ_WHO);   // P1/P2/P3
+      rows.push({
+        label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
+        startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
+        barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
+        cls:'clickable', caret: hasTasks?`<span class="gcaret">${expanded?'▾':'▸'}</span>`:'',
+        gutterClick: hasTasks?`toggleGanttExp('${escJsAttr(p.name)}')`:`openProjectEditor('${escJsAttr(p.name)}')`,
+        barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`
+      });
+      if(expanded){
+        let tl=(p.tasks||[]);
+        if(PROJ_WHO) tl=tl.filter(t=>taskWhoMatch(t,PROJ_WHO));         // P3: only this assignee's tasks
+        if(GANTT_LOD==='ms') tl=tl.filter(t=>/yes/i.test(t.ml||''));    // P2: milestones-only detail
+        tl=tl.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')));
+        tl.forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && barGeom(sr.startISO,sr.endISO,win)) rows.push(sr); });
+      }
     });
-    if(expanded){
-      let tl=(p.tasks||[]);
-      if(PROJ_WHO) tl=tl.filter(t=>taskWhoMatch(t,PROJ_WHO));         // P3: only this assignee's tasks
-      if(GANTT_LOD==='ms') tl=tl.filter(t=>/yes/i.test(t.ml||''));    // P2: milestones-only detail
-      tl=tl.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')));
-      tl.forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && barGeom(sr.startISO,sr.endISO,win)) rows.push(sr); });
-    }
-  });
+  } else {
+    dated.forEach(p=>{ if(!barGeom(p.startISO,p.finishISO,win)) return;
+      rows.push({ label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
+        startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
+        barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
+        cls:'clickable', onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
+        barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }); });
+  }
   { const hp=document.getElementById('projHolPick'); if(hp) hp.innerHTML=holPickerHtml(); }   // US/CA holiday picker above the Projects Gantt
   { const ww=document.getElementById('projWhoWrap'); if(ww) ww.innerHTML=projWhoSelHtml('projWhoSel'); }   // assignee filter
   renderGantt(document.getElementById('projGantt'), rows, win, {dates:true, showDays:true});
   { const ss=document.getElementById('projSort'); if(ss) ss.value=PROJ_SORT; }
-  { const gl=document.getElementById('ganttLod'); if(gl) gl.value=GANTT_LOD; }
+  { const gl=document.getElementById('ganttLod'); if(gl){ gl.value=GANTT_LOD; gl.style.display=GANTT_TASKLEVEL?'':'none'; } }
   { const df=document.getElementById('dateFmtSel'); if(df) df.value=DATE_FMT; }
   syncMraHlBtns();
   const undated=projects.filter(p=>!p.startISO||!p.finishISO).map(p=>p.name);

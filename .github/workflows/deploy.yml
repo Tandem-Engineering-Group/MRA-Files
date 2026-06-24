@@ -111,8 +111,12 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
           BANNER="<div style='position:fixed;top:0;left:0;right:0;z-index:99999;background:#2563eb;color:#fff;text-align:center;font:700 12px Segoe UI,Arial,sans-serif;padding:4px 8px'>PREVIEW build #${GITHUB_RUN_NUMBER} · Projects-Gantt task-level test — reads the LIVE data, does NOT change the live board</div>"
-          sed "s|<script src=\"data.js\"></script>|${BANNER}<script src=\"data.js\"></script>|" MRA_Dashboard.html > preview-gantt.html
+          # turn the task-level Gantt ON for the preview (it's dormant/false on the live board)
+          sed -e "s|<script src=\"data.js\"></script>|${BANNER}<script src=\"data.js\"></script>|" \
+              -e "s|const GANTT_TASKLEVEL=false;|const GANTT_TASKLEVEL=true;|" \
+              MRA_Dashboard.html > preview-gantt.html
           grep -q 'PREVIEW build #' preview-gantt.html || { echo "::error::failed to stamp the preview banner"; exit 1; }
+          grep -q 'const GANTT_TASKLEVEL=true;' preview-gantt.html || { echo "::error::failed to enable GANTT_TASKLEVEL in the preview"; exit 1; }
           az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
             --container-name '$web' --name preview-gantt.html --file preview-gantt.html \
             --content-type 'text/html' --content-cache-control 'no-cache, must-revalidate' --overwrite --only-show-errors
