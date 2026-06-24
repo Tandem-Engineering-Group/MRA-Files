@@ -4720,7 +4720,10 @@ function statusBadge(h){
 function buildStatusReport(){
   const D=window.MRA_DATA||{}, today=D.todayISO||'';
   const odMap=overdueByProject(D);
-  const active=(D.projects||[]).filter(p=>projStatus(p,today)!=='done')
+  // Use the SAME project set as the on-page board: drop archived/wrapped projects unless Show-archived is on.
+  const _all=(D.projects||[]).slice();
+  const projects=(typeof SHOW_ARCHIVED!=='undefined' && SHOW_ARCHIVED) ? _all : _all.filter(p=>!projArchived(p));
+  const active=projects.filter(p=>projStatus(p,today)!=='done')
     .map(p=>({p,h:projHealth(p,today)}))
     .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||'9999').localeCompare(b.p.finishISO||'9999')));
   const atRisk=active.filter(x=>x.h.state==='late'||x.h.state==='behind').length;
@@ -4748,7 +4751,7 @@ function buildStatusReport(){
   // Program Development Load (mirror the on-page panel) so the report can draw the same graph:
   // active/upcoming/done counts per PM, with TBD/Unassigned pushed to the bottom.
   const _pl={};
-  (D.projects||[]).forEach(p=>{const pm=(p.pm&&p.pm!=="TBD")?p.pm:"Unassigned/TBD";
+  projects.forEach(p=>{const pm=(p.pm&&p.pm!=="TBD")?p.pm:"Unassigned/TBD";
     _pl[pm]=_pl[pm]||{active:0,upcoming:0,done:0}; _pl[pm][projStatus(p,today)]++;});
   const pmLoad=Object.entries(_pl).map(([nm,v])=>({nm,...v,tot:v.active+v.upcoming+v.done}))
     .sort((a,b)=>{const at=a.nm==="Unassigned/TBD",bt=b.nm==="Unassigned/TBD"; if(at!==bt)return at?1:-1; return b.tot-a.tot;});
