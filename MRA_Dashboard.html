@@ -1075,7 +1075,7 @@
         <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260618c" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx) — same columns & look as the schedule (now with a Sub column for subtasks + a how-to note up top), so you can upload it, drop it in the Intake Inbox, or paste straight into Excel">⬇ Download Template</a>
         <button class="editbtn" onclick="openUpload()" title="Upload a filled intake template right here — it loads into the schedule on the next ~15-min cycle">⬆ Upload Filled</button>
         <select id="dlProjSel" class="editbtn" onmousedown="dlFillProjects()" style="padding:4px 6px" title="Pick a project to download as an editable Excel template"><option value="">— pick a project —</option></select>
-        <button class="editbtn" onclick="downloadProjectXlsx()" title="Download the picked project's tasks as an Excel template (same format as Upload Filled) — edit/add tasks offline, then ⬆ Upload Filled to send it back">⬇ Download a Project</button>
+        <button class="editbtn" onclick="downloadProjectXlsx()" title="Download the picked project's tasks as an Excel template (same format as Upload Filled) — frozen header + filters, shaded rows, milestones in gold. Edit/add tasks offline, then ⬆ Upload Filled to send it back">⬇ Download a Project</button>
         <button class="editbtn" onclick="openIntakeHow()" title="Step-by-step: how to download, fill, and load a project">ⓘ How to</button>
       </span>
       <span class="tbgroup" style="margin-left:auto">
@@ -2156,6 +2156,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.7", date:"2026-06-24", title:"⬇ Download a Project: formatted Excel (frozen header, filters, shading)", items:[
+    "The <b>⬇ Download a Project</b> file is now formatted for real work: the <b>header row stays pinned at the top</b> (freeze) and has <b>filter dropdowns</b> on every column, rows are <b>zebra-shaded</b>, and <b>milestone rows are highlighted gold + bold</b>. Same columns as before, so <b>⬆ Upload Filled</b> still reads it straight back." ] },
   { rev:"6.6", date:"2026-06-24", title:"Unassigned: milestones no longer counted as unassigned", items:[
     "Milestones (◆) are <b>date gates / headers, not assignable work</b>, so they no longer count as <b>Unassigned</b> — the <span class=\"k\">🚫 Unassigned</span> filter, its count, and the 📊 Workload <b>Unassigned</b> bar now reflect only <b>real work tasks with nobody assigned</b>. (Per Rich: a milestone shouldn't need an owner.)" ] },
   { rev:"6.5", date:"2026-06-23", title:"Unassigned filter · clickable Workload breakdown · iPad toolbar tidy", items:[
@@ -4928,6 +4930,15 @@ function ensureXLSX(cb){
   s.onload=()=>cb(); s.onerror=()=>cb(new Error("reader-failed"));
   document.head.appendChild(s);
 }
+// ExcelJS — only for WRITING the project download (it can style cells: freeze panes, autofilter,
+// zebra shading, milestone highlight — SheetJS free can't). Upload still reads via SheetJS.
+function ensureExcelJS(cb){
+  if(window.ExcelJS){ cb(); return; }
+  const s=document.createElement('script');
+  s.src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+  s.onload=()=>cb(); s.onerror=()=>cb(new Error("writer-failed"));
+  document.head.appendChild(s);
+}
 function upNorm(s){ return String(s==null?'':s).trim(); }
 function upDateISO(v){
   if(v==null||v==='') return "";
@@ -5040,33 +5051,50 @@ function dlFillProjects(){
 function downloadProjectXlsx(){
   const sel=document.getElementById('dlProjSel'); const name=sel?sel.value:'';
   if(!name){ alert("Pick a project from the dropdown first."); if(sel) sel.focus(); return; }
-  ensureXLSX(err=>{
+  ensureExcelJS(err=>{
     if(err){ alert("Couldn't load the spreadsheet writer (network blocked?). Try again on a connected device."); return; }
     const p=(((window.MRA_DATA||{}).projects)||[]).find(x=>(x.name||'')===name);
     if(!p){ alert("Project not found — try refreshing the page."); return; }
     const pm=p.pm||"";
-    // Header + task layout EXACTLY mirror the upload parser (sheet 'Enter Here', cols A=Project … L=Comments, O=Sub).
+    // Header + task layout EXACTLY mirror the upload parser (sheet 'Enter Here', header on row 6,
+    // cols A=Project … O=Sub). Styling (freeze / filter / zebra / milestone gold) is cosmetic — the
+    // upload reader ignores it and reads the same cells back.
     const H=["Project","Phase","Type","Task","Start","Finish","Duration","Assigned To","Status","PM","Milestone","Comments","Task ID","Predecessor","Sub"];
-    const aoa=[
-      ["MRA Project Intake — edit or add task rows below, then use ⬆ Upload Filled to send it back. Keep the Project name to UPDATE this project; rename it to create a NEW one."],
-      [],
-      ["Project / Client:", p.name],
-      ["Project Manager:", pm],
-      [],
-      H
-    ];
+    const wb=new ExcelJS.Workbook();
+    const ws=wb.addWorksheet("Enter Here", { views:[{ state:'frozen', ySplit:6 }] });   // freeze the title + header block
+    ws.addRow(["MRA Project Intake — edit or add task rows below, then use ⬆ Upload Filled to send it back. Keep the Project name to UPDATE this project; rename it to create a NEW one."]);
+    ws.addRow([]);
+    ws.addRow(["Project / Client:", p.name]);
+    ws.addRow(["Project Manager:", pm]);
+    ws.addRow([]);
+    ws.addRow(H);   // row 6 = the column header
+    [24,18,12,42,11,11,9,18,14,14,9,32,8,11,5].forEach((w,i)=>{ ws.getColumn(i+1).width=w; });
+    try{ ws.mergeCells('A1:O1'); }catch(e){}
+    ws.getCell('A1').font={italic:true,color:{argb:'FF6B7280'}}; ws.getCell('A1').alignment={wrapText:true};
+    ws.getCell('A3').font={bold:true}; ws.getCell('A4').font={bold:true};
+    // header row 6: dark fill, white bold
+    const hdr=ws.getRow(6); hdr.font={bold:true,color:{argb:'FFFFFFFF'}};
+    hdr.eachCell({includeEmpty:true},c=>{ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF23272E'}}; });
+    // data rows: gold for milestones, light-grey zebra otherwise
+    let ri=0;
     (p.tasks||[]).forEach(t=>{
       const ml=(t.ml===true||t.ml==='Yes'||/^y/i.test(String(t.ml||'')))?"Yes":"";
-      aoa.push([ p.name, t.phase||"", t.type||"", t.t||"", t.startISO||"", t.finISO||"",
+      const row=ws.addRow([ p.name, t.phase||"", t.type||"", t.t||"", t.startISO||"", t.finISO||"",
                  (t.dur!=null&&t.dur!==''?String(t.dur):""), t.who||"", t.st||"", pm, ml, t.cm||"",
                  (t.id!=null?String(t.id):""), t.pred||"", t.sub?"x":"" ]);
+      const isMs=(ml==='Yes');
+      const fill=isMs?'FFFFF1C2':(ri%2?'FFF2F4F7':null);
+      if(fill) row.eachCell({includeEmpty:true},c=>{ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:fill}}; });
+      if(isMs) row.font={bold:true};
+      ri++;
     });
-    const ws=XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols']=[{wch:24},{wch:18},{wch:12},{wch:42},{wch:11},{wch:11},{wch:9},{wch:18},{wch:14},{wch:14},{wch:9},{wch:32},{wch:8},{wch:11},{wch:5}];
-    const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Enter Here");
+    ws.autoFilter={ from:{row:6,column:1}, to:{row:6+(p.tasks||[]).length, column:15} };   // filter dropdowns on the header
     const safe=(name.replace(/[^\w\- ]+/g,'').trim()||"project").slice(0,40);
-    XLSX.writeFile(wb, "MRA_"+safe+".xlsx");
+    wb.xlsx.writeBuffer().then(buf=>{
+      const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download="MRA_"+safe+".xlsx";
+      document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000);
+    }).catch(()=>alert("Couldn't generate the file — try again."));
   });
 }
 
