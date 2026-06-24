@@ -1011,8 +1011,8 @@
     <div class="panel" id="bayStatusPanel">
       <h2>Bay Status <span class="count" id="bayCount"></span>
         <span style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">click a task count to see the tasks</span>
-        <button class="expandbtn bayallbtn" style="margin-left:8px" onclick="collapseAllBays()" title="Collapse every bay tile down to its title">⊟ Collapse all</button>
-        <button class="expandbtn bayallbtn" onclick="expandAllBays()" title="Expand every bay tile">⊞ Expand all</button>
+        <button class="expandbtn bayallbtn" style="margin-left:8px" onclick="collapseAllBays()" title="Hide every job's tasks across all bays (you still see the job names)">⊟ Collapse all</button>
+        <button class="expandbtn bayallbtn" onclick="expandAllBays()" title="Show every job's tasks across all bays">⊞ Expand all</button>
         <div class="linksmenu" style="margin-left:8px">
           <button class="expandbtn" onclick="toggleDrop(event,'bayPop')" title="Bay actions — edit, add, print">☰ Actions ▾</button>
           <div class="linksmenu-pop" id="bayPop">
@@ -1258,6 +1258,10 @@
       </h2>
       <div id="fIssues" class="fscroll"></div>
     </div>
+    <div class="panel" id="fp-svc">
+      <h2>🔧 Service — Due &amp; Overdue <span class="count" id="fSvcCount"></span><button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fService')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
+      <div id="fService" class="fscroll"></div>
+    </div>
     <div class="panel mappanel">
       <h2>🗺 Unit Map
         <span class="maplegend"><span class="dot" style="background:#e04826"></span>at MRA<span class="dot" style="background:#2f6fe0"></span>in Michigan<span class="dot" style="background:#7b8794"></span>elsewhere · <span id="mapMiniFleetioCount"></span></span>
@@ -1287,10 +1291,6 @@
         </select>
       </div>
       <div class="teamgrid fscroll" id="fByTrailer"></div>
-    </div>
-    <div class="panel" id="fp-svc">
-      <h2>🔧 Service — Due &amp; Overdue <span class="count" id="fSvcCount"></span><button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fService')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
-      <div id="fService" class="fscroll"></div>
     </div>
   </div>
 
@@ -2189,6 +2189,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"7.3", date:"2026-06-24", title:"FLOOR: Collapse all = hide tasks, keep jobs · FLEETIO: Service moved under Open Issues", items:[
+    "<b>FLOOR ⊟ Collapse all / ⊞ Expand all</b> now collapse/expand every job's <b>tasks</b> across all bays while <b>keeping the job names visible</b> (and it opens any whole-collapsed tile) — so \"collapse all\" gives you a clean trailer roster, not blank tiles.",
+    "<b>FLEETIO:</b> the <b>🔧 Service — Due &amp; Overdue</b> panel now sits <b>directly under ⚠ Open Issues</b> (service overdue is right where you're looking)." ] },
   { rev:"7.2", date:"2026-06-24", title:"FLOOR: Parking Lot + Next Up default collapsed · FLEETIO: Open Issues moved up", items:[
     "On <b>FLOOR</b>, the <b>Parking Lot</b> and <b>Next Up / On Hold</b> lanes now <b>default to collapsed</b> — you see the trailers, not all their tasks. Click a trailer's <b>▸</b> (or its task pill) to expand just that one; your choice sticks. (The work bays still show their tasks by default.)",
     "Every bay tile now has a small <b>⊟ tasks / ⊞ tasks</b> button in its header to <b>collapse or expand every job's tasks in that tile at once</b> (separate from the ▾ that collapses the whole tile).",
@@ -2850,16 +2853,17 @@ function toggleBayTile(el){
   if(caret){ caret.textContent=now?'▸':'▾'; }
   if(now) BAY_COLLAPSED.add(bay); else BAY_COLLAPSED.delete(bay);
   try{ localStorage.setItem('mra_bay_collapsed', JSON.stringify([...BAY_COLLAPSED])); }catch(e){} }
-// Collapse / expand EVERY bay tile at once (next to the Bay Status Actions menu).
-function setAllBays(collapse){
-  const cards=document.querySelectorAll('#bays .bay[data-bay]');
-  if(collapse){ cards.forEach(c=>{ const b=c.getAttribute('data-bay'); if(b) BAY_COLLAPSED.add(b); }); }
-  else { BAY_COLLAPSED.clear(); }
-  try{ localStorage.setItem('mra_bay_collapsed', JSON.stringify([...BAY_COLLAPSED])); }catch(e){}
-  cards.forEach(c=>{ const b=c.getAttribute('data-bay'); const on=BAY_COLLAPSED.has(b);
-    c.classList.toggle('collapsed',on); const car=c.querySelector('.bay-collapse'); if(car) car.textContent=on?'▸':'▾'; }); }
-function collapseAllBays(){ setAllBays(true); }
-function expandAllBays(){ setAllBays(false); }
+// "Collapse all / Expand all" (next to Bay Status Actions) = collapse / expand EVERY job's TASKS across all bays,
+// keeping the job names visible (Rich: "still see the jobs, no tasks"). Also opens any whole-collapsed tile so jobs show.
+function setAllTasks(collapse){
+  BAY_COLLAPSED.clear(); try{ localStorage.setItem('mra_bay_collapsed','[]'); }catch(e){}
+  document.querySelectorAll('#bays .job[id^="floorjob-"]').forEach(el=>{ const s=el.id.slice(9); const r=/^-?\d+$/.test(s)?+s:s;
+    const dc=WALL||DEFCOLL_ROWS.has(r);
+    if(collapse){ if(dc) expandedJobs.delete(r); else collapsedJobs.add(r); }
+    else { if(dc) expandedJobs.add(r); else collapsedJobs.delete(r); } });
+  renderAll(); }
+function collapseAllBays(){ setAllTasks(true); }
+function expandAllBays(){ setAllTasks(false); }
 /* ---- (C) Drag a trailer card from one bay to another — rides the existing editJob save ---- */
 let _jdragRow=null;
 function jobDragStart(e,row){ _jdragRow=row; try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain','job-'+row); }catch(_){} }
