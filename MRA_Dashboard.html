@@ -3327,6 +3327,11 @@ function _jobsOf(name){ return (_D().jobs||[]).filter(j=>j.project===name); }
 function _shopTasksOf(name){ const out=[]; _jobsOf(name).forEach(j=>(j.tasks||[]).forEach(t=>out.push(t))); return out; }
 function _allProjTasks(){ const out=[]; (_D().projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>out.push(t))); return out; }
 function _allShopTasks(){ const out=[]; (_D().jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>out.push(t))); return out; }
+// Project-task match: prefer the SharePoint item Id (numeric, exact) over {Project,TaskID} —
+// TaskID lives in a Number column, so a quoted text filter on it fails. Item Id sidesteps that.
+function _ptIid(project,taskId){ const p=(_D().projects||[]).find(x=>x.name===project); if(!p) return null;
+  const t=(p.tasks||[]).find(x=>String(x.id)===String(taskId)); return (t&&t._id!=null&&t._id!=='')?t._id:null; }
+function _ptMatch(project,taskId){ const iid=_ptIid(project,taskId); return iid!=null?{Id:iid}:{Project:project,TaskID:taskId}; }
 function _listOpsRaw(p){
   const today=_listToday();
   const a=p.action || (p.closedDate!=null ? 'closeTask' : '');
@@ -3384,10 +3389,10 @@ function _listOpsRaw(p){
     }
     case 'deleteHoliday':    return [O('delete','Holidays',{Name:p.name,Date:p.date})];
     case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
-    case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
-    case 'deleteProjectTask':return [O('delete','ProjectTasks',{Project:p.project,TaskID:p.id})];
-    case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Status:'Completed'})];
-    case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Status:'In Progress'})];
+    case 'editProjectTask':  return [O('update','ProjectTasks',_ptMatch(p.project,p.id),{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    case 'deleteProjectTask':return [O('delete','ProjectTasks',_ptMatch(p.project,p.id))];
+    case 'closeProjectTask': return [O('update','ProjectTasks',_ptMatch(p.project,p.id),{Status:'Completed'})];
+    case 'reopenProjectTask':return [O('update','ProjectTasks',_ptMatch(p.project,p.id),{Status:'In Progress'})];
     case 'importProject': {
       const ops=[]; if(p.replace) ops.push(...idOps('delete','ProjectTasks',_projTasksOf(p.project)));
       (p.tasks||[]).forEach(t=>ops.push(O('create','ProjectTasks',null,{Task:t.task,Project:p.project,Phase:t.phase,Type:t.type,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Duration:t.duration,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,PM:p.pm})));
@@ -3403,7 +3408,7 @@ function _listOpsRaw(p){
 const _LF = {
   Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
   ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9"} },   /* field_8 is a Number column in the list (always 0.0) — NOT milestone; don't write it (shop tasks have no milestone on the board) */
-  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Assigned:"field_5",Start:"field_6",Finish:"field_7",Duration:"field_8",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Predecessor:"field_13",Sub:"field_14"} },
+  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Assigned:"field_5",Start:"field_6",Finish:"field_7",Duration:"field_8",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14"} },   /* field_13 (Predecessor) + field_2 (TaskID) are Number cols — don't WRITE Predecessor (rare; needs a text col to persist); TaskID is match-only and now matched via item Id (_ptMatch) */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
 };
