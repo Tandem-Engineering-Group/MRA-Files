@@ -2097,7 +2097,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
     <p>The <span class="k">🟧 MRA Shop load</span> toggle above the Projects Gantt highlights every date span where <b>MRA Shop</b> is assigned, across <b>all</b> projects, so you can spot when the shop is over‑scheduled. The highlight is a clean <b>white outline</b>; adjacent tasks merge into one continuous band so it reads over any bar color. Click to turn on/off (remembered per device); works in every range and the full‑screen view.</p></div>
   <div class="hsec"><h4>⑰ᵇ 👥 Filter the Gantt by assignee (incl. 🚫 Unassigned)</h4>
-    <p>The <span class="k">👥 All assignees</span> dropdown above the Projects Gantt (and in the full-screen / detailed view) narrows the schedule to <b>one person or crew</b> — pick a name to see only their tasks across the projects. New: pick <span class="k">🚫 Unassigned (N)</span> to find every task with <b>nobody assigned</b> (the count matches the <b>Unassigned</b> bar in the 📊 Workload panel), so you can hunt down and assign the orphans. Your choice is remembered per device; reset with <b>👥 All assignees</b>.</p></div>
+    <p>The <span class="k">👥 All assignees</span> dropdown above the Projects Gantt (and in the full-screen / detailed view) narrows the schedule to <b>one person or crew</b> — pick a name to see only their tasks across the projects. New: pick <span class="k">🚫 Unassigned (N)</span> to find every <b>work task with nobody assigned</b> (the count matches the <b>Unassigned</b> bar in the 📊 Workload panel), so you can hunt down and assign the orphans. <b>Milestones (◆) are excluded</b> — they're date gates/headers, not work, so they don't need an owner. Your choice is remembered per device; reset with <b>👥 All assignees</b>.</p></div>
   <div class="hsec"><h4>⑱ 📅 Reading dates on the Gantts</h4>
     <p>Every Gantt shows dated gridlines on the <b>1st &amp; 15th</b> of each month (Jun 1, Jun 15, Jul 1…) so you can tell where a bar falls when comparing schedules. <span style="color:var(--amber)">◆</span> = milestone gate, <span style="color:var(--red)">▏</span> = today, <span style="color:#93c5fd">blue band</span> = this week, a soft <b>violet band</b> marks a holiday (its name is written on the timeline when you zoom in; hover for it otherwise).</p></div>
   <div class="hsec"><h4>⑱ᵇ 📅 Holidays on the schedule</h4>
@@ -2156,6 +2156,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"6.6", date:"2026-06-24", title:"Unassigned: milestones no longer counted as unassigned", items:[
+    "Milestones (◆) are <b>date gates / headers, not assignable work</b>, so they no longer count as <b>Unassigned</b> — the <span class=\"k\">🚫 Unassigned</span> filter, its count, and the 📊 Workload <b>Unassigned</b> bar now reflect only <b>real work tasks with nobody assigned</b>. (Per Rich: a milestone shouldn't need an owner.)" ] },
   { rev:"6.5", date:"2026-06-23", title:"Unassigned filter · clickable Workload breakdown · iPad toolbar tidy", items:[
     "<b>🚫 Unassigned in the assignee filter:</b> the <span class=\"k\">👥 All assignees</span> dropdown above the Projects Gantt now has an <b>🚫 Unassigned (N)</b> option — pick it to see every task with <b>nobody assigned</b>, so you can find and assign the orphans (the count matches the Unassigned bar in 📊 Workload).",
     "<b>Click the 📊 Workload bars</b> (by PM and by resource / crew, including <b>Unassigned</b>) to pop a <b>per-project breakdown</b> — how many open tasks that person/crew has on each project, overdue in red. Click a project there to open its detailed Gantt.",
@@ -3885,6 +3887,7 @@ function setPeWho(v){ PE_WHO=v||''; renderProjTaskList(); }
 let PE_SEARCH='';   // Edit-Project-Tasks: free-text task search
 function setPeSearch(v){ PE_SEARCH=v||''; renderProjTaskList(); }
 function projIsDone(t){ return !!(t && (t.done || /^completed$/i.test(t.st||''))); }
+function projIsMs(t){ return /yes/i.test((t&&t.ml)||''); }   // milestone (◆) = a date gate/header, NOT assignable work
 // Per-task % complete is stored INSIDE the status string (e.g. "In Progress 25%") so it round-trips
 // through the workbook + export with no new column. These read / strip it.
 function projTaskPct(st){ st=String(st||''); const m=st.match(/(\d{1,3})\s*%/);
@@ -3904,11 +3907,11 @@ let PROJ_WHO=''; try{ PROJ_WHO=localStorage.getItem('mra_proj_who')||''; }catch(
 const PROJ_UNASSIGNED='__UNASSIGNED__';   // sentinel: filter to tasks with NO assignee
 function _whoParts(s){ return String(s||'').split(/\s+\/\s+/).map(x=>(typeof crewCanon==='function'?crewCanon(x.trim()):x.trim())).filter(Boolean); }
 function taskWhoMatch(t, who){ if(!who) return true;
-  if(who===PROJ_UNASSIGNED) return _whoParts(t&&t.who).length===0;   // "Unassigned" = nobody in the Assigned-To
+  if(who===PROJ_UNASSIGNED) return _whoParts(t&&t.who).length===0 && !projIsMs(t);   // "Unassigned" = real work with nobody assigned (milestones are gates, excluded)
   const w=who.toLowerCase(); return _whoParts(t&&t.who).some(p=>p.toLowerCase()===w); }
 function projHasWho(p, who){ if(!who) return true; return (p&&p.tasks||[]).some(t=>taskWhoMatch(t,who)); }
 function projWhoList(){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>_whoParts(t.who).forEach(x=>s.add(x)))); return [...s].sort((a,b)=>a.localeCompare(b)); }
-function projUnassignedCount(){ let n=0; (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(!projIsDone(t) && _whoParts(t.who).length===0) n++; })); return n; }   // OPEN unassigned (matches the 📊 Workload bar)
+function projUnassignedCount(){ let n=0; (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(!projIsDone(t) && !projIsMs(t) && _whoParts(t.who).length===0) n++; })); return n; }   // OPEN unassigned WORK (milestones excluded; matches the 📊 Workload bar)
 function setProjWho(v){ PROJ_WHO=v||''; try{localStorage.setItem('mra_proj_who',PROJ_WHO);}catch(e){}
   if(window.MRA_DATA && typeof renderAll==='function') renderAll();
   const fs=document.getElementById('ganttFS'); if(fs && fs.classList.contains('show') && typeof renderGanttFS==='function') renderGanttFS(); }
@@ -5801,7 +5804,8 @@ function renderProjects(D){
     projects.forEach(p=>{ const pmNm=(p.pm&&p.pm!=="TBD")?p.pm:"Unassigned/TBD";
       (p.tasks||[]).forEach(t=>{ if(t.done) return; const od=!!(t.finISO&&t.finISO<today);
         wlAdd(wlPM,pmNm,p.name,od);
-        const parts=_whoParts(t.who); (parts.length?parts:["Unassigned"]).forEach(nm=>wlAdd(wlRes,nm,p.name,od)); }); });
+        const parts=_whoParts(t.who); const names=parts.length?parts:(projIsMs(t)?[]:["Unassigned"]);   // unassigned milestones are gates, not work → not counted as Unassigned
+        names.forEach(nm=>wlAdd(wlRes,nm,p.name,od)); }); });
     // Click a Workload row → popover listing how many OPEN tasks that PM / crew has, broken down per project.
     const wlPop=(name,o)=>{
       const rows=Object.entries(o.by).map(([nm,v])=>({nm,...v})).sort((a,b)=>b.tot-a.tot || a.nm.localeCompare(b.nm));
