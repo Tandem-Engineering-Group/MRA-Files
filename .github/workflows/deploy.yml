@@ -229,6 +229,26 @@ jobs:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
+      # MRA Product Catalogue — standalone app hosted in /catalogue/ (its logo.png + JSONs live there, so
+      # they don't clash with the dashboard's root assets). Linked from the dashboard ☰ Menu.
+      - name: Upload Product Catalogue (/catalogue/)
+        if: ${{ hashFiles('catalogue/index.html') != '' }}
+        run: |
+            az storage blob upload --account-name mrashopdash --container-name '$web' \
+              --name 'catalogue/index.html' --file catalogue/index.html --content-type 'text/html' \
+              --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+            for f in mra-product-history.json mra-reference-lists.json mra-allowed-units.json; do
+              az storage blob upload --account-name mrashopdash --container-name '$web' \
+                --name "catalogue/$f" --file "catalogue/$f" --content-type 'application/json' \
+                --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+            done
+            az storage blob upload --account-name mrashopdash --container-name '$web' \
+              --name 'catalogue/logo.png' --file catalogue/logo.png --content-type 'image/png' \
+              --overwrite --auth-mode key --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
       # Cleanup — delete the temporary preview.html blob from the live site.
       - name: Delete preview.html
         if: ${{ inputs.mode == 'cleanup' }}
