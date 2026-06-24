@@ -3327,18 +3327,22 @@ function _jobsOf(name){ return (_D().jobs||[]).filter(j=>j.project===name); }
 function _shopTasksOf(name){ const out=[]; _jobsOf(name).forEach(j=>(j.tasks||[]).forEach(t=>out.push(t))); return out; }
 function _allProjTasks(){ const out=[]; (_D().projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>out.push(t))); return out; }
 function _allShopTasks(){ const out=[]; (_D().jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>out.push(t))); return out; }
-// Project-task match: prefer the SharePoint item Id (numeric, exact) over {Project,TaskID} —
-// TaskID lives in a Number column, so a quoted text filter on it fails. Item Id sidesteps that.
-function _ptIid(project,taskId){ const p=(_D().projects||[]).find(x=>x.name===project); if(!p) return null;
-  const t=(p.tasks||[]).find(x=>String(x.id)===String(taskId)); return (t&&t._id!=null&&t._id!=='')?t._id:null; }
-function _ptMatch(project,taskId){ const iid=_ptIid(project,taskId); return iid!=null?{Id:iid}:{Project:project,TaskID:taskId}; }
+// Row collections carrying the PROJECT name + title, for TEXT-matched cascade fan-out
+// (the write flow can't match by internal item id, so every match is by Project + task name).
+function _projTaskRows(name){ const p=(_D().projects||[]).find(x=>x.name===name); return (((p&&p.tasks)||[])).map(t=>({_proj:name,t:t.t,who:t.who})); }
+function _shopRowsOf(name){ const out=[]; _jobsOf(name).forEach(j=>(j.tasks||[]).forEach(t=>out.push({_proj:name,t:t.t,who:t.who,jobNum:j.jobNum}))); return out; }
+function _allProjTaskRows(){ const out=[]; (_D().projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>out.push({_proj:p.name,t:t.t,who:t.who}))); return out; }
+function _allShopRows(){ const out=[]; (_D().jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>out.push({_proj:j.project,t:t.t,who:t.who,jobNum:j.jobNum}))); return out; }
+function _jobRows(name){ return _jobsOf(name).map(j=>({project:j.project})); }
 function _listOpsRaw(p){
   const today=_listToday();
   const a=p.action || (p.closedDate!=null ? 'closeTask' : '');
   const O=(verb,list,match,set)=>({verb,list,match:match?_defs(match):null,set:set?_defs(set):null});
-  // Fan a multi-row change into one op per row, matched by SharePoint item Id (skips rows with no _id).
-  const idOps=(verb,list,rows,set)=>(rows||[]).filter(r=>r&&r._id!=null&&r._id!=='').map(r=>O(verb,list,{Id:r._id},set));
-  const jId=(p.row!=null&&p.row!==''&&p.row!=='general')?p.row:null;   // a job's item id, when the caller sent it
+  // Fan a multi-row change into one TEXT-matched op per row (the write flow can't match by item id).
+  // Tasks match by {Project, Task[, extra]}; jobs match by Project (the list's Title). `extra` lets a
+  // cascade include the OLD value of the field it's about to change, so duplicate task names don't collide.
+  const taskOps=(verb,list,rows,set,extra)=>(rows||[]).filter(r=>r&&(r.t||r.task)).map(r=>O(verb,list,Object.assign({Project:r._proj,Task:(r.t||r.task)},extra||{}),set));
+  const jobOps =(verb,rows,set)=>(rows||[]).filter(r=>r&&r.project).map(r=>O(verb,'Jobs',{Project:r.project},set));
   switch(a){
     case 'closeTask':        return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Done',Closed:today})];
     case 'addTask':          return [O('create','ShopTasks',null,{Task:p.task,Project:p.project,JobNum:p.jobNum,Bay:p.bay,Assigned:p.assigned,Opened:today,Status:'Open',Milestone:p.milestone,Comments:p.comments})];
@@ -3350,31 +3354,31 @@ function _listOpsRaw(p){
       const set={Bay:p.bay,Status:p.status,Start:p.start,Finish:p.completion,Notes:p.notes,Client:p.client,PM:p.pm};
       if(p.newProject) set.Project=p.newProject;
       if(p.newJobNum)  set.JobNum=p.newJobNum;
-      const ops=[ jId!=null ? O('update','Jobs',{Id:jId},set) : O('update','Jobs',{Project:p.project},set) ];
-      if(p.newProject){ ops.push(...idOps('update','ProjectTasks',_projTasksOf(p.project),{Project:p.newProject}),
-                                 ...idOps('update','ShopTasks',_shopTasksOf(p.project),{Project:p.newProject})); }
-      if(p.newJobNum){ const rows=[]; (_D().jobs||[]).forEach(j=>{ if((j.jobNum||'')===(p.jobNum||'')) (j.tasks||[]).forEach(t=>rows.push(t)); });
-                       ops.push(...idOps('update','ShopTasks',rows,{JobNum:p.newJobNum})); }
+      const ops=[ O('update','Jobs',{Project:p.project},set) ];   // a job's match key is its project name (Title)
+      if(p.newProject){ ops.push(...taskOps('update','ProjectTasks',_projTaskRows(p.project),{Project:p.newProject}),
+                                 ...taskOps('update','ShopTasks',_shopRowsOf(p.project),{Project:p.newProject})); }
+      if(p.newJobNum){ const rows=_allShopRows().filter(r=>(r.jobNum||'')===(p.jobNum||''));
+                       ops.push(...taskOps('update','ShopTasks',rows,{JobNum:p.newJobNum},{JobNum:p.jobNum})); }
       return ops;
     }
-    case 'deleteJob':        return [ jId!=null ? O('delete','Jobs',{Id:jId}) : O('delete','Jobs',{Project:p.project}) ];
-    case 'renameProject':    return [].concat(
-                               idOps('update','ProjectTasks',_projTasksOf(p.oldProject),{Project:p.newProject}),
-                               idOps('update','Jobs',        _jobsOf(p.oldProject),     {Project:p.newProject}),
-                               idOps('update','ShopTasks',   _shopTasksOf(p.oldProject),{Project:p.newProject}));
+    case 'deleteJob':        return [ O('delete','Jobs',{Project:p.project}) ];
+    case 'renameProject':    return [].concat(   // set Project=new → match field changes, so duplicate task names are safe
+                               taskOps('update','ProjectTasks',_projTaskRows(p.oldProject),{Project:p.newProject}),
+                               jobOps('update',                _jobRows(p.oldProject),     {Project:p.newProject}),
+                               taskOps('update','ShopTasks',   _shopRowsOf(p.oldProject),  {Project:p.newProject}));
     case 'setProjectPM':     return [].concat(
-                               idOps('update','ProjectTasks',_projTasksOf(p.project),{PM:p.pm}),
-                               idOps('update','Jobs',        _jobsOf(p.project),     {PM:p.pm}));
+                               taskOps('update','ProjectTasks',_projTaskRows(p.project),{PM:p.pm}),
+                               jobOps('update',                _jobRows(p.project),     {PM:p.pm}));
     case 'renameAssignee': {
-      const old=(p.oldAssignee||'');
+      const old=(p.oldAssignee||'');   // include Assigned:old in the match so the set (Assigned=new) is dup-safe
       return [].concat(
-        idOps('update','ProjectTasks',_allProjTasks().filter(t=>(t.who||'')===old),{Assigned:p.newAssignee}),
-        idOps('update','ShopTasks',   _allShopTasks().filter(t=>(t.who||'')===old),{Assigned:p.newAssignee}));
+        taskOps('update','ProjectTasks',_allProjTaskRows().filter(r=>(r.who||'')===old),{Assigned:p.newAssignee},{Assigned:old}),
+        taskOps('update','ShopTasks',   _allShopRows().filter(r=>(r.who||'')===old),    {Assigned:p.newAssignee},{Assigned:old}));
     }
     case 'deleteProject':    return [].concat(
-                               idOps('delete','ProjectTasks',_projTasksOf(p.project)),
-                               idOps('delete','Jobs',        _jobsOf(p.project)),
-                               idOps('delete','ShopTasks',   _shopTasksOf(p.project)));
+                               taskOps('delete','ProjectTasks',_projTaskRows(p.project)),
+                               jobOps('delete',                _jobRows(p.project)),
+                               taskOps('delete','ShopTasks',   _shopRowsOf(p.project)));
     case 'setUser': {        // upsert -> update if the name already exists, else create (no PA upsert verb)
       const ex=(_D().users||[]).some(u=>(u.name||'').toLowerCase()===(p.name||'').toLowerCase());
       return ex ? [O('update','Users',{Name:p.name},{Code:p.code,Active:'Yes'})]
@@ -3394,7 +3398,7 @@ function _listOpsRaw(p){
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task},{Status:'In Progress'})];
     case 'importProject': {
-      const ops=[]; if(p.replace) ops.push(...idOps('delete','ProjectTasks',_projTasksOf(p.project)));
+      const ops=[]; if(p.replace) ops.push(...taskOps('delete','ProjectTasks',_projTaskRows(p.project)));
       (p.tasks||[]).forEach(t=>ops.push(O('create','ProjectTasks',null,{Task:t.task,Project:p.project,Phase:t.phase,Type:t.type,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Duration:t.duration,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,PM:p.pm})));
       return ops;
     }
@@ -3408,7 +3412,7 @@ function _listOpsRaw(p){
 const _LF = {
   Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
   ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9"} },   /* field_8 is a Number column in the list (always 0.0) — NOT milestone; don't write it (shop tasks have no milestone on the board) */
-  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Assigned:"field_5",Start:"field_6",Finish:"field_7",Duration:"field_8",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14"} },   /* field_13 (Predecessor) + field_2 (TaskID) are Number cols — don't WRITE Predecessor (rare; needs a text col to persist); TaskID is match-only and now matched via item Id (_ptMatch) */
+  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Assigned:"field_5",Start:"field_6",Finish:"field_7",Duration:"field_8",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14"} },   /* field_13 (Predecessor) + field_2 (TaskID) are Number cols — not written. The write flow can't filter by item id either, so all matching is by {Project, Task name} text. */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
 };
