@@ -23,6 +23,8 @@ on:
           - listscand
           - listspreview
           - listspreview-cleanup
+          - ganttpreview
+          - ganttpreview-cleanup
         default: preview
 
 jobs:
@@ -99,6 +101,31 @@ jobs:
               --container-name '$web' --name "$f" --only-show-errors || true
           done
           echo "Removed preview-lists*.html + data.lists.js from the live site."
+
+      # ganttpreview: publish MRA_Dashboard.html as /preview-gantt.html so Rich can VERIFY the new
+      # task-level Projects Gantt before it goes live. It reads the LIVE data.js (relative) and does
+      # NOT touch the live board (index.html / MRA_Dashboard.html). Build # is stamped in the banner.
+      - name: Publish the Projects-Gantt preview
+        if: ${{ inputs.mode == 'ganttpreview' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          BANNER="<div style='position:fixed;top:0;left:0;right:0;z-index:99999;background:#2563eb;color:#fff;text-align:center;font:700 12px Segoe UI,Arial,sans-serif;padding:4px 8px'>PREVIEW build #${GITHUB_RUN_NUMBER} · Projects-Gantt task-level test — reads the LIVE data, does NOT change the live board</div>"
+          sed "s|<script src=\"data.js\"></script>|${BANNER}<script src=\"data.js\"></script>|" MRA_Dashboard.html > preview-gantt.html
+          grep -q 'PREVIEW build #' preview-gantt.html || { echo "::error::failed to stamp the preview banner"; exit 1; }
+          az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name preview-gantt.html --file preview-gantt.html \
+            --content-type 'text/html' --content-cache-control 'no-cache, must-revalidate' --overwrite --only-show-errors
+          echo "PREVIEW LIVE (build #${GITHUB_RUN_NUMBER}) → https://mrashopdash.z13.web.core.windows.net/preview-gantt.html"
+
+      - name: Remove the Projects-Gantt preview
+        if: ${{ inputs.mode == 'ganttpreview-cleanup' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage blob delete --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name 'preview-gantt.html' --only-show-errors || true
+          echo "Removed preview-gantt.html from the live site."
 
       # Generate a long-lived, write-scoped SAS for AzCopy on a no-admin PC.
       # Writes the full upload target URL to an artifact (masked in logs).

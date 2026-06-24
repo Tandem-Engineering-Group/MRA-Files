@@ -170,6 +170,8 @@
   .g-bar.done{opacity:.6}
   .g-row.g-subrow .g-gutter{padding-left:24px}
   .g-row.g-subrow .g-lbl{font-weight:500; color:var(--muted); font-size:11px}
+  .g-lbl .gcaret{display:inline-block; width:13px; color:var(--blue); font-size:11px; user-select:none}
+  .g-rowedit .g-gutter{cursor:pointer}
   .g-row.clickable{cursor:pointer}
   .g-row.clickable:hover{background:rgba(255,255,255,.035)}
   .g-rowedit .g-gutter:hover{background:rgba(255,255,255,.05)}
@@ -804,7 +806,9 @@
   .panel.fs-on{ position:fixed; inset:0; z-index:10000; margin:0; border-radius:0; overflow:auto; background:var(--bg); padding:14px 20px 30px; box-shadow:none }
   .panel.fs-on > h2{ position:sticky; top:0; background:var(--bg); z-index:2; padding-top:6px; font-size:18px }
   .panel.fs-on #fIssues{ max-height:none !important; height:auto !important; overflow:visible !important }
-  .panel.fs-on .row{ font-size:14px; padding:9px 6px }
+  .panel.fs-on .row{ font-size:14px; padding:9px 6px; cursor:pointer }
+  .panel.fs-on .row:hover::after{ content:"↗ open in Fleetio"; position:absolute; right:10px; font-size:10px; color:var(--brand); font-weight:700 }
+  .panel.fs-on .row{ position:relative }
   table.flt .typ{font-size:10px; background:#243042; color:#cdd8e6; border-radius:20px; padding:2px 9px; white-space:nowrap}
   table.flt .mut{color:var(--muted)}
   table.flt .ch{display:inline-block; font-size:10px; font-weight:700; padding:2px 9px; border-radius:20px}
@@ -1126,6 +1130,11 @@
           <option value="bay">Sort: Bay</option>
           <option value="pm">Sort: Program Development</option>
           <option value="name">Sort: A–Z name</option>
+        </select>
+        <select id="ganttLod" class="projsort" onchange="setGanttLod(this.value)" title="How much detail to show on the Gantt — projects only, every task, or just milestones">
+          <option value="proj">Detail: Projects</option>
+          <option value="tasks">Detail: + Tasks</option>
+          <option value="ms">Detail: Milestones</option>
         </select>
         <span id="projWhoWrap" style="margin-left:8px"></span>
         <details class="tbmenu" id="viewMenu">
@@ -1981,6 +1990,19 @@ let GWIN_DAYS=null; try{ const _gw=parseInt(localStorage.getItem('mra_gwin'),10)
 let PFILTER='';   // projects tab: filter by project name / PM / job # (matches task text)
 let PROJ_SORT='start'; try{ const _ps=localStorage.getItem('mra_proj_sort'); if(_ps) PROJ_SORT=_ps; }catch(e){}  // projects Gantt row order
 function setProjSort(v){ PROJ_SORT=v||'start'; try{localStorage.setItem('mra_proj_sort',PROJ_SORT);}catch(e){} if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(GFS==='projects') renderGanttFS(); } }
+// Projects Gantt detail level (P2) + per-project task expansion (P1). LOD: 'proj' = one bar per project (default),
+// 'tasks' = every project expanded to its task bars, 'ms' = projects + milestone tasks only.
+let GANTT_LOD='proj'; try{ const _gl=localStorage.getItem('mra_gantt_lod'); if(_gl) GANTT_LOD=_gl; }catch(e){}
+const GANTT_EXP=new Set();   // project names manually expanded when LOD='proj'
+function setGanttLod(v){ GANTT_LOD=v||'proj'; try{localStorage.setItem('mra_gantt_lod',GANTT_LOD);}catch(e){} if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
+function toggleGanttExp(name){ name=String(name||''); if(GANTT_EXP.has(name)) GANTT_EXP.delete(name); else GANTT_EXP.add(name); if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
+// Map one project task -> a Gantt sub-row (reuses the detail-view shape). Returns null if undated.
+function ganttTaskSubRow(t,p){ const today=(window.MRA_DATA||{}).todayISO||''; const s=t.startISO, f=t.finISO||t.startISO; if(!s) return null;
+  const done=projIsDone(t), isMs=/yes/i.test(t.ml||''), tp=projTaskPct(t.st);
+  const color=done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6'));
+  return { label:(isMs?'◆ ':'')+(t.t||'(task)'), sub:[t.who,t.st].filter(Boolean).join(' · '),
+    startISO:s, endISO:f, color, done, cls:'g-subrow', pct:(!done&&tp!=null&&tp>0&&tp<100)?tp:undefined,
+    milestones:[], barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }; }
 // Row order for the Projects Gantt (operates on project objects). Start date is the default.
 function projSortCmp(a,b){
   const today=(window.MRA_DATA&&window.MRA_DATA.todayISO)||'';
@@ -3235,6 +3257,8 @@ function toggleIssuesFS(btn){ const p=document.getElementById('fp-issues'); if(!
   const b=btn||p.querySelector('.fsbtn'); if(b){ b.innerHTML = on?'⤡ Contract':'⛶ Full screen'; b.title = on?'Exit full screen (Esc)':'Open the open-issues list full screen (Esc to exit)'; }
   document.body.style.overflow = on?'hidden':''; }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ const p=document.querySelector('.panel.fs-on'); if(p) toggleIssuesFS(p.querySelector('.fsbtn')); } });
+// In full-screen Open Issues, click anywhere on a (highlighted) row to open THAT issue in Fleetio — handy for meeting walk-throughs.
+document.addEventListener('click',e=>{ const p=document.querySelector('.panel.fs-on'); if(!p) return; const row=e.target.closest('.row'); if(!row||!p.contains(row)||e.target.closest('a')) return; const a=row.querySelector('a.fiotitle'); if(a&&a.href) window.open(a.href,'_blank','noopener'); });
 // Click outside the wall settings popup (and not on its gear) closes it.
 document.addEventListener('click',e=>{ const c=document.getElementById('wallCtl');
   if(!c||!c.classList.contains('show')||!e.target.closest) return;
@@ -5451,7 +5475,7 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
     const gutAttr = r.gutterClick ? ` onclick="${r.gutterClick}" style="cursor:pointer" title="Click to edit this task"` : '';
     const hl=(MRASHOP_HL&&r.hlSegs&&r.hlSegs.length)?r.hlSegs.map(s=>{const gg=barGeom(s.startISO,s.endISO,win);
       return gg?`<div class="g-hl hl-${MRA_HL_STYLE}" style="left:${gg.left}%;width:${gg.width}%" title="MRA Shop assigned"></div>`:'';}).join(''):'';
-    html+=`<div class="g-row${r.cls?' '+r.cls:''}${r.gutterClick?' g-rowedit':''}"${rowClick}><div class="g-gutter"${gutAttr}><div class="g-lbl">${esc(r.label)}</div>`
+    html+=`<div class="g-row${r.cls?' '+r.cls:''}${r.gutterClick?' g-rowedit':''}"${rowClick}><div class="g-gutter"${gutAttr}><div class="g-lbl">${r.caret||''}${esc(r.label)}</div>`
       +`<div class="g-sub">${esc(r.sub||'')}</div>${r.bay?`<div class="g-bay" title="Currently in ${escA(r.bay)} on the shop floor">${esc(r.bay)}</div>`:''}</div>`
       +`<div class="g-track">${grid}${bar}${hl}${ms}</div></div>`;
   });
@@ -5956,18 +5980,32 @@ function renderProjects(D){
     const ps=document.getElementById('gpanSlider'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
 
   const dated=projects.filter(p=>p.startISO&&p.finishISO&&projMatch(p)&&projHasWho(p,PROJ_WHO)).sort(projSortCmp);
-  const rows=dated.map(p=>({_p:p})).map(({_p:p})=>({
-    label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
-    startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
-    barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
-    cls:'clickable', onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
-    barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`,
-    _has:!!barGeom(p.startISO,p.finishISO,win)
-  })).filter(r=>r._has);
+  const rows=[];
+  dated.forEach(p=>{
+    if(!barGeom(p.startISO,p.finishISO,win)) return;   // project bar must fall in the visible window
+    const hasTasks=!!(p.tasks&&p.tasks.length);
+    const expanded = hasTasks && (GANTT_LOD!=='proj' || GANTT_EXP.has(p.name) || !!PROJ_WHO);   // P1/P2/P3
+    rows.push({
+      label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
+      startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
+      barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
+      cls:'clickable', caret: hasTasks?`<span class="gcaret">${expanded?'▾':'▸'}</span>`:'',
+      gutterClick: hasTasks?`toggleGanttExp('${escJsAttr(p.name)}')`:`openProjectEditor('${escJsAttr(p.name)}')`,
+      barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`
+    });
+    if(expanded){
+      let tl=(p.tasks||[]);
+      if(PROJ_WHO) tl=tl.filter(t=>taskWhoMatch(t,PROJ_WHO));         // P3: only this assignee's tasks
+      if(GANTT_LOD==='ms') tl=tl.filter(t=>/yes/i.test(t.ml||''));    // P2: milestones-only detail
+      tl=tl.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')));
+      tl.forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && barGeom(sr.startISO,sr.endISO,win)) rows.push(sr); });
+    }
+  });
   { const hp=document.getElementById('projHolPick'); if(hp) hp.innerHTML=holPickerHtml(); }   // US/CA holiday picker above the Projects Gantt
   { const ww=document.getElementById('projWhoWrap'); if(ww) ww.innerHTML=projWhoSelHtml('projWhoSel'); }   // assignee filter
   renderGantt(document.getElementById('projGantt'), rows, win, {dates:true, showDays:true});
   { const ss=document.getElementById('projSort'); if(ss) ss.value=PROJ_SORT; }
+  { const gl=document.getElementById('ganttLod'); if(gl) gl.value=GANTT_LOD; }
   { const df=document.getElementById('dateFmtSel'); if(df) df.value=DATE_FMT; }
   syncMraHlBtns();
   const undated=projects.filter(p=>!p.startISO||!p.finishISO).map(p=>p.name);
