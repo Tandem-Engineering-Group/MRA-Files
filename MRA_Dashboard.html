@@ -2022,6 +2022,8 @@ function togglePhase(proj,ph){ const k=proj+'|'+ph; if(PHASE_OPEN.has(k)) PHASE_
 // Detailed (full-screen) project view phase collapse. Separate key namespace ('__FS__|…') so collapsing a
 // phase in the detail view doesn't flip its open/closed state in the main Projects Gantt. Phases default OPEN here.
 function togglePhaseFS(ph){ const k='__FS__|'+ph; if(PHASE_OPEN.has(k)) PHASE_OPEN.delete(k); else PHASE_OPEN.add(k); if(typeof GFS!=='undefined' && GFS==='project') renderGanttFS(); }
+// Multi-project "Project Schedules — Detailed" overview: per-project phase collapse (key '__PS__|proj|phase').
+function togglePhasePS(proj,ph){ const k='__PS__|'+proj+'|'+ph; if(PHASE_OPEN.has(k)) PHASE_OPEN.delete(k); else PHASE_OPEN.add(k); if(typeof GFS!=='undefined' && GFS==='projects') renderGanttFS(); }
 // The phases shown in the detailed (full-screen) project view right now — respects the assignee filter + Hide-completed.
 function pdPhasesForCurrent(){
   const D=window.MRA_DATA; if(!D||typeof GFS==='undefined'||GFS!=='project') return [];
@@ -8099,7 +8101,8 @@ function setGfsFloorDays(d){ GFS_FLOOR_DAYS=d; renderGanttFS(); }
 function setGfsLevel(lv){
   const D=window.MRA_DATA; if(!D) return;
   expandedProjects.clear();
-  if(lv>=2) (D.projects||[]).forEach(p=>{ if((p.milestones||[]).length) expandedProjects.add(p.name); });
+  // task-level mode expands to PHASES (needs tasks); legacy mode expands to milestone GATES (needs milestones)
+  if(lv>=2) (D.projects||[]).forEach(p=>{ if(GANTT_TASKLEVEL ? (p.tasks||[]).length : (p.milestones||[]).length) expandedProjects.add(p.name); });
   renderGanttFS();
 }
 function toggleGfsProject(key){ const name=GFS_PKEY[key]; if(!name) return;
@@ -8359,10 +8362,10 @@ function renderGanttFS(){
       +`<span style="color:var(--muted)">one bar per project (their booked span) · pick a resource above · full task dates in the list on the board</span>`;
   } else {
     titleEl.textContent='Project Schedules — Detailed';
-    const withMs=(D.projects||[]).filter(p=>(p.milestones||[]).length);
-    const allExp=withMs.length>0 && withMs.every(p=>expandedProjects.has(p.name));
+    const withExp=(D.projects||[]).filter(p=>(GANTT_TASKLEVEL?(p.tasks||[]):(p.milestones||[])).length);
+    const allExp=withExp.length>0 && withExp.every(p=>expandedProjects.has(p.name));
     levelEl.innerHTML=`<div class="rb${expandedProjects.size===0?' active':''}" onclick="setGfsLevel(1)" title="Projects only">1 · Projects</div>`
-      +`<div class="rb${allExp?' active':''}" onclick="setGfsLevel(2)" title="Projects + milestone gates">2 · + Milestones</div>`
+      +`<div class="rb${allExp?' active':''}" onclick="setGfsLevel(2)" title="${GANTT_TASKLEVEL?'Expand every project to its phases':'Projects + milestone gates'}">2 · + ${GANTT_TASKLEVEL?'Phases':'Milestones'}</div>`
       +`<div class="rb mraHlBtn${MRASHOP_HL?' active':''}" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects">🟧 MRA Shop</div>`;
     rangeEl.innerHTML=
       `<span class="gwinwrap" title="Zoom — how much time the Gantt shows at once">🔍<input id="gwinSliderFS" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year of the schedule at once"><span id="gwinLabFS" class="gwinlab"></span></span>`
@@ -8391,16 +8394,34 @@ function renderGanttFS(){
       .sort(projSortCmp);
     const rows=[];
     dated.forEach((p,i)=>{
-      const hasMs=(p.milestones||[]).length>0, exp=expandedProjects.has(p.name), done=projStatus(p,today)==='done';
+      const hasTasks=(p.tasks||[]).length>0, hasMs=(p.milestones||[]).length>0;
+      const canExp=GANTT_TASKLEVEL?hasTasks:hasMs, exp=expandedProjects.has(p.name), done=projStatus(p,today)==='done';
       const key='p'+i; GFS_PKEY[key]=p.name; BARPOP[key]=projPop(p);
-      rows.push({label:(hasMs?(exp?'▾ ':'▸ '):'   ')+p.name,
+      rows.push({label:(canExp?(exp?'▾ ':'▸ '):'   ')+p.name,
         sub:(p.pm||'—')+' · '+p.taskCount+' tasks'+(hasMs?' · '+p.milestones.length+' gates':''),
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct, barLabel:'',
         milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name), done, popKey:key,
         barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`,
-        cls:hasMs?'clickable':'', onclick:hasMs?`toggleGfsProject('${key}')`:''});
-      if(exp) (p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')).forEach(m=>{
-        rows.push({label:'◆ '+m.name, sub:fmtMDY(m.dateISO), startISO:null, endISO:null, color:p._color, milestones:[m], noBar:true, cls:'g-subrow'}); });
+        cls:canExp?'clickable':'', onclick:canExp?`toggleGfsProject('${key}')`:''});
+      if(exp && GANTT_TASKLEVEL && hasTasks){
+        // expanded → collapsible PHASE rows (rollup bar each); click a phase to drill to its tasks. Default: phases collapsed.
+        let tl=(p.tasks||[]); if(PROJ_WHO) tl=tl.filter(t=>taskWhoMatch(t,PROJ_WHO));
+        const phOrder=[], byPh={};
+        tl.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!(ph in byPh)){ byPh[ph]=[]; phOrder.push(ph); } byPh[ph].push(t); });
+        phOrder.forEach(ph=>{
+          const pkey='__PS__|'+p.name+'|'+ph, open=PHASE_OPEN.has(pkey), tks=byPh[ph], doneN=tks.filter(projIsDone).length, roll=phaseRollup(tks);
+          rows.push({ label:ph, sub:tks.length+' task'+(tks.length>1?'s':'')+(doneN?(' · '+doneN+' done'):''),
+            startISO:roll.startISO, endISO:roll.endISO, noBar:!roll.startISO,
+            pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
+            cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
+            gutterClick:`togglePhasePS('${escJsAttr(p.name)}','${escJsAttr(ph)}')` });
+          if(open){ tks.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')))
+            .forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && (sr.noBar || barGeom(sr.startISO,sr.endISO,win))) rows.push(sr); }); }
+        });
+      } else if(exp){
+        (p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')).forEach(m=>{
+          rows.push({label:'◆ '+m.name, sub:fmtMDY(m.dateISO), startISO:null, endISO:null, color:p._color, milestones:[m], noBar:true, cls:'g-subrow'}); });
+      }
     });
     renderGantt(cont, rows, win, {dates:true, showDays:true});
     window._gfsPrint={title:titleEl.textContent, rows, win, today};
