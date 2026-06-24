@@ -168,13 +168,23 @@ Treat help + rev as PART OF the feature, not an afterthought.
 ## Pending / requested (not yet built — remind Rich)
 
 - **🎨 UI batch requested 2026-06-24 (working through in waves; deploy incrementally).** Status: ✅ **FLEETIO (4) +
-  Fleetio layout move + Floor FL1/FL2 shipped LIVE (rev 7.1/7.2)**; ⏳ **remaining: Floor FL3 + Projects-Gantt (3)**.
-  - **Projects tab / Gantt:**
+  Fleetio layout move + Service-under-Issues + Floor FL1/FL2/FL3 + Collapse-all fix + 📖 Product Catalogue ALL shipped
+  LIVE (rev 7.1→7.5)**. ⏳ **ONLY remaining: the Projects-Gantt task-level rebuild (P1–P3) — the big visual one.**
+  - **Projects tab / Gantt — ⏳ THE LAST PIECE (deliberately not blind-shipped — it's a visual Gantt-engine change on a
+    daily-use view; build it where the result can be eyeballed). Scoping done:**
     1. Project **tasks shown in the Gantt**, **expand/collapse** per project; clicking a project defaults to
-       **open (tasks-expanded) mode**. *(task-level Gantt bars — overlaps the long-parked "Task-level Gantt bars")*
-    2. A **level-of-detail "scroll"/slider** on the Project Gantt: instead of scrolling, it **shrinks the rows**
-       progressively — full tasks → … → just milestones. (Collapse depth control.)
+       **open (tasks-expanded) mode**. *(the long-parked "task-level Gantt bars")*
+    2. A **level-of-detail slider** on the Project Gantt: progressively **shrinks rows** — full tasks → … → milestones only.
     3. When you **filter by assignee**, still see **all that person's tasks**, expand/collapsible.
+    - **HOW (scoped 2026-06-24):** the Gantt engine `renderGantt` (~line 5388) ALREADY renders task **sub-rows**
+      (`cls:'g-subrow'`, used by the full-screen detail view `renderGanttFS` ~8029, task→row map ~8090-8115). Main
+      Projects Gantt builds one row per project (~line 5958 `rows=dated.map(...)`). PLAN: (a) small engine tweak — render
+      an optional unescaped `r.caret` before `esc(r.label)` in the gutter (line ~5454, label is currently escaped so a
+      caret can't be injected via label); (b) a `GANTT_EXPANDED` Set + gutter caret to expand a project → push its tasks
+      as `g-subrow` rows (reuse the FS task→row mapping); (c) P3: when `PROJ_WHO` (assignee filter) is set, auto-expand and
+      show only that person's tasks; (d) P2: a LOD select/slider (All tasks / Milestones only / Projects only) controlling
+      what sub-rows render. NOTE current project-row onclick = `openProjectEditor` — Rich wants click to **expand tasks**;
+      keep the editor reachable via the name / ✎ button.
   - **Fleetio tab — ✅ ALL DONE (rev 7.1):**
     4. ✅ **⚠ Open Issues panel → true full-screen** (`toggleIssuesFS`, `.fs-on`; ⤡ Contract / Esc). *(F1)*
     5. ✅ **Fleetio issue # everywhere** — done in `fioTitle` (`.fionum` span), so it propagates to every panel. *(F2)*
@@ -184,18 +194,18 @@ Treat help + rev as PART OF the feature, not an afterthought.
     8. ✅ **Per-tile ⊟/⊞ tasks button** — collapse/expand EVERY job's tasks in a tile at once (`toggleTileJobs`);
        per-job ▾ caret already existed. *(FL1, rev 7.2)*
     9. ✅ **Parking Lot + Next Up default COLLAPSED** (`DEFCOLL_ROWS` + `opts.defaultCollapsed`; open via `expandedJobs`). *(FL2, rev 7.2)*
-    10. ⏳ **Bay 3 + Bay 4 MIDDLE tile**, with a **filter to hide them when not in use**; **auto-hide when empty**
-        unless the filter is clicked to show them. *(FL3 — still to do)*
+    10. ✅ **Bay 3 + Bay 4 MIDDLE tiles** between Front/Back — auto-hide when empty + **Ⓜ Middle bays** filter to force-show.
+        (`MIDDLE_BAYS`, columns grouped by bay number, middle jobs re-tagged `category=bay`, added to `BAY_OPTIONS`.) *(FL3, rev 7.4)*
   - **Fleetio layout (Rich 2026-06-24):** ✅ moved **⚠ Open Issues** up to the top (full-width) where **Needs Attention**
     was, and **removed Needs Attention** (covered by Open Issues). **SVC overdue stays in the dedicated 🔧 Service —
     Due & Overdue panel** (recommended NOT mixing service records into the issues list; revisit if Rich wants a combined view).
 
-- **🗂 Add the MRA Product Catalogue to the dashboard ☰ menu (Rich 2026-06-24, queued — do after the UI batch).**
-  Uploaded `MRAProductCataloguefullV1.3.3.zip` = a standalone web app: **`MRA-Product-Catalogue-fullV1.3.3 3.html`** (87KB)
-  + data files `mra-product-history.json` (359KB), `mra-reference-lists.json`, `mra-allowed-units.json` + `logo.png`.
-  Today it's "wonky — have to load the file" (likely opened from disk, so it can't `fetch()` its JSONs → manual file-picker).
-  **Plan:** host all 5 files on the Azure **`$web`** site next to the dashboard (add to `deploy.yml` static-asset uploads),
-  make the HTML fetch its JSONs via **relative URLs** (no manual load), then add a **☰ Menu link** that opens it.
+- **🗂 MRA Product Catalogue in the ☰ Menu — ✅ DONE (rev 7.5).** Hosted at **`/catalogue/index.html`** on `$web`
+  (its `logo.png` + 3 JSONs live in the subfolder so they don't clash with the dashboard's root assets). No HTML edits
+  needed — it already `fetch()`es its JSONs by relative path, so hosting fixed the "load the file" wonkiness. ☰ Menu link
+  added (`href="catalogue/index.html"` — Azure Static Web doesn't serve subfolder index docs, so link the file explicitly).
+  Files committed under `catalogue/`; `deploy.yml` uploads them on every deploy. ⚠️ NOTE: it's on the PUBLIC site (same as
+  the dashboard) — incl. `mra-product-history.json`. Fine if the catalogue is OK public; lock down with Step 4 SSO if not.
 
 - **Standardize Assigned-To names in the workbook (Rich asked 2026-06-18: "go back and fix
   them all the same", and "stop forgetting open items").** The `Project Tasks` `Assigned To`
