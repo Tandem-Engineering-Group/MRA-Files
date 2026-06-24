@@ -167,6 +167,25 @@ Treat help + rev as PART OF the feature, not an afterthought.
 
 ## Pending / requested (not yet built — remind Rich)
 
+- **🎨 UI batch requested 2026-06-24 (working through in waves; deploy incrementally).** Status: started.
+  - **Projects tab / Gantt:**
+    1. Project **tasks shown in the Gantt**, **expand/collapse** per project; clicking a project defaults to
+       **open (tasks-expanded) mode**. *(task-level Gantt bars — overlaps the long-parked "Task-level Gantt bars")*
+    2. A **level-of-detail "scroll"/slider** on the Project Gantt: instead of scrolling, it **shrinks the rows**
+       progressively — full tasks → … → just milestones. (Collapse depth control.)
+    3. When you **filter by assignee**, still see **all that person's tasks**, expand/collapsible.
+  - **Fleetio tab:**
+    4. **Open-issues tile → clickable to full-screen.** *(F1)*
+    5. **Show the actual Fleetio issue # everywhere a Fleetio task/issue is shown** — board, tiles, by-trailer,
+       added tasks. *(F2 — Rich emphasized "every time, anywhere")*
+    6. **Hover a task → highlight it yellow** so it stands out when going through them one-by-one in meetings. *(F3)*
+    7. **Fleetio "by trailer": show the full trailer name after the J#.** *(F4)*
+  - **Floor tab:**
+    8. **Collapse/expand each section's tasks** (per job). *(FL1)*
+    9. **Parking Lot + Next Up tiles default COLLAPSED** (show the jobs, not their tasks); expandable manually. *(FL2)*
+    10. **Bay 3 + Bay 4 MIDDLE tile**, with a **filter to hide them when not in use**; **auto-hide when empty**
+        unless the filter is clicked to show them. *(FL3)*
+
 - **Standardize Assigned-To names in the workbook (Rich asked 2026-06-18: "go back and fix
   them all the same", and "stop forgetting open items").** The `Project Tasks` `Assigned To`
   column has variants for the same resource. The dashboard's **Crew / Resource Schedule**
