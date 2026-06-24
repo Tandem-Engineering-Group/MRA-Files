@@ -129,6 +129,18 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
 - **🏁 STEP 3 — kill the .xlsx:** move the data off the workbook entirely → **SharePoint Lists**
   (Jobs / ShopTasks / ProjectTasks / Users), so there's no Excel file to open. Platform handles
   concurrency (the write-collision class disappears).
+  - **🟢 STATUS 2026-06-24: read AND write paths BUILT + PROVEN end-to-end (zero Excel). Only the
+    CUTOVER remains.** Don't rebuild — resume from the **"⭐ CUTOVER — START HERE" checklist in
+    `LISTS-WRITE-DESIGN.md`**. TL;DR: read = "MRA Lists to JSON" flow → `lists.json` (SharePoint +
+    `pipeline` blob) → `build_from_lists.py` → `data.js`; write = dashboard `_listOps` → "MRA Lists
+    Write 2" flow (all TEXT-matched, PIN-gated), DORMANT behind `const USE_LISTS_WRITE=false` in
+    `MRA_Dashboard.html`. Validated on the write-enabled preview `preview-lists2.html` (deploy modes
+    `listspreview` / `listspreview-cleanup`). LIVE board still on the workbook — untouched. Cutover =
+    (1) put the Lists-to-JSON flow on a 15-min Recurrence [Rich], (2) fresh full reload of Lists from
+    the workbook via the write flow in batches, (3) point the live `data.js` build at the blob's
+    `lists.json`, (4) flip `USE_LISTS_WRITE=true` + deploy, (5) retire the workbook shuttle/Office-Script.
+    Hard-won gotchas (flow can't match by item id — text only; Number columns reject text writes) are
+    in `LISTS-WRITE-DESIGN.md`.
 - **🔐 STEP 4 — lock it down + plug into M365 (do AFTER/with Step 3):** (a) **Formal login / SSO** —
   today the board is a PUBLIC static blob site (code only gates editing). Real sign-in needs an
   auth-capable host: **Azure Static Web Apps (built-in Entra ID login + roles)** OR embed in

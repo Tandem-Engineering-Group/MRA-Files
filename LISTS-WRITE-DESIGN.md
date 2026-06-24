@@ -210,15 +210,46 @@ pointed at `data.lists.js`, `USE_LISTS_WRITE=true`, build # stamped in the banne
   Fixes: publish to a **fresh filename** (`preview-lists2.html`) + **stamp the build # in the banner** so
   we can verify the loaded code. (Also: editing the LIVE board writes to the workbook, not the Lists.)
 
-**REMAINING before cutover:**
-1. Convert the still-`Id`-matched ops to **text** the same way (they'll hit the same empty-`Id` wall):
-   `editJob`/`deleteJob` ({Id:jId}→{Project} on Title) and the cascades `renameProject` /
-   `deleteProject` / `setProjectPM` / `renameAssignee` / `editJob`(newProject|newJobNum) /
-   `importProject`-replace (currently `idOps` per row by `_id`). ⚠️ Per-row text matching needs distinct
-   keys — within a project, exact-duplicate task **titles** would collide under the flow's `$top=1`
-   (acceptable risk noted; revisit if dupes appear).
-2. Optional hardening: get the flow to support id matching (e.g. `getItemById`) so we can go back to exact
-   item-id matching and kill the dup-title risk — needs flow edits (Rich) we couldn't inspect/test here.
-3. Coordinated cutover: fresh full reload of Lists from the workbook → flip the **live** board to
-   `USE_LISTS_WRITE=true` + point reads at the Lists (`pipeline/lists.json` → build) → deploy → retire the
-   workbook shuttle/Office-Script.
+**DONE 2026-06-24 (commit 987824f):** ✅ All ops converted to TEXT matching. `editJob`/`deleteJob`
+match the job by `{Project}` (Title); `renameProject`/`deleteProject`/`setProjectPM`/`renameAssignee`/
+`editJob`(newProject|newJobNum)/`importProject`-replace fan out one text op per row via `taskOps`/`jobOps`
+(`{Project, Task[, oldValue]}`). Dup-title-safe except `setProjectPM` (rare; documented). Simulated all six.
+NO id-based matching remains in `_listOpsRaw`.
+
+----------------------------------------------------------------------------------------------------
+## ⭐ CUTOVER — START HERE (next session, planned 2026-06-25)
+**State as of 2026-06-24:** read path AND write path are both BUILT + PROVEN end-to-end against the
+SharePoint Lists, with **zero Excel**. Verified live via the write-enabled preview. Everything below is
+committed on branch `claude/zealous-fermi-6n5pil`. Nothing about the LIVE board has changed yet — it still
+reads/writes the workbook (`USE_LISTS_WRITE=false`). Cutover is the ONLY thing left.
+
+**What exists now (no need to rebuild):**
+- **Read:** `build_from_lists.py` turns `lists.json` → `data.js` (field_N map verified; stamps `_id`).
+- **Read source:** the **"MRA Lists to JSON"** Power Automate flow writes `lists.json` to BOTH SharePoint
+  (`/MRA Claude Code/01.1 RL Claude Bot/lists.json`) AND the private **`pipeline`** blob.
+- **Write:** dashboard `_listOpsRaw`+`_listOps` (DORMANT behind `const USE_LISTS_WRITE=false`, line ~3218 of
+  `MRA_Dashboard.html`) → posts ops to **`LISTS_WRITE_URL`** = the **"MRA Lists Write 2"** flow. All ops
+  text-matched. PIN-gated. Proven: shop add/close, project add/close (persisted, timestamp-verified).
+- **Preview harness:** `deploy.yml` mode **`listspreview`** publishes `preview-lists2.html` (live dashboard
+  pointed at `data.lists.js`, `USE_LISTS_WRITE=true`, build # in banner) — the parallel test rig.
+  `listspreview-cleanup` removes it. Also mode `listscand` builds a candidate `data.js` from the blob + diffs.
+
+**CUTOVER CHECKLIST:**
+1. **[Rich]** Put **"MRA Lists to JSON"** on a **Recurrence** trigger (every 15 min, like the workbook
+   shuttle) — it's currently an Instant flow run by hand. This keeps `pipeline/lists.json` fresh on its own.
+2. **[Claude+Rich]** **Fresh full reload of the Lists from the current workbook** at flip time, so the Lists
+   capture every edit up to the cutover moment. Load via the **write flow in batches** (NOT "From Excel" —
+   it truncates ~240 rows). One-time.
+3. **[Claude]** **Wire the LIVE read off the Lists:** make the scheduled `data.js` build run
+   `build_from_lists.py` against `pipeline/lists.json` (mirror the `listspreview` step but publish the real
+   `data.js` to `$web`), instead of `export.yml`'s workbook→`Export-Data.ps1` path. Keep fleet/Samsara as-is
+   (inherited from the live data.js base).
+4. **[Claude]** **Flip the live board:** set `const USE_LISTS_WRITE = true;` in `MRA_Dashboard.html` (line
+   ~3218), deploy `mode=live`. Now the live board reads AND writes the Lists.
+5. **[Claude+Rich]** **Retire the workbook:** stop the "MRA workbook shuttle" flow + the Office-Script save
+   path (and the workbook→`export.yml`). Keep one last workbook backup.
+
+**Optional later hardening (not blocking):** get "MRA Lists Write 2" to support **item-id matching**
+(`getItemById`) so we can drop text matching and kill the `setProjectPM`/dup-title edge; assign **TaskID** on
+new project-task creates (flow currently leaves `field_2` empty); make `field_13`/`field_2` **Text** columns
+if we ever want to write Predecessor/TaskID.
