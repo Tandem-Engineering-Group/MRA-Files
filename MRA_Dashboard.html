@@ -168,8 +168,13 @@
   .tbmenu .tbpanel .gwinslider{flex:1}
   .tbmenu .tbpanel .vmlabel{font-size:10px; font-weight:700; color:var(--faint); text-transform:uppercase; letter-spacing:.5px; margin-top:2px}
   .g-bar.done{opacity:.6}
-  .g-row.g-subrow .g-gutter{padding-left:24px}
+  .g-row.g-subrow .g-gutter{padding-left:32px}
   .g-row.g-subrow .g-lbl{font-weight:500; color:var(--muted); font-size:11px}
+  /* phase / section header rows sit indented UNDER the project, tasks indent further under the phase (project › phase › task) */
+  .g-row.g-phaserow .g-gutter{padding-left:15px; cursor:pointer}
+  .g-row.g-phaserow{background:rgba(255,255,255,.028)}
+  .g-row.g-phaserow .g-lbl{font-weight:700; color:var(--txt); font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; opacity:.92}
+  body.light .g-row.g-phaserow{background:rgba(0,0,0,.035)}
   .g-lbl .gcaret{display:inline-block; width:13px; color:var(--blue); font-size:11px; user-select:none}
   .g-rowedit .g-gutter{cursor:pointer}
   .g-row.clickable{cursor:pointer}
@@ -2014,6 +2019,9 @@ const _LOD_BY_N={0:'proj',1:'phase',2:'tasks'}, _LOD_N={proj:0,phase:1,tasks:2},
 function setGanttLodSlider(v){ setGanttLod(_LOD_BY_N[String(v)]||'proj'); }   // P2 slider: 0=Projects (shrunk) → 1=Phases (just the section headers) → 2=Tasks (everything)
 function toggleGanttExp(name){ name=String(name||''); if(GANTT_EXP.has(name)) GANTT_EXP.delete(name); else GANTT_EXP.add(name); if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
 function togglePhase(proj,ph){ const k=proj+'|'+ph; if(PHASE_OPEN.has(k)) PHASE_OPEN.delete(k); else PHASE_OPEN.add(k); if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
+// Detailed (full-screen) project view phase collapse. Separate key namespace ('__FS__|…') so collapsing a
+// phase in the detail view doesn't flip its open/closed state in the main Projects Gantt. Phases default OPEN here.
+function togglePhaseFS(ph){ const k='__FS__|'+ph; if(PHASE_OPEN.has(k)) PHASE_OPEN.delete(k); else PHASE_OPEN.add(k); if(typeof GFS!=='undefined' && GFS==='project') renderGanttFS(); }
 // Map one project task -> a Gantt sub-row. ALWAYS returns a row: a bar if it has start+finish,
 // a ◆ milestone diamond if it's a milestone, or a label-only (noBar) row when it's undated.
 function ganttTaskSubRow(t,p){ const today=(window.MRA_DATA||{}).todayISO||'';
@@ -8241,7 +8249,22 @@ function renderGanttFS(){
         color:'#f59e0b', cls:'g-msrow',
         gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null };
     };
-    sorted.forEach(t=>{ if(/yes/i.test(t.ml||'')) rows.push(msRow(t)); else rows.push(taskRow(t)); });
+    if(GANTT_TASKLEVEL){
+      // Group tasks by PHASE — collapsible section headers, same as the main Projects Gantt. Phases default OPEN
+      // (this IS the detail view); click a phase header to collapse it. Order = first-appearance in the sorted list.
+      const phOrder=[], byPh={};
+      sorted.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!(ph in byPh)){ byPh[ph]=[]; phOrder.push(ph); } byPh[ph].push(t); });
+      phOrder.forEach(ph=>{
+        const tks=byPh[ph], open=!PHASE_OPEN.has('__FS__|'+ph), doneN=tks.filter(projIsDone).length;
+        rows.push({ label:ph, sub:tks.length+' task'+(tks.length>1?'s':'')+(doneN?(' · '+doneN+' done'):''),
+          noBar:true, cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
+          gutterClick:`togglePhaseFS('${escJsAttr(ph)}')` });
+        if(open) tks.forEach(t=>{ const r=(/yes/i.test(t.ml||''))?msRow(t):taskRow(t);
+          r.cls=/\bg-subrow\b/.test(r.cls||'')?r.cls:((r.cls?r.cls+' ':'')+'g-subrow'); rows.push(r); });   // indent tasks under the phase header
+      });
+    } else {
+      sorted.forEach(t=>{ if(/yes/i.test(t.ml||'')) rows.push(msRow(t)); else rows.push(taskRow(t)); });
+    }
     renderGantt(cont, rows, win, {dates:true, showDays:true, mlines});
     try{ pdDrawLinks(); }catch(_){}   // (B) draw predecessor → successor arrows over the bars
     window._gfsPrint={title:titleEl.textContent, rows, win, today};
