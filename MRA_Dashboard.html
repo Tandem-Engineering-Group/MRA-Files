@@ -253,6 +253,9 @@
   /* Per-job collapse caret (normal view) — shrink a single job's tasks right by its name */
   .job-collapse{cursor:pointer; color:#9fb0c4; font-weight:800; font-size:11px; line-height:1; margin-right:6px; user-select:none; vertical-align:middle}
   .job-collapse:hover{color:#7aa2d6}
+  /* Per-tile "collapse/expand every job's tasks" button (FL1) */
+  .bay-head .tilejobs{ background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:6px; font-size:10.5px; font-weight:700; padding:1px 7px; margin-left:8px; cursor:pointer; white-space:nowrap }
+  .bay-head .tilejobs:hover{ color:var(--txt); border-color:var(--muted) }
   .job{font-size:13px; margin-bottom:calc(9px*var(--ds-density,1))}
   .job:last-child{margin-bottom:0}
   .job.done{opacity:.5} .job.done .pj{text-decoration:line-through}
@@ -2188,6 +2191,7 @@ const FLEETIO_HELP = `
 const CHANGELOG = [
   { rev:"7.2", date:"2026-06-24", title:"FLOOR: Parking Lot + Next Up default collapsed · FLEETIO: Open Issues moved up", items:[
     "On <b>FLOOR</b>, the <b>Parking Lot</b> and <b>Next Up / On Hold</b> lanes now <b>default to collapsed</b> — you see the trailers, not all their tasks. Click a trailer's <b>▸</b> (or its task pill) to expand just that one; your choice sticks. (The work bays still show their tasks by default.)",
+    "Every bay tile now has a small <b>⊟ tasks / ⊞ tasks</b> button in its header to <b>collapse or expand every job's tasks in that tile at once</b> (separate from the ▾ that collapses the whole tile).",
     "On <b>FLEETIO</b>, the <b>⚠ Open Issues</b> list moved up to the top (now full-width) where <b>Needs Attention</b> used to be — and Needs Attention was removed (it was already covered by Open Issues). <b>Service overdue</b> still lives in the <b>🔧 Service — Due &amp; Overdue</b> panel just below." ] },
   { rev:"7.1", date:"2026-06-24", title:"FLEETIO: issue # everywhere · hover-highlight · full trailer name", items:[
     "Every Fleetio <b>issue / work order</b> now shows its <b>#number</b> (e.g. <span class=\"k\">#964</span>) right before its title — on every panel of the FLEETIO tab (Needs Attention, Open Issues, Work Orders, By Assignee, By Trailer).",
@@ -2829,6 +2833,14 @@ function toggleJob(row){
   else { collapsedJobs.has(row)?collapsedJobs.delete(row):collapsedJobs.add(row); }
   renderAll(); }
 function toggleBay(bay){ expandedBays.has(bay)?expandedBays.delete(bay):expandedBays.add(bay); renderAll(); }
+// FL1: collapse / expand EVERY job's tasks in one tile at once (the ⊟/⊞ tasks button on the tile header).
+function toggleTileJobs(btn){ const card=btn.closest('.bay'); if(!card) return;
+  const rows=[...card.querySelectorAll('.job[id^="floorjob-"]')].map(el=>{ const s=el.id.slice(9); return /^-?\d+$/.test(s)?+s:s; });
+  const anyOpen=rows.some(r=>{ const dc=WALL||DEFCOLL_ROWS.has(r); return dc?expandedJobs.has(r):!collapsedJobs.has(r); });
+  rows.forEach(r=>{ const dc=WALL||DEFCOLL_ROWS.has(r);
+    if(anyOpen){ if(dc) expandedJobs.delete(r); else collapsedJobs.add(r); }
+    else { if(dc) expandedJobs.add(r); else collapsedJobs.delete(r); } });
+  renderAll(); }
 // Per-tile collapse on the FLOOR (normal view) — remembered per device. Toggles in place (no re-render, no scroll reset).
 let BAY_COLLAPSED=new Set(); try{ BAY_COLLAPSED=new Set(JSON.parse(localStorage.getItem('mra_bay_collapsed')||'[]')); }catch(e){}
 function toggleBayTile(el){
@@ -5618,7 +5630,11 @@ function renderFloor(D){
     const bodyCls=(opts.scroll?"bay-body autoscroll":"bay-body")+(list.length>1?" wrapjobs":"");
     const col=BAY_COLLAPSED.has(bay);
     const caret=`<span class="bay-collapse">${col?'▸':'▾'}</span>`;
-    return `<div class="bay ${cls}${col?' collapsed':''}${!list.length?' bay-empty':''}" data-bay="${escA(bay)}" ondragover="jobDragOver(event)" ondragleave="jobDragLeave(event)" ondrop="jobDrop(event,'${escJsAttr(bay)}')"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}</div>`+
+    // FL1: a per-tile button to collapse / expand EVERY job's tasks in this tile at once.
+    const _tileTasks=list.some(j=>j.openCount>0);
+    const _anyJobOpen=list.some(j=>{ const dc=WALL||DEFCOLL_ROWS.has(j.row); return dc?expandedJobs.has(j.row):!collapsedJobs.has(j.row); });
+    const allJobsBtn=_tileTasks?`<button class="tilejobs" onclick="event.stopPropagation();toggleTileJobs(this)" title="${_anyJobOpen?'Collapse':'Expand'} every job's tasks in this tile at once">${_anyJobOpen?'⊟ tasks':'⊞ tasks'}</button>`:'';
+    return `<div class="bay ${cls}${col?' collapsed':''}${!list.length?' bay-empty':''}" data-bay="${escA(bay)}" ondragover="jobDragOver(event)" ondragleave="jobDragLeave(event)" ondrop="jobDrop(event,'${escJsAttr(bay)}')"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}</div>${allJobsBtn}`+
       `<div class="st ${stCls}">${stTxt}</div></div><div class="${bodyCls}">${body}</div></div>`;
   };
 
