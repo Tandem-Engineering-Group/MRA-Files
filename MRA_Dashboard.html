@@ -332,6 +332,21 @@
   .dtb-overlay.napkin .dtb-tools .gfs-theme.active{background:#c0381c;color:#fff;border-color:#c0381c;box-shadow:0 0 0 2px rgba(192,56,28,.25)}
   .dtb-overlay.napkin .gfs-close{color:#2b2620}
   .dtb-overlay.napkin .gfs-close:hover{color:#c0381c}
+  /* napkin: carry the theme into the bottom analytics too */
+  .dtb-overlay.napkin .dtb-chart{background:#f6f1e2;color:#2b2620;border:none;border-radius:3px;box-shadow:0 10px 26px rgba(0,0,0,.45),0 2px 0 rgba(0,0,0,.12);
+    font-family:'Bradley Hand','Segoe Print','Comic Sans MS','Marker Felt',cursive;
+    background-image:radial-gradient(circle at 88% 90%, rgba(150,90,40,.10), transparent 42%),repeating-linear-gradient(0deg, rgba(0,0,0,.02) 0 1px, transparent 1px 27px)}
+  .dtb-overlay.napkin .dtb-charth{color:#2b2620}
+  .dtb-overlay.napkin .dtb-charthsub{color:#6b5a3c}
+  .dtb-overlay.napkin .dtb-balnm,.dtb-overlay.napkin .dtb-balv{color:#2b2620}
+  .dtb-overlay.napkin .dtb-baltrack,.dtb-overlay.napkin .dtb-lstack{background:rgba(60,40,15,.1)}
+  .dtb-overlay.napkin .dtb-leg{color:#6b5a3c}
+  .dtb-overlay.napkin .dtb-leg b,.dtb-overlay.napkin .dtb-lnum{color:#2b2620}
+  .dtb-overlay.napkin .dtb-llab{color:#6b5a3c}
+  .dtb-overlay.napkin .dtb-sharebar{border-color:rgba(60,40,15,.3)}
+  .dtb-overlay.napkin #dtbGantt .g-lbl,.dtb-overlay.napkin #dtbGantt .g-tick,.dtb-overlay.napkin #dtbGantt .g-d,.dtb-overlay.napkin #dtbGantt .g-dout,.dtb-overlay.napkin #dtbGantt .g-mid,.dtb-overlay.napkin #dtbGantt .g-pct,.dtb-overlay.napkin #dtbGantt .g-barlabel{color:#2b2620}
+  .dtb-overlay.napkin #dtbGantt .g-row{border-top-color:rgba(60,40,15,.18)}
+  .dtb-overlay.napkin #dtbGantt .g-grid{background:rgba(60,40,15,.14)}
   body.light .dtb-task.odue{background:rgba(239,68,68,.10)}
   body.light .g-dout{color:#475569; text-shadow:none}
   body.light .g-hl.hl-white{background:rgba(0,0,0,.06); border-color:rgba(0,0,0,.7)}
@@ -2424,6 +2439,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"8.1", date:"2026-06-24", title:"🎨 Design board: fixed added-tasks vanishing · napkin theme now covers the charts too", items:[
+    "<b>Real fix for added tasks disappearing:</b> the browser can only post the shared file as plain text, but the flow was set to require JSON — so the write was rejected and the task got wiped on the next sync. Now posts as text and a just-added task is protected from the background refresh for a few seconds while it saves.",
+    "<b>🍸 Napkin mode now skins the bottom charts too</b> — the whole board (header, tiles, and the Workload / Share / Deadline / timeline analytics) reads as one bar-napkin sheet." ] },
   { rev:"8.0", date:"2026-06-24", title:"🎨 Design board: full names · per-tile Show all/fewer · 🖨 one-page board print · napkin header", items:[
     "Designers now show by <b>full name</b> as assigned in Projects — <b>Steve K, Sarah Williams, Mark Mustonen, Brandon Choy</b> (and they still match short forms automatically).",
     "Each tile now caps at <b>10 tasks</b> with a <b>▾ Show all / ▴ Show fewer</b> button — so a long list (hi Steve) doesn't blow out the board; great for a clean screenshot.",
@@ -7409,6 +7427,7 @@ let DTB_EDIT = {};                                   // {note:key} or {gen:id} w
 let NAPKIN=false;                                    // 🍸 bar-napkin skin (the design crew's fun view)
 const DTB_CAP=10;                                    // tiles show up to 10 tasks, then "Show all"
 const DTB_EXPAND=new Set();                          // lane names expanded past the cap
+let DTB_LASTWRITE=0;                                 // ms of the last local write (refresh won't clobber within ~15s)
 const DTB_HZN_LAB={day:'Today',week:'Week',month:'Month',all:'All'};
 const DTB_MAXRANK={day:1,week:2,month:3,all:4};
 const DTB_GLAB={overdue:'⚠ Overdue',today:'Today',week:'This Week',month:'This Month',later:'Upcoming',undated:'No date · ongoing'};
@@ -7428,7 +7447,9 @@ function dtbSaveLocal(){ try{ localStorage.setItem('mra_design_v1', JSON.stringi
 function dtbFetchRemote(){ if(!dtbShared()) return Promise.resolve(null);
   return fetch('design.json?cb='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(o=>o?dtbNorm(o):null).catch(()=>null); }
 function dtbPostRemote(){ if(!dtbShared()) return Promise.resolve();
-  try{ return fetch(DESIGN_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+  DTB_LASTWRITE=Date.now();   // mark a recent local write so the refresh won't adopt a not-yet-updated remote
+  // no-cors can only send a "simple" content type — text/plain (same as the EOTM flow); application/json gets stripped.
+  try{ return fetch(DESIGN_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},
     body:JSON.stringify({pin:DESIGN_PIN, json:JSON.stringify(dtbNorm(DTB))})}).catch(()=>{}); }catch(e){ return Promise.resolve(); } }
 // Apply a change everywhere: optimistic locally, then (if shared) re-fetch the latest, re-apply the SAME change
 // on top of it, and push back — so two people editing close together converge instead of clobbering.
@@ -7475,7 +7496,7 @@ function dtbDecorate(it, today){
   return {general:false, key, title:t.t||'(task)', dateISO, note:DTB.notes[key]||'', proj:it.proj, who:t.who, ms:projIsMs(t), done:projIsDone(t), bucket:dtbBucket(dateISO,today)};
 }
 function openDesignTeam(){ dtbLoadLocal(); document.getElementById('dtbOverlay').classList.add('show'); renderDesignTeam();
-  dtbFetchRemote().then(r=>{ if(r){ DTB=r; dtbSaveLocal(); if(!(DTB_EDIT.note||DTB_EDIT.gen)) renderDesignTeam(); } }); }   // adopt the shared file (if sharing is on)
+  dtbFetchRemote().then(r=>{ if(r && Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); if(!(DTB_EDIT.note||DTB_EDIT.gen)) renderDesignTeam(); } }); }   // adopt the shared file (skip if we just wrote locally)
 function closeDesignTeam(){ DTB_EDIT={}; document.getElementById('dtbOverlay').classList.remove('show'); }
 function setDtbHzn(h){ DTB_HZN=h; try{localStorage.setItem('mra_design_hzn',h);}catch(e){} renderDesignTeam(); }
 function dtbToggleDone(){ DTB_DONE=!DTB_DONE; renderDesignTeam(); }
@@ -8982,8 +9003,8 @@ function renderAll(){
   if(VIEW==='history') renderHistory();
   if(GFS) renderGanttFS();
   { const ov=document.getElementById('dtbOverlay'); if(ov&&ov.classList.contains('show') && !(DTB_EDIT.note||DTB_EDIT.gen)){
-      if(dtbShared()) dtbFetchRemote().then(r=>{ const o2=document.getElementById('dtbOverlay'); if(r&&o2&&o2.classList.contains('show')&&!(DTB_EDIT.note||DTB_EDIT.gen)){ DTB=r; dtbSaveLocal(); renderDesignTeam(); } });
-      else renderDesignTeam(); } }   // keep the Design board live (pull shared file if sharing's on), but don't clobber an in-progress edit
+      if(dtbShared() && Date.now()-DTB_LASTWRITE>15000) dtbFetchRemote().then(r=>{ const o2=document.getElementById('dtbOverlay'); if(r&&o2&&o2.classList.contains('show')&&!(DTB_EDIT.note||DTB_EDIT.gen)&&Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); renderDesignTeam(); } });
+      else renderDesignTeam(); } }   // keep the Design board live (pull shared file if sharing's on), but don't clobber an in-progress edit OR a just-saved add
   setView(VIEW);
   restoreWallScroll(_wsnap);
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===RANGE));
