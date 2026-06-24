@@ -797,6 +797,11 @@
   body.light #fIssues .row:hover, body.light #fWorkOrders .row:hover, body.light #fService .row:hover,
   body.light #fAttention .row:hover, body.light #fInBay .row:hover, body.light #fByTrailer .row:hover,
   body.light #fByAssignee .trow:hover{ background:rgba(245,200,30,.40) }
+  /* True full-screen for the ⚠ Open Issues panel (F1) — keeps the live list, just blows it up */
+  .panel.fs-on{ position:fixed; inset:0; z-index:10000; margin:0; border-radius:0; overflow:auto; background:var(--bg); padding:14px 20px 30px; box-shadow:none }
+  .panel.fs-on > h2{ position:sticky; top:0; background:var(--bg); z-index:2; padding-top:6px; font-size:18px }
+  .panel.fs-on #fIssues{ max-height:none !important; height:auto !important; overflow:visible !important }
+  .panel.fs-on .row{ font-size:14px; padding:9px 6px }
   table.flt .typ{font-size:10px; background:#243042; color:#cdd8e6; border-radius:20px; padding:2px 9px; white-space:nowrap}
   table.flt .mut{color:var(--muted)}
   table.flt .ch{display:inline-block; font-size:10px; font-weight:700; padding:2px 9px; border-radius:20px}
@@ -1265,7 +1270,7 @@
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <div class="panel" id="fp-issues">
-        <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span><button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fIssues')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
+        <h2>⚠ Open Issues <span class="count" id="fIssueCount"></span><button class="expandbtn fsbtn" style="margin-left:auto" onclick="toggleIssuesFS(this)" title="Open the open-issues list full screen (Esc to exit)">⛶ Full screen</button><button class="expandbtn fexp" onclick="toggleFScroll(this,'fIssues')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
         <div id="fIssues" class="fscroll"></div>
       </div>
       <div class="panel" id="fp-wos">
@@ -2191,7 +2196,8 @@ const CHANGELOG = [
   { rev:"7.1", date:"2026-06-24", title:"FLEETIO: issue # everywhere · hover-highlight · full trailer name", items:[
     "Every Fleetio <b>issue / work order</b> now shows its <b>#number</b> (e.g. <span class=\"k\">#964</span>) right before its title — on every panel of the FLEETIO tab (Needs Attention, Open Issues, Work Orders, By Assignee, By Trailer).",
     "<b>Hover a row → it highlights yellow</b>, so it's easy to keep your place when going through open items one-by-one in a meeting.",
-    "The <b>🚛 By Trailer</b> cards now show the <b>full unit name right after the J#</b> (instead of tucked underneath)." ] },
+    "The <b>🚛 By Trailer</b> cards now show the <b>full unit name right after the J#</b> (instead of tucked underneath).",
+    "The <b>⚠ Open Issues</b> panel has a <b>⛶ Full screen</b> button — blows the live list up to fill the screen for meeting review; <b>⤡ Contract</b> or <b>Esc</b> to come back." ] },
   { rev:"7.0", date:"2026-06-24", title:"Tidier Projects toolbar — ⚙ View + ⬇ Import/Export menus", items:[
     "The Projects top is decluttered. The set-and-forget Gantt controls — <b>date format, 🔍 zoom / ↔ scroll / All, 🎌 holidays, 🟧 MRA Shop load, 🗄 Show archived</b> — now live under one <b>⚙ View ▾</b> menu next to the search box. And the project <b>template / upload / download / hard-date</b> buttons fold into one <b>⬇ Import / Export ▾</b> menu.",
     "The things you reach for stay out front: 🔍 Find, Sort, 👥 assignees, 🖨 Print, ⛶ Expand — plus ✎ Edit Project Tasks, 📤 Status Report and ⓘ How-to. Nothing was removed, just grouped (and a menu closes when you click away)." ] },
@@ -3198,6 +3204,12 @@ function closeMenu(){ closeDrops(); }
 document.addEventListener('click',e=>{ if(!(e.target.closest && e.target.closest('.linksmenu'))) closeDrops(); });
 // Toolbar dropdown menus (⚙ View / ⬇ Import-Export): clicking outside an open one closes it (clicks inside keep it open).
 document.addEventListener('click',e=>{ document.querySelectorAll('details.tbmenu[open]').forEach(d=>{ if(!d.contains(e.target)) d.removeAttribute('open'); }); });
+// ⚠ Open Issues panel → true full screen (F1). Toggles a class so the LIVE list just blows up; Esc/contract exits.
+function toggleIssuesFS(btn){ const p=document.getElementById('fp-issues'); if(!p) return;
+  const on=p.classList.toggle('fs-on');
+  const b=btn||p.querySelector('.fsbtn'); if(b){ b.innerHTML = on?'⤡ Contract':'⛶ Full screen'; b.title = on?'Exit full screen (Esc)':'Open the open-issues list full screen (Esc to exit)'; }
+  document.body.style.overflow = on?'hidden':''; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ const p=document.querySelector('.panel.fs-on'); if(p) toggleIssuesFS(p.querySelector('.fsbtn')); } });
 // Click outside the wall settings popup (and not on its gear) closes it.
 document.addEventListener('click',e=>{ const c=document.getElementById('wallCtl');
   if(!c||!c.classList.contains('show')||!e.target.closest) return;
