@@ -137,7 +137,7 @@ foreach ($it in (Items 'MRA Shop Tasks')) {
   $op = FF $f @('Opened')
   $cl = FF $f @('Closed')
   $rec = [PSCustomObject]@{
-    task = $task
+    task = $task; _id = $it.id
     who  = (FF $f @('Assigned','AssignedTo','Assigned_x0020_To'))
     st   = (FF $f @('Status'))
     ml   = $(if (FFBool $f @('Milestone')) { 'Yes' } else { '' })
@@ -170,7 +170,7 @@ function Build-TasksFromRows($rows) {
       [void]$open.Add("$n. $label")
       if ($label -match '(?i)\bsal\b') { $salOpen++ }
     }
-    [void]$tasks.Add([PSCustomObject]@{ t = [string]$r.task; who = $who; op = $r.op; cl = $r.cl; st = [string]$r.st; done = [bool]$r.done; ml = [string]$r.ml; cm = [string]$r.cm })
+    [void]$tasks.Add([PSCustomObject]@{ t = [string]$r.task; who = $who; op = $r.op; cl = $r.cl; st = [string]$r.st; done = [bool]$r.done; ml = [string]$r.ml; cm = [string]$r.cm; _id = $r._id })
   }
   return @{ open = @($open); openCount = $open.Count; doneCount = $doneCount; salOpen = $salOpen; done = @($done); tasks = @($tasks) }
 }
@@ -210,7 +210,7 @@ foreach ($it in (Items 'MRA Jobs')) {
   if ($compISO  -match '^\d{4}-\d{2}-\d{2}$') { $p = $compISO.Split('-');  $compTxt  = "$([int]$p[1])/$([int]$p[2])/$($p[0].Substring(2))" }
 
   $rec = [PSCustomObject]@{
-    row = $(if ($isGeneral) { 'general' } elseif ($rowNum -ne '') { [int]$rowNum } else { $rowNum })
+    row = $(if ($isGeneral) { 'general' } elseif ($rowNum -ne '') { [int]$rowNum } else { $rowNum }); _id = $it.id
     bay = $bay; project = $proj; client = $client; jobNum = $job
     status = $status; pm = $pm
     startISO = $(if ($startISO -ne '') { $startISO } else { $null })
@@ -304,7 +304,7 @@ foreach ($it in (Items 'MRA Project Tasks')) {
     [void]$teamTasks.Add([PSCustomObject]@{ assignee = $pAssigned; project = $name; task = $pTask; dueISO = $dueISO; status = $pStatus })
   }
   [void]$o.tasks.Add([PSCustomObject]@{
-    id = $pTaskId; t = $pTask; phase = $pPhase; type = $pType; who = $pAssigned
+    id = $pTaskId; _id = $it.id; t = $pTask; phase = $pPhase; type = $pType; who = $pAssigned
     startISO = $sISO; finISO = $fISO; dur = $pDur; st = $pStatus; ml = $pMile; cm = $pComments
     pred = $pPred; sub = $pSub; parent = $pParent; subRes = $pSubRes
     ord = $pOrder; eD = $pEstDays; eH = $pEstHours; bud = $pBudget

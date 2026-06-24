@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = AzCopy token; cleanup = delete temp preview.html blob'
+        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = AzCopy token; cleanup = delete temp preview.html blob; listscand = build data.js FROM the Lists (validation only, no publish)'
         type: choice
         options:
           - preview
@@ -20,6 +20,7 @@ on:
           - data
           - sas
           - cleanup
+          - listscand
         default: preview
 
 jobs:
@@ -27,6 +28,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # listscand: build a CANDIDATE data.js straight from the 4 SharePoint Lists (Graph app auth),
+      # diff it against the live workbook-built data.js, and confirm item-ids (_id) are stamped.
+      # Validation ONLY — uploads an artifact, never publishes. Proves the cutover read path works.
+      - name: Build candidate data.js from the Lists (no publish)
+        if: ${{ inputs.mode == 'listscand' }}
+        shell: pwsh
+        env:
+          SP_TENANT_ID:     ${{ secrets.SP_TENANT_ID }}
+          SP_CLIENT_ID:     ${{ secrets.SP_CLIENT_ID }}
+          SP_CLIENT_SECRET: ${{ secrets.SP_CLIENT_SECRET }}
+        run: |
+          if (-not $env:SP_TENANT_ID -or -not $env:SP_CLIENT_ID -or -not $env:SP_CLIENT_SECRET) {
+            Write-Error "Missing SP_TENANT_ID / SP_CLIENT_ID / SP_CLIENT_SECRET repo secrets — the Graph 'Lists Reader' app (IT/Part A) must be set up first."
+            exit 1
+          }
+          ./Export-FromLists.ps1 -OutFile data.fromlists.js
+          Write-Host "`n=== _id (SharePoint item id) presence ==="
+          $c = Get-Content data.fromlists.js -Raw
+          Write-Host ("_id occurrences in candidate: " + ([regex]::Matches($c,'\"_id\"')).Count)
+          Write-Host "`n=== Compare candidate (Lists) vs live (workbook) ==="
+          try { ./Compare-DataJs.ps1 data.js data.fromlists.js } catch { Write-Host "Compare-DataJs note: $($_.Exception.Message)" }
+
+      - name: Upload candidate data.js artifact
+        if: ${{ inputs.mode == 'listscand' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-fromlists
+          path: data.fromlists.js
+          retention-days: 3
 
       # Generate a long-lived, write-scoped SAS for AzCopy on a no-admin PC.
       # Writes the full upload target URL to an artifact (masked in logs).
