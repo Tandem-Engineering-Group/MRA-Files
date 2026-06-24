@@ -2022,6 +2022,28 @@ function togglePhase(proj,ph){ const k=proj+'|'+ph; if(PHASE_OPEN.has(k)) PHASE_
 // Detailed (full-screen) project view phase collapse. Separate key namespace ('__FS__|…') so collapsing a
 // phase in the detail view doesn't flip its open/closed state in the main Projects Gantt. Phases default OPEN here.
 function togglePhaseFS(ph){ const k='__FS__|'+ph; if(PHASE_OPEN.has(k)) PHASE_OPEN.delete(k); else PHASE_OPEN.add(k); if(typeof GFS!=='undefined' && GFS==='project') renderGanttFS(); }
+// The phases shown in the detailed (full-screen) project view right now — respects the assignee filter + Hide-completed.
+function pdPhasesForCurrent(){
+  const D=window.MRA_DATA; if(!D||typeof GFS==='undefined'||GFS!=='project') return [];
+  const p=(D.projects||[]).find(x=>x.name===GFS_PROJECT); if(!p) return [];
+  const tl=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>!(PD_HIDEDONE&&projIsDone(t)));
+  const seen=new Set(), out=[];
+  tl.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!seen.has(ph)){ seen.add(ph); out.push(ph); } });
+  return out;
+}
+function pdAllPhasesOpen(){ const ph=pdPhasesForCurrent(); return ph.length>0 && ph.every(x=>!PHASE_OPEN.has('__FS__|'+x)); }
+function pdSetAllPhases(collapse){ pdPhasesForCurrent().forEach(ph=>{ const k='__FS__|'+ph; if(collapse) PHASE_OPEN.add(k); else PHASE_OPEN.delete(k); }); if(typeof GFS!=='undefined'&&GFS==='project') renderGanttFS(); }
+// Phase ROLLUP — one summary bar spanning all the phase's tasks (earliest start → latest finish) with a
+// %-complete fill (= done tasks / total). Lets a COLLAPSED phase still show its overall span + progress.
+function phaseRollup(tks){
+  const okY=iso=>{ const y=(iso&&/^\d{4}-/.test(iso))?+iso.slice(0,4):0; return y>=2020&&y<=2035; };
+  let lo=null, hi=null, done=0, n=0;
+  (tks||[]).forEach(t=>{ n++; if(projIsDone(t)) done++;
+    const s=t.startISO||t.finISO, f=t.finISO||t.startISO;
+    if(okY(s) && (!lo||s<lo)) lo=s;
+    if(okY(f) && (!hi||f>hi)) hi=f; });
+  return { startISO:lo, endISO:hi||lo, pct:n?Math.round(done/n*100):0, done, n };
+}
 // Map one project task -> a Gantt sub-row. ALWAYS returns a row: a bar if it has start+finish,
 // a ◆ milestone diamond if it's a milestone, or a label-only (noBar) row when it's undated.
 function ganttTaskSubRow(t,p){ const today=(window.MRA_DATA||{}).todayISO||'';
@@ -6060,9 +6082,11 @@ function renderProjects(D){
         const phaseDefaultOpen = (GANTT_LOD==='tasks') || !!PROJ_WHO;   // Tasks level / assignee filter → phases open; Phases level → just headers
         phOrder.forEach(ph=>{
           const key=p.name+'|'+ph, open = PHASE_OPEN.has(key) ? !phaseDefaultOpen : phaseDefaultOpen;
-          const tks=byPh[ph], doneN=tks.filter(projIsDone).length;
+          const tks=byPh[ph], doneN=tks.filter(projIsDone).length, roll=phaseRollup(tks);
           rows.push({ label:ph, sub:tks.length+' task'+(tks.length>1?'s':'')+(doneN?(' · '+doneN+' done'):''),
-            noBar:true, cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
+            startISO:roll.startISO, endISO:roll.endISO, noBar:!roll.startISO,
+            pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
+            cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
             gutterClick:`togglePhase('${escJsAttr(p.name)}','${escJsAttr(ph)}')` });
           if(open){ tks.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')))
             .forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && (sr.noBar || barGeom(sr.startISO,sr.endISO,win))) rows.push(sr); }); }
@@ -8174,7 +8198,10 @@ function renderGanttFS(){
       : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars, add and edit tasks">🔒 Edit / add tasks</div>`)
       + `<div class="rb${PD_HIDEDONE?' active':''}" onclick="pdToggleHideDone()" title="Hide completed tasks in this detailed view">✓ Hide completed</div>`
       + `<div class="rb${PD_SORT==='date'?' active':''}" onclick="setPdSort('date')" title="Order tasks by date">📅 By date</div>`
-      + `<div class="rb${PD_SORT==='manual'?' active':''}" onclick="setPdSort('manual')" title="Keep the list's own order (don't auto-sort by date)">▦ List order</div>`;
+      + `<div class="rb${PD_SORT==='manual'?' active':''}" onclick="setPdSort('manual')" title="Keep the list's own order (don't auto-sort by date)">▦ List order</div>`
+      + (GANTT_TASKLEVEL ? (pdAllPhasesOpen()
+          ? `<div class="rb" onclick="pdSetAllPhases(true)" title="Collapse every phase — show just the phase summary bars">⊟ Collapse all</div>`
+          : `<div class="rb" onclick="pdSetAllPhases(false)" title="Expand every phase — show all tasks">⊞ Expand all</div>`) : '');
     if(!p || !(p.tasks||[]).length){
       cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
       legEl.innerHTML=''; warnEl.textContent=''; rangeEl.innerHTML=''; return;
@@ -8256,8 +8283,11 @@ function renderGanttFS(){
       sorted.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!(ph in byPh)){ byPh[ph]=[]; phOrder.push(ph); } byPh[ph].push(t); });
       phOrder.forEach(ph=>{
         const tks=byPh[ph], open=!PHASE_OPEN.has('__FS__|'+ph), doneN=tks.filter(projIsDone).length;
+        const roll=phaseRollup(tks);
         rows.push({ label:ph, sub:tks.length+' task'+(tks.length>1?'s':'')+(doneN?(' · '+doneN+' done'):''),
-          noBar:true, cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
+          startISO:roll.startISO, endISO:roll.endISO, noBar:!roll.startISO,
+          pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
+          cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
           gutterClick:`togglePhaseFS('${escJsAttr(ph)}')` });
         if(open) tks.forEach(t=>{ const r=(/yes/i.test(t.ml||''))?msRow(t):taskRow(t);
           r.cls=/\bg-subrow\b/.test(r.cls||'')?r.cls:((r.cls?r.cls+' ':'')+'g-subrow'); rows.push(r); });   // indent tasks under the phase header
