@@ -29,27 +29,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # listscand: build a CANDIDATE data.js straight from the 4 SharePoint Lists (Graph app auth),
-      # diff it against the live workbook-built data.js, and confirm item-ids (_id) are stamped.
-      # Validation ONLY — uploads an artifact, never publishes. Proves the cutover read path works.
-      - name: Build candidate data.js from the Lists (no publish)
+      # listscand: build a CANDIDATE data.js straight from the SharePoint Lists — via the
+      # "MRA Lists to JSON" Power Automate flow, which drops lists.json into the private
+      # "pipeline" blob (NO Graph app / NO IT). Downloads it, runs build_from_lists.py,
+      # prints lists-vs-live counts. Validation ONLY — uploads an artifact, never publishes.
+      - name: Build candidate data.js from the Lists blob (no publish)
         if: ${{ inputs.mode == 'listscand' }}
-        shell: pwsh
         env:
-          SP_TENANT_ID:     ${{ secrets.SP_TENANT_ID }}
-          SP_CLIENT_ID:     ${{ secrets.SP_CLIENT_ID }}
-          SP_CLIENT_SECRET: ${{ secrets.SP_CLIENT_SECRET }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
-          if (-not $env:SP_TENANT_ID -or -not $env:SP_CLIENT_ID -or -not $env:SP_CLIENT_SECRET) {
-            Write-Error "Missing SP_TENANT_ID / SP_CLIENT_ID / SP_CLIENT_SECRET repo secrets — the Graph 'Lists Reader' app (IT/Part A) must be set up first."
-            exit 1
-          }
-          ./Export-FromLists.ps1 -OutFile data.fromlists.js
-          Write-Host "`n=== _id (SharePoint item id) presence ==="
-          $c = Get-Content data.fromlists.js -Raw
-          Write-Host ("_id occurrences in candidate: " + ([regex]::Matches($c,'\"_id\"')).Count)
-          Write-Host "`n=== Compare candidate (Lists) vs live (workbook) ==="
-          try { ./Compare-DataJs.ps1 data.js data.fromlists.js } catch { Write-Host "Compare-DataJs note: $($_.Exception.Message)" }
+          az storage container create --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --name pipeline --only-show-errors >/dev/null
+          az storage blob download \
+            --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name pipeline --name lists.json --file lists.json --only-show-errors
+          if [ ! -f lists.json ]; then echo "::error::lists.json not in 'pipeline' container — is the MRA Lists to JSON flow's Create blob step running?"; exit 1; fi
+          echo "lists.json bytes: $(wc -c < lists.json)"
+          python3 build_from_lists.py --lists lists.json --base data.js --out data.fromlists.js
+          echo "=== candidate (Lists) vs live (workbook) ==="
+          python3 -c "import json
+load=lambda p:(lambda r:json.loads(r[r.index('{'):r.rindex('}')+1]))(open(p,encoding='utf-8').read())
+C=load('data.fromlists.js'); D=load('data.js')
+[print('  '+k+': lists='+str(len(C.get(k,[])))+'  live='+str(len(D.get(k,[])))) for k in ['jobs','projects','teamTasks','users','holidays']]
+print('  _id stamped on candidate:', open('data.fromlists.js',encoding='utf-8').read().count('\"_id\"'))"
 
       - name: Upload candidate data.js artifact
         if: ${{ inputs.mode == 'listscand' }}
