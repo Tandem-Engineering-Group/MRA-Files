@@ -165,5 +165,17 @@ NOT "From Excel". This is also how the fresh cutover reload happens.
      numeric-filter change needed.
   4. **Parallel test** with a preview dashboard (USE_LISTS_WRITE=true on a test copy) -> real
      edits land in lists; live stays on workbook.
+     - 2026-06-24: read path is CODE-READY — `Export-FromLists.ps1` (Graph reader) now stamps
+       `_id` on jobs/shop tasks/project tasks, and `deploy.yml` has a **`listscand`** dispatch
+       mode that builds a candidate data.js from the Lists, checks `_id`, and diffs vs live (no
+       publish). **BLOCKER:** the run failed because the repo secrets **SP_TENANT_ID /
+       SP_CLIENT_ID / SP_CLIENT_SECRET are EMPTY** — the Graph "MRA Dashboard Lists Reader" app
+       (Part A = IT) was never finished / its creds never added. The guard exits cleanly with
+       that message. Two ways to unblock: (A) IT creates the Entra app (Graph Sites.Selected on
+       MRASiteProject) → partner adds the 3 values as repo secrets → re-run `listscand` (then
+       it's fully automatic forever); or (B) the "MRA Lists to JSON" Power Automate flow (Rich's
+       login, no IT) writes lists.json to the pipeline blob and the export reads it via
+       `MRA_LISTS_JSON` + `Build-FromLists` (already `_id`-stamped). Recommended: A (one-time IT,
+       hands-off after; same team needed for Step 4 SSO).
   5. **Cutover:** fresh full reload of lists from workbook (bulk loader, not From-Excel) +
      flip `USE_LISTS_WRITE=true` + point reads at lists + deploy + retire workbook.
