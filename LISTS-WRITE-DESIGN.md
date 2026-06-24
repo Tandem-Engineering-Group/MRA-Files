@@ -134,10 +134,22 @@ NOT "From Excel". This is also how the fresh cutover reload happens.
   headers `IF-MATCH:*` + `X-HTTP-Method: MERGE|DELETE`. `LISTS_WRITE_URL` now wired in the
   dashboard (DORMANT — `USE_LISTS_WRITE` still false).
 - REMAINING before cutover:
-  1. **Add `upsert` case** (Users/Holidays setUser/setHoliday) — GET by filter; if found MERGE
-     else POST create. (Or split the dashboard upsert into update+create.)
-  2. **Cascades** (renameProject / setProjectPM / renameAssignee / deleteProject) hit MANY rows
-     -> need a real loop (Get items -> Apply to each -> MERGE/DELETE). Rare; do after.
+  1. ✅ **`upsert` — DONE in code 2026-06-24 (no PA verb).** The dashboard `_listOpsRaw` splits
+     setUser/setHoliday into **update** (if the name/date already exists in `MRA_DATA`) **else
+     create** — so the flow only ever sees create/update/delete.
+  2. ✅ **Cascades — DONE in code 2026-06-24 (no PA loop).** Instead of one match-many op, the
+     dashboard now **fans each cascade out into one op PER ROW, matched by SharePoint item Id**,
+     by enumerating the affected rows straight from the in-memory board. Covers renameProject /
+     setProjectPM / renameAssignee / deleteProject / editJob(newProject|newJobNum) / importProject.
+     Linchpin: **`Build-FromLists` now stamps `_id` (SharePoint item Id) on every entity** (jobs
+     already had `row`; added to shop tasks via the shop obj + Build-TasksFromRows, and to project
+     tasks via Add-TaskRowObj). `_listOps` emits `Id eq <n>` (numeric, UNQUOTED — like the pin)
+     for these; the existing FindToUpdate/FindToDelete branches handle each single-Id op with no
+     loop. Verified by extracting the real functions and running cascade scenarios through them
+     (renameProject → 6 per-row ops by Id, deleteProject → 6 deletes, renameAssignee → only the
+     matching rows, setUser EXISTING→update / NEW→create). **DORMANT** until cutover
+     (`USE_LISTS_WRITE` still false; reads still from the workbook, so `_id` is only present once
+     reads come from Lists).
   3. ✅ **SECURITY: pin-gate the flow — DONE & VERIFIED 2026-06-24.** Added two actions at the
      TOP of "MRA Lists Write 2" (before the Switch): **CheckPIN** = "Send an HTTP request to
      SharePoint" GET

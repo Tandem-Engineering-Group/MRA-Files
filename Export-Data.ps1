@@ -193,7 +193,7 @@ function Build-TasksFromRows($rows) {
             [void]$open.Add("$n. $label")
             if ($label -match '(?i)\bsal\b') { $salOpen++ }
         }
-        [void]$tasks.Add([PSCustomObject]@{ t = [string]$r.task; who = $who; op = $r.opened; cl = $r.closed; st = [string]$r.status; done = [bool]$r.done; ml = [string]$r.milestone; cm = [string]$r.comments })
+        [void]$tasks.Add([PSCustomObject]@{ t = [string]$r.task; who = $who; op = $r.opened; cl = $r.closed; st = [string]$r.status; done = [bool]$r.done; ml = [string]$r.milestone; cm = [string]$r.comments; _id = $r._id })
     }
     return @{ open = @($open); openCount = $open.Count; doneCount = $doneCount; salOpen = $salOpen; done = @($done); tasks = @($tasks) }
 }
@@ -425,7 +425,7 @@ function Add-TaskRowObj($t, $pmap, $teamTasks) {
         })
     }
     [void]$o.tasks.Add([PSCustomObject]@{
-        id = $pTaskId; t = $pTask; phase = $pPhase; type = $pType; who = $pAssigned
+        id = $pTaskId; _id = $t.id; t = $pTask; phase = $pPhase; type = $pType; who = $pAssigned
         startISO = $psd; finISO = $pfd; dur = $pDur; st = $pStatus; ml = $pMile
         cm = $pComments; pred = $pPred; sub = $isSub; parent = $pParent; subRes = $pSubRes
         ord = $(if ($pOrder    -match '^-?\d+(\.\d+)?$') { [double]$pOrder    } else { $null })
@@ -462,7 +462,7 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
         $obj = [PSCustomObject]@{
             task = $task; who = $assigned; opened = $od; closed = $cl
             status = $status; milestone = $mile; comments = $cmt; done = $isDone
-            proj = $proj; jobNum = $jobn; matched = $false
+            proj = $proj; jobNum = $jobn; matched = $false; _id = $r.id
         }
         [void]$stAll.Add($obj)
         if ($proj -ne '') { $pk = $proj.ToLower(); if (-not $byProj.ContainsKey($pk)) { $byProj[$pk] = New-Object System.Collections.ArrayList }; [void]$byProj[$pk].Add($obj) }
@@ -503,7 +503,7 @@ function Build-FromLists($jsonPath, $PhysicalBays, $ScriptDir) {
 
         $rowKey = if ($null -ne $jr.id -and ([string]$jr.id) -ne '') { $jr.id } else { $rix }
         [void]$jobs.Add([PSCustomObject]@{
-            row = $rowKey; bay = $bay; project = $proj; client = $client; jobNum = $job
+            row = $rowKey; _id = $rowKey; bay = $bay; project = $proj; client = $client; jobNum = $job
             status = $status; pm = $pm; startISO = $startISO; completionISO = $compISO
             startText = $startTxt; completionText = $compTxt; category = $category
             notesRaw = $notes

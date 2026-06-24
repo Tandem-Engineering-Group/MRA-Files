@@ -3285,10 +3285,22 @@ function _wqDrain(){
 function _listToday(){ return (typeof localISO==='function') ? localISO(Date.now()) : new Date().toISOString().slice(0,10); }
 function _defs(o){ const r={}; for(const k in o){ if(o[k]!==undefined && o[k]!==null) r[k]=o[k]; } return r; }
 function _doneStatus(s){ return /done|complete|closed/i.test(s||''); }
+/* Lists cutover: enumerate the rows a cascade touches straight from the in-memory board, so the
+   dashboard fans a multi-row change into one op PER ROW (matched by SharePoint item Id) — the
+   write flow never needs a loop. Every list entity carries ._id (stamped by Build-FromLists). */
+function _D(){ return window.MRA_DATA||{}; }
+function _projTasksOf(name){ const p=(_D().projects||[]).find(x=>x.name===name); return (p&&p.tasks)||[]; }
+function _jobsOf(name){ return (_D().jobs||[]).filter(j=>j.project===name); }
+function _shopTasksOf(name){ const out=[]; _jobsOf(name).forEach(j=>(j.tasks||[]).forEach(t=>out.push(t))); return out; }
+function _allProjTasks(){ const out=[]; (_D().projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>out.push(t))); return out; }
+function _allShopTasks(){ const out=[]; (_D().jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>out.push(t))); return out; }
 function _listOpsRaw(p){
   const today=_listToday();
   const a=p.action || (p.closedDate!=null ? 'closeTask' : '');
   const O=(verb,list,match,set)=>({verb,list,match:match?_defs(match):null,set:set?_defs(set):null});
+  // Fan a multi-row change into one op per row, matched by SharePoint item Id (skips rows with no _id).
+  const idOps=(verb,list,rows,set)=>(rows||[]).filter(r=>r&&r._id!=null&&r._id!=='').map(r=>O(verb,list,{Id:r._id},set));
+  const jId=(p.row!=null&&p.row!==''&&p.row!=='general')?p.row:null;   // a job's item id, when the caller sent it
   switch(a){
     case 'closeTask':        return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Done',Closed:today})];
     case 'addTask':          return [O('create','ShopTasks',null,{Task:p.task,Project:p.project,JobNum:p.jobNum,Bay:p.bay,Assigned:p.assigned,Opened:today,Status:'Open',Milestone:p.milestone,Comments:p.comments})];
@@ -3300,27 +3312,43 @@ function _listOpsRaw(p){
       const set={Bay:p.bay,Status:p.status,Start:p.start,Finish:p.completion,Notes:p.notes,Client:p.client,PM:p.pm};
       if(p.newProject) set.Project=p.newProject;
       if(p.newJobNum)  set.JobNum=p.newJobNum;
-      const ops=[O('update','Jobs',{Project:p.project},set)];
-      if(p.newProject){ ops.push(O('update','ProjectTasks',{Project:p.project},{Project:p.newProject}),
-                                 O('update','ShopTasks',{Project:p.project},{Project:p.newProject})); }
-      if(p.newJobNum){  ops.push(O('update','ShopTasks',{JobNum:p.jobNum},{JobNum:p.newJobNum})); }
+      const ops=[ jId!=null ? O('update','Jobs',{Id:jId},set) : O('update','Jobs',{Project:p.project},set) ];
+      if(p.newProject){ ops.push(...idOps('update','ProjectTasks',_projTasksOf(p.project),{Project:p.newProject}),
+                                 ...idOps('update','ShopTasks',_shopTasksOf(p.project),{Project:p.newProject})); }
+      if(p.newJobNum){ const rows=[]; (_D().jobs||[]).forEach(j=>{ if((j.jobNum||'')===(p.jobNum||'')) (j.tasks||[]).forEach(t=>rows.push(t)); });
+                       ops.push(...idOps('update','ShopTasks',rows,{JobNum:p.newJobNum})); }
       return ops;
     }
-    case 'deleteJob':        return [O('delete','Jobs',{Project:p.project})];
-    case 'renameProject':    return [O('update','ProjectTasks',{Project:p.oldProject},{Project:p.newProject}),
-                                     O('update','Jobs',{Project:p.oldProject},{Project:p.newProject}),
-                                     O('update','ShopTasks',{Project:p.oldProject},{Project:p.newProject})];
-    case 'setProjectPM':     return [O('update','ProjectTasks',{Project:p.project},{PM:p.pm}),
-                                     O('update','Jobs',{Project:p.project},{PM:p.pm})];
-    case 'renameAssignee':   return [O('update','ProjectTasks',{Assigned:p.oldAssignee},{Assigned:p.newAssignee}),
-                                     O('update','ShopTasks',{Assigned:p.oldAssignee},{Assigned:p.newAssignee})];
-    case 'deleteProject':    return [O('delete','ProjectTasks',{Project:p.project}),
-                                     O('delete','Jobs',{Project:p.project}),
-                                     O('delete','ShopTasks',{Project:p.project})];
-    case 'setUser':          return [O('upsert','Users',{Name:p.name},{Code:p.code,Active:'Yes'})];
+    case 'deleteJob':        return [ jId!=null ? O('delete','Jobs',{Id:jId}) : O('delete','Jobs',{Project:p.project}) ];
+    case 'renameProject':    return [].concat(
+                               idOps('update','ProjectTasks',_projTasksOf(p.oldProject),{Project:p.newProject}),
+                               idOps('update','Jobs',        _jobsOf(p.oldProject),     {Project:p.newProject}),
+                               idOps('update','ShopTasks',   _shopTasksOf(p.oldProject),{Project:p.newProject}));
+    case 'setProjectPM':     return [].concat(
+                               idOps('update','ProjectTasks',_projTasksOf(p.project),{PM:p.pm}),
+                               idOps('update','Jobs',        _jobsOf(p.project),     {PM:p.pm}));
+    case 'renameAssignee': {
+      const old=(p.oldAssignee||'');
+      return [].concat(
+        idOps('update','ProjectTasks',_allProjTasks().filter(t=>(t.who||'')===old),{Assigned:p.newAssignee}),
+        idOps('update','ShopTasks',   _allShopTasks().filter(t=>(t.who||'')===old),{Assigned:p.newAssignee}));
+    }
+    case 'deleteProject':    return [].concat(
+                               idOps('delete','ProjectTasks',_projTasksOf(p.project)),
+                               idOps('delete','Jobs',        _jobsOf(p.project)),
+                               idOps('delete','ShopTasks',   _shopTasksOf(p.project)));
+    case 'setUser': {        // upsert -> update if the name already exists, else create (no PA upsert verb)
+      const ex=(_D().users||[]).some(u=>(u.name||'').toLowerCase()===(p.name||'').toLowerCase());
+      return ex ? [O('update','Users',{Name:p.name},{Code:p.code,Active:'Yes'})]
+                : [O('create','Users',null,{Name:p.name,Code:p.code,Active:'Yes'})];
+    }
     case 'deleteUser':       return [O('delete','Users',{Name:p.name})];
     case 'renameUser':       return [O('update','Users',{Name:p.oldName},{Name:p.newName})];
-    case 'setHoliday':       return [O('upsert','Holidays',{Name:p.name,Date:p.date},{Country:p.country})];
+    case 'setHoliday': {     // upsert by name+date
+      const ex=(_D().holidays||[]).some(h=>(h.name||'')===(p.name||'') && ((h.dateISO||h.date||''))===(p.date||''));
+      return ex ? [O('update','Holidays',{Name:p.name,Date:p.date},{Country:p.country})]
+                : [O('create','Holidays',null,{Name:p.name,Date:p.date,Country:p.country})];
+    }
     case 'deleteHoliday':    return [O('delete','Holidays',{Name:p.name,Date:p.date})];
     case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
     case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
@@ -3328,7 +3356,7 @@ function _listOpsRaw(p){
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,TaskID:p.id},{Status:'In Progress'})];
     case 'importProject': {
-      const ops=[]; if(p.replace) ops.push(O('delete','ProjectTasks',{Project:p.project}));
+      const ops=[]; if(p.replace) ops.push(...idOps('delete','ProjectTasks',_projTasksOf(p.project)));
       (p.tasks||[]).forEach(t=>ops.push(O('create','ProjectTasks',null,{Task:t.task,Project:p.project,Phase:t.phase,Type:t.type,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Duration:t.duration,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,PM:p.pm})));
       return ops;
     }
@@ -3353,7 +3381,8 @@ function _listOps(p){
   for(const o of raw){
     const lf=_LF[o.list]; if(!lf) continue;
     const r={verb:o.verb, list:lf.list};
-    if(o.match){ r.filter=Object.keys(o.match).map(k=>(lf.cols[k]||k)+" eq '"+_odEsc(o.match[k])+"'").join(' and '); }
+    if(o.match){ r.filter=Object.keys(o.match).map(k=>{ const col=lf.cols[k]||k; const v=o.match[k];
+      return (col==='Id'||col==='ID') ? (col+' eq '+v) : (col+" eq '"+_odEsc(v)+"'"); }).join(' and '); }
     if(o.set){ const b={}; for(const k in o.set){ if(lf.cols[k]) b[lf.cols[k]]=o.set[k]; } r.body=b; }
     out.push(r);
   }
