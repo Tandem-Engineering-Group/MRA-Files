@@ -153,19 +153,57 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
       with no TaskID (flow leaves `field_2` blank — text-matched edits still work); (4) Predecessor/Duration are
       Number columns and not written.
     - Gotchas + the full design are in `LISTS-WRITE-DESIGN.md`.
-- **🔐 STEP 4 — lock it down + plug into M365 (do AFTER/with Step 3):** (a) **Formal login / SSO** —
-  today the board is a PUBLIC static blob site (code only gates editing). Real sign-in needs an
-  auth-capable host: **Azure Static Web Apps (built-in Entra ID login + roles)** OR embed in
-  **Teams/SharePoint** (auto-authenticates the org). This is a HOSTING change, not just a feature.
-  (b) **Roles (Rich confirmed 2026-06-20: Admin / Editor / Viewer):** **Admin** = manage logins/codes
-  + everything (today hardcoded to "Rich Miller"; make it grantable via a `Role` column on the Users
-  list so Rich can promote others); **Editor** = can edit the board (today = anyone with a code);
-  **Viewer** = read-only (today = the public view). Plus **role-based tabs** — show/hide by role:
-  shop crew see only FLOOR, managers see all, Rich = admin. (c) **Teams/Outlook/Planner** — native once data is in
-  Lists: Power Automate off List changes → email assignee (Outlook) + assigned Planner task (lands in
-  their Teams Tasks/phone) + channel posts; embed the dash as a Teams tab. Reliable once OFF the
-  Excel/Office-Script path (kills the "Who" blank gremlin). Each step makes the next easier: 1-3 get
-  off Excel; 4 = sign-in, roles, M365 hooks.
+## 🔜 NEXT SESSION RUNBOOK — locked in 2026-06-25 (Rich wants all of this "tomorrow")
+
+**A. Cutover follow-ups (post-flip cleanup — board is LIVE on Lists, see Step 3):**
+1. **Verify the test edits persisted** — Rich added shop tasks on **Ferguson BizBox - Graphic Updates**
+   ("test edit for Ricardo miller" etc.) as a live write test. Run "MRA Lists to JSON" → rebuild
+   (`listspreview`) → confirm they came out of the Lists. (Pending at end of 2026-06-24 session.)
+2. **Tighten refresh lag (~15–30 min → ~15):** today it rides TWO unsynced 15-min cycles (the
+   "MRA Lists to JSON" Recurrence, then `export.yml`). Fix: add an **HTTP `repository_dispatch`
+   (`event_type:"run-export"`) step to the END of the "MRA Lists to JSON" flow** (same fine-grained PAT
+   the workbook shuttle uses) so writing `lists.json` immediately triggers the export rebuild → one cycle.
+3. **Retire the workbook path (only once stable):** ⚠️ DEPENDENCY — `export.yml` still runs
+   `Export-Data.ps1` for **fresh Fleetio/Samsara**, which needs the **workbook** (the shuttle copies it to
+   the `pipeline` blob). So BEFORE retiring the shuttle, refactor the fleet pull to NOT need the workbook
+   (Export-Data has a fleet-only path, or split it out). THEN pause the **"MRA workbook shuttle"** flow +
+   stop the **Office Script** save path. Keep one final workbook backup. (The dashboard already writes to
+   the Lists, so the Office Script is unused now — safe to retire after fleet is decoupled.)
+
+**B. 🔐 STEP 4 — Secure login + role-based access (Rich: "add secure login + decide what each login sees").**
+Two layers — do Layer 1 first (fast, big payoff), then decide Layer 2:
+
+- **LAYER 1 — Role-based UI on the EXISTING code-login (Claude can build; NO new hosting):**
+  The code-login already maps a code → user name. Add roles, data-driven from the **MRA Users `Role`
+  column** (already in the list schema). Steps:
+  1. `build_from_lists.py` (+ `Export-Data.ps1` for parity): **emit each user's `Role`** in `data.js` users
+     (today it only emits `{name, h}` — add `role`). 
+  2. Dashboard: on login, set `CURRENT_ROLE`; **Admin / Editor / Viewer** (Rich confirmed).
+  3. **Gate by role:** Viewer = read-only (hide all edit/✓/add/🔒 buttons); Editor = can edit; Admin =
+     all + the ☰ admin items (Manage logins, EOTM, Holidays, Design board admin).
+  4. **Role-based tabs** (Rich to confirm the matrix): e.g. shop crew → FLOOR (+FLEETIO?) only; managers →
+     all; Admin → all. Show/hide tabs by `CURRENT_ROLE`.
+  5. Make **Admin grantable** (today hardcoded "Rich Miller") via the `Role` column so Rich can promote others.
+  - ⚠️ CAVEAT: this is **soft** security — `data.js` is still publicly fetchable on `$web`, so it gates the
+    UI, not the raw data. Good for org day-to-day; HARD data security = Layer 2.
+
+- **LAYER 2 — Real SSO + private data (HOSTING decision; needs IT + partner). DECIDE TOMORROW:**
+  The board is a PUBLIC static blob site. Real sign-in + non-public data needs an auth-capable host. Options:
+  - **(A) Azure Static Web Apps** — built-in **Entra ID (M365) login + roles**, data served behind auth.
+    Cleanest "real" SSO, but a **hosting migration** ($web blob → SWA). Needs **partner** (Azure) +
+    **IT** (Entra app registration / admin consent).
+  - **(B) Teams / SharePoint embed** — embed the board as a **Teams tab / SharePoint page**; the org
+    auto-authenticates. Low migration, but the underlying `$web` data stays public unless also locked.
+  - **(C) MSAL.js sign-in on the static page** — adds a Microsoft sign-in gate to the UI; `data.js` stays
+    public. Soft (same data caveat as Layer 1).
+  - **KEY DECISION for Rich:** is "only the right people can sign in to SEE/EDIT" enough (→ Layer 1 + a
+    sign-in: B or C), or must the **data itself be non-public** (→ A, the bigger lift)? **WHO:** any Microsoft
+    sign-in → **IT** does the Entra app/consent; Azure SWA hosting → **partner**. Give Rich the exact
+    forward-asks for each (per the access/who-has-what rules at top).
+
+- **(c later) Teams/Outlook/Planner hooks** — now that data is in Lists: Power Automate off List changes →
+  email assignee (Outlook) + assigned Planner task (Teams Tasks/phone) + channel posts; embed dash as a
+  Teams tab. Reliable now we're OFF the Office-Script path.
 
 
 ### ⚠️ Dashboard release checklist (do EVERY time `MRA_Dashboard.html` changes — Rich shouldn't have to remind us)
