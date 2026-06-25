@@ -171,35 +171,37 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
    the Lists, so the Office Script is unused now — safe to retire after fleet is decoupled.)
 
 **B. 🔐 STEP 4 — Secure login + role-based access (Rich: "add secure login + decide what each login sees").**
-Two layers — do Layer 1 first (fast, big payoff), then decide Layer 2:
+**DECISION 2026-06-25 (Rich): SKIP the code-based soft roles (old "Layer 1") — it'd be thrown away when
+real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles + private data.**
 
-- **LAYER 1 — Role-based UI on the EXISTING code-login (Claude can build; NO new hosting):**
-  The code-login already maps a code → user name. Add roles, data-driven from the **MRA Users `Role`
-  column** (already in the list schema). Steps:
-  1. `build_from_lists.py` (+ `Export-Data.ps1` for parity): **emit each user's `Role`** in `data.js` users
-     (today it only emits `{name, h}` — add `role`). 
-  2. Dashboard: on login, set `CURRENT_ROLE`; **Admin / Editor / Viewer** (Rich confirmed).
-  3. **Gate by role:** Viewer = read-only (hide all edit/✓/add/🔒 buttons); Editor = can edit; Admin =
-     all + the ☰ admin items (Manage logins, EOTM, Holidays, Design board admin).
-  4. **Role-based tabs** (Rich to confirm the matrix): e.g. shop crew → FLOOR (+FLEETIO?) only; managers →
-     all; Admin → all. Show/hide tabs by `CURRENT_ROLE`.
-  5. Make **Admin grantable** (today hardcoded "Rich Miller") via the `Role` column so Rich can promote others.
-  - ⚠️ CAVEAT: this is **soft** security — `data.js` is still publicly fetchable on `$web`, so it gates the
-    UI, not the raw data. Good for org day-to-day; HARD data security = Layer 2.
-
-- **LAYER 2 — Real SSO + private data (HOSTING decision; needs IT + partner). DECIDE TOMORROW:**
-  The board is a PUBLIC static blob site. Real sign-in + non-public data needs an auth-capable host. Options:
-  - **(A) Azure Static Web Apps** — built-in **Entra ID (M365) login + roles**, data served behind auth.
-    Cleanest "real" SSO, but a **hosting migration** ($web blob → SWA). Needs **partner** (Azure) +
-    **IT** (Entra app registration / admin consent).
-  - **(B) Teams / SharePoint embed** — embed the board as a **Teams tab / SharePoint page**; the org
-    auto-authenticates. Low migration, but the underlying `$web` data stays public unless also locked.
-  - **(C) MSAL.js sign-in on the static page** — adds a Microsoft sign-in gate to the UI; `data.js` stays
-    public. Soft (same data caveat as Layer 1).
-  - **KEY DECISION for Rich:** is "only the right people can sign in to SEE/EDIT" enough (→ Layer 1 + a
-    sign-in: B or C), or must the **data itself be non-public** (→ A, the bigger lift)? **WHO:** any Microsoft
-    sign-in → **IT** does the Entra app/consent; Azure SWA hosting → **partner**. Give Rich the exact
-    forward-asks for each (per the access/who-has-what rules at top).
+- **THE PLAN — Azure Static Web Apps (SWA) with Entra ID (M365) login + roles.** Cleanest "real login":
+  built-in Microsoft sign-in restricted to the MRA org, roles, and **data served behind auth (not public)**.
+  This is a **HOSTING MIGRATION** off the public `$web` blob → SWA. Steps for tomorrow:
+  1. **[Partner — Azure]** Create the **Static Web App** (mrashopdash subscription). Wire it to the GitHub
+     repo (SWA auto-adds its own deploy workflow) OR keep our `deploy.yml` and point SWA at the output. Serve
+     `MRA_Dashboard.html` (+ assets) and **`data.js` from BEHIND auth** (so it's no longer publicly fetchable).
+  2. **[IT / often automatic]** Auth = SWA's **built-in Entra ID provider**; **restrict sign-in to the MRA
+     tenant** (only @tandemeng.com / org accounts). IT may need to OK the app/consent; SWA's default Entra
+     provider often needs no separate app reg — confirm tenant restriction.
+  3. **[Claude] Roles from the MRA Users list (so Rich manages roles in SharePoint, not Azure):** add a small
+     **roles API** (Azure Function in the SWA) that looks the signed-in user up in **MRA Users** and returns
+     their **Role** (Admin / Editor / Viewer) via SWA's `rolesSource`. Then SWA gates by role natively.
+  4. **[Claude] Dashboard:** read the signed-in identity + roles from **`/.auth/me`**; gate **tabs + edit
+     buttons + ☰ admin items** by role (Viewer read-only · Editor edits · Admin = all + manage logins/EOTM/
+     holidays/design-admin). The PIN/code-login + `_findId` write path stays; identity now comes from SSO.
+  5. **[Claude] Pipeline:** repoint the data publish from public `$web` → the SWA's auth-protected location
+     (the export hybrid build stays the same; only the publish target changes).
+- **OPEN QUESTIONS to settle first thing tomorrow:**
+  - **Shop TV / Wall mode** — does the floor TV need a **no-login kiosk** read-only view? If yes, keep a
+    public/kiosk read path OR a device account; if no, the TV signs in once. (Affects whether data goes
+    fully private.)
+  - **Role → tab matrix** (who sees what): e.g. shop crew → FLOOR (+FLEETIO?) only; managers → all; Rich = Admin.
+  - Confirm the **MRA Users** list has everyone who needs access + their **Role**.
+- **OWNERS to line up (Rich, give them a heads-up tonight/AM):** **partner** = create the Azure Static Web App
+  + hosting; **IT** = Entra/tenant sign-in restriction (+consent if prompted). Claude builds the roles API +
+  dashboard auth gating. (Per the access rules up top: Azure → partner, Entra/M365 admin → IT.)
+- (Fallback if SWA is blocked: **Teams/SharePoint embed** auto-authenticates the org but leaves `$web` data
+  public; or **MSAL.js** sign-in gate on the static page — both are softer. SWA is the real answer Rich wants.)
 
 - **(c later) Teams/Outlook/Planner hooks** — now that data is in Lists: Power Automate off List changes →
   email assignee (Outlook) + assigned Planner task (Teams Tasks/phone) + channel posts; embed dash as a
