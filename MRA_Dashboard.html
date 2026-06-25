@@ -840,6 +840,7 @@
   .baassign #baPerson{flex:1; min-width:160px}
   /* 🟡 PM verification queue (design-board "mark ready" tasks) */
   .vq-panel{border:1px solid rgba(245,158,11,.5); background:rgba(245,158,11,.07)}
+  .vq-panel > h2{display:flex; align-items:center; flex-wrap:wrap; gap:8px}
   .vq-panel > h2 .vq-hint{font-size:11px; font-weight:400; color:var(--muted); margin-left:10px; text-transform:none; letter-spacing:0}
   .vq-list{display:flex; flex-direction:column; gap:6px; margin-top:8px}
   .vq-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel2)}
@@ -854,6 +855,9 @@
   .vq-acts .vq-back{color:var(--muted)}
   .vq-acts .vq-back:hover{border-color:var(--amber); color:#fde68a}
   .vq-need{font-size:11px; color:var(--muted); font-style:italic}
+  .vq-signin{margin-left:auto; background:rgba(245,158,11,.18); border:1px solid var(--amber); color:#fde68a; border-radius:8px; padding:5px 12px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit}
+  .vq-signin:hover{background:rgba(245,158,11,.3)}
+  .vq-who{margin-left:auto; font-size:11.5px; color:var(--muted); font-weight:600}
   body.light .vq-acts button{background:#fff}
   /* design-board task waiting on the PM */
   .dtb-task.pending{border-color:rgba(245,158,11,.55); background:rgba(245,158,11,.08)}
@@ -2558,6 +2562,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"8.7", date:"2026-06-25", title:"🔓 Verify from the Projects tab: log in right there", items:[
+    "The <b>✓ Verify</b> / <b>↩ Send back</b> buttons on the 🟡 Awaiting-verification list are now <b>always clickable</b> — click and it <b>asks for your code</b> if you're not signed in, then checks you're the project's PM (or an admin) before closing it.",
+    "Added a <b>🔒 Sign in to verify</b> button on the panel (and it shows who's signed in) — no need to go to another screen to log in." ] },
   { rev:"8.6", date:"2026-06-25", title:"🟡 Awaiting-verification list now opens + highlights on the Gantt", items:[
     "The <b>🟡 Awaiting verification</b> panel on the PROJECTS tab now <b>always shows its tasks</b> (it was collapsing) so you can hit ✓ Verify / ↩ Send back right there.",
     "<b>Click a task in that list to jump to it on the Gantt</b> — it scrolls to it and flashes. Pending tasks are also <b>tinted gold with a 🟡</b> on the Gantt so they're easy to spot." ] },
@@ -4502,17 +4509,21 @@ function renderVerifyQueue(){
   const rows=list.sort((a,b)=>String(a.p.name).localeCompare(String(b.p.name))).map(({p,t})=>{
     const mine=canVerify(p.name), h=projTaskHandle(t);
     const due=t.finISO||t.startISO; const od=due&&due<(window.MRA_DATA||{}).todayISO;
-    const acts = mine
-      ? `<button class="vq-ok" onclick="verifyTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Confirm done — marks it Completed">✓ Verify</button>`
-        +`<button class="vq-back" onclick="sendBackTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Not done yet — send it back to In Progress">↩ Send back</button>`
-      : `<span class="vq-need" title="Sign in as ${esc(p.pm||'the PM')} (or admin) to verify">needs ${esc(p.pm||'PM')}</span>`;
+    // Buttons are ALWAYS clickable — clicking prompts for your code (login), then checks you're the PM/admin.
+    const acts = `<button class="vq-ok" onclick="verifyTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Confirm done — marks it Completed (asks for your code if you're not signed in)">✓ Verify</button>`
+      +`<button class="vq-back" onclick="sendBackTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Not done yet — send it back to In Progress">↩ Send back</button>`
+      +(mine?'':`<span class="vq-need" title="Only this project's PM or an admin can sign off">${esc(p.pm||'PM')} / admin</span>`);
     return `<div class="vq-row">`
       +`<div class="vq-task" onclick="gotoVerifyTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Jump to this task on the Gantt (it's highlighted gold)"><b>${esc(t.t||'(task)')}</b><div class="vq-sub">${esc(p.name)} · ${esc(p.pm||'—')}${t.who?(' · marked by '+esc(t.who)):''}${due?(' · due '+esc(fmtMDY(due))+(od?' ⚠':'')):''}</div></div>`
       +`<div class="vq-acts">${acts}</div></div>`;
   }).join('');
+  const signin = CLOSE_PIN
+    ? `<span class="vq-who" title="Signed in">👤 ${esc(CURRENT_USER||'signed in')}</span>`
+    : `<button class="vq-signin" onclick="vqSignIn()" title="Enter your code to verify tasks">🔒 Sign in to verify</button>`;
   box.innerHTML=`<div class="panel vq-panel"><h2>🟡 Awaiting verification <span class="count">${list.length}</span>`
-    +`<span class="vq-hint">tasks the design team marked ready — the PM signs off to close</span></h2><div class="vq-list">${rows}</div></div>`;
+    +`<span class="vq-hint">tasks the design team marked ready — the PM signs off to close</span>${signin}</h2><div class="vq-list">${rows}</div></div>`;
 }
+function vqSignIn(){ if(ensureAuth('verify tasks') && window.MRA_DATA) renderProjects(window.MRA_DATA); }
 function verifyTask(proj, handle){
   const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return;
   if(!ensureAuth('verify a task')) return;
