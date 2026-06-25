@@ -2562,6 +2562,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"8.8", date:"2026-06-25", title:"🐞 Fix: drag-to-reschedule now works on tasks without a Task ID", items:[
+    "On a project's detailed Gantt, <b>every task bar can now be dragged</b> to reschedule (move dates / reorder) — before, tasks with no Task ID (many imported ones) showed no drag handle and wouldn't budge. Same root cause as this morning's click-to-edit fix; now drag, click, and the ⇄ tools all address tasks the same robust way, writing to the exact row." ] },
   { rev:"8.7", date:"2026-06-25", title:"🔓 Verify from the Projects tab: log in right there", items:[
     "The <b>✓ Verify</b> / <b>↩ Send back</b> buttons on the 🟡 Awaiting-verification list are now <b>always clickable</b> — click and it <b>asks for your code</b> if you're not signed in, then checks you're the project's PM (or an admin) before closing it.",
     "Added a <b>🔒 Sign in to verify</b> button on the panel (and it shows who's signed in) — no need to go to another screen to log in." ] },
@@ -8936,17 +8938,18 @@ function pdReorderDrop(ctx, t, idx){
 // Apply an ord to a task by id (write-back + re-render). Shared by drag, undo and redo.
 function pdApplyOrderById(project, id, ord){
   const p=oProj(project); if(!p) return;
-  const t=(p.tasks||[]).find(x=>String(x.id)===String(id)); if(!t) return;
+  const t=projTaskByAnyId(p,id); if(!t) return;
   t.ord=(ord==null?null:ord);
-  if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, taskOld:t.t, ord:(ord==null?'':ord) });
+  if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, ord:(ord==null?'':ord) });
   if(typeof oRecomputeProject==='function') oRecomputeProject(p);
   renderGanttFS(); if(typeof renderAll==='function') renderAll();
 }
 function pdApplyOrder(project, t, newOrd){
-  PD_UNDO.push({ kind:'ord', project, id:t.id, label:(t.t||'').slice(0,30), oldOrd:(t.ord!=null?t.ord:null), newOrd });
+  const h=projTaskHandle(t);
+  PD_UNDO.push({ kind:'ord', project, id:h, label:(t.t||'').slice(0,30), oldOrd:(t.ord!=null?t.ord:null), newOrd });
   if(PD_UNDO.length>60) PD_UNDO.shift();
   PD_REDO.length=0;                                   // a fresh change clears the redo trail
-  pdApplyOrderById(project, t.id, newOrd);
+  pdApplyOrderById(project, h, newOrd);
 }
 function pdResetOrder(){
   if(!GFS_PROJECT) return; if(typeof ensureAuth==='function' && !ensureAuth('reset task order')) return;
@@ -8954,7 +8957,7 @@ function pdResetOrder(){
   const had=(p.tasks||[]).filter(t=>t.ord!=null && t.ord!=='');
   if(!had.length){ alert('This project is already in date order — nothing to reset.'); return; }
   if(!confirm('Reset "'+GFS_PROJECT+'" back to date order? This clears the manual task order for everyone.')) return;
-  had.forEach(t=>{ t.ord=null; if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project:GFS_PROJECT, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, taskOld:t.t, ord:'' }); });
+  had.forEach(t=>{ t.ord=null; if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project:GFS_PROJECT, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, ord:'' }); });
   if(typeof oRecomputeProject==='function') oRecomputeProject(p);
   renderGanttFS(); if(typeof renderAll==='function') renderAll();
 }
@@ -8965,9 +8968,9 @@ function pdragHintHide(){ const h=document.getElementById('pdragHint'); if(h) h.
 // Apply new dates to a task (write back + optimistic + re-render). Shared by drag, undo and redo.
 function pdApplyDates(project, id, startISO, finISO){
   const p=oProj(project); if(!p) return;
-  const t=(p.tasks||[]).find(x=>String(x.id)===String(id)); if(!t) return;
+  const t=projTaskByAnyId(p,id); if(!t) return;   // id may be a real TaskID or an "s<_id>" handle
   const payload={ action:'editProjectTask', project, pin:CLOSE_PIN, user:CURRENT_USER,
-    id:t.id, taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'', assigned:t.who||'',
+    id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'', assigned:t.who||'',
     status:t.st||'Not Started', start:startISO||'', finish:finISO||'', pred:(t.pred!=null?t.pred:''),
     milestone:/yes/i.test(t.ml||'')?'Yes':'', comments:t.cm||'' };
   t.startISO=startISO||null; t.finISO=finISO||null;
@@ -8976,10 +8979,11 @@ function pdApplyDates(project, id, startISO, finISO){
   renderGanttFS(); if(typeof renderAll==='function') renderAll();
 }
 function pdragSave(project, t, startISO, finISO){
-  PD_UNDO.push({ project, id:t.id, label:(t.t||'').slice(0,30), oldStart:t.startISO||null, oldFin:t.finISO||null, newStart:startISO, newFin:finISO });
+  const h=projTaskHandle(t);
+  PD_UNDO.push({ project, id:h, label:(t.t||'').slice(0,30), oldStart:t.startISO||null, oldFin:t.finISO||null, newStart:startISO, newFin:finISO });
   if(PD_UNDO.length>60) PD_UNDO.shift();
   PD_REDO.length=0;                                   // a fresh change clears the redo trail
-  pdApplyDates(project, t.id, startISO, finISO);
+  pdApplyDates(project, h, startISO, finISO);
 }
 /* ---- (B) Drag-to-link predecessors (Smartsheet-style). Drag a bar's ● connector onto the task that
    comes AFTER it → that task's predecessor = this one. Live line while dragging + persistent arrows. ---- */
@@ -9238,7 +9242,7 @@ function renderGanttFS(){
       const ll=document.getElementById('pdWinLab'); if(ll) ll.textContent=gwinLabel(winDays);
       const ps=document.getElementById('pdPanSlider'); if(ps){ ps.disabled=(_panSpan<=0); if(document.activeElement!==ps) ps.value=_panSpan<=0?0:(PD_PAN!=null?PD_PAN:0); }
       const ab=document.getElementById('pdAllBtn'); if(ab) ab.classList.toggle('active', PD_WIN_DAYS==null); }
-    const byId={}; (p.tasks||[]).forEach(t=>{ if(t.id!=null&&t.id!=='') byId[String(t.id)]=t; });
+    const byId={}; (p.tasks||[]).forEach(t=>{ const h=projTaskHandle(t); if(h) byId[h]=t; });   // keyed by handle so id-less rows are draggable too
     const dkey=t=>(t.startISO||t.finISO||'9999-99-99');
     const flagged=(p.tasks||[]).filter(t=>(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO))).length;
     const dragHelp = CLOSE_PIN
@@ -9250,15 +9254,15 @@ function renderGanttFS(){
       const pend=projIsPendingVerify(t);
       const color=bad?'#a855f7':(pend?'#f59e0b':(done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6'))));
       const badDate=(t.startISO&&!SANE(t.startISO))?t.startISO:t.finISO;
-      const canDrag=(t.id!=null&&t.id!==''&&s&&!bad);
-      const _h=projTaskHandle(t), canEdit=!!_h;   // editable rows: clicking the label opens the task edit form (works even with no TaskID, via the SharePoint _id)
+      const _h=projTaskHandle(t), canEdit=!!_h;   // universal handle: real TaskID, else "s<_id>" — so id-less rows are editable AND draggable
+      const canDrag=(!!_h&&s&&!bad);
       const tp=projTaskPct(t.st);              // per-task % → partial bar fill + label
       return { label:(bad?'⚠ ':'')+(pend?'🟡 ':'')+(t.t||'(task)'),
         sub:[t.who, pend?'Pending verification':t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
         startISO:s, endISO:f, color, milestones:[], done, noBar:(!s||bad), cls:(t.sub?'g-subrow':'')+(pend?' g-pending':''),
         pct:(!done&&!bad&&tp!=null&&tp>0&&tp<100)?tp:undefined,
-        dragId:canDrag?t.id:null,
-        linkId:(CLOSE_PIN&&t.id!=null&&t.id!==''&&s&&!bad)?t.id:null,   // (B) connector dot for drag-to-link predecessors (edit mode only)
+        dragId:canDrag?_h:null,
+        linkId:(CLOSE_PIN&&t.id!=null&&t.id!==''&&s&&!bad)?t.id:null,   // (B) connector dot for drag-to-link predecessors — needs a real TaskID (predecessor refs are numeric)
         gutterClick:canEdit?`pdEditTask('${escJsAttr(_h)}')`:null,
         barTitle:canDrag?((t.t||'')+'\n'+fmtMDY(s)+' – '+fmtMDY(f)+'\n'+dragHelp):(bad?((t.t||'')+'\n⚠ check this date: '+badDate):null) };
     };
