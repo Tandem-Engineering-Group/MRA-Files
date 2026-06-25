@@ -3569,7 +3569,7 @@ const CLOSE_FLOW_URL = "https://default57714027b784449484126e3b00c9bf.2c.environ
 // create/update/delete ops (see _listOps + LISTS-WRITE-DESIGN.md) and posts {ops,...}
 // to LISTS_WRITE_URL instead of the workbook flow. Flip true AT cutover only (paired
 // with read-from-lists). While false, every write goes to the workbook exactly as before.
-const USE_LISTS_WRITE = false;
+const USE_LISTS_WRITE = true;   // CUTOVER 2026-06-25: dashboard reads+writes the SharePoint Lists (by item id); workbook retired as live source
 const LISTS_WRITE_URL = "https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/12d3826052ea4f5584ec2921fc83172c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=sFy30x3sqmmrAYw64u6fytwIXUSZ9DQwn7fVsfvC_cQ";   // "MRA Lists Write 2" flow (create/update/delete proven). Flip USE_LISTS_WRITE at cutover.
 let CLOSE_PIN = null;       // current signed-in person's code (this browser session)
 let CURRENT_USER = "";      // current signed-in person's name (display + attribution)
@@ -3771,15 +3771,29 @@ const _LF = {
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
 };
 function _odEsc(v){ return String(v).replace(/'/g,"''"); }   // OData single-quote escape
+// Resolve a row's SharePoint item id from the in-memory board (present once reads come from the Lists,
+// where Build-FromLists stamps _id). Lets update/delete match BY ID — robust vs names with & / # / emoji
+// that break OData text filters. Returns null pre-cutover (workbook data has no _id) → filter fallback.
+function _findId(listKey, match){
+  if(!match) return null;
+  const D=_D()||{}, P=match.Project, T=match.Task;
+  if(listKey==='Jobs'){ const j=(D.jobs||[]).find(x=>x.project===P); return j&&j._id!=null?j._id:null; }
+  if(listKey==='ShopTasks'){ for(const j of (D.jobs||[])){ if(j.project!==P) continue; const tk=(j.tasks||[]).find(t=>t.t===T); if(tk&&tk._id!=null) return tk._id; } return null; }
+  if(listKey==='ProjectTasks'){ const pr=(D.projects||[]).find(x=>x.name===P); if(!pr) return null; const tk=(pr.tasks||[]).find(t=>t.t===T); return tk&&tk._id!=null?tk._id:null; }
+  return null;
+}
 function _listOps(p){
   const raw=_listOpsRaw(p); if(!raw) return null;
   const out=[];
   for(const o of raw){
     const lf=_LF[o.list]; if(!lf) continue;
     const r={verb:o.verb, list:lf.list};
-    if(o.match){ r.filter=Object.keys(o.match).map(k=>{ const col=lf.cols[k]||k; const v=o.match[k];
-      return (col==='Id'||col==='ID') ? (col+' eq '+v) : (col+" eq '"+_odEsc(v)+"'"); }).join(' and '); }
     if(o.set){ const b={}; for(const k in o.set){ if(lf.cols[k]) b[lf.cols[k]]=o.set[k]; } r.body=b; }
+    let id=null;
+    if((o.verb==='update'||o.verb==='delete') && (o.list==='Jobs'||o.list==='ShopTasks'||o.list==='ProjectTasks')) id=_findId(o.list,o.match);
+    if(id!=null){ r.verb=(o.verb==='delete')?'deleteById':'mergeById'; r.id=id; }   // by item id (no text match)
+    else if(o.match){ r.filter=Object.keys(o.match).map(k=>{ const col=lf.cols[k]||k; const v=o.match[k];
+      return (col==='Id'||col==='ID') ? (col+' eq '+v) : (col+" eq '"+_odEsc(v)+"'"); }).join(' and '); }
     out.push(r);
   }
   return out;

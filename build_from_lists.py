@@ -326,9 +326,12 @@ def main():
         print(f"  (couldn't inherit fleet/logistics from {args.base}: {e})", file=sys.stderr)
 
     now = datetime.now()
+    _h12 = ((now.hour + 11) % 12) + 1
+    _ampm = 'AM' if now.hour < 12 else 'PM'
+    _gentext = f"{now.strftime('%a %b')} {now.day}, {now.year}  {_h12}:{now.strftime('%M')} {_ampm}"   # cross-platform (no %-d/%-I; runs on Windows export too)
     payload = {
         'generatedAt':   datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'generatedText': now.strftime('%a %b %-d, %Y  %-I:%M %p'),
+        'generatedText': _gentext,
         'todayISO':      now.strftime('%Y-%m-%d'),
         'physicalBays':  phys,
         'jobs':          jobs_out,
