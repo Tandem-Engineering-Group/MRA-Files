@@ -910,6 +910,10 @@
   .fcal-bar:hover{filter:brightness(1.1); z-index:6; box-shadow:0 2px 7px rgba(0,0,0,.5)}
   .fcal-bar.contL{border-top-left-radius:0; border-bottom-left-radius:0}      /* flows in from the previous week */
   .fcal-bar.contR{border-top-right-radius:0; border-bottom-right-radius:0}    /* flows on into the next week */
+  .fcal-bar.od{box-shadow:0 0 0 1.5px var(--red), 0 1px 3px rgba(0,0,0,.4)}   /* past due — red ring */
+  .fcal-bar.done{opacity:.5}                                                  /* finished/shipped — faded back */
+  .fcal-legend{font-size:11px; color:var(--muted); padding:8px 4px 2px; display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .fcal-lg-today{background:var(--red); color:#fff; border-radius:9px; padding:0 6px; font-weight:700; font-size:10px}
   body.light .fcal-cell{border-right-color:rgba(0,0,0,.06)} body.light .fcal-dow>div{border-right-color:rgba(0,0,0,.06)}
   body.light .fcal-cell.out{background:rgba(0,0,0,.025)} body.light .fcal-cell.we{background:rgba(0,0,0,.015)}
   /* Global search overlay (spotlight, anchored near the top) */
@@ -2611,6 +2615,7 @@ const FLEETIO_HELP = `
 const CHANGELOG = [
   { rev:"9.0", date:"2026-06-25", title:"📅 Floor Schedule: new Gantt | Calendar toggle", items:[
     "The <b>Next 2 Weeks — Floor Schedule</b> now has a <b>📊 Gantt / 📅 Calendar</b> toggle. Calendar is an old-school month grid (‹ prev / next ›) with each trailer drawn across its build dates.",
+    "<b>Each trailer has its own color</b> with its <b>name + job #</b>, so they're easy to tell apart; long builds flow as one continuous bar across the weeks (‹ › arrows), ⚠ marks past due.",
     "<b>Default shows the bays;</b> clickable chips layer in <b>Parking Lot</b> and <b>Next Up / Hold</b>. A <b>👤 person filter</b> narrows to who's assigned (Sal, Wrap, Electricians…).",
     "Click a trailer to open its details, same as the Gantt. (A queued trailer only shows if it has start/ship dates.)" ] },
   { rev:"8.9", date:"2026-06-25", title:"⇄ Bulk Edits — change assignee · phase · type · status across many tasks", items:[
@@ -6252,6 +6257,12 @@ function _fcalBucket(j){
 function _jobHasWho(j, who){ if(!who) return true; const w=who.toLowerCase();
   return (j.tasks||[]).some(t=>{ const parts=(typeof crewWhoList==='function')?crewWhoList(t.who):[(t.who||'')];
     return parts.some(p=>String(p).toLowerCase()===w) || (t.who||'').toLowerCase().includes(w); }); }
+// Stable distinct color per trailer (so each job reads as its own color on the calendar).
+function _fcalColor(key){ key=String(key||''); let h=0; for(let i=0;i<key.length;i++) h=(h*31+key.charCodeAt(i))>>>0; return PALETTE[h%PALETTE.length]; }
+// Pick readable text (near-black on light fills, white on dark) for a hex color.
+function _fcalInk(hex){ const c=String(hex||'').replace('#',''); if(c.length<6) return '#fff';
+  const r=parseInt(c.slice(0,2),16), g=parseInt(c.slice(2,4),16), b=parseInt(c.slice(4,6),16);
+  return (0.299*r+0.587*g+0.114*b)>150 ? '#16202e' : '#fff'; }
 function renderFloorCalendar(){
   const D=window.MRA_DATA; if(!D) return;
   const cont=document.getElementById('floorCal'), tools=document.getElementById('floorCalTools'); if(!cont) return;
@@ -6300,17 +6311,20 @@ function renderFloorCalendar(){
       html+=`<div class="fcal-cell${out?' out':''}${isToday?' today':''}${we?' we':''}"><span class="fcal-dnum">${day.getDate()}</span></div>`; }
     html+=`</div><div class="fcal-ev">`;
     const gut=0.6;
-    evs.forEach(e=>{ const j=e.j, c=classify(j,todayISO), col=stColor[c.state]||'#64748b';
+    evs.forEach(e=>{ const j=e.j, c=classify(j,todayISO);
+      const col=_fcalColor(j.jobNum||j.project), ink=_fcalInk(col);                       // each trailer its OWN color
       const sMs=ms(parseISO(j.startISO)), fMs=ms(parseISO(j.completionISO));
-      const contL=(sMs<wkStartMs), contR=(fMs>wkEndMs);                                  // bar continues from / into another week
+      const contL=(sMs<wkStartMs), contR=(fMs>wkEndMs);                                    // bar continues from / into another week
+      const od=!!(c&&c.overdue), done=/^(shipped|done|complete)/i.test(j.status||'')||(c&&c.state==='done');
       const left=(e.c0/7*100)+(contL?0:gut), width=((e.c1-e.c0+1)/7*100)-(contL?0:gut)-(contR?0:gut), top=24+e.lane*20;
       const nm=(j.project||('Job '+(j.jobNum||''))).trim();
-      const lbl=(contL?'‹ ':'')+esc(nm)+(j.jobNum?` · ${esc(j.jobNum)}`:'')+(contR?' ›':'');   // NAME first (+ job #), arrows show it flows across weeks
-      const tt=(j.project||'')+(j.jobNum?(' · '+j.jobNum):'')+(j.bay?(' · '+j.bay):'')+'\\n'+fmtMDY(j.startISO)+' – '+fmtMDY(j.completionISO)+(c.state?('  ·  '+c.state):'');
-      const cls='fcal-bar'+(contL?' contL':'')+(contR?' contR':'');
-      html+=`<div class="${cls}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;top:${top}px;background:${col}" title="${escA(tt)}" onclick="barProjectOrPop(event,null,'${escJsAttr(j.project)}')">${lbl}</div>`; });
+      const lbl=(contL?'‹ ':'')+(od?'⚠ ':'')+esc(nm)+(j.jobNum?` · ${esc(j.jobNum)}`:'')+(contR?' ›':'');   // NAME first (+ job #); ⚠ = past due
+      const tt=(j.project||'')+(j.jobNum?(' · '+j.jobNum):'')+(j.bay?(' · '+j.bay):'')+'\\n'+fmtMDY(j.startISO)+' – '+fmtMDY(j.completionISO)+(c&&c.state?('  ·  '+c.state):'');
+      const cls='fcal-bar'+(contL?' contL':'')+(contR?' contR':'')+(od?' od':'')+(done?' done':'');
+      html+=`<div class="${cls}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;top:${top}px;background:${col};color:${ink}" title="${escA(tt)}" onclick="barProjectOrPop(event,null,'${escJsAttr(j.project)}')">${lbl}</div>`; });
     html+=`</div></div>`;
   }
+  if(jobs.length) html+=`<div class="fcal-legend">Each trailer has its own color · <b style="color:var(--red)">⚠ past due</b> · <span style="opacity:.5">faded = shipped/done</span> · <span class="fcal-lg-today">25</span> today · click a bar for details</div>`;
   if(!jobs.length) html+=`<div class="bamuted" style="padding:14px 4px">No dated trailers in the selected buckets. Toggle <b>Parking Lot</b> / <b>Next Up / Hold</b> above, or check the bay start/ship dates.</div>`;
   cont.innerHTML=html;
 }
