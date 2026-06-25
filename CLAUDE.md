@@ -204,6 +204,24 @@ real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles 
   dashboard auth gating. (Per the access rules up top: Azure → partner, Entra/M365 admin → IT.)
 - (Fallback if SWA is blocked: **Teams/SharePoint embed** auto-authenticates the org but leaves `$web` data
   public; or **MSAL.js** sign-in gate on the static page — both are softer. SWA is the real answer Rich wants.)
+- **🔑 ENTRA APP REG (provided by Rich 2026-06-25) — NOT secrets, safe to keep here:**
+  **Tenant ID** `1dc2dfee-5d93-4f0c-aa97-2344b72fe6b0` (= gomra.com tenant) · **Client ID** `fad6a2aa-2dab-4c46-ad3a-29e7040036ae`.
+  The **client SECRET is NOT provided and must never be pasted in chat / committed** — it goes straight into the
+  SWA config (`AAD_CLIENT_SECRET`) in Azure.
+- **⚠ DECISION 2026-06-25: going OPTION 2 (real SWA, truly private).** Rich understood that an MSAL.js UI gate
+  hides the *view* but not the *data* (the `$web` host serves data.js to anyone with the URL), so he wants the
+  real lock-on-the-door (SWA checks the gomra.com login before serving data). His **partner** (Azure access — same
+  login as the storage key) will create the SWA + wire the custom Entra provider.
+- **🔓 "Partner can't get the client secret" — RESOLVED (it's normal, not a blocker):** Azure shows a client
+  secret's VALUE only ONCE at creation, then hides it forever (unrecoverable by design). FIX = create a **NEW**
+  secret: app reg → Certificates & secrets → New client secret → copy the Value → paste into the **Static Web App**
+  application settings as `AAD_CLIENT_SECRET`. Never retrieved/shared; stays in Azure.
+- **NEXT STEP owed to the partner (forwardable):** (1) create the **Azure Static Web App** (Standard plan, needed
+  for custom auth) in the `mrashopdash` subscription, connected to the GitHub repo; (2) add custom **Microsoft Entra**
+  login restricted to tenant `1dc2dfee…`, Client ID `fad6a2aa…` + a fresh `AAD_CLIENT_SECRET`; (3) send Claude the
+  **SWA URL**. THEN Claude: `staticwebapp.config.json` (floor=anonymous, rest=authenticated), roles from MRA Users,
+  `/.auth/me` gating, repoint the data publish behind auth, and give the partner the exact **callback URL** to add to
+  the app reg. (Optional stopgap offered to Rich: ship the MSAL.js soft gate now for logins-today, swap to SWA when ready.)
 
 - **(c) ✉ EMAIL ON NEW TASK — Rich wants this (2026-06-25).** Power Automate trigger **"When an item is
   created" on MRA Project Tasks + MRA Shop Tasks** (also fire on assignee-set) → look up the assignee's email
