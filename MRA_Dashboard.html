@@ -8813,7 +8813,7 @@ function renderGanttFS(){
   const _inMenu=(GFS==='project'||GFS==='projects');
   gfsPlaceControls(_inMenu);
   { const v=document.getElementById('gfsView'), lw=document.getElementById('gfsLodWrap');
-    if(v) v.style.display=_inMenu?'':'none'; if(v) v.removeAttribute('open');
+    if(v){ v.style.display=_inMenu?'':'none'; if(!_inMenu) v.removeAttribute('open'); }   // keep it OPEN across re-renders so dragging a slider inside it doesn't snap it shut
     if(lw) lw.style.display=_inMenu?'':'none'; }
   const titleEl=document.getElementById('gfsTitle'), warnEl=document.getElementById('gfsWarn');
   const cont=document.getElementById('gfsGantt'), legEl=document.getElementById('gfsLegend');
@@ -9027,10 +9027,13 @@ function renderGanttFS(){
       if(lab) lab.textContent=_GFSPROJ_LOD_LAB[GFS_PROJ_LOD]||'';
       if(lw) lw.title='Detail — slide RIGHT to drill into phases & tasks, LEFT to shrink to one bar per project'; }
     levelEl.innerHTML=`<div class="rb mraHlBtn${MRASHOP_HL?' active':''}" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects">🟧 MRA Shop</div>`;
-    rangeEl.innerHTML=
-      `<span class="gwinwrap" title="Zoom — how much time the Gantt shows at once">🔍<input id="gwinSliderFS" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year of the schedule at once"><span id="gwinLabFS" class="gwinlab"></span></span>`
-      +`<span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="gpanSliderFS" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider" title="Scroll: slide the window left (earlier) or right (later) through the timeline — the zoom level stays the same"></span>`
-      +`<div class="rb${(GWIN_DAYS==null&&RANGE==='all')?' active':''}" data-m="all" onclick="setRange('all')" title="Show the entire timeline at once">All</div>`;
+    // Build the zoom/scroll sliders ONCE, then only sync their values below — so dragging one (now inside the ⚙ View menu) isn't torn down by the re-render it triggers.
+    if(!document.getElementById('gwinSliderFS')){
+      rangeEl.innerHTML=
+        `<span class="gwinwrap" title="Zoom — how much time the Gantt shows at once">🔍<input id="gwinSliderFS" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year of the schedule at once"><span id="gwinLabFS" class="gwinlab"></span></span>`
+        +`<span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="gpanSliderFS" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider" title="Scroll: slide the window left (earlier) or right (later) through the timeline — the zoom level stays the same"></span>`
+        +`<div class="rb" data-m="all" onclick="setRange('all')" title="Show the entire timeline at once">All</div>`;
+    }
     const projects=(D.projects||[]).filter(p=>SHOW_ARCHIVED||!projArchived(p)); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
     // Window: zoom (GWIN_DAYS / RANGE) sets the LENGTH; the pan slider (GPAN) scrolls it. Mirrors renderProjects so both stay in sync.
     const t=parseISO(today);
@@ -9048,8 +9051,9 @@ function renderGanttFS(){
     const mStart=new Date(startMs);
     const win=buildWindow(mStart,days);
     _panT0=tlo; _panT1=thi; _panDays=days;
-    { const sl=document.getElementById('gwinSliderFS'); if(sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLabFS'); if(gl) gl.textContent=gwinLabel(days);
-      const ps=document.getElementById('gpanSliderFS'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); } }
+    { const sl=document.getElementById('gwinSliderFS'); if(sl && document.activeElement!==sl) sl.value=_d2s(days); const gl=document.getElementById('gwinLabFS'); if(gl) gl.textContent=gwinLabel(days);
+      const ps=document.getElementById('gpanSliderFS'); if(ps){ const span=maxStart-tlo; ps.disabled=(fullView||span<=0); if(document.activeElement!==ps) ps.value=span<=0?0:Math.round(100*(startMs-tlo)/span); }
+      const ab=rangeEl.querySelector('[data-m="all"]'); if(ab) ab.classList.toggle('active', GWIN_DAYS==null&&RANGE==='all'); }   // build-once: keep the All button's state in sync
     const dated=projects.filter(p=>p.startISO&&p.finishISO && barGeom(p.startISO,p.finishISO,win) && projMatch(p) && projHasWho(p,PROJ_WHO))
       .sort(projSortCmp);
     const rows=[];
