@@ -71,6 +71,32 @@ jobs:
         run: |
           ./Export-Data.ps1
 
+      # CUTOVER (Step 3): the board now reads the SharePoint LISTS, not the workbook. The export above
+      # still runs so the FLEETIO/Samsara fleet data stays fresh; this step overrides the board sections
+      # (jobs/projects/tasks/users/holidays) from lists.json (kept fresh by the "MRA Lists to JSON" flow)
+      # and republishes data.js. FAIL-SAFE: if lists.json is missing or the build errors, it leaves the
+      # workbook-built data.js live, so the board never goes dark.
+      - name: Override board data from the SharePoint Lists (keep fresh fleet)
+        if: always()
+        shell: pwsh
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          try {
+            az storage blob download --account-name mrashopdash --account-key "$env:AZURE_STORAGE_KEY" `
+              --container-name pipeline --name lists.json --file lists.json --only-show-errors
+            if (-not (Test-Path lists.json)) { throw "lists.json not present in the pipeline container" }
+            if (-not (Test-Path data.js))    { throw "data.js (workbook build) not present to use as fleet base" }
+            python build_from_lists.py --lists lists.json --base data.js --out data.js
+            az storage blob upload --account-name mrashopdash --account-key "$env:AZURE_STORAGE_KEY" `
+              --container-name '$web' --name data.js --file data.js `
+              --content-type 'application/javascript' --content-cache-control 'no-cache, must-revalidate' `
+              --overwrite --only-show-errors
+            Write-Host "data.js rebuilt from the SharePoint Lists (board) + fresh fleet, and republished."
+          } catch {
+            Write-Warning "Lists override skipped ($($_.Exception.Message)) - leaving the workbook-built data.js live."
+          }
+
       - name: Confirm the run finished OK
         if: always()
         shell: pwsh
