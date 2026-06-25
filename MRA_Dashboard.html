@@ -2523,6 +2523,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"8.4", date:"2026-06-25", title:"🐞 Fixes: Gantt phase arrows expand again · tasks without an ID are editable", items:[
+    "<b>Fixed the ▸/▾ phase arrows on the Projects Gantt</b> — clicking a project's phase to expand/collapse its tasks works again (a naming clash was silently swallowing the click).",
+    "<b>Fixed editing tasks that have no Task ID</b> (e.g. several Medtronic rows like “Collaboration with IXL / TSS”). They're now clickable to edit on the full-screen detail view and in the editor — and edits/closes/deletes now save to the <b>exact</b> row, even when two tasks share the same name." ] },
   { rev:"8.3", date:"2026-06-25", title:"⇄ Assign People — bulk-assign who's on tasks (no more one-at-a-time)", items:[
     "New <b>⇄ Assign People</b> button on the PROJECTS toolbar. <b>Pick a project, check the tasks, choose a person, hit Apply</b> — it sets them on every checked task at once. No more opening tasks one by one to fill in the 2nd-tier person.",
     "It <b>keeps the group and adds the person</b> (so <i>MRA Design</i> → <i>MRA Design / Sarah Williams</i>) — exactly what the Crew/Resource schedule and the Design board read. You can also switch the group outright, or clear it.",
@@ -3839,10 +3842,10 @@ function _listOpsRaw(p){
     }
     case 'deleteHoliday':    return [O('delete','Holidays',{Name:p.name,Date:p.date})];
     case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
-    case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,Task:p.taskOld},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
-    case 'deleteProjectTask':return [O('delete','ProjectTasks',{Project:p.project,Task:p.task})];
-    case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task},{Status:'Completed'})];
-    case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task},{Status:'In Progress'})];
+    case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,Task:p.taskOld,__id:p._id},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    case 'deleteProjectTask':return [O('delete','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id})];
+    case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'Completed'})];
+    case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'importProject': {
       const ops=[]; if(p.replace) ops.push(...taskOps('delete','ProjectTasks',_projTaskRows(p.project)));
       (p.tasks||[]).forEach(t=>ops.push(O('create','ProjectTasks',null,{Task:t.task,Project:p.project,Phase:t.phase,Type:t.type,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Duration:t.duration,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,PM:p.pm})));
@@ -3868,6 +3871,7 @@ function _odEsc(v){ return String(v).replace(/'/g,"''"); }   // OData single-quo
 // that break OData text filters. Returns null pre-cutover (workbook data has no _id) → filter fallback.
 function _findId(listKey, match){
   if(!match) return null;
+  if(match.__id!=null && match.__id!=='') return match.__id;   // exact SharePoint item id passed by the caller (dup-safe)
   const D=_D()||{}, P=match.Project, T=match.Task;
   if(listKey==='Jobs'){ const j=(D.jobs||[]).find(x=>x.project===P); return j&&j._id!=null?j._id:null; }
   if(listKey==='ShopTasks'){ for(const j of (D.jobs||[])){ if(j.project!==P) continue; const tk=(j.tasks||[]).find(t=>t.t===T); if(tk&&tk._id!=null) return tk._id; } return null; }
@@ -4840,7 +4844,7 @@ function renderProjTaskList(){
       const est=[ (t.eD!=null?(t.eD+'d'):''), (t.eH!=null?(t.eH+'h'):'') ].filter(Boolean).join(' / ');
       const bud=(t.bud!=null)?('$'+Number(t.bud).toLocaleString()):'';
       const meta=[ t.who?esc(t.who):'', dates, est, bud, predT?('after: '+esc(predT.t)):'', /yes/i.test(t.ml||'')?'◆ milestone':'' ].filter(Boolean).join(' · ');
-      const idA=`data-id="${escA(t.id!=null?String(t.id):'')}"`;
+      const idA=`data-id="${escA(projTaskHandle(t))}"`;   // real TaskID, or "s<_id>" so id-less rows are still editable/closable
       const tools=projIsDone(t)
         ? `<span class="ttool reopen" ${idA} onclick="reopenProjTaskBtn(this)" title="Reopen">↩</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`
         : `<span class="ttool done" ${idA} onclick="completeProjTaskBtn(this)" title="Mark complete" style="color:var(--green)">✓</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`;
@@ -4878,18 +4882,29 @@ function renderProjTaskList(){
       }
       return peRow(u.head,{});
     }).join('');
-    return `<div class="pephase" data-ph="${escA(ph)}" onclick="togglePhase(this)" title="Click to ${open?'collapse':'expand'}">`+
+    return `<div class="pephase" data-ph="${escA(ph)}" onclick="togglePePhase(this)" title="Click to ${open?'collapse':'expand'}">`+
       `<span class="pecaret">${open?'▾':'▸'}</span>${esc(ph)} <span class="pephase-n">${g.length}${doneN?(' · '+doneN+' done'):''}</span></div>`+
       `<div class="pephase-body"${open?'':' style="display:none"'}>${rows}</div>`;
   }).join("");
 }
-function togglePhase(el){ const ph=el.dataset.ph; if(PE_EXPANDED.has(ph)) PE_EXPANDED.delete(ph); else PE_EXPANDED.add(ph); renderProjTaskList(); }
+// Project-EDITOR phase toggle (takes a DOM element). Renamed from togglePhase to avoid colliding with the
+// inline-Gantt togglePhase(proj,ph) — JS keeps the last-declared function, so the old name broke the Gantt's carets.
+function togglePePhase(el){ const ph=el.dataset.ph; if(PE_EXPANDED.has(ph)) PE_EXPANDED.delete(ph); else PE_EXPANDED.add(ph); renderProjTaskList(); }
 function togglePeSub(ev,pkey){ ev.stopPropagation(); if(PE_SUBCLOSED.has(pkey)) PE_SUBCLOSED.delete(pkey); else PE_SUBCLOSED.add(pkey); renderProjTaskList(); }
 function peExpandAll(){ (window._peOrder||[]).forEach(ph=>PE_EXPANDED.add(ph)); renderProjTaskList(); }
 function peCollapseAll(){ PE_EXPANDED.clear(); renderProjTaskList(); }
 
 /* ---- single-task form (add or edit) ---- */
 function projTaskById(p,id){ return ((p&&p.tasks)||[]).find(t=>String(t.id)===String(id)); }
+// Resolve a task by a universal handle: a real TaskID, OR an "s<SharePoint _id>" token for rows that have NO
+// TaskID (field_2 blank) — every Lists row carries a unique _id, so this addresses each row exactly (even
+// duplicate-named ones, which a name match can't tell apart). Falls back to TaskID, then _id.
+function projTaskByAnyId(p,ref){ ref=String(ref==null?'':ref); if(!p||!p.tasks||ref==='') return null;
+  if(ref.charAt(0)==='s' && /^s\d+$/.test(ref)){ const sid=ref.slice(1);
+    const bySp=p.tasks.find(t=>t._id!=null && String(t._id)===sid); if(bySp) return bySp; }
+  return p.tasks.find(t=>t.id!=null && t.id!=='' && String(t.id)===ref) || null; }
+// The clickable handle for a task: its real TaskID when present, else its "s<_id>" token (so id-less rows are still editable).
+function projTaskHandle(t){ return (t && t.id!=null && t.id!=='') ? String(t.id) : ((t&&t._id!=null)?('s'+t._id):''); }
 function fillPredOptions(p,excludeId){
   const tasks=((p&&p.tasks)||[]).filter(t=>t.id!=null&&t.id!=='' && String(t.id)!==String(excludeId));
   document.getElementById('ptPred').innerHTML=`<option value="">— none —</option>`+
@@ -4998,16 +5013,16 @@ function openProjTaskNew(){
 }
 function editProjTaskBtn(el){ if(!ensureAuth("edit a project task")) return; openProjTaskEdit(el.dataset.id); }
 function openProjTaskEdit(id){
-  const name=peCurrentProject(), p=oProj(name), t=projTaskById(p,id);
+  const name=peCurrentProject(), p=oProj(name), t=projTaskByAnyId(p,id);   // id may be a real TaskID or an "s<_id>" handle (id-less rows)
   if(!t){ alert("Couldn't find that task — try reloading."); return; }
-  window._ptProj=name; window._ptId=id;
+  window._ptProj=name; window._ptId=id; window._ptSpId=(t._id!=null?t._id:null);   // exact SharePoint row id → dup-safe writes
   { const mr=document.getElementById('ptMoveRow'), sel=document.getElementById('ptMoveDest');
     if(mr&&sel){ const names=(((window.MRA_DATA||{}).projects)||[]).map(x=>x.name).filter(n=>n&&n!==name).sort((a,b)=>a.localeCompare(b));
       sel.innerHTML = names.length ? names.map(n=>`<option>${esc(n)}</option>`).join('') : '<option value="">(no other projects)</option>';
       mr.style.display = names.length ? 'flex' : 'none'; const mm=document.getElementById('ptMoveMsg'); if(mm) mm.textContent=''; } }
   document.getElementById('ptTitle').textContent="✎ Edit project task";
   document.getElementById('ptSub').innerHTML=`<b>${esc(name)}</b>`;
-  fillAssignAndPhase(p); fillPredOptions(p,id); fillParentOptions(p,id);
+  fillAssignAndPhase(p); fillPredOptions(p,t.id); fillParentOptions(p,t.id);   // exclude self by real TaskID (handle may be an "s<_id>" token)
   document.getElementById('ptTask').value=t.t||"";
   document.getElementById('ptParent').value=(t.parent!=null?String(t.parent):"");
   document.getElementById('ptType').value=t.type||"";
@@ -5055,19 +5070,21 @@ function submitProjTask(){
     budget:document.getElementById('ptBudget').value,
     comments:document.getElementById('ptComments').value.trim() };
   const editing=(window._ptId!=null);
+  const _oldEdit=editing?projTaskByAnyId(p,window._ptId):null;   // resolve by real TaskID or "s<_id>" handle
   const payload=Object.assign({ action: editing?"editProjectTask":"addProjectTask", project:name, pin:CLOSE_PIN, user:CURRENT_USER }, f);
-  if(editing){ payload.id=window._ptId; const old=projTaskById(p,window._ptId); payload.taskOld=old?old.t:task; }
+  if(editing){ payload.id=window._ptId; payload.taskOld=_oldEdit?_oldEdit.t:task;
+    if(_oldEdit&&_oldEdit._id!=null) payload._id=_oldEdit._id; else if(window._ptSpId!=null) payload._id=window._ptSpId; }   // exact SharePoint row → dup-safe
   const btn=document.getElementById('ptSubmit'); btn.disabled=true; btn.textContent="Saving…";
   msg.style.color='var(--muted)'; msg.textContent='Saving…';
   shopWrite(payload).then(()=>{
     if(p){ if(!p.tasks) p.tasks=[];
-      const _old=editing?projTaskById(p,window._ptId):null;
-      const obj={ id:(editing?window._ptId:('tmp'+Date.now())), t:f.task, phase:f.phase, type:f.type, who:f.assigned,
+      const _old=_oldEdit;
+      const obj={ id:(editing?((_old&&_old.id!=null)?_old.id:window._ptId):('tmp'+Date.now())), t:f.task, phase:f.phase, type:f.type, who:f.assigned,
         startISO:f.start||null, finISO:f.finish||null, st:f.status, ml:f.milestone, cm:f.comments, pred:f.pred,
         parent:_parent||'', sub:(_parent?true:(editing?!!(_old&&_old.sub):false)),
         eD:numOrNull(f.estDays), eH:numOrNull(f.estHours), bud:numOrNull(f.budget),
         done:/^completed$/i.test(f.status) };
-      if(editing){ const i=p.tasks.findIndex(t=>String(t.id)===String(window._ptId)); if(i>=0) p.tasks[i]=Object.assign(p.tasks[i],obj); }
+      if(editing){ const i=_old?p.tasks.indexOf(_old):-1; if(i>=0) p.tasks[i]=Object.assign(p.tasks[i],obj); }
       else { p.tasks.push(obj); pendAdd({kind:'projTask', project:name, obj:obj}); }
       oRecomputeProject(p);
     }
@@ -5198,7 +5215,7 @@ function baSave(){
   let n=0;
   keys.forEach(key=>{ const e=byKey[key]; if(!e) return; const {p,t}=e; const neu=BA_PENDING[key];
     const payload={ action:'editProjectTask', project:p.name, pin:CLOSE_PIN, user:CURRENT_USER,
-      id:t.id, taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'', assigned:neu,
+      id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'', assigned:neu,
       status:t.st||'', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'', milestone:t.ml||'',
       parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''), budget:(t.bud!=null?t.bud:''),
       comments:t.cm||'' };
@@ -5211,21 +5228,21 @@ function baSave(){
 }
 
 /* ---- per-row delete / complete / reopen ---- */
-function projRowFind(id){ const p=oProj(peCurrentProject()); return {p:p, t:projTaskById(p,id)}; }
+function projRowFind(id){ const p=oProj(peCurrentProject()); return {p:p, t:projTaskByAnyId(p,id)}; }
 function delProjTaskBtn(el){
   if(!ensureAuth("delete a project task")) return;
   const id=el.dataset.id, r=projRowFind(id);
   if(!r.t){ alert("Couldn't find that task."); return; }
   if(!confirm("Delete this task?\n\n"+(r.t.t||""))) return;
   el.textContent="…"; el.style.pointerEvents="none";
-  shopWrite({action:"deleteProjectTask", project:r.p.name, id:id, task:r.t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
-    r.p.tasks=r.p.tasks.filter(x=>String(x.id)!==String(id)); oRecomputeProject(r.p);
+  shopWrite({action:"deleteProjectTask", project:r.p.name, id:id, _id:(r.t._id!=null?r.t._id:undefined), task:r.t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
+    r.p.tasks=r.p.tasks.filter(x=>x!==r.t); oRecomputeProject(r.p);
     renderProjTaskList(); oApply();
   }).catch(()=>{ el.textContent="🗑"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
 }
 function ptMoveCopy(isMove){
   if(window._ptId==null) return;
-  const src=oProj(window._ptProj), t=src&&projTaskById(src,window._ptId);
+  const src=oProj(window._ptProj), t=src&&projTaskByAnyId(src,window._ptId);
   if(!t){ alert("Couldn't find that task — try reloading."); return; }
   const dest=document.getElementById('ptMoveDest').value;
   if(!dest){ alert("Pick a destination project."); return; }
@@ -5243,8 +5260,8 @@ function ptMoveCopy(isMove){
         st:t.st, ml:t.ml, cm:t.cm, pred:"", parent:"", sub:false, eD:t.eD, eH:t.eH, bud:t.bud, done:projIsDone(t) };
       dp.tasks.push(obj); pendAdd({kind:'projTask', project:dest, obj:obj}); oRecomputeProject(dp); }
     if(isMove){
-      return shopWrite({ action:"deleteProjectTask", project:src.name, id:window._ptId, task:t.t, pin:CLOSE_PIN, user:CURRENT_USER }).then(()=>{
-        const i=src.tasks.findIndex(x=>String(x.id)===String(window._ptId)); if(i>=0) src.tasks.splice(i,1); oRecomputeProject(src);
+      return shopWrite({ action:"deleteProjectTask", project:src.name, id:window._ptId, _id:(t._id!=null?t._id:undefined), task:t.t, pin:CLOSE_PIN, user:CURRENT_USER }).then(()=>{
+        const i=src.tasks.indexOf(t); if(i>=0) src.tasks.splice(i,1); oRecomputeProject(src);
       });
     }
   }).then(()=>{
@@ -5255,11 +5272,11 @@ function ptMoveCopy(isMove){
 }
 function delProjTaskFromForm(){
   if(window._ptId==null){ closePT(); return; }
-  const p=oProj(window._ptProj), t=projTaskById(p,window._ptId);
+  const p=oProj(window._ptProj), t=projTaskByAnyId(p,window._ptId);
   if(!t){ closePT(); return; }
   if(!confirm("Delete this task?\n\n"+(t.t||""))) return;
-  shopWrite({action:"deleteProjectTask", project:p.name, id:window._ptId, task:t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
-    p.tasks=p.tasks.filter(x=>String(x.id)!==String(window._ptId)); oRecomputeProject(p);
+  shopWrite({action:"deleteProjectTask", project:p.name, id:window._ptId, _id:(t._id!=null?t._id:undefined), task:t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
+    p.tasks=p.tasks.filter(x=>x!==t); oRecomputeProject(p);
     renderProjTaskList(); oApply();
     document.getElementById('projTaskModal').classList.remove('show');
   }).catch(()=>{ alert("Couldn't reach the service — try again."); });
@@ -5269,7 +5286,7 @@ function completeProjTaskBtn(el){
   const id=el.dataset.id, r=projRowFind(id); if(!r.t) return;
   el.textContent="…"; el.style.pointerEvents="none";
   const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
-  shopWrite({action:"closeProjectTask", project:r.p.name, id:id, task:r.t.t, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
+  shopWrite({action:"closeProjectTask", project:r.p.name, id:id, _id:(r.t._id!=null?r.t._id:undefined), task:r.t.t, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
     r.t.done=true; r.t.st='Completed'; if(!r.t.finISO) r.t.finISO=localISO(Date.now()); oRecomputeProject(r.p);
     renderProjTaskList(); oApply();
   }).catch(()=>{ el.textContent="✓"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
@@ -5278,7 +5295,7 @@ function reopenProjTaskBtn(el){
   if(!ensureAuth("reopen a project task")) return;
   const id=el.dataset.id, r=projRowFind(id); if(!r.t) return;
   el.textContent="…"; el.style.pointerEvents="none";
-  shopWrite({action:"reopenProjectTask", project:r.p.name, id:id, task:r.t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
+  shopWrite({action:"reopenProjectTask", project:r.p.name, id:id, _id:(r.t._id!=null?r.t._id:undefined), task:r.t.t, pin:CLOSE_PIN, user:CURRENT_USER}).then(()=>{
     r.t.done=false; r.t.st='In Progress'; oRecomputeProject(r.p);
     renderProjTaskList(); oApply();
   }).catch(()=>{ el.textContent="↩"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
@@ -9090,7 +9107,7 @@ function renderGanttFS(){
       const color=bad?'#a855f7':(done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6')));
       const badDate=(t.startISO&&!SANE(t.startISO))?t.startISO:t.finISO;
       const canDrag=(t.id!=null&&t.id!==''&&s&&!bad);
-      const canEdit=(t.id!=null&&t.id!=='');   // editable rows: clicking the label opens the task edit form
+      const _h=projTaskHandle(t), canEdit=!!_h;   // editable rows: clicking the label opens the task edit form (works even with no TaskID, via the SharePoint _id)
       const tp=projTaskPct(t.st);              // per-task % → partial bar fill + label
       return { label:(bad?'⚠ ':'')+(t.t||'(task)'),
         sub:[t.who,t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
@@ -9098,7 +9115,7 @@ function renderGanttFS(){
         pct:(!done&&!bad&&tp!=null&&tp>0&&tp<100)?tp:undefined,
         dragId:canDrag?t.id:null,
         linkId:(CLOSE_PIN&&t.id!=null&&t.id!==''&&s&&!bad)?t.id:null,   // (B) connector dot for drag-to-link predecessors (edit mode only)
-        gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null,
+        gutterClick:canEdit?`pdEditTask('${escJsAttr(_h)}')`:null,
         barTitle:canDrag?((t.t||'')+'\n'+fmtMDY(s)+' – '+fmtMDY(f)+'\n'+dragHelp):(bad?((t.t||'')+'\n⚠ check this date: '+badDate):null) };
     };
     // #8 (Al): a milestone is a ◆ POINT at its date — NOT a collapsible gate that groups tasks.
@@ -9110,14 +9127,14 @@ function renderGanttFS(){
     const msRow=t=>{
       const gd=t.finISO||t.startISO;
       const ok=(gd&&SANE(gd)); const mp=ok?msPos(gd,win):null; if(mp!=null) mlines.push(mp);
-      const canEdit=(t.id!=null&&t.id!=='');
+      const _h=projTaskHandle(t), canEdit=!!_h;
       const extra=[t.who,t.st].filter(Boolean).join(' · ');
       return { label:'◆ '+(t.t||'(milestone)'),
         sub:(gd?fmtMDY(gd):'TBD')+(extra?(' · '+extra):''),
         startISO:gd, endISO:gd, noBar:true, done:projIsDone(t),
         milestones:ok?[{dateISO:gd, name:(t.t||'milestone')}]:[],
         color:'#f59e0b', cls:'g-msrow',
-        gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null };
+        gutterClick:canEdit?`pdEditTask('${escJsAttr(_h)}')`:null };
     };
     if(GANTT_TASKLEVEL){
       // 📊 LOD drives how much detail shows — slide LEFT to shrink, RIGHT to expand:
