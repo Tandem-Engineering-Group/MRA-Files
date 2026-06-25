@@ -237,9 +237,26 @@ Treat help + rev as PART OF the feature, not an afterthought.
 
 ## Pending / requested (not yet built — remind Rich)
 
+- **⏳ GANTT FULL-SCREEN DETAIL VIEW — make it MATCH the inline Projects Gantt (Rich 2026-06-25, "you missed it,
+  do everything the same on every view"). The inline `#projGantt` toolbar got the clean treatment; the full-screen
+  overlay `#ganttFS` (`renderGanttFS`, the view you get clicking a project bar / ⛶ Expand) did NOT.** Three pieces,
+  all "make `#ganttFS` look like the inline one":
+  1. **LOD slider** on the full-screen view — a slider (Rich wants it **vertical**, or right-to-left is fine) that
+     progressively collapses detail: **all tasks → phases (+milestones) → milestones only → fully shrunk**, and
+     back open the other way. (The inline gantt already has the 3-step `ganttLodSlider` 📊 proj/phase/tasks — extend
+     to a 4-step tasks/phases/milestones/shrunk for the detail view, or reuse + add a 4th level.)
+  2. **‹ › scroll arrows** (`.gfs-nav`, line ~741: currently `top:50%` = floating mid-screen) → move them **UP TOP,
+     outside the toolbar**, like the inline `.gnav-l/.gnav-r` (`top:5px`). Consistency.
+  3. **Simplify the toolbar into the ⚙ View dropdown** (`.tbmenu` native <details>, same as the inline Projects
+     Gantt) — consolidate the flat row (Hide completed / By date / List order / Collapse all / zoom + pan sliders /
+     Today / All / US / Canada holiday picker / assignee) into the same **⚙ View** popover + keep 🖨 Print / ⤢ / ✕.
+  - ⚠️ VISUAL change on a daily-use view + Rich is hot on consistency — **build by REUSING the inline components
+    (tbmenu, slider, .gnav positioning) so it matches by construction, then EYEBALL on the gantt preview
+    (`ganttpreview` → preview-gantt.html) before going live.** Do NOT blind-ship.
 - **🎨 UI batch requested 2026-06-24 (working through in waves; deploy incrementally).** Status: ✅ **FLEETIO (4) +
   Fleetio layout move + Service-under-Issues + Floor FL1/FL2/FL3 + Collapse-all fix + 📖 Product Catalogue ALL shipped
-  LIVE (rev 7.1→7.5)**. ⏳ **ONLY remaining: the Projects-Gantt task-level rebuild (P1–P3) — the big visual one.**
+  LIVE (rev 7.1→7.5)**. ✅ **Projects-Gantt task-level rebuild (P1–P3) — SHIPPED rev 8.0** (phases expand/collapse +
+  rollup bars on the inline gantt + both detail views). ⏳ Remaining = the full-screen-detail-view consistency above.
   - **Projects tab / Gantt — ⏳ THE LAST PIECE (deliberately not blind-shipped — it's a visual Gantt-engine change on a
     daily-use view; build it where the result can be eyeballed). Scoping done:**
     1. Project **tasks shown in the Gantt**, **expand/collapse** per project; clicking a project defaults to
