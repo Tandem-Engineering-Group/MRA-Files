@@ -901,14 +901,17 @@
   .fcal-cell:last-child{border-right:none}
   .fcal-cell.out{background:rgba(255,255,255,.025)}
   .fcal-cell.out .fcal-dnum{opacity:.4}
+  .fcal-cell.we{background:rgba(255,255,255,.02)}
   .fcal-cell.today{background:rgba(59,130,246,.10)}
   .fcal-cell.today .fcal-dnum{background:var(--red); color:#fff; border-radius:10px; padding:1px 6px}
   .fcal-dnum{font-size:11px; color:var(--muted); font-weight:600}
   .fcal-ev{position:absolute; inset:0; pointer-events:none}
-  .fcal-bar{position:absolute; height:18px; border-radius:4px; font-size:10px; font-weight:700; color:#fff; padding:0 5px; line-height:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; pointer-events:auto; box-shadow:0 1px 2px rgba(0,0,0,.4); border:1px solid rgba(0,0,0,.18)}
-  .fcal-bar:hover{filter:brightness(1.13); z-index:6}
+  .fcal-bar{position:absolute; height:17px; border-radius:5px; font-size:10.5px; font-weight:600; color:#fff; padding:0 7px; line-height:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; pointer-events:auto; box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.1px}
+  .fcal-bar:hover{filter:brightness(1.1); z-index:6; box-shadow:0 2px 7px rgba(0,0,0,.5)}
+  .fcal-bar.contL{border-top-left-radius:0; border-bottom-left-radius:0}      /* flows in from the previous week */
+  .fcal-bar.contR{border-top-right-radius:0; border-bottom-right-radius:0}    /* flows on into the next week */
   body.light .fcal-cell{border-right-color:rgba(0,0,0,.06)} body.light .fcal-dow>div{border-right-color:rgba(0,0,0,.06)}
-  body.light .fcal-cell.out{background:rgba(0,0,0,.025)}
+  body.light .fcal-cell.out{background:rgba(0,0,0,.025)} body.light .fcal-cell.we{background:rgba(0,0,0,.015)}
   /* Global search overlay (spotlight, anchored near the top) */
   #searchModal{align-items:flex-start; padding:0}
   #searchModal .searchbox{margin-top:8vh; width:min(680px,94vw); background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.55); overflow:hidden}
@@ -6290,18 +6293,22 @@ function renderFloorCalendar(){
     evs.sort((a,b)=>a.c0-b.c0 || a.c1-b.c1);
     const lanes=[];
     evs.forEach(e=>{ let L=0; for(;;L++){ if(lanes[L]==null || lanes[L]<e.c0){ lanes[L]=e.c1; e.lane=L; break; } } });
-    const cellH=Math.max(86, 24 + lanes.length*21 + 6);
+    const cellH=Math.max(74, 26 + lanes.length*20 + 6);
     html+=`<div class="fcal-week" style="height:${cellH}px"><div class="fcal-cells">`;
     for(let d=0; d<7; d++){ const day=new Date(wkStartMs+d*DAY), iso=localISO(ms(day));
-      const out=(day.getMonth()!==mM), isToday=(iso===todayISO);
-      html+=`<div class="fcal-cell${out?' out':''}${isToday?' today':''}"><span class="fcal-dnum">${day.getDate()}</span></div>`; }
+      const out=(day.getMonth()!==mM), isToday=(iso===todayISO), we=(d===0||d===6);
+      html+=`<div class="fcal-cell${out?' out':''}${isToday?' today':''}${we?' we':''}"><span class="fcal-dnum">${day.getDate()}</span></div>`; }
     html+=`</div><div class="fcal-ev">`;
-    const gut=0.5;
+    const gut=0.6;
     evs.forEach(e=>{ const j=e.j, c=classify(j,todayISO), col=stColor[c.state]||'#64748b';
-      const left=(e.c0/7*100)+gut, width=((e.c1-e.c0+1)/7*100)-gut*2, top=22+e.lane*21;
-      const lbl=((typeof kindIcon==='function'?kindIcon(j):'')||'')+(j.jobNum||j.project||'');
-      const tt=(j.project||'')+' · '+(j.bay||'')+' · '+(j.jobNum||'')+'\\n'+fmtMDY(j.startISO)+' – '+fmtMDY(j.completionISO);
-      html+=`<div class="fcal-bar" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;top:${top}px;background:${col}" title="${escA(tt)}" onclick="barProjectOrPop(event,null,'${escJsAttr(j.project)}')">${esc(lbl)}</div>`; });
+      const sMs=ms(parseISO(j.startISO)), fMs=ms(parseISO(j.completionISO));
+      const contL=(sMs<wkStartMs), contR=(fMs>wkEndMs);                                  // bar continues from / into another week
+      const left=(e.c0/7*100)+(contL?0:gut), width=((e.c1-e.c0+1)/7*100)-(contL?0:gut)-(contR?0:gut), top=24+e.lane*20;
+      const nm=(j.project||('Job '+(j.jobNum||''))).trim();
+      const lbl=(contL?'‹ ':'')+esc(nm)+(j.jobNum?` · ${esc(j.jobNum)}`:'')+(contR?' ›':'');   // NAME first (+ job #), arrows show it flows across weeks
+      const tt=(j.project||'')+(j.jobNum?(' · '+j.jobNum):'')+(j.bay?(' · '+j.bay):'')+'\\n'+fmtMDY(j.startISO)+' – '+fmtMDY(j.completionISO)+(c.state?('  ·  '+c.state):'');
+      const cls='fcal-bar'+(contL?' contL':'')+(contR?' contR':'');
+      html+=`<div class="${cls}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;top:${top}px;background:${col}" title="${escA(tt)}" onclick="barProjectOrPop(event,null,'${escJsAttr(j.project)}')">${lbl}</div>`; });
     html+=`</div></div>`;
   }
   if(!jobs.length) html+=`<div class="bamuted" style="padding:14px 4px">No dated trailers in the selected buckets. Toggle <b>Parking Lot</b> / <b>Next Up / Hold</b> above, or check the bay start/ship dates.</div>`;
