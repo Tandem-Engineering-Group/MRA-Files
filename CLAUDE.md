@@ -212,16 +212,24 @@ real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles 
   hides the *view* but not the *data* (the `$web` host serves data.js to anyone with the URL), so he wants the
   real lock-on-the-door (SWA checks the gomra.com login before serving data). His **partner** (Azure access — same
   login as the storage key) will create the SWA + wire the custom Entra provider.
-- **🔓 "Partner can't get the client secret" — RESOLVED (it's normal, not a blocker):** Azure shows a client
-  secret's VALUE only ONCE at creation, then hides it forever (unrecoverable by design). FIX = create a **NEW**
-  secret: app reg → Certificates & secrets → New client secret → copy the Value → paste into the **Static Web App**
-  application settings as `AAD_CLIENT_SECRET`. Never retrieved/shared; stays in Azure.
-- **NEXT STEP owed to the partner (forwardable):** (1) create the **Azure Static Web App** (Standard plan, needed
-  for custom auth) in the `mrashopdash` subscription, connected to the GitHub repo; (2) add custom **Microsoft Entra**
-  login restricted to tenant `1dc2dfee…`, Client ID `fad6a2aa…` + a fresh `AAD_CLIENT_SECRET`; (3) send Claude the
-  **SWA URL**. THEN Claude: `staticwebapp.config.json` (floor=anonymous, rest=authenticated), roles from MRA Users,
-  `/.auth/me` gating, repoint the data publish behind auth, and give the partner the exact **callback URL** to add to
-  the app reg. (Optional stopgap offered to Rich: ship the MSAL.js soft gate now for logins-today, swap to SWA when ready.)
+- **👥 TWO DIFFERENT PEOPLE (Rich clarified 2026-06-25) — don't conflate:**
+  - **MRA IT guy** = gomra.com **Entra/M365** admin. Created the app reg (gave Tenant+Client IDs). Owns the
+    **app registration** (in the gomra.com tenant).
+  - **Partner (Tandem)** = has the **Azure key / `mrashopdash` subscription** access. Builds the SWA + hosting.
+- **🔓 "Partner can't get the client secret" — EXPLAINED:** the secret lives on the **app registration in gomra.com**
+  = the **IT guy's** tenant, NOT the partner's Azure — that's literally why the partner can't see it. Azure also hides
+  a secret's value after creation (one-time view). So the **IT guy** must create a NEW client secret (app reg →
+  Certificates & secrets → New client secret → copy Value) and hand the value to the **partner** to paste into the
+  **SWA** app settings as `AAD_CLIENT_SECRET`. (Alt: IT adds partner as an owner of the app reg — more hassle.)
+- **NEXT STEPS — split by owner:**
+  - **IT guy (gomra.com):** (1) create the client secret → hand value to partner; (2) LATER add the SWA **callback URL**
+    to the app reg's redirect URIs (Claude provides exact URL once SWA exists); (3) confirm app reg = single-tenant.
+  - **Partner (Tandem/Azure):** (1) create the **Azure Static Web App** (Standard plan — needed for custom auth) in the
+    `mrashopdash` subscription, connected to the GitHub repo; (2) configure custom **Entra** login (Tenant `1dc2dfee…`,
+    Client `fad6a2aa…` + IT's secret as `AAD_CLIENT_SECRET`); (3) send Claude the **SWA URL**.
+  - **THEN Claude:** `staticwebapp.config.json` (floor=anonymous, rest=authenticated), roles from MRA Users list,
+    `/.auth/me` gating, repoint the data publish behind auth, give IT the exact callback URL.
+  - (Optional stopgap offered to Rich: ship the MSAL.js soft gate now for logins-today, swap to SWA when ready.)
 
 - **(c) ✉ EMAIL ON NEW TASK — Rich wants this (2026-06-25).** Power Automate trigger **"When an item is
   created" on MRA Project Tasks + MRA Shop Tasks** (also fire on assignee-set) → look up the assignee's email
