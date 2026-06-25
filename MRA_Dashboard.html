@@ -2616,8 +2616,8 @@ const CHANGELOG = [
   { rev:"9.0", date:"2026-06-25", title:"📅 Floor Schedule: new Gantt | Calendar toggle", items:[
     "The <b>Next 2 Weeks — Floor Schedule</b> now has a <b>📊 Gantt / 📅 Calendar</b> toggle. Calendar is an old-school month grid (‹ prev / next ›) with each trailer drawn across its build dates.",
     "<b>Each trailer has its own color</b> with its <b>name + job #</b>, so they're easy to tell apart; long builds flow as one continuous bar across the weeks (‹ › arrows), ⚠ marks past due.",
-    "<b>Default shows the bays;</b> clickable chips layer in <b>Parking Lot</b> and <b>Next Up / Hold</b>. A <b>👤 person filter</b> narrows to who's assigned (Sal, Wrap, Electricians…).",
-    "Click a trailer to open its details, same as the Gantt. (A queued trailer only shows if it has start/ship dates.)" ] },
+    "<b>Default shows the bays;</b> clickable chips layer in <b>Parking Lot</b>, <b>Next Up / Hold</b>, and <b>📋 Project tasks</b> (the dated project-schedule tasks — set the 👤 filter to a crew like <b>Wrap Team</b> to see just theirs). A <b>👤 person filter</b> narrows to who's assigned (Sal, Wrap, Electricians…).",
+    "Click a trailer to open its details, same as the Gantt. (A queued trailer / project task only shows if it has dates.)" ] },
   { rev:"8.9", date:"2026-06-25", title:"⇄ Bulk Edits — change assignee · phase · type · status across many tasks", items:[
     "The ⇄ Assign People tool is now <b>⇄ Bulk Edits</b>: pick a project, check tasks, then use the field tabs (👤 Assignee · 📂 Phase · 🏷 Type · 📊 Status) to change that field on every checked task at once.",
     "Stage several changes — even different fields on different tasks — then <b>💾 Save</b> them all together. Each write lands on the exact row (dup-safe).",
@@ -6236,6 +6236,8 @@ let FLOOR_VIEW='gantt';            // 'gantt' | 'calendar'
 let FCAL_ANCHOR=null;              // ms of the first-of-month shown; null = current month
 const FCAL_CATS=new Set(['bay']);  // buckets to plot: 'bay' | 'parking' | 'nextup'
 let FCAL_WHO='';                   // optional assignee filter ('' = everyone)
+let FCAL_PTASKS=false;             // also overlay dated project-schedule tasks (e.g. Wrap Team's)
+function fcalTogglePtasks(){ FCAL_PTASKS=!FCAL_PTASKS; if(window.MRA_DATA) renderFloor(window.MRA_DATA); }
 const _FCAL_MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function setFloorView(v){ FLOOR_VIEW=(v==='calendar')?'calendar':'gantt'; if(window.MRA_DATA) renderFloor(window.MRA_DATA); }
 function _fcalMonthStart(){ if(FCAL_ANCHOR!=null) return new Date(FCAL_ANCHOR);
@@ -6269,41 +6271,58 @@ function renderFloorCalendar(){
   const todayISO=D.todayISO;
   const m0=_fcalMonthStart(), mY=m0.getFullYear(), mM=m0.getMonth();
   const ttl=document.getElementById('floorSchedTitle'); if(ttl) ttl.textContent='Floor Calendar';
-  const jobs=(D.jobs||[]).filter(j=>{ const b=_fcalBucket(j); return b && FCAL_CATS.has(b) && j.startISO && j.completionISO; })
-    .filter(j=>_jobHasWho(j,FCAL_WHO));
-  document.getElementById('floorGanttCount').textContent=jobs.length+' trailers';
-  // assignee options (from every floor job's tasks, so you can pick anyone)
+  const ms=d=>d.getTime();
+  // ---- unified event list: shop-floor trailers (+ optional project-schedule tasks) ----
+  const events=[];
+  (D.jobs||[]).forEach(j=>{ const b=_fcalBucket(j); if(!(b && FCAL_CATS.has(b) && j.startISO && j.completionISO)) return; if(!_jobHasWho(j,FCAL_WHO)) return;
+    const s=parseISO(j.startISO), f=parseISO(j.completionISO); if(!s||!f) return; const c=classify(j,todayISO), col=_fcalColor(j.jobNum||j.project);
+    events.push({ sMs:ms(s), fMs:ms(f), color:col, ink:_fcalInk(col), icon:'', ptask:false,
+      name:(j.project||('Job '+(j.jobNum||''))).trim(), tag:(j.jobNum||''),
+      od:!!(c&&c.overdue), done:/^(shipped|done|complete)/i.test(j.status||'')||(c&&c.state==='done'),
+      title:(j.project||'')+(j.jobNum?(' · '+j.jobNum):'')+(j.bay?(' · '+j.bay):'')+'\n'+fmtMDY(j.startISO)+' – '+fmtMDY(j.completionISO)+(c&&c.state?('  ·  '+c.state):''),
+      click:`barProjectOrPop(event,null,'${escJsAttr(j.project)}')` }); });
+  if(FCAL_PTASKS){
+    (D.projects||[]).forEach(p=>{ (p.tasks||[]).forEach(t=>{ if(!t.startISO||!t.finISO) return;
+      const okWho = !FCAL_WHO || (typeof taskWhoMatch==='function' ? taskWhoMatch(t,FCAL_WHO) : String(t.who||'').toLowerCase().includes(FCAL_WHO.toLowerCase()));
+      if(!okWho) return; const s=parseISO(t.startISO), f=parseISO(t.finISO); if(!s||!f) return;
+      const col=_fcalColor('P:'+(p.name||''));
+      events.push({ sMs:ms(s), fMs:ms(f), color:col, ink:_fcalInk(col), icon:'📋 ', ptask:true,
+        name:(t.t||'task').trim(), tag:'',
+        od:(!!t.finISO && t.finISO<todayISO && !projIsDone(t)), done:projIsDone(t),
+        title:'📋 '+(t.t||'')+' · '+(p.name||'')+(t.who?(' · '+t.who):'')+'\n'+fmtMDY(t.startISO)+' – '+fmtMDY(t.finISO),
+        click:`openProjectDetail(event,'${escJsAttr(p.name)}')` }); }); });
+  }
+  document.getElementById('floorGanttCount').textContent=events.length+' item'+(events.length===1?'':'s');
+  // assignee options (floor jobs' crews + project-task assignees)
   const whoSet=new Set();
   (D.jobs||[]).forEach(j=>{ if(!_fcalBucket(j)) return; (j.tasks||[]).forEach(t=>{ (typeof crewWhoList==='function'?crewWhoList(t.who):[t.who||'']).forEach(p=>{ if(p) whoSet.add(p); }); }); });
+  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ (typeof crewWhoList==='function'?crewWhoList(t.who):[t.who||'']).forEach(x=>{ if(x) whoSet.add(x); }); }));
   const whoOpts=[...whoSet].sort((a,b)=>String(a).localeCompare(b));
   const catChip=(c,lbl)=>`<button class="fcal-chip${FCAL_CATS.has(c)?' on':''}" onclick="fcalToggleCat('${c}')">${FCAL_CATS.has(c)?'✓ ':''}${lbl}</button>`;
   tools.innerHTML=
     `<div class="fcal-tools">`
     +`<span class="fcal-nav"><button onclick="fcalNav(-1)" title="Previous month">‹</button><b>${_FCAL_MONTHS[mM]} ${mY}</b><button onclick="fcalNav(1)" title="Next month">›</button><button class="fcal-today" onclick="fcalThisMonth()" title="Jump to the current month">Today</button></span>`
-    +`<span class="fcal-cats">Show: ${catChip('bay','Bays')}${catChip('parking','Parking Lot')}${catChip('nextup','Next Up / Hold')}</span>`
+    +`<span class="fcal-cats">Show: ${catChip('bay','Bays')}${catChip('parking','Parking Lot')}${catChip('nextup','Next Up / Hold')}`
+       +`<button class="fcal-chip${FCAL_PTASKS?' on':''}" onclick="fcalTogglePtasks()" title="Also plot dated project-schedule tasks. Tip: set the 👤 filter to a crew (e.g. Wrap Team) to see just theirs.">${FCAL_PTASKS?'✓ ':''}📋 Project tasks</button></span>`
     +`<span class="fcal-who">👤 <select onchange="fcalSetWho(this.value)"><option value="">Everyone</option>`
        +whoOpts.map(w=>`<option value="${escA(w)}"${w===FCAL_WHO?' selected':''}>${esc(w)}</option>`).join('')+`</select></span>`
     +`</div>`;
-  const daysInMonth=new Date(mY,mM+1,0).getDate();
-  const firstDow=new Date(mY,mM,1).getDay();
-  const weeks=Math.ceil((firstDow+daysInMonth)/7);
+  // ---- month grid ----
+  const daysInMonth=new Date(mY,mM+1,0).getDate(), firstDow=new Date(mY,mM,1).getDay(), weeks=Math.ceil((firstDow+daysInMonth)/7);
   const gridStart=new Date(mY,mM,1); gridStart.setDate(1-firstDow);
-  const stColor={active:'#22c55e',scheduled:'#3b82f6',onhold:'#64748b',overdue:'#ef4444',open:'#64748b',done:'#475569'};
   const dnames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const ms=d=>d.getTime();
   let html=`<div class="fcal-dow">`+dnames.map(d=>`<div>${d}</div>`).join('')+`</div>`;
   for(let wk=0; wk<weeks; wk++){
     const wkStart=new Date(gridStart); wkStart.setDate(gridStart.getDate()+wk*7);
     const wkStartMs=ms(wkStart), wkEndMs=wkStartMs+6*DAY;
     const evs=[];
-    jobs.forEach(j=>{ const s=parseISO(j.startISO), f=parseISO(j.completionISO); if(!s||!f) return;
-      const sMs=ms(s), fMs=ms(f); if(fMs<wkStartMs||sMs>wkEndMs) return;
-      const c0=Math.max(0,Math.round((Math.max(sMs,wkStartMs)-wkStartMs)/DAY));
-      const c1=Math.min(6,Math.round((Math.min(fMs,wkEndMs)-wkStartMs)/DAY));
-      evs.push({j,c0,c1}); });
+    events.forEach(ev=>{ if(ev.fMs<wkStartMs||ev.sMs>wkEndMs) return;
+      const c0=Math.max(0,Math.round((Math.max(ev.sMs,wkStartMs)-wkStartMs)/DAY));
+      const c1=Math.min(6,Math.round((Math.min(ev.fMs,wkEndMs)-wkStartMs)/DAY));
+      evs.push({ev,c0,c1}); });
     evs.sort((a,b)=>a.c0-b.c0 || a.c1-b.c1);
     const lanes=[];
-    evs.forEach(e=>{ let L=0; for(;;L++){ if(lanes[L]==null || lanes[L]<e.c0){ lanes[L]=e.c1; e.lane=L; break; } } });
+    evs.forEach(e=>{ let L=0; for(;;L++){ if(lanes[L]==null||lanes[L]<e.c0){ lanes[L]=e.c1; e.lane=L; break; } } });
     const cellH=Math.max(74, 26 + lanes.length*20 + 6);
     html+=`<div class="fcal-week" style="height:${cellH}px"><div class="fcal-cells">`;
     for(let d=0; d<7; d++){ const day=new Date(wkStartMs+d*DAY), iso=localISO(ms(day));
@@ -6311,24 +6330,18 @@ function renderFloorCalendar(){
       html+=`<div class="fcal-cell${out?' out':''}${isToday?' today':''}${we?' we':''}"><span class="fcal-dnum">${day.getDate()}</span></div>`; }
     html+=`</div><div class="fcal-ev">`;
     const gut=0.6;
-    evs.forEach(e=>{ const j=e.j, c=classify(j,todayISO);
-      const col=_fcalColor(j.jobNum||j.project), ink=_fcalInk(col);                       // each trailer its OWN color
-      const sMs=ms(parseISO(j.startISO)), fMs=ms(parseISO(j.completionISO));
-      const contL=(sMs<wkStartMs), contR=(fMs>wkEndMs);                                    // bar continues from / into another week
-      const od=!!(c&&c.overdue), done=/^(shipped|done|complete)/i.test(j.status||'')||(c&&c.state==='done');
+    evs.forEach(e=>{ const ev=e.ev;
+      const contL=(ev.sMs<wkStartMs), contR=(ev.fMs>wkEndMs);
       const left=(e.c0/7*100)+(contL?0:gut), width=((e.c1-e.c0+1)/7*100)-(contL?0:gut)-(contR?0:gut), top=24+e.lane*20;
-      const nm=(j.project||('Job '+(j.jobNum||''))).trim();
-      const lbl=(contL?'‹ ':'')+(od?'⚠ ':'')+esc(nm)+(j.jobNum?` · ${esc(j.jobNum)}`:'')+(contR?' ›':'');   // NAME first (+ job #); ⚠ = past due
-      const tt=(j.project||'')+(j.jobNum?(' · '+j.jobNum):'')+(j.bay?(' · '+j.bay):'')+'\\n'+fmtMDY(j.startISO)+' – '+fmtMDY(j.completionISO)+(c&&c.state?('  ·  '+c.state):'');
-      const cls='fcal-bar'+(contL?' contL':'')+(contR?' contR':'')+(od?' od':'')+(done?' done':'');
-      html+=`<div class="${cls}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;top:${top}px;background:${col};color:${ink}" title="${escA(tt)}" onclick="barProjectOrPop(event,null,'${escJsAttr(j.project)}')">${lbl}</div>`; });
+      const lbl=(contL?'‹ ':'')+(ev.od?'⚠ ':'')+ev.icon+esc(ev.name)+(ev.tag?(' · '+esc(ev.tag)):'')+(contR?' ›':'');
+      const cls='fcal-bar'+(contL?' contL':'')+(contR?' contR':'')+(ev.od?' od':'')+(ev.done?' done':'')+(ev.ptask?' ptask':'');
+      html+=`<div class="${cls}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;top:${top}px;background:${ev.color};color:${ev.ink}" title="${escA(ev.title)}" onclick="${ev.click}">${lbl}</div>`; });
     html+=`</div></div>`;
   }
-  if(jobs.length) html+=`<div class="fcal-legend">Each trailer has its own color · <b style="color:var(--red)">⚠ past due</b> · <span style="opacity:.5">faded = shipped/done</span> · <span class="fcal-lg-today">25</span> today · click a bar for details</div>`;
-  if(!jobs.length) html+=`<div class="bamuted" style="padding:14px 4px">No dated trailers in the selected buckets. Toggle <b>Parking Lot</b> / <b>Next Up / Hold</b> above, or check the bay start/ship dates.</div>`;
+  if(events.length) html+=`<div class="fcal-legend">Each item is its own color · <b>📋 = project task</b> · <b style="color:var(--red)">⚠ past due</b> · <span style="opacity:.5">faded = done/shipped</span> · <span class="fcal-lg-today">25</span> today · click for details</div>`;
+  else html+=`<div class="bamuted" style="padding:14px 4px">Nothing to show. Toggle <b>Parking Lot</b> / <b>Next Up / Hold</b> / <b>📋 Project tasks</b> above, pick a person, or check the dates.</div>`;
   cont.innerHTML=html;
 }
-
 function renderFloor(D){
   const today=D.todayISO, jobs=D.jobs||[];
   // Open Fleetio issues indexed by Job# digits, to surface on the matching bay card.
