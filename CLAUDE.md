@@ -192,9 +192,11 @@ real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles 
   5. **[Claude] Pipeline:** repoint the data publish from public `$web` → the SWA's auth-protected location
      (the export hybrid build stays the same; only the publish target changes).
 - **OPEN QUESTIONS to settle first thing tomorrow:**
-  - **Shop TV / Wall mode** — does the floor TV need a **no-login kiosk** read-only view? If yes, keep a
-    public/kiosk read path OR a device account; if no, the TV signs in once. (Affects whether data goes
-    fully private.)
+  - **Shop TV / Wall mode — DECIDED (Rich 2026-06-25): NO login for the shop floor.** The **default,
+    anonymous view = the FLOOR/shop-floor screen only**, read-only. **Login gates everything else** (other
+    tabs, all editing, ☰ admin). Implication: the FLOOR data stays **publicly readable** (anonymous SWA route)
+    — so it's NOT "fully private"; the sensitive tabs (Projects/Fleet/admin/editing) sit behind M365 sign-in.
+    Build via SWA route rules (`staticwebapp.config.json`): `/` + floor = anonymous; the rest = authenticated.
   - **Role → tab matrix** (who sees what): e.g. shop crew → FLOOR (+FLEETIO?) only; managers → all; Rich = Admin.
   - Confirm the **MRA Users** list has everyone who needs access + their **Role**.
 - **OWNERS to line up (Rich, give them a heads-up tonight/AM):** **partner** = create the Azure Static Web App
@@ -203,9 +205,17 @@ real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles 
 - (Fallback if SWA is blocked: **Teams/SharePoint embed** auto-authenticates the org but leaves `$web` data
   public; or **MSAL.js** sign-in gate on the static page — both are softer. SWA is the real answer Rich wants.)
 
-- **(c later) Teams/Outlook/Planner hooks** — now that data is in Lists: Power Automate off List changes →
-  email assignee (Outlook) + assigned Planner task (Teams Tasks/phone) + channel posts; embed dash as a
-  Teams tab. Reliable now we're OFF the Office-Script path.
+- **(c) ✉ EMAIL ON NEW TASK — Rich wants this (2026-06-25).** Power Automate trigger **"When an item is
+  created" on MRA Project Tasks + MRA Shop Tasks** (also fire on assignee-set) → look up the assignee's email
+  (from the **MRA Users `Email`** column — same column the SSO uses) → **send an Outlook email**, subject
+  **"MRA Command Center — you have a new task"**, body = a short blurb (task title · project · due date · any
+  note) + optionally that person's current open list. Prereq: emails on the Users list (shared with SSO) +
+  the **assignee name → email** match. NOTE: attaching the exact printed one-pager as a **PDF** is a stretch
+  (needs an HTML→PDF step — OneDrive convert or a paid connector); **v1 = a clean formatted HTML email body**
+  (looks like the one-pager, no attachment), add the PDF later if wanted. Also covers the design team
+  (Steve K / Sarah Williams / Mark Mustonen / Brandon Choy) + everyone else.
+- **(d later) Teams/Outlook/Planner hooks** — assigned **Planner** task (Teams Tasks/phone) + channel posts;
+  embed dash as a Teams tab. Reliable now we're OFF the Office-Script path.
 
 
 ### ⚠️ Dashboard release checklist (do EVERY time `MRA_Dashboard.html` changes — Rich shouldn't have to remind us)
