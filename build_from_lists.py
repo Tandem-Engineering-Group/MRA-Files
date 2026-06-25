@@ -232,7 +232,7 @@ def main():
         p_task   = ff(it, 'Title')
         p_phase  = ff(it, P_PHASE)
         p_type   = ff(it, P_TYPE)
-        p_status = ff(it, P_STATUS)
+        p_status = ff(it, P_STATUS) or 'Not Started'   # mirror Export-Data: blank → Not Started
         p_pm     = ff(it, P_PM)
         p_assign = ff(it, P_ASSIGNED)
         p_cm     = ff(it, P_COMMENTS)
@@ -241,7 +241,7 @@ def main():
         p_pred   = ff(it, P_PRED)
         s_iso    = iso_or_none(ff(it, P_START))
         f_iso    = iso_or_none(ff(it, P_FINISH))
-        p_mile   = 'Yes' if is_yes(ff(it, P_MILE)) else ''
+        p_mile   = 'Yes' if is_yes(ff(it, P_MILE)) else 'No'   # mirror Export-Data: non-milestone → No
         p_sub    = is_yes(ff(it, P_SUB))
 
         o = pmap.get(name)
