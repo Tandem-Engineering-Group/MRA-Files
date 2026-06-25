@@ -251,6 +251,22 @@ real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles 
 - **(d later) Teams/Outlook/Planner hooks** — assigned **Planner** task (Teams Tasks/phone) + channel posts;
   embed dash as a Teams tab. Reliable now we're OFF the Office-Script path.
 
+## ✅ REQUESTED 2026-06-25 — Design-task VERIFICATION / sign-off workflow (BUILD NOW on existing code logins)
+Rich wants a two-step complete for **project-fed** design tasks (NOT the ad-hoc/general ones added on the board):
+- **Design board stays OPEN (no login)** — unchanged. On a **project-fed** task the button = **"✓ Mark ready"** → sets the
+  project task to a new **"Pending Verification"** status (the flag), stamped with who (the task's assignee, e.g. Sarah).
+  On an **ad-hoc/general** task the button still **self-closes** (design.json), no sign-off.
+- **Projects tab annunciation:** a **"🟡 Awaiting verification (N)"** panel (visible to all) — project · task · marked-by ·
+  PM · since — with **✓ Verify** (→ Completed) and **↩ Send back** (→ In Progress).
+- **Gated to the task's assigned PM OR admin (Rich)** using the EXISTING code logins (findUser→CURRENT_USER; PM name
+  matched fuzzily to the project's PM; Rich=admin sees all). Everyone can SEE the flag so the PM knows to log in.
+- **DECISION (Rich): do it NOW with the number logins, transfer to gomra.com SSO later** (IT guy is struggling with the
+  client secret + off next week → SSO is a few weeks out). Build the `canVerify(task)` check so it's a one-line swap to
+  SSO roles later. Approach = a real **"Pending Verification" status on the task** (single source of truth; shows on
+  Projects tab + Gantt + reports; never counted done until verified). Ship to a **preview** first for Rich to run the
+  Sarah→Al loop, then live.
+
+
 
 ### ⚠️ Dashboard release checklist (do EVERY time `MRA_Dashboard.html` changes — Rich shouldn't have to remind us)
 

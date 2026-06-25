@@ -838,6 +838,27 @@
   .baassign-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
   .baassign select,.baassign input{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:7px 9px; font-family:inherit; font-size:13px}
   .baassign #baPerson{flex:1; min-width:160px}
+  /* 🟡 PM verification queue (design-board "mark ready" tasks) */
+  .vq-panel{border:1px solid rgba(245,158,11,.5); background:rgba(245,158,11,.07)}
+  .vq-panel > h2 .vq-hint{font-size:11px; font-weight:400; color:var(--muted); margin-left:10px; text-transform:none; letter-spacing:0}
+  .vq-list{display:flex; flex-direction:column; gap:6px; margin-top:8px}
+  .vq-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel2)}
+  .vq-task{min-width:0; flex:1}
+  .vq-task b{font-size:13px}
+  .vq-sub{font-size:11px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .vq-acts{flex:0 0 auto; display:flex; gap:6px; align-items:center}
+  .vq-acts button{border:1px solid var(--line); border-radius:7px; padding:5px 11px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; background:var(--panel)}
+  .vq-acts .vq-ok{background:rgba(34,197,94,.15); border-color:rgba(34,197,94,.55); color:#86efac}
+  .vq-acts .vq-ok:hover{background:rgba(34,197,94,.28)}
+  .vq-acts .vq-back{color:var(--muted)}
+  .vq-acts .vq-back:hover{border-color:var(--amber); color:#fde68a}
+  .vq-need{font-size:11px; color:var(--muted); font-style:italic}
+  body.light .vq-acts button{background:#fff}
+  /* design-board task waiting on the PM */
+  .dtb-task.pending{border-color:rgba(245,158,11,.55); background:rgba(245,158,11,.08)}
+  .dtb-chip.pend{background:rgba(245,158,11,.2); color:#fbbf24; border:1px solid rgba(245,158,11,.5)}
+  .dtb-pending{font-size:11px; font-weight:700; color:#fbbf24}
+  .dtb-overlay.napkin .dtb-task.pending{background:rgba(224,160,30,.14); border-color:rgba(180,120,20,.5)}
   /* Global search overlay (spotlight, anchored near the top) */
   #searchModal{align-items:flex-start; padding:0}
   #searchModal .searchbox{margin-top:8vh; width:min(680px,94vw); background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.55); overflow:hidden}
@@ -1290,6 +1311,8 @@
   <!-- ===================== PROJECTS VIEW ===================== -->
   <div id="projectsView" class="hidden">
     <div class="kpis" id="projKpis"></div>
+    <!-- 🟡 Tasks a designer marked "ready" on the Design board, waiting for the PM to verify & close -->
+    <div id="verifyQueue" style="display:none"></div>
 
     <div class="projtoolbar" style="display:flex; align-items:center; gap:10px; margin:10px 0 14px; flex-wrap:wrap">
       <button class="editbtn" onclick="openProjectEditor()" title="Add, edit, complete or delete a project's tasks — and set predecessors — right here (no Excel)">✎ Edit Project Tasks</button>
@@ -2454,6 +2477,9 @@ const GENERAL_HELP = `
     <p>When a batch of tasks is assigned to a <b>group</b> (e.g. <i>MRA Design</i>) and you need to fill in <b>who specifically</b> (Sarah, Brandon…), don't open them one at a time. Click <span class="k">⇄ Assign People</span> on the PROJECTS toolbar:</p>
     <p><b>1.</b> Pick a <b>project</b> (or ★ All projects). <b>2.</b> Optionally narrow to a current assignee (e.g. only the <i>MRA Design</i> tasks) and/or 🔎 filter by text. <b>3.</b> <b>Check the tasks</b> (or <span class="k">Select all</span>). <b>4.</b> Choose a <b>person</b> at the bottom and hit <span class="k">Apply to checked</span> — it stages the change on every checked task (you'll see <i>old → <b>new</b></i> in green). <b>5.</b> Review, then <span class="k">💾 Save</span>.</p>
     <p>By default it <b>keeps each task's group and just adds the person</b> as the 2nd tier (so <i>MRA Design</i> becomes <i>MRA Design / Sarah Williams</i>) — which is what the Crew/Resource rollups and the Design board read. You can also pick a specific group from the dropdown to change it, or clear the assignee. You can stage several batches (different people) across one or more projects, then Save them all at once. Code-protected; changes show instantly and settle in the lists within ~15 min.</p></div>
+  <div class="hsec"><h4>⑯ᵛ ✅ Mark-ready → PM verifies (Design tasks)</h4>
+    <p><b>Project-fed design tasks now get a sign-off step.</b> On the 🎨 Design board (open, no login), a project task shows a <span class="k">✓ Mark ready</span> button. When a designer clicks it, the task flips to <b>🟡 Pending verification</b> — a flag, <b>not</b> a completion.</p>
+    <p>On the <span class="k">PROJECTS</span> tab, a <b>🟡 Awaiting verification</b> panel lists those tasks (project · PM · who marked it). The task's <b>assigned PM</b> — or an <b>admin</b> — signs in with their code and clicks <span class="k">✓ Verify</span> to mark it truly Complete, or <span class="k">↩ Send back</span> to bounce it to In Progress. Everyone can see the flag, but only the PM/admin can act on it. <b>Tasks added directly on the Design board still just close themselves</b> (no sign-off — they never touch the project files).</p></div>
   <div class="hsec"><h4>⑯ᵇ 🖱️ Click a KPI hover to jump</h4>
     <p>Hover a top KPI tile to see its list — on <b>PROJECTS</b> (In progress / Upcoming / Completed / At risk / Milestones) and on the <b>FLOOR</b> job tiles, each item is now <b>clickable</b>: click a <b>project</b> to open its full‑screen detail view, or a <b>floor job</b> to switch to the Floor board and flash its card. Move the mouse onto the popover before clicking — it stays open so the links are live.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
@@ -2523,6 +2549,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"8.5", date:"2026-06-25", title:"✅ Design tasks: mark-ready → PM verifies & closes", items:[
+    "On the 🎨 Design board, a <b>project task</b> now has a <b>✓ Mark ready</b> button. The designer marks it ready (no login) and it flags as <b>🟡 Pending verification</b> — it is <b>not</b> completed yet.",
+    "The PROJECTS tab shows a <b>🟡 Awaiting verification</b> list — project · PM · who marked it. The task's <b>assigned PM</b> (or an admin) signs in with their code and hits <b>✓ Verify</b> to close it, or <b>↩ Send back</b> if it's not done. Everyone else just sees the flag.",
+    "<b>Tasks added directly on the Design board still just close themselves</b> — no sign-off (they never touch the project files).",
+    "Uses your existing login codes for now; it'll move to the @gomra.com logins when those are ready, no change to how it works." ] },
   { rev:"8.4", date:"2026-06-25", title:"🐞 Fixes: Gantt phase arrows expand again · tasks without an ID are editable", items:[
     "<b>Fixed the ▸/▾ phase arrows on the Projects Gantt</b> — clicking a project's phase to expand/collapse its tasks works again (a naming clash was silently swallowing the click).",
     "<b>Fixed editing tasks that have no Task ID</b> (e.g. several Medtronic rows like “Collaboration with IXL / TSS”). They're now clickable to edit on the full-screen detail view and in the editor — and edits/closes/deletes now save to the <b>exact</b> row, even when two tasks share the same name." ] },
@@ -4431,6 +4462,60 @@ function projTaskPct(st){ st=String(st||''); const m=st.match(/(\d{1,3})\s*%/);
   return null; }   // null = no explicit % (Not Started / plain In Progress / On Hold / blank)
 function projBaseStatus(st){ st=String(st||'').replace(/\s*\d{1,3}\s*%\s*/,' ').trim();   // drop the "25%"
   const f=PROJ_STATUS_OPTIONS.find(s=>s.toLowerCase()===st.toLowerCase()); return f||st; }
+// ===== Design-task VERIFICATION workflow (rev 8.5) =====
+// A project-fed task a designer marks "ready" on the open Design board gets this status — a flag for the PM,
+// NOT a completion. The assigned PM (or an admin) verifies it → Completed. Never counts as done until then.
+const PROJ_VERIFY_STATUS = 'Pending Verification';
+function projIsPendingVerify(t){ return /pending verification/i.test((t&&t.st)||''); }
+const VERIFY_ADMINS = ['Rich Miller'];   // always allowed to verify any task (until SSO roles land, then swap this check)
+// Does the signed-in person (by their existing login code) own this project as PM, or are they an admin?
+function _verifyNameMatch(user, pm){
+  const ut=String(user||'').toLowerCase().split(/[^a-z0-9]+/).filter(x=>x.length>=2);
+  const pt=String(pm||'').toLowerCase().split(/[^a-z0-9]+/).filter(x=>x.length>=2);
+  return ut.some(u=>pt.includes(u));
+}
+function canVerify(projName){
+  if(!CLOSE_PIN || !CURRENT_USER) return false;            // must be signed in (existing code)
+  if(VERIFY_ADMINS.includes(CURRENT_USER)) return true;    // admin (Rich) → any task
+  const p=oProj(projName); return _verifyNameMatch(CURRENT_USER, (p&&p.pm)||'');   // else must be that project's PM
+}
+// Every task across all projects currently flagged "Pending Verification".
+function verifyPending(){ const out=[]; (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(projIsPendingVerify(t)) out.push({p, t}); })); return out; }
+// The 🟡 annunciation panel on the Projects tab — everyone sees it; ✓/↩ are enabled only for the PM/admin.
+function renderVerifyQueue(){
+  const box=document.getElementById('verifyQueue'); if(!box) return;
+  const list=verifyPending();
+  if(!list.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='';
+  const rows=list.sort((a,b)=>String(a.p.name).localeCompare(String(b.p.name))).map(({p,t})=>{
+    const mine=canVerify(p.name), h=projTaskHandle(t);
+    const due=t.finISO||t.startISO; const od=due&&due<(window.MRA_DATA||{}).todayISO;
+    const acts = mine
+      ? `<button class="vq-ok" onclick="verifyTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Confirm done — marks it Completed">✓ Verify</button>`
+        +`<button class="vq-back" onclick="sendBackTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Not done yet — send it back to In Progress">↩ Send back</button>`
+      : `<span class="vq-need" title="Sign in as ${esc(p.pm||'the PM')} (or admin) to verify">needs ${esc(p.pm||'PM')}</span>`;
+    return `<div class="vq-row">`
+      +`<div class="vq-task"><b>${esc(t.t||'(task)')}</b><div class="vq-sub">${esc(p.name)} · ${esc(p.pm||'—')}${t.who?(' · marked by '+esc(t.who)):''}${due?(' · due '+esc(fmtMDY(due))+(od?' ⚠':'')):''}</div></div>`
+      +`<div class="vq-acts">${acts}</div></div>`;
+  }).join('');
+  box.innerHTML=`<div class="panel vq-panel"><h2>🟡 Awaiting verification <span class="count">${list.length}</span>`
+    +`<span class="vq-hint">tasks the design team marked ready — the PM signs off to close</span></h2><div class="vq-list">${rows}</div></div>`;
+}
+function verifyTask(proj, handle){
+  const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return;
+  if(!ensureAuth('verify a task')) return;
+  if(!canVerify(proj)){ alert('Only '+((p&&p.pm)||'the PM for this project')+' or an admin can verify this one.'); return; }
+  const d=new Date(), cd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+  shopWrite({action:'closeProjectTask', project:proj, id:t.id, _id:(t._id!=null?t._id:undefined), task:t.t, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});
+  t.done=true; t.st='Completed'; if(!t.finISO) t.finISO=localISO(Date.now()); oRecomputeProject(p); oApply();
+}
+function sendBackTask(proj, handle){
+  const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return;
+  if(!ensureAuth('send a task back')) return;
+  if(!canVerify(proj)){ alert('Only '+((p&&p.pm)||'the PM for this project')+' or an admin can do that.'); return; }
+  shopWrite({action:'reopenProjectTask', project:proj, id:t.id, _id:(t._id!=null?t._id:undefined), task:t.t, pin:CLOSE_PIN, user:CURRENT_USER});
+  t.done=false; t.st='In Progress'; oRecomputeProject(p); oApply();
+}
 // Manual task order (col Q "ord"): a task's sort key is its ord when set, else its date as YYYYMMDD —
 // SAME numeric scale, so dragging only needs to set the moved task's ord; everything else stays date-sorted.
 function projDnum(t){ const d=(t&&(t.startISO||t.finISO))||''; const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m?(+(m[1]+m[2]+m[3])):99999999; }
@@ -6448,6 +6533,7 @@ function msListPop(title, list){
 }
 function renderProjects(D){
   const today=D.todayISO;
+  try{ renderVerifyQueue(); }catch(_){}   // 🟡 PM sign-off queue (design-board "mark ready" tasks)
   const allProjects=(D.projects||[]).slice();
   const archN=allProjects.filter(projArchived).length;
   const projects = SHOW_ARCHIVED ? allProjects : allProjects.filter(p=>!projArchived(p));   // auto-archive wrapped projects off the active board
@@ -7749,7 +7835,7 @@ function dtbBucket(dateISO, today){
 function dtbDecorate(it, today){
   if(it.general){ const g=it.g; return {general:true, gid:g.id, title:g.title||'(task)', dateISO:g.dueISO||'', note:g.note||'', proj:'', ms:false, done:!!g.done, bucket:dtbBucket(g.dueISO||'',today)}; }
   const t=it.t, key=dtbKey(it.proj,t), dateISO=t.finISO||t.startISO||'';
-  return {general:false, key, title:t.t||'(task)', dateISO, note:DTB.notes[key]||'', proj:it.proj, who:t.who, ms:projIsMs(t), done:projIsDone(t), bucket:dtbBucket(dateISO,today)};
+  return {general:false, key, handle:projTaskHandle(t), title:t.t||'(task)', dateISO, note:DTB.notes[key]||'', proj:it.proj, who:t.who, ms:projIsMs(t), done:projIsDone(t), pending:projIsPendingVerify(t), bucket:dtbBucket(dateISO,today)};
 }
 function openDesignTeam(){ dtbLoadLocal(); document.getElementById('dtbOverlay').classList.add('show'); renderDesignTeam();
   dtbFetchRemote().then(r=>{ if(r && Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); if(!(DTB_EDIT.note||DTB_EDIT.gen)) renderDesignTeam(); } }); }   // adopt the shared file (skip if we just wrote locally)
@@ -7773,6 +7859,21 @@ function dtbEditNote(key){ DTB_EDIT={note:key}; renderDesignTeam(); const ta=doc
 function dtbSaveNote(key){ const ta=document.getElementById('dtbne'); const v=ta?(ta.value||'').trim():''; DTB_EDIT={};
   dtbApply(t=>{ if(v) t.notes[key]=v; else delete t.notes[key]; }); }
 function dtbCancel(){ DTB_EDIT={}; renderDesignTeam(); }
+// Designer marks a PROJECT-fed task "ready" on the open board (no login): flips it to "Pending Verification"
+// (a flag for the PM), preserving every other field. NOT a completion — the assigned PM/admin verifies it.
+function dtbMarkReady(proj, handle){
+  const p=oProj(proj), t=p&&projTaskByAnyId(p,handle);
+  if(!t){ alert("Couldn't find that task — try reloading."); return; }
+  if(projIsDone(t) || projIsPendingVerify(t)) return;   // already done / already sent
+  if(!confirm('Mark “'+(t.t||'this task')+'” ready?\n\nIt goes to '+((p.pm||'the PM'))+' to verify and close — it won’t be marked complete until they sign off.')) return;
+  const payload={ action:'editProjectTask', project:proj, pin:'1974', user:(t.who||'Design Team'),
+    id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
+    assigned:t.who||'', status:PROJ_VERIFY_STATUS, start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
+    milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
+    budget:(t.bud!=null?t.bud:''), comments:t.cm||'' };
+  shopWrite(payload); t.st=PROJ_VERIFY_STATUS; t.done=false; oRecomputeProject(p); oApply();
+  renderDesignTeam();
+}
 function dtbTaskHtml(x){
   if(x.general && DTB_EDIT.gen===x.gid){
     return `<div class="dtb-task gen"><div class="dtb-note-edit">`
@@ -7795,8 +7896,14 @@ function dtbTaskHtml(x){
   let acts='';
   if(x.general){ acts=`<button onclick="dtbToggleGen('${escJsAttr(x.gid)}')">${x.done?'↩ reopen':'✓ done'}</button>`
       +`<button onclick="dtbEditGen('${escJsAttr(x.gid)}')">✎ edit</button><button onclick="dtbDelGen('${escJsAttr(x.gid)}')">🗑</button>`; }
-  else { acts=`<button onclick="dtbEditNote('${escJsAttr(x.key)}')">${x.note?'✎ note':'✎ add note'}</button>`; }
-  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${odue?' odue':''}">`
+  else {   // project-fed task: "✓ Mark ready" → sends it to the PM to verify (doesn't complete it); ad-hoc above just self-closes
+    let mr='';
+    if(x.pending) mr=`<span class="dtb-pending" title="Marked ready — the PM needs to verify &amp; close it on the Projects tab">⏳ awaiting PM sign-off</span>`;
+    else if(!x.done) mr=`<button onclick="dtbMarkReady('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Mark this done and flag it for the PM to verify &amp; close — it is NOT completed until they sign off">✓ Mark ready</button>`;
+    acts=mr+`<button onclick="dtbEditNote('${escJsAttr(x.key)}')">${x.note?'✎ note':'✎ add note'}</button>`;
+  }
+  if(x.pending) chips.push(`<span class="dtb-chip pend" title="Waiting on PM verification">⏳ pending verify</span>`);
+  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}">`
     +`<div class="dtb-title">${x.ms?'◆ ':''}${esc(x.title)}</div>`
     +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}`
     +`<div class="dtb-tacts">${acts}</div></div>`;
