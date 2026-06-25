@@ -214,13 +214,14 @@ real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles 
   (needs an HTML→PDF step — OneDrive convert or a paid connector); **v1 = a clean formatted HTML email body**
   (looks like the one-pager, no attachment), add the PDF later if wanted. Also covers the design team
   (Steve K / Sarah Williams / Mark Mustonen / Brandon Choy) + everyone else.
-  - **DESIGN TEAM EMAILS (Rich provided 2026-06-25)** — for the email-on-new-task flow + SSO role match:
-    Brandon Choy = `bchoy@gomra.com` · Mark Mustonen = `markm@gomra.com` · Sarah Williams = `swilliams@gomra.com`
-    · Steve K (Kowalski) = `skowalski@gomra.com`. Put these in the **MRA Users `Email`** column (+ everyone else).
-  - ⚠️ **DOMAIN FLAG for SSO:** the team is **@gomra.com** but Rich is **@tandemeng.com** — two domains.
-    **Ask IT first thing:** are gomra.com + tandemeng.com **in the same M365 tenant** (then single-tenant
-    sign-in covers both) or **separate tenants** (then allow both / use guest accounts)? This changes the
-    Entra tenant-restriction setup.
+  - **MRA logins are @gomra.com (Rich provided 2026-06-25)** — for the email-on-new-task flow + SSO role match.
+    Rich (Admin) = `rmiller@gomra.com`; Brandon Choy = `bchoy@gomra.com` · Mark Mustonen = `markm@gomra.com` ·
+    Sarah Williams = `swilliams@gomra.com` · Steve K (Kowalski) = `skowalski@gomra.com`. Put these (+ everyone
+    else) in the **MRA Users `Email`** column with their **Role**.
+  - **DOMAIN — RESOLVED enough to plan:** everyone who uses the board (incl. Rich's `rmiller@gomra.com`) has a
+    **@gomra.com** account, so **SSO targets the gomra.com M365 tenant** — clean single-tenant sign-in. Rich's
+    `@tandemeng.com` is the Tandem parent, **not needed** for the board. (Still worth a one-line confirm to IT
+    that gomra.com is its own tenant when they make the Entra app registration.)
 - **(d later) Teams/Outlook/Planner hooks** — assigned **Planner** task (Teams Tasks/phone) + channel posts;
   embed dash as a Teams tab. Reliable now we're OFF the Office-Script path.
 
