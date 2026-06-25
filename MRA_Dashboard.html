@@ -816,6 +816,28 @@
   /* Task editors must sit ABOVE the full-screen project-detail overlay (z 150) when opened from it */
   #projEditModal, #projTaskModal{z-index:200}
   #asgStdModal{z-index:210}   /* opened from the project editor — must sit ABOVE it */
+  /* ⇄ Assign People bulk tool */
+  .bactrls{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:4px 0 8px}
+  .bactrls select,.bactrls input[type=search]{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:6px 9px; font-family:inherit; font-size:13px}
+  .bactrls input[type=search]{flex:1; min-width:130px}
+  .bachk{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); cursor:pointer; user-select:none}
+  .bahead{display:flex; align-items:center; justify-content:space-between; padding:6px 4px; border-bottom:1px solid var(--line)}
+  .bamuted{color:var(--muted); font-size:12px}
+  #baList{max-height:42vh; overflow:auto; margin:0 0 4px}
+  .ba-row{display:flex; align-items:center; gap:10px; padding:7px 6px; border-bottom:1px solid rgba(255,255,255,.06); cursor:pointer}
+  .ba-row:hover{background:rgba(255,255,255,.05)}
+  body.light .ba-row:hover{background:rgba(0,0,0,.04)}
+  .ba-row.chg{background:rgba(34,197,94,.12)}
+  .ba-row .ba-t{flex:1; min-width:0; font-size:13px}
+  .ba-row .ba-t .ba-tn{font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ba-row .ba-meta{font-size:11px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ba-row .ba-who{font-size:11.5px; color:var(--muted); white-space:nowrap; flex:0 0 auto; max-width:210px; overflow:hidden; text-overflow:ellipsis; text-align:right}
+  .ba-row .ba-who .ba-new{color:#22c55e; font-weight:700}
+  .ba-row .ba-who .ba-old{text-decoration:line-through; opacity:.6}
+  .baassign{border-top:1px solid var(--line); margin-top:6px; padding-top:9px; display:flex; flex-direction:column; gap:8px}
+  .baassign-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .baassign select,.baassign input{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:7px 9px; font-family:inherit; font-size:13px}
+  .baassign #baPerson{flex:1; min-width:160px}
   /* Global search overlay (spotlight, anchored near the top) */
   #searchModal{align-items:flex-start; padding:0}
   #searchModal .searchbox{margin-top:8vh; width:min(680px,94vw); background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.55); overflow:hidden}
@@ -1271,6 +1293,7 @@
 
     <div class="projtoolbar" style="display:flex; align-items:center; gap:10px; margin:10px 0 14px; flex-wrap:wrap">
       <button class="editbtn" onclick="openProjectEditor()" title="Add, edit, complete or delete a project's tasks — and set predecessors — right here (no Excel)">✎ Edit Project Tasks</button>
+      <button class="editbtn" onclick="openBulkAssign()" title="Bulk-assign people: pick a project, check the tasks, choose a person and apply to all of them at once — no more opening tasks one at a time">⇄ Assign People</button>
       <button class="editbtn" onclick="openStatus()" title="One-click portfolio status — every active project's %, health, next gate and overdue items. Copy it into an email or print to PDF.">📤 Status Report</button>
       <button class="editbtn" onclick="openIntakeHow()" title="Step-by-step: how to download, fill, and load a project">ⓘ How to</button>
       <details class="tbmenu" id="ioMenu" style="margin-left:auto">
@@ -1873,6 +1896,41 @@
     </div>
   </div>
 
+  <!-- ===================== BULK ASSIGN PEOPLE (select tasks → set a person, all at once) ===================== -->
+  <div class="modal-overlay" id="bulkAssignModal" onclick="closeBulkAssign(event)">
+    <div class="modal" style="max-width:820px">
+      <button class="modal-close" onclick="closeBulkAssign()" title="Close">×</button>
+      <h3>⇄ Assign People</h3>
+      <div class="msub">Stop opening tasks one at a time. <b>Pick a project</b>, <b>check the tasks</b> you want, then choose a <b>person</b> below and hit <b>Apply</b> — it sets them on every checked task at once. Keeps the group (e.g. <i>MRA Design</i>) and adds the person as the 2nd tier (<i>MRA Design / Sarah Williams</i>). Review, then <b>Save</b>.</div>
+      <div class="bactrls">
+        <select id="baProj" onchange="baProjChange()" title="Which project's tasks to show"></select>
+        <select id="baWho" onchange="baRender()" title="Narrow to tasks currently assigned to one group/person"></select>
+        <input id="baSearch" type="search" placeholder="🔎 filter task text…" oninput="baRender()">
+        <label class="bachk" title="Include completed tasks too"><input type="checkbox" id="baShowDone" onchange="baRender()"> Show completed</label>
+      </div>
+      <div class="bahead">
+        <label class="bachk"><input type="checkbox" id="baAll" onchange="baToggleAll(this.checked)"> <span id="baSelCount">Select all</span></label>
+        <span id="baCount" class="bamuted"></span>
+      </div>
+      <div id="baList"></div>
+      <div class="baassign">
+        <span class="vmlabel" style="margin:0">Assign the checked tasks to:</span>
+        <div class="baassign-row">
+          <select id="baGroup" onchange="baGroupChange()" title="Group (resource). Leave on “keep each task's group” to just add a person to whatever group it already has.">
+            <option value="">— keep each task's group —</option>
+          </select>
+          <input id="baPerson" list="baPersonList" autocomplete="off" placeholder="person (e.g. Sarah Williams)" title="The person (2nd tier). Pick from the list or type any name.">
+          <datalist id="baPersonList"></datalist>
+          <button class="btn-primary" onclick="baApply()" id="baApplyBtn">Apply to checked</button>
+        </div>
+        <div class="baassign-row" style="justify-content:space-between">
+          <span id="baMsg" class="bamuted"></span>
+          <button class="btn-primary" id="baSaveBtn" onclick="baSave()" style="background:var(--green)" disabled>💾 Save changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== MANAGE LOGINS (admin: who can edit + their codes) ===================== -->
   <div class="modal-overlay" id="usersModal" onclick="closeUsers(event)">
     <div class="modal" style="max-width:560px">
@@ -2392,6 +2450,10 @@ const GENERAL_HELP = `
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented). Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule — handy for a "what's left" handout.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
     <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text (stacks with the assignee filter); <span class="k">Type</span> is a dropdown; <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt (which now has its own <span class="k">✓ Hide completed</span>); and a task's <b>Finish can't be set before its Start</b>.</p></div>
+  <div class="hsec"><h4>⑯ᵃ ⇄ Assign People — bulk-set who's on tasks (PROJECTS tab)</h4>
+    <p>When a batch of tasks is assigned to a <b>group</b> (e.g. <i>MRA Design</i>) and you need to fill in <b>who specifically</b> (Sarah, Brandon…), don't open them one at a time. Click <span class="k">⇄ Assign People</span> on the PROJECTS toolbar:</p>
+    <p><b>1.</b> Pick a <b>project</b> (or ★ All projects). <b>2.</b> Optionally narrow to a current assignee (e.g. only the <i>MRA Design</i> tasks) and/or 🔎 filter by text. <b>3.</b> <b>Check the tasks</b> (or <span class="k">Select all</span>). <b>4.</b> Choose a <b>person</b> at the bottom and hit <span class="k">Apply to checked</span> — it stages the change on every checked task (you'll see <i>old → <b>new</b></i> in green). <b>5.</b> Review, then <span class="k">💾 Save</span>.</p>
+    <p>By default it <b>keeps each task's group and just adds the person</b> as the 2nd tier (so <i>MRA Design</i> becomes <i>MRA Design / Sarah Williams</i>) — which is what the Crew/Resource rollups and the Design board read. You can also pick a specific group from the dropdown to change it, or clear the assignee. You can stage several batches (different people) across one or more projects, then Save them all at once. Code-protected; changes show instantly and settle in the lists within ~15 min.</p></div>
   <div class="hsec"><h4>⑯ᵇ 🖱️ Click a KPI hover to jump</h4>
     <p>Hover a top KPI tile to see its list — on <b>PROJECTS</b> (In progress / Upcoming / Completed / At risk / Milestones) and on the <b>FLOOR</b> job tiles, each item is now <b>clickable</b>: click a <b>project</b> to open its full‑screen detail view, or a <b>floor job</b> to switch to the Floor board and flash its card. Move the mouse onto the popover before clicking — it stays open so the links are live.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
@@ -2461,6 +2523,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"8.3", date:"2026-06-25", title:"⇄ Assign People — bulk-assign who's on tasks (no more one-at-a-time)", items:[
+    "New <b>⇄ Assign People</b> button on the PROJECTS toolbar. <b>Pick a project, check the tasks, choose a person, hit Apply</b> — it sets them on every checked task at once. No more opening tasks one by one to fill in the 2nd-tier person.",
+    "It <b>keeps the group and adds the person</b> (so <i>MRA Design</i> → <i>MRA Design / Sarah Williams</i>) — exactly what the Crew/Resource schedule and the Design board read. You can also switch the group outright, or clear it.",
+    "Narrow the list to one current assignee (e.g. just the <i>MRA Design</i> tasks) or 🔎 filter by text, <b>Select all</b>, and stage several batches across projects, then <b>💾 Save</b> them together. Staged changes show as <i>old → <b>new</b></i> in green before you commit." ] },
   { rev:"8.2", date:"2026-06-25", title:"📊 Full-screen Gantt now matches the main Gantt: detail slider, arrows up top, ⚙ View menu", items:[
     "<b>New 📊 detail slider</b> on both full-screen Gantt views — slide it to dial how much shows. Open ONE project (click a bar) and it slides <b>Summary → Milestones → Phases → Tasks</b>; the multi-project <b>⛶ Expand</b> slides <b>Projects → Phases → Tasks</b>. Slide left to shrink, right to expand — same as the slider on the main Projects Gantt.",
     "<b>‹ › scroll arrows moved UP TOP</b>, just outside the toolbar — no more arrows floating in the middle of the screen. Consistent with every other view.",
@@ -5009,6 +5075,139 @@ function submitProjTask(){
     msg.style.color='var(--green)'; msg.textContent='✓ Saved.'; btn.textContent= editing?"Save":"Add task";
     setTimeout(()=>document.getElementById('projTaskModal').classList.remove('show'),900);
   }).catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent= editing?"Save":"Add task"; btn.disabled=false; });
+}
+
+/* ====================== ⇄ BULK ASSIGN PEOPLE ======================
+   Select many tasks at once and stamp a person (2nd tier) on all of them — no
+   more opening tasks one-by-one. Keeps each task's group and appends "/ Person"
+   (or a chosen group). Reuses the SAME editProjectTask write path (one op per
+   task) and re-sends every other field unchanged so nothing else is touched. */
+let BA_PROJ='', BA_WHO='', BA_SEL=new Set(), BA_PENDING={};   // sel/pending keyed by "ProjectTaskName"
+function _baKey(projName,t){ return projName+''+(t.t||''); }
+function _baProjects(){ return (((window.MRA_DATA||{}).projects)||[]).filter(p=>(p.tasks||[]).length); }
+// The GROUP portion of a "who" (e.g. "MRA Design / Steve K" → "MRA Design"); falls back to the first part.
+function baGroupOf(who){ const parts=String(who||'').split(/\s+\/\s+/).map(s=>s.trim()).filter(Boolean);
+  const g=parts.find(p=>(typeof CREW_GROUPS!=='undefined')&&CREW_GROUPS.indexOf(crewCanon(p))>=0);
+  return g?crewCanon(g):(parts[0]||''); }
+function openBulkAssign(){
+  if(!ensureAuth("assign people to tasks")) return;
+  BA_SEL=new Set(); BA_PENDING={};
+  // Group dropdown = the known resource groups
+  const gs=(typeof CREW_GROUPS!=='undefined'?CREW_GROUPS:['MRA Design']);
+  document.getElementById('baGroup').innerHTML=`<option value="">— keep each task's group —</option>`
+    + gs.map(g=>`<option value="${escA(g)}">${esc(g)}</option>`).join('')
+    + `<option value="__clear__">— clear the assignee —</option>`;
+  // Person suggestions = the design team + everyone already seen as an assignee/person
+  const ppl=new Set((typeof DESIGN_TEAM!=='undefined'?DESIGN_TEAM:[]));
+  projPeople().forEach(n=>{ if(n && (typeof CREW_GROUPS==='undefined'||CREW_GROUPS.indexOf(n)<0)) ppl.add(n); });
+  document.getElementById('baPersonList').innerHTML=[...ppl].sort((a,b)=>a.localeCompare(b)).map(n=>`<option value="${escA(n)}">`).join('');
+  document.getElementById('baPerson').value=''; document.getElementById('baGroup').value='';
+  // Project dropdown
+  const projs=_baProjects();
+  if(!projs.some(p=>p.name===BA_PROJ)) BA_PROJ=(projs[0]?projs[0].name:'');
+  document.getElementById('baProj').innerHTML=`<option value="__ALL__">★ All projects</option>`
+    + projs.map(p=>`<option value="${escA(p.name)}"${p.name===BA_PROJ?' selected':''}>${esc(p.name)} · ${(p.tasks||[]).length}</option>`).join('');
+  BA_WHO='';
+  baRender();
+  document.getElementById('baMsg').textContent='';
+  document.getElementById('bulkAssignModal').classList.add('show');
+}
+function closeBulkAssign(e){ if(e && e.target && e.target.id!=='bulkAssignModal' && !(e.target.classList&&e.target.classList.contains('modal-close'))) return;
+  document.getElementById('bulkAssignModal').classList.remove('show'); }
+function baProjChange(){ BA_PROJ=document.getElementById('baProj').value; BA_WHO=''; BA_SEL=new Set(); baRender(); }   // selection is per project view
+function baGroupChange(){ // suggest that group's members first when a group is chosen
+  const g=document.getElementById('baGroup').value;
+  if(g==='MRA Design' && typeof DESIGN_TEAM!=='undefined'){
+    document.getElementById('baPersonList').innerHTML=DESIGN_TEAM.map(n=>`<option value="${escA(n)}">`).join('');
+  }
+}
+// The tasks currently in scope (chosen project or all), top-level + subtasks, optionally hiding completed.
+function _baTasks(){
+  const showDone=document.getElementById('baShowDone').checked;
+  const out=[];
+  _baProjects().forEach(p=>{ if(BA_PROJ!=='__ALL__' && p.name!==BA_PROJ) return;
+    (p.tasks||[]).forEach(t=>{ if(!t.t) return; if(!showDone && projIsDone(t)) return; out.push({p,t}); }); });
+  return out;
+}
+function baRender(){
+  const all=_baTasks();
+  // "currently assigned" filter options (distinct), from the in-scope tasks
+  const whoSet=new Map();   // label -> count
+  all.forEach(({t})=>{ const w=(t.who||'').trim()||'(unassigned)'; whoSet.set(w,(whoSet.get(w)||0)+1); });
+  const whoSel=document.getElementById('baWho');
+  const whoOpts=[...whoSet.keys()].sort((a,b)=>a.localeCompare(b));
+  whoSel.innerHTML=`<option value="">All assignees</option>`+whoOpts.map(w=>`<option value="${escA(w)}"${w===BA_WHO?' selected':''}>${esc(w)} (${whoSet.get(w)})</option>`).join('');
+  const q=(document.getElementById('baSearch').value||'').trim().toLowerCase();
+  const rows=all.filter(({t})=>{
+    if(BA_WHO){ const w=(t.who||'').trim()||'(unassigned)'; if(w!==BA_WHO) return false; }
+    if(q && !((t.t||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+  const showProj=(BA_PROJ==='__ALL__');
+  const list=document.getElementById('baList');
+  if(!rows.length){ list.innerHTML=`<div class="bamuted" style="padding:14px 6px">No tasks match. Try a different project, clear the filters, or turn on “Show completed”.</div>`; }
+  else list.innerHTML=rows.map(({p,t})=>{
+    const key=_baKey(p.name,t), sel=BA_SEL.has(key), pend=BA_PENDING[key];
+    const cur=(t.who||'').trim()||'—';
+    const whoHtml=pend!=null
+      ? `<span class="ba-old">${esc(cur)}</span> → <span class="ba-new">${esc(pend)}</span>`
+      : esc(cur);
+    const meta=[ (showProj?esc(p.name):''), esc((t.phase||'').trim()), (t.finISO?esc(fmtMDY(t.finISO)):'') ].filter(Boolean).join(' · ');
+    return `<div class="ba-row${pend!=null?' chg':''}" onclick="baToggleRow(event,'${escA(key)}')">`
+      +`<input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation(); baToggleRow(event,'${escA(key)}')">`
+      +`<div class="ba-t"><div class="ba-tn">${/yes/i.test(t.ml||'')?'◆ ':''}${esc(t.t||'(task)')}</div><div class="ba-meta">${meta||'&nbsp;'}</div></div>`
+      +`<div class="ba-who">${whoHtml}</div></div>`;
+  }).join('');
+  // header counts + select-all state
+  const selN=rows.filter(({p,t})=>BA_SEL.has(_baKey(p.name,t))).length;
+  document.getElementById('baCount').textContent=`${rows.length} task${rows.length===1?'':'s'} shown`;
+  document.getElementById('baSelCount').textContent=selN?`${selN} selected`:'Select all';
+  const allBox=document.getElementById('baAll'); allBox.checked=(rows.length>0 && selN===rows.length); allBox.indeterminate=(selN>0 && selN<rows.length);
+  window._baRows=rows;   // remember the visible set for select-all
+  const nChg=Object.keys(BA_PENDING).length;
+  const sv=document.getElementById('baSaveBtn'); sv.disabled=!nChg; sv.textContent=nChg?`💾 Save ${nChg} change${nChg===1?'':'s'}`:'💾 Save changes';
+}
+function baToggleRow(e,key){ if(e) e.stopPropagation(); if(BA_SEL.has(key)) BA_SEL.delete(key); else BA_SEL.add(key); baRender(); }
+function baToggleAll(on){ (window._baRows||[]).forEach(({p,t})=>{ const k=_baKey(p.name,t); if(on) BA_SEL.add(k); else BA_SEL.delete(k); }); baRender(); }
+function baApply(){
+  const sel=[...BA_SEL]; const msg=document.getElementById('baMsg');
+  if(!sel.length){ msg.style.color='var(--red)'; msg.textContent='Check at least one task first.'; return; }
+  const grp=document.getElementById('baGroup').value;
+  const person=document.getElementById('baPerson').value.trim();
+  if(grp!=='__clear__' && !grp && !person){ msg.style.color='var(--red)'; msg.textContent='Pick a person (and/or a group) to assign.'; return; }
+  const byKey={}; _baProjects().forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.t) byKey[_baKey(p.name,t)]={p,t}; }));
+  let n=0;
+  sel.forEach(key=>{ const e=byKey[key]; if(!e) return; const {t}=e;
+    let neu;
+    if(grp==='__clear__') neu='';
+    else { const g = grp || baGroupOf(t.who); neu=[g,person].filter(Boolean).join(' / '); }
+    if(neu===(t.who||'').trim()){ delete BA_PENDING[key]; }   // no change → drop any prior pending
+    else BA_PENDING[key]=neu;
+    n++;
+  });
+  BA_SEL=new Set();   // clear the checks so the next batch starts fresh
+  msg.style.color='var(--muted)'; msg.textContent=`Staged ${n} task${n===1?'':'s'} — review, then Save.`;
+  baRender();
+}
+function baSave(){
+  const keys=Object.keys(BA_PENDING); const msg=document.getElementById('baMsg');
+  if(!keys.length) return;
+  if(!ensureAuth("save assignee changes")) return;
+  // Resolve across ALL projects (not just the one in the dropdown) — staged changes can span projects.
+  const byKey={}; _baProjects().forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.t) byKey[_baKey(p.name,t)]={p,t}; }));
+  let n=0;
+  keys.forEach(key=>{ const e=byKey[key]; if(!e) return; const {p,t}=e; const neu=BA_PENDING[key];
+    const payload={ action:'editProjectTask', project:p.name, pin:CLOSE_PIN, user:CURRENT_USER,
+      id:t.id, taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'', assigned:neu,
+      status:t.st||'', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'', milestone:t.ml||'',
+      parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''), budget:(t.bud!=null?t.bud:''),
+      comments:t.cm||'' };
+    shopWrite(payload); t.who=neu; oRecomputeProject(p); n++;
+  });
+  BA_PENDING={};
+  oApply();   // instant on-screen update + hold the 30s poll until data.js regenerates
+  msg.style.color='var(--green)'; msg.textContent=`✓ Saved ${n} task${n===1?'':'s'}. They'll settle in the lists within ~15 min.`;
+  baRender();
 }
 
 /* ---- per-row delete / complete / reopen ---- */
