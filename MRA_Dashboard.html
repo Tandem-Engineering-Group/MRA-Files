@@ -738,7 +738,8 @@
   .gnav:hover{opacity:1; border-color:#3b82f6; color:#dbeafe}
   body.light .gnav{background:rgba(255,255,255,.92); box-shadow:0 2px 8px rgba(0,0,0,.18)}
   .gnav-l{left:3px; top:5px} .gnav-r{right:9px; top:5px}
-  .gfs-nav{top:50%; transform:translateY(-50%); width:42px; height:42px; font-size:25px}
+  /* Full-screen ‹ › arrows: UP TOP, just under the toolbar (outside the bars), like every other view — NOT floating mid-screen. */
+  .gfs-nav{top:78px; width:36px; height:36px; font-size:22px}
   .gfs-nav-l{left:10px} .gfs-nav-r{right:14px}
   @media print{ .gnav{display:none !important} }
   body.wall .gnav{display:none !important}
@@ -1579,10 +1580,17 @@
   <div class="gfs-overlay" id="ganttFS" onclick="closeGantt(event)">
     <div class="gfs-head">
       <h3 id="gfsTitle"></h3>
+      <!-- 📊 Detail slider (project / projects views only) — slide RIGHT = more detail, LEFT = shrink. Mirrors the inline Projects-Gantt slider. -->
+      <span class="gwinwrap" id="gfsLodWrap" style="display:none">📊<input id="gfsLodSlider" type="range" min="0" max="3" step="1" value="3" oninput="setGfsLodSlider(this.value)" class="gwinslider" style="width:96px"><span id="gfsLodLab" class="gwinlab"></span></span>
       <div class="rangebtns" id="gfsLevel"></div>
       <div class="rangebtns" id="gfsRange" style="margin-left:12px"></div>
       <div class="rangebtns" id="gfsHolPick" style="margin-left:10px"></div>
       <span id="gfsWhoWrap" style="margin-left:10px"></span>
+      <!-- ⚙ View dropdown (project / projects views) — same popover pattern as the inline Projects Gantt; secondary controls move in here. -->
+      <details class="tbmenu" id="gfsView" style="display:none">
+        <summary class="expandbtn" title="View options — tasks &amp; editing, zoom, time range, holidays">⚙ View ▾</summary>
+        <div class="tbpanel" id="gfsViewPanel"></div>
+      </details>
       <div class="gfs-warn" id="gfsWarn"></div>
       <button class="gfs-theme" onclick="event.stopPropagation(); printGanttFS()" title="Print this Gantt on one 11×17 landscape page (auto-fit) — or Save as PDF">🖨 Print</button>
       <button class="gfs-theme" id="gfsThemeBtn" onclick="event.stopPropagation(); toggleTheme(this)" title="Switch this view (and the whole dashboard) light / dark — remembered on this device">☀️ Light</button>
@@ -2181,6 +2189,20 @@ const PHASE_OPEN=new Set();  // "project|phase" toggled OPPOSITE the current def
 function setGanttLod(v){ GANTT_LOD=v||'proj'; try{localStorage.setItem('mra_gantt_lod',GANTT_LOD);}catch(e){} if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
 const _LOD_BY_N={0:'proj',1:'phase',2:'tasks'}, _LOD_N={proj:0,phase:1,tasks:2}, _LOD_LAB={proj:'Projects',phase:'Phases',tasks:'Tasks'};
 function setGanttLodSlider(v){ setGanttLod(_LOD_BY_N[String(v)]||'proj'); }   // P2 slider: 0=Projects (shrunk) → 1=Phases (just the section headers) → 2=Tasks (everything)
+// Full-screen DETAIL-view level-of-detail sliders — mirror the inline Projects-Gantt 📊 slider so every view works the same.
+//  • Single project (GFS==='project'): 0=Summary (one rollup bar) → 1=Milestones (◆ only) → 2=Phases (+ milestones) → 3=Tasks (everything).
+//  • Multi-project Expand (GFS==='projects'): 0=Projects (one bar each) → 1=Phases (rollup bars) → 2=Tasks (every task).
+let PD_LOD=3;        // single-project detail LOD (default = all tasks, the most-detailed view)
+let GFS_PROJ_LOD=0;  // multi-project detail LOD (default = one bar per project)
+const _PD_LOD_LAB={0:'Summary',1:'Milestones',2:'Phases',3:'Tasks'};
+const _GFSPROJ_LOD_LAB={0:'Projects',1:'Phases',2:'Tasks'};
+function setPdLod(v){ PD_LOD=Math.max(0,Math.min(3,+v)); if(typeof GFS!=='undefined'&&GFS==='project') renderGanttFS(); }
+function setGfsProjLod(v){ v=Math.max(0,Math.min(2,+v)); GFS_PROJ_LOD=v;
+  const D=window.MRA_DATA; if(D){ expandedProjects.clear();
+    if(v>=1) (D.projects||[]).forEach(p=>{ if(GANTT_TASKLEVEL?(p.tasks||[]).length:(p.milestones||[]).length) expandedProjects.add(p.name); }); }
+  if(typeof GFS!=='undefined'&&GFS==='projects') renderGanttFS(); }
+// The full-screen 📊 slider routes to whichever detail view is open (its min/max/labels are set in renderGanttFS).
+function setGfsLodSlider(v){ if(typeof GFS==='undefined') return; if(GFS==='project') setPdLod(v); else if(GFS==='projects') setGfsProjLod(v); }
 function toggleGanttExp(name){ name=String(name||''); if(GANTT_EXP.has(name)) GANTT_EXP.delete(name); else GANTT_EXP.add(name); if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
 function togglePhase(proj,ph){ const k=proj+'|'+ph; if(PHASE_OPEN.has(k)) PHASE_OPEN.delete(k); else PHASE_OPEN.add(k); if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
 // Detailed (full-screen) project view phase collapse. Separate key namespace ('__FS__|…') so collapsing a
@@ -2317,17 +2339,17 @@ const GENERAL_HELP = `
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
     <span class="k">Everyone / People only</span> toggle hides crews & vendors — your choice is remembered. It's <b>compact by default</b> — scrolls within a fixed height so it doesn't dominate the tab — with an <span class="k">⤢ Expand</span> button to grow it to full height (remembered per device). <b>Project Progress</b> works the same way.</p></div>
   <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
-    <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> <span class="k">1 · Projects</span> / <span class="k">2 · + Milestones</span>, click a project name (▾) to expand its gates, click a <b>bar</b> to open that project's <b>detailed view</b> (⑥ᵈ below). The full-screen Projects view has the <b>same</b> <span class="k">🔍 zoom</span> and <span class="k">↔ scroll</span> sliders as the inline Gantt (below) — they stay in sync, plus its own <span class="k">🖨 Print</span> and <span class="k">🎌 holiday</span> picker up top. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p>
+    <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> a <span class="k">📊</span> <b>detail slider</b> up top (<b>Projects → Phases → Tasks</b>) — same slider as the inline Gantt — or click a project name (▾) to expand just one, click a <b>bar</b> to open that project's <b>detailed view</b> (⑥ᵈ below). Its <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> sliders and <span class="k">🎌 holiday</span> picker now live in the <span class="k">⚙ View</span> menu (the <span class="k">🖨 Print</span> stays out), and the <span class="k">‹</span> / <span class="k">›</span> scroll arrows sit up top just outside the toolbar — so this view matches the inline one. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p>
     <p><b>Holidays shade the whole Gantt</b> (amber band, top to bottom) so you can plan around them; the <span class="k">🎌 US</span> and <span class="k">Canada</span> toggles (above the Gantt and in the Expand view) turn each on/off independently — show both, one, or none. Each bar also shows its <b>length in days</b> (e.g. <i>12d</i>). The <span class="k">🖨 Print</span> button in the Expand view prints whatever Gantt you're viewing (including a single project's detailed view) on one 11×17 page. The <b>date row (and holidays) stays pinned to the top</b> as you scroll, so the dates are always in view. A <span class="k">👥 assignee</span> dropdown narrows the Gantt to one person/crew (e.g. <i>MRA Design</i>, <i>Wrap Team</i>, a PM) — their <b>tasks</b> in a project's detailed view, or just the <b>projects they're on</b> in the all-projects view.</p></div>
   <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
-    <p>On the Project Schedules Gantt these live in the <span class="k">⚙ View</span> menu (top-right of the Gantt): the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom — or just tap the <span class="k">‹</span> / <span class="k">›</span> <b>arrows</b> at the left/right edge of the Gantt to scroll a step at a time (the arrows stay on the Gantt, not in the menu). <span class="k">All</span> snaps to the whole timeline. In the full-screen view they're inline as before. Your zoom is remembered per device. <span class="k">🖨 Print</span> lays the whole project Gantt + a project list onto one <b>11×17 landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
+    <p>On the Project Schedules Gantt these live in the <span class="k">⚙ View</span> menu (top-right of the Gantt): the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom — or just tap the <span class="k">‹</span> / <span class="k">›</span> <b>arrows</b> at the left/right edge of the Gantt to scroll a step at a time (the arrows stay on the Gantt, not in the menu). <span class="k">All</span> snaps to the whole timeline. In the full-screen Projects / detail views they live in the same <span class="k">⚙ View</span> menu, with the <span class="k">‹</span> / <span class="k">›</span> arrows up top. Your zoom is remembered per device. <span class="k">🖨 Print</span> lays the whole project Gantt + a project list onto one <b>11×17 landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>⑥ᶜ ↕ Sort the Gantt</h4>
     <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>Program Development</b> (groups each person's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p></div>
   <div class="hsec"><h4>⑥ᵈ 🔎 Project detail view (click a Gantt bar)</h4>
-    <p><b>Click any project's bar</b> (on the Projects Gantt or the floor schedules) to open a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, colored by status. Tasks are <b>grouped under their phase</b>: each phase is a <b>collapsible header with a summary bar</b> showing the phase's full span and <b>% complete</b> (▾/▸ to open or close it), and the tasks indent underneath. <span class="k">⊞ Expand all</span> / <span class="k">⊟ Collapse all</span> (top toolbar) opens or closes every phase at once. ◆ milestones show as diamonds in their phase. It has the same <span class="k">🔍 zoom</span> + <span class="k">↔ scroll</span> sliders (and an <span class="k">All</span> to fit the whole project) so you can zoom in for precise work.</p>
+    <p><b>Click any project's bar</b> (on the Projects Gantt or the floor schedules) to open a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, colored by status. Tasks are <b>grouped under their phase</b>: each phase is a <b>collapsible header with a summary bar</b> showing the phase's full span and <b>% complete</b> (▾/▸ to open or close it), and the tasks indent underneath. ◆ milestones show as diamonds in their phase. A <span class="k">📊</span> <b>detail slider</b> up top dials how much shows — slide it down through <b>Tasks → Phases → Milestones → Summary</b> (one rollup bar for the whole project) and back up — same slider as the main Projects Gantt. The <span class="k">🔍 zoom</span> + <span class="k">↔ scroll</span> sliders (and <span class="k">All</span> to fit the whole project), the <span class="k">🎌 holidays</span> picker and the editing buttons now live in the <span class="k">⚙ View</span> menu; the <span class="k">‹</span> / <span class="k">›</span> scroll arrows sit up top, just outside it.</p>
     <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). <b>Click any task's name on the left</b> to open that one task's edit form directly — where you can also set its <b>% Complete</b> (slider or type a number); a partly-done task shows a <b>partial bar fill + the %</b>. You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit. The top bar also has a <span class="k">☀️ Light / 🌙 Dark</span> button to switch the theme right from this screen (it flips the whole dashboard, remembered per device).</p></div>
   <div class="hsec"><h4>⑥ᵉ 📊 Detail slider — phases & tasks on the Gantt</h4>
-    <p>The <span class="k">📊</span> slider on the Projects Gantt toolbar sets <b>how much detail</b> the schedule shows: <b>Projects</b> (one bar each, the default), <b>Phases</b> (each project opens to its phase rows — every phase a summary bar of its span + % done), or <b>Tasks</b> (every task too). You can also just click the <b>▸ caret next to a project name</b> to expand only that one, then a <b>phase's ▸</b> to drill into its tasks. In the full-screen <span class="k">⛶ Expand</span> view, the <span class="k">2 · + Phases</span> button does the same across every project. Filtering by an assignee auto-opens the phases that hold their tasks.</p></div>
+    <p>The <span class="k">📊</span> slider on the Projects Gantt toolbar sets <b>how much detail</b> the schedule shows: <b>Projects</b> (one bar each, the default), <b>Phases</b> (each project opens to its phase rows — every phase a summary bar of its span + % done), or <b>Tasks</b> (every task too). You can also just click the <b>▸ caret next to a project name</b> to expand only that one, then a <b>phase's ▸</b> to drill into its tasks. <b>The full-screen <span class="k">⛶ Expand</span> view has the same 📊 slider</b> (Projects → Phases → Tasks across every project), and a single project's detail view (click a bar) adds a <b>Milestones</b> and a <b>Summary</b> step so you can shrink it all the way to one bar. Filtering by an assignee auto-opens the phases that hold their tasks.</p></div>
   <div class="hsec"><h4>⑦ Colors & Gantt markers</h4>
     <p><span style="color:var(--green)">●</span> Active &nbsp; <span style="color:var(--blue)">●</span> Scheduled &nbsp; <span style="color:var(--grey)">●</span> On hold / open &nbsp; <span style="color:var(--red)">●</span> Past due.
     On the Gantts: amber <span style="color:var(--amber)">◆</span> = milestone, solid fill = % complete, faded = completed, <span style="color:#93c5fd">blue band</span> = this week, <span style="color:var(--red)">red line</span> = today.</p></div>
@@ -2439,6 +2461,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"8.2", date:"2026-06-25", title:"📊 Full-screen Gantt now matches the main Gantt: detail slider, arrows up top, ⚙ View menu", items:[
+    "<b>New 📊 detail slider</b> on both full-screen Gantt views — slide it to dial how much shows. Open ONE project (click a bar) and it slides <b>Summary → Milestones → Phases → Tasks</b>; the multi-project <b>⛶ Expand</b> slides <b>Projects → Phases → Tasks</b>. Slide left to shrink, right to expand — same as the slider on the main Projects Gantt.",
+    "<b>‹ › scroll arrows moved UP TOP</b>, just outside the toolbar — no more arrows floating in the middle of the screen. Consistent with every other view.",
+    "<b>Toolbar simplified into a ⚙ View menu</b> (zoom · scroll · range · holidays · editing) — the same clean popover the main Projects Gantt uses, so the two views finally match." ] },
   { rev:"8.1", date:"2026-06-24", title:"🎨 Design board: fixed added-tasks vanishing · napkin theme now covers the charts too", items:[
     "<b>Real fix for added tasks disappearing:</b> the browser can only post the shared file as plain text, but the flow was set to require JSON — so the write was rejected and the task got wiped on the next sync. Now posts as text and a just-added task is protected from the background refresh for a few seconds while it saves.",
     "<b>🍸 Napkin mode now skins the bottom charts too</b> — the whole board (header, tiles, and the Workload / Share / Deadline / timeline analytics) reads as one bar-napkin sheet." ] },
@@ -8455,11 +8481,16 @@ function findBayConflicts(jobs){
   });
   return {rows,pairs};
 }
-function openGantt(which){ GFS=which; document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); _toTopSync(); }
+function openGantt(which){ GFS=which;
+  // Multi-project Expand: the 📊 slider is the master — reconcile which projects are expanded to the current LOD on open.
+  if(which==='projects'){ const D=window.MRA_DATA; if(D){ expandedProjects.clear();
+    if(GFS_PROJ_LOD>=1) (D.projects||[]).forEach(p=>{ if(GANTT_TASKLEVEL?(p.tasks||[]).length:(p.milestones||[]).length) expandedProjects.add(p.name); }); } }
+  document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); _toTopSync(); }
 // Click a Gantt BAR → open a full-screen DETAILED view of that one project (its tasks as bars).
 function openProjectDetail(ev, name){ if(ev&&ev.stopPropagation) ev.stopPropagation();
   if(!name) return; GFS='project'; GFS_PROJECT=name;
   if(name!==PD_UNDO_PROJ){ PD_UNDO=[]; PD_REDO=[]; PD_UNDO_PROJ=name; PD_WIN_DAYS=null; PD_PAN=null; }   // undo history + zoom are per project
+  PD_LOD=3;   // a project always opens fully expanded (all tasks) — slide LEFT to shrink toward a summary bar
   document.getElementById('ganttFS').classList.add('show'); renderGanttFS(); _toTopSync(); }
 // Floor bars: open the project detail if this job is a tracked project (has tasks), else the popover.
 function barProjectOrPop(ev, popKey, projName){ if(ev&&ev.stopPropagation) ev.stopPropagation();
@@ -8749,11 +8780,41 @@ function projPop(p){
     + ms.map(m=>`<div>◆ ${esc(m.name)} — ${fmtMDY(m.dateISO)}</div>`).join('') + `</div>`; }
   return h;
 }
+// Consistency: the Gantt detail views (project / projects) consolidate their secondary controls into a ⚙ View
+// dropdown — same pattern as the inline Projects Gantt. This MOVES the existing #gfsLevel / #gfsRange / #gfsHolPick
+// nodes into (or back out of) the dropdown panel, keeping a single instance of each id so all the build/sync-by-id
+// code keeps working unchanged. Idempotent: it only moves when the node isn't already where it belongs.
+function gfsPlaceControls(inMenu){
+  const head=document.querySelector('#ganttFS .gfs-head'), panel=document.getElementById('gfsViewPanel');
+  const lvl=document.getElementById('gfsLevel'), rng=document.getElementById('gfsRange'),
+        hol=document.getElementById('gfsHolPick'), who=document.getElementById('gfsWhoWrap');
+  if(!head||!panel||!lvl||!rng||!hol||!who) return;
+  if(inMenu){
+    if(lvl.parentNode!==panel){
+      panel.innerHTML='';
+      const mk=t=>{ const s=document.createElement('span'); s.className='vmlabel'; s.textContent=t; return s; };
+      panel.appendChild(mk('Tasks & editing')); panel.appendChild(lvl);
+      panel.appendChild(mk('Zoom · scroll · range')); panel.appendChild(rng);
+      panel.appendChild(mk('Holidays')); panel.appendChild(hol);
+      lvl.style.marginLeft=rng.style.marginLeft=hol.style.marginLeft='';
+    }
+  } else if(lvl.parentNode===panel){           // restore the head layout for floor / crew
+    head.insertBefore(lvl, who); head.insertBefore(rng, who); head.insertBefore(hol, who);
+    rng.style.marginLeft='12px'; hol.style.marginLeft='10px';
+    panel.querySelectorAll('.vmlabel').forEach(n=>n.remove());
+  }
+}
 function renderGanttFS(){
   const D=window.MRA_DATA; if(!D||!GFS) return;
   const today=D.todayISO;
   { const showNav=(GFS==='projects'||GFS==='crew'||GFS==='project');   // ‹ › scroll arrows only where there's a pannable timeline
     ['gfsNavL','gfsNavR'].forEach(id=>{ const n=document.getElementById(id); if(n) n.style.display=showNav?'flex':'none'; }); }
+  // ⚙ View dropdown + 📊 detail slider only on the project / projects (Gantt) detail views — floor/crew keep their own toolbar.
+  const _inMenu=(GFS==='project'||GFS==='projects');
+  gfsPlaceControls(_inMenu);
+  { const v=document.getElementById('gfsView'), lw=document.getElementById('gfsLodWrap');
+    if(v) v.style.display=_inMenu?'':'none'; if(v) v.removeAttribute('open');
+    if(lw) lw.style.display=_inMenu?'':'none'; }
   const titleEl=document.getElementById('gfsTitle'), warnEl=document.getElementById('gfsWarn');
   const cont=document.getElementById('gfsGantt'), legEl=document.getElementById('gfsLegend');
   const rangeEl=document.getElementById('gfsRange'), levelEl=document.getElementById('gfsLevel'), capEl=document.getElementById('gfsCap');
@@ -8767,8 +8828,13 @@ function renderGanttFS(){
     // sorted by full date, colored by status, milestones flagged ◆.
     const p=(D.projects||[]).find(x=>x.name===GFS_PROJECT);
     titleEl.textContent=(p?p.name:'Project')+' — Detailed';
+    // 📊 Detail slider: 0=Summary (one rollup bar) → 1=Milestones → 2=Phases (+ milestones) → 3=Tasks. Mirrors the inline Gantt slider.
+    { const sl=document.getElementById('gfsLodSlider'), lab=document.getElementById('gfsLodLab'), lw=document.getElementById('gfsLodWrap');
+      if(sl){ sl.min=0; sl.max=3; if(document.activeElement!==sl) sl.value=PD_LOD; }
+      if(lab) lab.textContent=_PD_LOD_LAB[PD_LOD]||'';
+      if(lw) lw.title='Detail — slide RIGHT to expand down to every task, LEFT to shrink up to a single summary bar'; }
     // Edit toggle so it's obvious how to get into drag/edit mode, plus the full task controls (add / edit /
-    // complete / delete) and Undo/Redo — all appear together once you're in edit mode.
+    // complete / delete) and Undo/Redo — all appear together once you're in edit mode. (Lives in the ⚙ View dropdown now.)
     levelEl.innerHTML = (CLOSE_PIN
       ? `<div class="rb active" title="Edit on — drag a task bar: middle moves it, the ends change start/finish">✏️ Edit on — drag to reschedule</div>`
         + `<div class="rb" onclick="pdAddTask()" title="Add a new task to this project">➕ Add task</div>`
@@ -8779,10 +8845,7 @@ function renderGanttFS(){
       : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars, add and edit tasks">🔒 Edit / add tasks</div>`)
       + `<div class="rb${PD_HIDEDONE?' active':''}" onclick="pdToggleHideDone()" title="Hide completed tasks in this detailed view">✓ Hide completed</div>`
       + `<div class="rb${PD_SORT==='date'?' active':''}" onclick="setPdSort('date')" title="Order tasks by date">📅 By date</div>`
-      + `<div class="rb${PD_SORT==='manual'?' active':''}" onclick="setPdSort('manual')" title="Keep the list's own order (don't auto-sort by date)">▦ List order</div>`
-      + (GANTT_TASKLEVEL ? (pdAllPhasesOpen()
-          ? `<div class="rb" onclick="pdSetAllPhases(true)" title="Collapse every phase — show just the phase summary bars">⊟ Collapse all</div>`
-          : `<div class="rb" onclick="pdSetAllPhases(false)" title="Expand every phase — show all tasks">⊞ Expand all</div>`) : '');
+      + `<div class="rb${PD_SORT==='manual'?' active':''}" onclick="setPdSort('manual')" title="Keep the list's own order (don't auto-sort by date)">▦ List order</div>`;
     if(!p || !(p.tasks||[]).length){
       cont.innerHTML='<div class="g-row"><div class="g-gutter"></div><div class="g-track"><div class="g-out">No tasks for this project yet.</div></div></div>';
       legEl.innerHTML=''; warnEl.textContent=''; rangeEl.innerHTML=''; return;
@@ -8858,21 +8921,39 @@ function renderGanttFS(){
         gutterClick:canEdit?`pdEditTask('${escJsAttr(String(t.id))}')`:null };
     };
     if(GANTT_TASKLEVEL){
-      // Group tasks by PHASE — collapsible section headers, same as the main Projects Gantt. Phases default OPEN
-      // (this IS the detail view); click a phase header to collapse it. Order = first-appearance in the sorted list.
-      const phOrder=[], byPh={};
-      sorted.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!(ph in byPh)){ byPh[ph]=[]; phOrder.push(ph); } byPh[ph].push(t); });
-      phOrder.forEach(ph=>{
-        const tks=byPh[ph], open=!PHASE_OPEN.has('__FS__|'+ph), doneN=tks.filter(projIsDone).length;
-        const roll=phaseRollup(tks);
-        rows.push({ label:ph, sub:tks.length+' task'+(tks.length>1?'s':'')+(doneN?(' · '+doneN+' done'):''),
+      // 📊 LOD drives how much detail shows — slide LEFT to shrink, RIGHT to expand:
+      if(PD_LOD<=0){
+        // 0 · SUMMARY — the whole project as ONE rollup bar (earliest start → latest finish, % complete).
+        const roll=phaseRollup(sorted);
+        rows.push({ label:p.name, sub:(p.taskCount||sorted.length)+' task'+((p.taskCount||sorted.length)===1?'':'s')+(p.pct!=null?(' · '+p.pct+'% complete'):''),
           startISO:roll.startISO, endISO:roll.endISO, noBar:!roll.startISO,
-          pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
-          cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
-          gutterClick:`togglePhaseFS('${escJsAttr(ph)}')` });
-        if(open) tks.forEach(t=>{ const r=(/yes/i.test(t.ml||''))?msRow(t):taskRow(t);
-          r.cls=/\bg-subrow\b/.test(r.cls||'')?r.cls:((r.cls?r.cls+' ':'')+'g-subrow'); rows.push(r); });   // indent tasks under the phase header
-      });
+          pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#3b82f6', cls:'g-phaserow' });
+      } else if(PD_LOD===1){
+        // 1 · MILESTONES — just the ◆ points (a clean milestone chart).
+        const ms=sorted.filter(t=>/yes/i.test(t.ml||''));
+        if(ms.length) ms.forEach(t=>rows.push(msRow(t)));
+        else rows.push({ label:'(no milestones)', sub:'slide right ▸ to see phases & tasks', startISO:null, endISO:null, noBar:true, cls:'g-msrow' });
+      } else {
+        // 2 · PHASES (+ milestones)  /  3 · TASKS — group by PHASE with collapsible headers + rollup bars.
+        // At level 3 phases default OPEN (every task shows); at level 2 they default CLOSED (rollup bar + the phase's
+        // milestone ◆s show). Either way a per-phase caret flips one phase the other way.
+        const phaseDefaultOpen=(PD_LOD>=3);
+        const phOrder=[], byPh={};
+        sorted.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!(ph in byPh)){ byPh[ph]=[]; phOrder.push(ph); } byPh[ph].push(t); });
+        phOrder.forEach(ph=>{
+          const tks=byPh[ph], k='__FS__|'+ph, open=phaseDefaultOpen?!PHASE_OPEN.has(k):PHASE_OPEN.has(k), doneN=tks.filter(projIsDone).length;
+          const roll=phaseRollup(tks);
+          rows.push({ label:ph, sub:tks.length+' task'+(tks.length>1?'s':'')+(doneN?(' · '+doneN+' done'):''),
+            startISO:roll.startISO, endISO:roll.endISO, noBar:!roll.startISO,
+            pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
+            cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
+            gutterClick:`togglePhaseFS('${escJsAttr(ph)}')` });
+          tks.forEach(t=>{ const isMs=/yes/i.test(t.ml||'');
+            if(!(open || isMs)) return;   // tasks-level/open phase → all tasks · phases-level → milestones only
+            const r=isMs?msRow(t):taskRow(t);
+            r.cls=/\bg-subrow\b/.test(r.cls||'')?r.cls:((r.cls?r.cls+' ':'')+'g-subrow'); rows.push(r); });   // indent under the phase header
+        });
+      }
     } else {
       sorted.forEach(t=>{ if(/yes/i.test(t.ml||'')) rows.push(msRow(t)); else rows.push(taskRow(t)); });
     }
@@ -8940,11 +9021,12 @@ function renderGanttFS(){
       +`<span style="color:var(--muted)">one bar per project (their booked span) · pick a resource above · full task dates in the list on the board</span>`;
   } else {
     titleEl.textContent='Project Schedules — Detailed';
-    const withExp=(D.projects||[]).filter(p=>(GANTT_TASKLEVEL?(p.tasks||[]):(p.milestones||[])).length);
-    const allExp=withExp.length>0 && withExp.every(p=>expandedProjects.has(p.name));
-    levelEl.innerHTML=`<div class="rb${expandedProjects.size===0?' active':''}" onclick="setGfsLevel(1)" title="Projects only">1 · Projects</div>`
-      +`<div class="rb${allExp?' active':''}" onclick="setGfsLevel(2)" title="${GANTT_TASKLEVEL?'Expand every project to its phases':'Projects + milestone gates'}">2 · + ${GANTT_TASKLEVEL?'Phases':'Milestones'}</div>`
-      +`<div class="rb mraHlBtn${MRASHOP_HL?' active':''}" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects">🟧 MRA Shop</div>`;
+    // 📊 Detail slider replaces the old 1·Projects / 2·+Phases buttons: 0=Projects (one bar each) → 1=Phases (rollup bars) → 2=Tasks.
+    { const sl=document.getElementById('gfsLodSlider'), lab=document.getElementById('gfsLodLab'), lw=document.getElementById('gfsLodWrap');
+      if(sl){ sl.min=0; sl.max=2; if(document.activeElement!==sl) sl.value=GFS_PROJ_LOD; }
+      if(lab) lab.textContent=_GFSPROJ_LOD_LAB[GFS_PROJ_LOD]||'';
+      if(lw) lw.title='Detail — slide RIGHT to drill into phases & tasks, LEFT to shrink to one bar per project'; }
+    levelEl.innerHTML=`<div class="rb mraHlBtn${MRASHOP_HL?' active':''}" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects">🟧 MRA Shop</div>`;
     rangeEl.innerHTML=
       `<span class="gwinwrap" title="Zoom — how much time the Gantt shows at once">🔍<input id="gwinSliderFS" type="range" min="0" max="100" value="50" oninput="setGwin(_s2d(this.value))" class="gwinslider" title="Zoom: drag to show anywhere from 1 week up to 1 year of the schedule at once"><span id="gwinLabFS" class="gwinlab"></span></span>`
       +`<span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="gpanSliderFS" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider" title="Scroll: slide the window left (earlier) or right (later) through the timeline — the zoom level stays the same"></span>`
@@ -8982,12 +9064,14 @@ function renderGanttFS(){
         barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`,
         cls:canExp?'clickable':'', onclick:canExp?`toggleGfsProject('${key}')`:''});
       if(exp && GANTT_TASKLEVEL && hasTasks){
-        // expanded → collapsible PHASE rows (rollup bar each); click a phase to drill to its tasks. Default: phases collapsed.
+        // expanded → collapsible PHASE rows (rollup bar each); click a phase to drill to its tasks.
+        // At LOD 2 (Tasks) phases default OPEN (every task shows); at LOD 1 (Phases) they default collapsed (rollup bars). Caret flips one.
+        const phaseDefaultOpen=(GFS_PROJ_LOD>=2);
         let tl=(p.tasks||[]); if(PROJ_WHO) tl=tl.filter(t=>taskWhoMatch(t,PROJ_WHO));
         const phOrder=[], byPh={};
         tl.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!(ph in byPh)){ byPh[ph]=[]; phOrder.push(ph); } byPh[ph].push(t); });
         phOrder.forEach(ph=>{
-          const pkey='__PS__|'+p.name+'|'+ph, open=PHASE_OPEN.has(pkey), tks=byPh[ph], doneN=tks.filter(projIsDone).length, roll=phaseRollup(tks);
+          const pkey='__PS__|'+p.name+'|'+ph, open=phaseDefaultOpen?!PHASE_OPEN.has(pkey):PHASE_OPEN.has(pkey), tks=byPh[ph], doneN=tks.filter(projIsDone).length, roll=phaseRollup(tks);
           rows.push({ label:ph, sub:tks.length+' task'+(tks.length>1?'s':'')+(doneN?(' · '+doneN+' done'):''),
             startISO:roll.startISO, endISO:roll.endISO, noBar:!roll.startISO,
             pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
