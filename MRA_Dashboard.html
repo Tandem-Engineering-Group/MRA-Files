@@ -843,7 +843,8 @@
   .vq-panel > h2 .vq-hint{font-size:11px; font-weight:400; color:var(--muted); margin-left:10px; text-transform:none; letter-spacing:0}
   .vq-list{display:flex; flex-direction:column; gap:6px; margin-top:8px}
   .vq-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel2)}
-  .vq-task{min-width:0; flex:1}
+  .vq-task{min-width:0; flex:1; cursor:pointer; border-radius:6px; padding:2px 4px; margin:-2px -4px}
+  .vq-task:hover{background:rgba(245,158,11,.12)}
   .vq-task b{font-size:13px}
   .vq-sub{font-size:11px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .vq-acts{flex:0 0 auto; display:flex; gap:6px; align-items:center}
@@ -859,6 +860,13 @@
   .dtb-chip.pend{background:rgba(245,158,11,.2); color:#fbbf24; border:1px solid rgba(245,158,11,.5)}
   .dtb-pending{font-size:11px; font-weight:700; color:#fbbf24}
   .dtb-overlay.napkin .dtb-task.pending{background:rgba(224,160,30,.14); border-color:rgba(180,120,20,.5)}
+  /* pending-verification tasks stand out on the Gantt (so a PM can spot them) */
+  .g-row.g-pending{background:rgba(245,158,11,.14); box-shadow:inset 3px 0 0 var(--amber)}
+  .g-row.g-pending .g-lbl{color:#fbbf24}
+  body.light .g-row.g-pending{background:rgba(245,158,11,.2)}
+  body.light .g-row.g-pending .g-lbl{color:#92610a}
+  .g-row.vqflash{animation:vqflash 1s ease-in-out 2}
+  @keyframes vqflash{0%,100%{background:rgba(245,158,11,.14)} 50%{background:rgba(245,158,11,.55)}}
   /* Global search overlay (spotlight, anchored near the top) */
   #searchModal{align-items:flex-start; padding:0}
   #searchModal .searchbox{margin-top:8vh; width:min(680px,94vw); background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.55); overflow:hidden}
@@ -2317,11 +2325,12 @@ function phaseRollup(tks){
 // a ◆ milestone diamond if it's a milestone, or a label-only (noBar) row when it's undated.
 function ganttTaskSubRow(t,p){ const today=(window.MRA_DATA||{}).todayISO||'';
   const s=t.startISO, f=t.finISO||t.startISO, hasBar=!!(s&&f);
-  const done=projIsDone(t), isMs=/yes/i.test(t.ml||''), tp=projTaskPct(t.st), mdate=f||s;
-  const color=done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6'));
-  return { label:(isMs?'◆ ':'')+(t.t||'(task)'),
-    sub:[t.who,t.st].filter(Boolean).join(' · ')+(hasBar?'':(mdate?(' · '+fmtMDY(mdate)):' · no dates')),
-    startISO:s, endISO:f, color, done, cls:'g-subrow', noBar:!hasBar,
+  const done=projIsDone(t), isMs=/yes/i.test(t.ml||''), tp=projTaskPct(t.st), mdate=f||s, pend=projIsPendingVerify(t);
+  const color=pend?'#f59e0b':(done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6')));
+  return { label:(pend?'🟡 ':'')+(isMs?'◆ ':'')+(t.t||'(task)'),
+    sub:[t.who, pend?'Pending verification':t.st].filter(Boolean).join(' · ')+(hasBar?'':(mdate?(' · '+fmtMDY(mdate)):' · no dates')),
+    startISO:s, endISO:f, color, done, cls:'g-subrow'+(pend?' g-pending':''), noBar:!hasBar,
+    rowAttr:pend?`data-vq="${escA(p.name+'|'+projTaskHandle(t))}"`:'',
     pct:(hasBar&&!done&&tp!=null&&tp>0&&tp<100)?tp:undefined,
     milestones:(isMs&&mdate)?[{name:t.t,dateISO:mdate}]:[],
     barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }; }
@@ -2549,6 +2558,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"8.6", date:"2026-06-25", title:"🟡 Awaiting-verification list now opens + highlights on the Gantt", items:[
+    "The <b>🟡 Awaiting verification</b> panel on the PROJECTS tab now <b>always shows its tasks</b> (it was collapsing) so you can hit ✓ Verify / ↩ Send back right there.",
+    "<b>Click a task in that list to jump to it on the Gantt</b> — it scrolls to it and flashes. Pending tasks are also <b>tinted gold with a 🟡</b> on the Gantt so they're easy to spot." ] },
   { rev:"8.5", date:"2026-06-25", title:"✅ Design tasks: mark-ready → PM verifies & closes", items:[
     "On the 🎨 Design board, a <b>project task</b> now has a <b>✓ Mark ready</b> button. The designer marks it ready (no login) and it flags as <b>🟡 Pending verification</b> — it is <b>not</b> completed yet.",
     "The PROJECTS tab shows a <b>🟡 Awaiting verification</b> list — project · PM · who marked it. The task's <b>assigned PM</b> (or an admin) signs in with their code and hits <b>✓ Verify</b> to close it, or <b>↩ Send back</b> if it's not done. Everyone else just sees the flag.",
@@ -4495,7 +4507,7 @@ function renderVerifyQueue(){
         +`<button class="vq-back" onclick="sendBackTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Not done yet — send it back to In Progress">↩ Send back</button>`
       : `<span class="vq-need" title="Sign in as ${esc(p.pm||'the PM')} (or admin) to verify">needs ${esc(p.pm||'PM')}</span>`;
     return `<div class="vq-row">`
-      +`<div class="vq-task"><b>${esc(t.t||'(task)')}</b><div class="vq-sub">${esc(p.name)} · ${esc(p.pm||'—')}${t.who?(' · marked by '+esc(t.who)):''}${due?(' · due '+esc(fmtMDY(due))+(od?' ⚠':'')):''}</div></div>`
+      +`<div class="vq-task" onclick="gotoVerifyTask('${escJsAttr(p.name)}','${escJsAttr(h)}')" title="Jump to this task on the Gantt (it's highlighted gold)"><b>${esc(t.t||'(task)')}</b><div class="vq-sub">${esc(p.name)} · ${esc(p.pm||'—')}${t.who?(' · marked by '+esc(t.who)):''}${due?(' · due '+esc(fmtMDY(due))+(od?' ⚠':'')):''}</div></div>`
       +`<div class="vq-acts">${acts}</div></div>`;
   }).join('');
   box.innerHTML=`<div class="panel vq-panel"><h2>🟡 Awaiting verification <span class="count">${list.length}</span>`
@@ -4515,6 +4527,19 @@ function sendBackTask(proj, handle){
   if(!canVerify(proj)){ alert('Only '+((p&&p.pm)||'the PM for this project')+' or an admin can do that.'); return; }
   shopWrite({action:'reopenProjectTask', project:proj, id:t.id, _id:(t._id!=null?t._id:undefined), task:t.t, pin:CLOSE_PIN, user:CURRENT_USER});
   t.done=false; t.st='In Progress'; oRecomputeProject(p); oApply();
+}
+// Click a row in the Awaiting-verification panel → expand that project + its phase on the Gantt, scroll to the
+// task and flash it (it's also tinted gold there). Best-effort: if the row can't be found, scroll to the Gantt.
+function gotoVerifyTask(proj, handle){
+  const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return;
+  setView('projects');
+  try{ GANTT_EXP.add(proj); const ph=((t.phase||'').trim())||'(no phase)'; PHASE_OPEN.add(proj+'|'+ph); }catch(_){}
+  if(window.MRA_DATA) renderProjects(window.MRA_DATA);
+  setTimeout(()=>{ const g=document.getElementById('projGantt'); if(!g) return;
+    const tgt=proj+'|'+handle, row=[...g.querySelectorAll('.g-row[data-vq]')].find(r=>r.getAttribute('data-vq')===tgt);
+    if(row){ row.scrollIntoView({behavior:'smooth', block:'center'}); row.classList.add('vqflash'); setTimeout(()=>row.classList.remove('vqflash'),2100); }
+    else g.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 80);
 }
 // Manual task order (col Q "ord"): a task's sort key is its ord when set, else its date as YYYYMMDD —
 // SAME numeric scale, so dragging only needs to set the moved task's ord; everything else stays date-sorted.
@@ -6094,7 +6119,7 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
     const gutAttr = r.gutterClick ? ` onclick="${r.gutterClick}" style="cursor:pointer" title="Click to edit this task"` : '';
     const hl=(MRASHOP_HL&&r.hlSegs&&r.hlSegs.length)?r.hlSegs.map(s=>{const gg=barGeom(s.startISO,s.endISO,win);
       return gg?`<div class="g-hl hl-${MRA_HL_STYLE}" style="left:${gg.left}%;width:${gg.width}%" title="MRA Shop assigned"></div>`:'';}).join(''):'';
-    html+=`<div class="g-row${r.cls?' '+r.cls:''}${r.gutterClick?' g-rowedit':''}"${rowClick}><div class="g-gutter"${gutAttr}><div class="g-lbl">${r.caret||''}${esc(r.label)}</div>`
+    html+=`<div class="g-row${r.cls?' '+r.cls:''}${r.gutterClick?' g-rowedit':''}"${r.rowAttr?' '+r.rowAttr:''}${rowClick}><div class="g-gutter"${gutAttr}><div class="g-lbl">${r.caret||''}${esc(r.label)}</div>`
       +`<div class="g-sub">${esc(r.sub||'')}</div>${r.bay?`<div class="g-bay" title="Currently in ${escA(r.bay)} on the shop floor">${esc(r.bay)}</div>`:''}</div>`
       +`<div class="g-track">${grid}${bar}${hl}${ms}</div></div>`;
   });
@@ -6901,7 +6926,7 @@ function ageBadge(age){ if(age==null) return ''; const cls=age>90?'red':age>=30?
 function setupCollapse(rootSel, keyPrefix){
   document.querySelectorAll(rootSel+' .panel').forEach(pl=>{
     const h=pl.querySelector(':scope > h2'); if(!h) return;
-    if(/Project Schedules/i.test(h.textContent||'')){ const ex=h.querySelector('.pcaret'); if(ex) ex.remove(); pl.classList.remove('pcollapsed'); return; }   // no collapse caret on the main Gantt panel (Rich)
+    if(pl.classList.contains('vq-panel') || /Project Schedules/i.test(h.textContent||'')){ const ex=h.querySelector('.pcaret'); if(ex) ex.remove(); pl.classList.remove('pcollapsed'); return; }   // never collapse the main Gantt or the Awaiting-verification annunciation
     const key=keyPrefix+(pl.id || (h.textContent||'').trim().slice(0,20).replace(/\s+/g,'_'));
     let col=false; try{ col=localStorage.getItem(key)==='1'; }catch(e){}
     pl.classList.toggle('pcollapsed', col);
@@ -9211,14 +9236,15 @@ function renderGanttFS(){
     const taskRow=t=>{
       const done=projIsDone(t), s=t.startISO, f=t.finISO||t.startISO;
       const bad=(t.startISO&&!SANE(t.startISO))||(t.finISO&&!SANE(t.finISO));
-      const color=bad?'#a855f7':(done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6')));
+      const pend=projIsPendingVerify(t);
+      const color=bad?'#a855f7':(pend?'#f59e0b':(done?'#64748b':((f&&f<today)?'#ef4444':(/in progress/i.test(t.st||'')?'#f59e0b':'#3b82f6'))));
       const badDate=(t.startISO&&!SANE(t.startISO))?t.startISO:t.finISO;
       const canDrag=(t.id!=null&&t.id!==''&&s&&!bad);
       const _h=projTaskHandle(t), canEdit=!!_h;   // editable rows: clicking the label opens the task edit form (works even with no TaskID, via the SharePoint _id)
       const tp=projTaskPct(t.st);              // per-task % → partial bar fill + label
-      return { label:(bad?'⚠ ':'')+(t.t||'(task)'),
-        sub:[t.who,t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
-        startISO:s, endISO:f, color, milestones:[], done, noBar:(!s||bad), cls:t.sub?'g-subrow':'',
+      return { label:(bad?'⚠ ':'')+(pend?'🟡 ':'')+(t.t||'(task)'),
+        sub:[t.who, pend?'Pending verification':t.st].filter(Boolean).join(' · ')+(bad?(' · ⚠ check this date: '+badDate):(s?'':' · no dates')),
+        startISO:s, endISO:f, color, milestones:[], done, noBar:(!s||bad), cls:(t.sub?'g-subrow':'')+(pend?' g-pending':''),
         pct:(!done&&!bad&&tp!=null&&tp>0&&tp<100)?tp:undefined,
         dragId:canDrag?t.id:null,
         linkId:(CLOSE_PIN&&t.id!=null&&t.id!==''&&s&&!bad)?t.id:null,   // (B) connector dot for drag-to-link predecessors (edit mode only)
