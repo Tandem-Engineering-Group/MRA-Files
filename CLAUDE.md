@@ -231,7 +231,27 @@ real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles 
     `/.auth/me` gating, repoint the data publish behind auth, give IT the exact callback URL.
   - (Optional stopgap offered to Rich: ship the MSAL.js soft gate now for logins-today, swap to SWA when ready.)
 
-- **(c) ✉ EMAIL ON NEW TASK — Rich wants this (2026-06-25).** Power Automate trigger **"When an item is
+- **(c) ✉ EMAIL ON NEW TASK — ✅ BUILT + LIVE for PROJECT TASKS (2026-06-26).** Flow **"MRA Email"** (owner Rich,
+  Office 365 Outlook conn `rmiller@gomra.com`): trigger **"When an item is created" on MRA Project Tasks** →
+  **Get items** on **MRA Users** with Filter `Title eq '<Assigned>'` → **Send an email (V2)** To =
+  `first(body('Get_items')?['value'])?['Email']`, subject "MRA Command Center — you have a new task", body =
+  Task/Project/Due(FinishISO)/Notes + dashboard link. **GOTCHAS LEARNED (don't repeat):** (1) the MRA Users name
+  column's INTERNAL name is **`Title`** (just *labeled* "Name" via `Set-TitleLabel` — see `Provision-MRA-Lists.ps1`),
+  so the filter is `Title eq …`, NOT `Name eq …`; (2) **straight quotes only** in the Filter Query — smart/curly
+  quotes throw "expression … is not valid / Creating query failed" (BadRequest 400); (3) the assignee on the task
+  must EXACTLY match a **Name** in MRA Users (`Sarah Williams` ok; ⚠️ board lane **"Steve K" ≠ "Steve Kowalski"** —
+  align them). MRA Users now has Email filled for all 8 (Rich/Luc Giglio/Al Karloff/Megan Fraser/Steve Kowalski/
+  Brandon Choy/Mark Mustonen/Sarah Williams). **STILL OPEN:** (a) **dashboard board-adds don't reliably create the
+  list row** — a task added via the dash Projects editor did NOT appear in MRA Project Tasks even after a 15-min
+  cycle (direct "+ Add new item" in the list DID fire the flow), so verify the dash `addProjectTask` create op is
+  landing in the **"MRA Lists Write 2"** flow (board saves are no-cors fire-and-forget — check that flow's run
+  history) or board-added tasks won't email; (b) **MRA Shop Tasks** = clone the flow (Save As → trigger list =
+  MRA Shop Tasks) for bay tasks; (c) **re-assigning an EXISTING task won't fire** ("item created" only — would need
+  created-or-modified + an assignee-changed guard, or fire from the dashboard on assign); (d) **design-board "added
+  here" general cards DON'T email** (they go to design.json via the **"MRA Design Board"** flow `DESIGN_WRITE_URL`,
+  not a list) → to wire: small dash change in `dtbAddGen` to POST `{who,title,due}` to a new **HTTP-triggered** email
+  flow (clone of "MRA Email": HTTP trigger → same Get items + Send email), then embed its URL + deploy.
+  --- ORIGINAL SPEC: --- Power Automate trigger **"When an item is
   created" on MRA Project Tasks + MRA Shop Tasks** (also fire on assignee-set) → look up the assignee's email
   (from the **MRA Users `Email`** column — same column the SSO uses) → **send an Outlook email**, subject
   **"MRA Command Center — you have a new task"**, body = a short blurb (task title · project · due date · any
