@@ -2363,7 +2363,7 @@ const GANTT_TASKLEVEL=true;   // task-level Projects Gantt (P1-P3) — LIVE as o
 let GANTT_LOD='proj'; try{ const _gl=localStorage.getItem('mra_gantt_lod'); if(_gl) GANTT_LOD=_gl; }catch(e){}
 const GANTT_EXP=new Set();   // project names manually expanded when LOD='proj'
 const PHASE_OPEN=new Set();  // "project|phase" toggled OPPOSITE the current default (so one set handles expand + collapse)
-function setGanttLod(v){ GANTT_LOD=v||'proj'; try{localStorage.setItem('mra_gantt_lod',GANTT_LOD);}catch(e){} if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
+function setGanttLod(v){ GANTT_LOD=v||'proj'; GANTT_EXP.clear(); try{localStorage.setItem('mra_gantt_lod',GANTT_LOD);}catch(e){} if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
 const _LOD_BY_N={0:'proj',1:'phase',2:'tasks'}, _LOD_N={proj:0,phase:1,tasks:2}, _LOD_LAB={proj:'Projects',phase:'Phases',tasks:'Tasks'};
 function setGanttLodSlider(v){ setGanttLod(_LOD_BY_N[String(v)]||'proj'); }   // P2 slider: 0=Projects (shrunk) → 1=Phases (just the section headers) → 2=Tasks (everything)
 // Full-screen DETAIL-view level-of-detail sliders — mirror the inline Projects-Gantt 📊 slider so every view works the same.
@@ -2649,6 +2649,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"9.4", date:"2026-06-26", title:"🐛 Bulk Edits + Gantt LOD bug fixes", items:[
+    "<b>Bulk Edits — assignee filter now works:</b> picking a name from the \"All assignees\" dropdown now actually filters the task list to that person.",
+    "<b>Bulk Edits — fields reset after apply/save:</b> after applying or saving a bulk change, the input fields are cleared so you can make a new selection without having to delete the old value first. Affects all four fields (Assignee, Phase, Type, Status).",
+    "<b>Gantt LOD slider — collapses expanded projects:</b> using the 📊 slider to collapse to Projects or Phases now also closes any projects you'd manually expanded — the slider is now fully in control." ] },
   { rev:"9.3", date:"2026-06-26", title:"✉️ Auto-email the assignee when a task is added", items:[
     "<b>Project tasks:</b> when a new task is created and assigned to someone, they now get an automatic email (task · project · due date · notes + a link to the dashboard). Runs off the <b>MRA Users</b> list — the person needs an email there, and the assignee name has to match their name on the list.",
     "<b>Design Team board:</b> adding an \"added here\" card for a designer now emails that person the same way. (Steve's lane maps to <b>Steve Kowalski</b> so the lookup matches the Users list.)" ] },
@@ -5385,7 +5389,9 @@ function closeBulkAssign(e){ if(e && e.target && e.target.id!=='bulkAssignModal'
   document.getElementById('bulkAssignModal').classList.remove('show'); }
 function baProjChange(){ BA_PROJ=document.getElementById('baProj').value; BA_WHO=''; BA_SEL=new Set(); baRender(); }
 function baGroupChange(){ const g=(document.getElementById('baGroup')||{}).value;
-  if(g==='MRA Design' && typeof DESIGN_TEAM!=='undefined'){ const el=document.getElementById('baPersonList'); if(el) el.innerHTML=DESIGN_TEAM.map(n=>`<option value="${escA(n)}">`).join(''); } }
+  if(g==='MRA Design' && typeof DESIGN_TEAM!=='undefined'){ const el=document.getElementById('baPersonList'); if(el) el.innerHTML=DESIGN_TEAM.map(n=>`<option value="${escA(n)}">`).join(''); }
+  else { baFillDatalists(); }   // switching away from MRA Design — restore full person list
+}
 function _baTasks(){
   const showDone=document.getElementById('baShowDone').checked;
   const out=[];
@@ -5406,8 +5412,10 @@ function baRender(){
   const whoSet=new Map();
   all.forEach(({t})=>{ const w=(t.who||'').trim()||'(unassigned)'; whoSet.set(w,(whoSet.get(w)||0)+1); });
   const whoSel=document.getElementById('baWho');
+  if(whoSel) BA_WHO=whoSel.value;   // capture current selection before rebuilding (fixes filter not applying)
   const whoOpts=[...whoSet.keys()].sort((a,b)=>a.localeCompare(b));
   whoSel.innerHTML='<option value="">All assignees</option>'+whoOpts.map(w=>`<option value="${escA(w)}"${w===BA_WHO?' selected':''}>${esc(w)} (${whoSet.get(w)})</option>`).join('');
+  if(whoSel) BA_WHO=whoSel.value;   // re-read after rebuild (clears if old value no longer in list)
   const q=(document.getElementById('baSearch').value||'').trim().toLowerCase();
   const rows=all.filter(({t})=>{
     if(BA_WHO){ const w=(t.who||'').trim()||'(unassigned)'; if(w!==BA_WHO) return false; }
@@ -5460,6 +5468,7 @@ function baApply(){
     n++;
   });
   BA_SEL=new Set();
+  baSetField(BA_FIELD);   // reset input fields so they're blank for the next round (fixes stuck-value bug)
   msg.style.color='var(--muted)'; msg.textContent=`Staged ${field} on ${n} task${n===1?'':'s'} — review, then Save.`;
   baRender();
 }
@@ -5483,7 +5492,8 @@ function baSave(){
   });
   BA_PENDING={};
   oApply();
-  msg.style.color='var(--green)'; msg.textContent=`✓ Saved ${n} task${n===1?'':'s'}. They’ll settle in the lists within ~15 min.`;
+  baSetField(BA_FIELD);   // reset input fields after save
+  msg.style.color=’var(--green)’; msg.textContent=`✓ Saved ${n} task${n===1?’’:’s’}. They’ll settle in the lists within ~15 min.`;
   baRender();
 }
 
