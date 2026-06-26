@@ -2281,6 +2281,7 @@
         <button class="gfs-theme" id="dtbDoneBtn" onclick="dtbToggleDone()" title="Show completed tasks too">✓ Show done</button>
         <button class="gfs-theme" onclick="printDesignBoard()" title="Print the whole board on one landscape page (for the team)">🖨 Print board</button>
         <button class="gfs-theme" onclick="renderDesignTeam()" title="Refresh from the latest project data">↻ Refresh</button>
+        <button class="gfs-theme" id="dtbAuthBtn" onclick="dtbAuthClick()" title="Sign in (needed to delete tasks)">🔒 Sign in</button>
         <button class="gfs-close" onclick="closeDesignTeam()" title="Close (Esc)">✕</button>
       </div>
       <div class="dtb-sub" id="dtbSub"></div>
@@ -2624,7 +2625,8 @@ const FLEETIO_HELP = `
 const CHANGELOG = [
   { rev:"9.1", date:"2026-06-26", title:"🎨 Design board: set status + % on the board · added-here tasks stand out", items:[
     "Project tasks on the Team Board now have a <b>status dropdown</b> (Not Started / In Progress / On Hold) and a <b>% complete</b> field (type it in) — updates save straight to the project schedule for everyone. (Completion still goes through <b>✓ Mark ready → PM verifies</b>.)",
-    "<b>Tasks you add on the board</b> now stand out — a pink accent edge + tint and a <b>📌</b> in the corner — so they're easy to spot vs the project-fed ones." ] },
+    "<b>Tasks you add on the board</b> now stand out — a teal accent edge + tint and a <b>📌</b> in the corner — so they're easy to spot vs the project-fed ones.",
+    "Adding / editing / notes / status / % stay open to the team; <b>deleting a task now needs a login</b>. New <b>🔒 Sign in</b> on the board (top) so Al, Megan, Rich, etc. can log in." ] },
   { rev:"9.0", date:"2026-06-25", title:"📅 Floor Schedule: new Gantt | Calendar toggle", items:[
     "The <b>Next 2 Weeks — Floor Schedule</b> now has a <b>📊 Gantt / 📅 Calendar</b> toggle. Calendar is an old-school month grid (‹ prev / next ›) with each trailer drawn across its build dates.",
     "<b>Each trailer has its own color</b> with its <b>name + job #</b>, so they're easy to tell apart; long builds flow as one continuous bar across the weeks (‹ › arrows), ⚠ marks past due.",
@@ -8108,8 +8110,14 @@ function dtbAddGen(who){ const sl=dtbSlug(who), ti=document.getElementById('dtba
   const title=((ti&&ti.value)||'').trim(); if(!title){ if(ti) ti.focus(); return; }
   const due=(di&&di.value)||'', id='g'+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36);
   dtbApply(t=>{ if(!t.general.some(g=>g.id===id)) t.general.push({id, who, title, dueISO:due, note:'', done:false}); }); }
-function dtbDelGen(id){ if(!confirm('Delete this added task? (It only exists on the Design board — the project files are untouched.)')) return;
-  if(DTB_EDIT.gen===id) DTB_EDIT={}; dtbApply(t=>{ t.general=t.general.filter(g=>g.id!==id); }); }
+function dtbDelGen(id){ if(typeof ensureAuth==='function' && !ensureAuth('delete a task')){ return; }   // deleting needs a login (Al / Megan / Rich…)
+  if(!confirm('Delete this added task? (It only exists on the Design board — the project files are untouched.)')) return;
+  if(DTB_EDIT.gen===id) DTB_EDIT={}; dtbApply(t=>{ t.general=t.general.filter(g=>g.id!==id); }); if(typeof dtbSyncAuth==='function') dtbSyncAuth(); }
+// Sign-in control on the board (so Al/Megan/Rich can log in — needed to delete). Add/edit/notes/status/% stay open.
+function dtbAuthClick(){ if(CLOSE_PIN){ if(typeof signOut==='function') signOut(); } else { if(typeof ensureAuth==='function') ensureAuth('sign in'); } dtbSyncAuth(); }
+function dtbSyncAuth(){ const b=document.getElementById('dtbAuthBtn'); if(!b) return;
+  if(CLOSE_PIN){ b.textContent='👤 '+(CURRENT_USER||'Signed in')+' · Log out'; b.title='Signed in — click to log out'; b.classList.add('on'); }
+  else { b.textContent='🔒 Sign in'; b.title='Sign in (needed to delete tasks)'; b.classList.remove('on'); } }
 function dtbToggleGen(id){ const cur=DTB.general.find(x=>x.id===id); const want=cur?!cur.done:true;
   dtbApply(t=>{ const x=t.general.find(y=>y.id===id); if(x) x.done=want; }); }
 function dtbEditGen(id){ DTB_EDIT={gen:id}; renderDesignTeam(); }
@@ -8199,6 +8207,7 @@ function dtbTaskHtml(x){
 }
 function renderDesignTeam(){
   const ov=document.getElementById('dtbOverlay'); if(!ov||!ov.classList.contains('show')) return;
+  if(typeof dtbSyncAuth==='function') dtbSyncAuth();
   const today=dtbToday();
   document.getElementById('dtbHzn').innerHTML=Object.keys(DTB_MAXRANK).map(h=>
     `<button class="${DTB_HZN===h?'active':''}" onclick="setDtbHzn('${h}')">${DTB_HZN_LAB[h]}</button>`).join('');
