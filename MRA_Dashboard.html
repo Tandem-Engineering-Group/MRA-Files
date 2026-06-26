@@ -229,17 +229,25 @@
   .dtb-grp.od{color:#ef4444}
   .dtb-task{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--panel2)}
   .dtb-task.odue{border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.08)}
-  .dtb-task.gen{border-style:dashed}
+  .dtb-task.gen{position:relative;border-left:4px solid #ec4899;background:rgba(236,72,153,.10)}   /* added-here cards stand out (pink accent + tint) */
+  .dtb-task.gen .dtb-title{padding-right:20px}
+  .dtb-addpin{position:absolute;top:7px;right:8px;font-size:13px;line-height:1;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}
   .dtb-task.done{opacity:.6}
   .dtb-title{font-size:12.5px;font-weight:600;line-height:1.3}
   .dtb-task.done .dtb-title{text-decoration:line-through;color:var(--muted)}
   .dtb-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;align-items:center}
   .dtb-chip{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(255,255,255,.07);color:var(--muted);white-space:nowrap}
   .dtb-chip.proj{background:rgba(59,130,246,.18);color:#93c5fd}
-  .dtb-chip.add{background:rgba(16,185,129,.18);color:#6ee7b7}
+  .dtb-chip.add{background:rgba(236,72,153,.22);color:#f9a8d4;border:1px solid rgba(236,72,153,.5)}
   .dtb-chip.ms{background:rgba(245,158,11,.2);color:#fcd34d}
   .dtb-chip.date.od{background:rgba(239,68,68,.2);color:#fca5a5}
   .dtb-note{font-size:11px;color:var(--amber);font-style:italic;margin-top:5px;line-height:1.3}
+  .dtb-prog{display:flex;gap:6px;align-items:center;margin-top:6px}
+  .dtb-stat{flex:1;min-width:0;font-family:inherit;font-size:10.5px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt);padding:3px 6px}
+  .dtb-pctwrap{display:inline-flex;align-items:center;gap:2px}
+  .dtb-pct{width:46px;font-family:inherit;font-size:10.5px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt);padding:3px 4px;text-align:right}
+  .dtb-pctsign{font-size:10.5px;color:var(--muted)}
+  .dtb-overlay.napkin .dtb-stat,.dtb-overlay.napkin .dtb-pct{background:#f6f1e2;color:#2b2620;border-color:rgba(60,40,15,.3)}
   .dtb-tacts{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
   .dtb-tacts button{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:7px;padding:2px 8px;font-size:10.5px;cursor:pointer;font-family:inherit}
   .dtb-tacts button:hover{border-color:var(--blue);color:var(--blue)}
@@ -308,7 +316,8 @@
   .dtb-overlay.napkin .dtb-title{color:#2b2620;font-weight:700}
   .dtb-overlay.napkin .dtb-chip{background:rgba(60,40,15,.08);color:#5a4a2e}
   .dtb-overlay.napkin .dtb-chip.proj{background:rgba(192,56,28,.13);color:#a3301a}
-  .dtb-overlay.napkin .dtb-chip.add{background:rgba(16,120,80,.15);color:#0a6b46}
+  .dtb-overlay.napkin .dtb-chip.add{background:rgba(190,24,93,.14);color:#9d174d;border-color:rgba(190,24,93,.4)}
+  .dtb-overlay.napkin .dtb-task.gen{border-left-color:#be185d;background:rgba(190,24,93,.07)}
   .dtb-overlay.napkin .dtb-note{color:#9a6a00}
   .dtb-overlay.napkin .dtb-tacts button{border-color:rgba(60,40,15,.25);color:#5a4a2e}
   .dtb-overlay.napkin .dtb-empty{color:#8a7448}
@@ -2613,6 +2622,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"9.1", date:"2026-06-26", title:"🎨 Design board: set status + % on the board · added-here tasks stand out", items:[
+    "Project tasks on the Team Board now have a <b>status dropdown</b> (Not Started / In Progress / On Hold) and a <b>% complete</b> field (type it in) — updates save straight to the project schedule for everyone. (Completion still goes through <b>✓ Mark ready → PM verifies</b>.)",
+    "<b>Tasks you add on the board</b> now stand out — a pink accent edge + tint and a <b>📌</b> in the corner — so they're easy to spot vs the project-fed ones." ] },
   { rev:"9.0", date:"2026-06-25", title:"📅 Floor Schedule: new Gantt | Calendar toggle", items:[
     "The <b>Next 2 Weeks — Floor Schedule</b> now has a <b>📊 Gantt / 📅 Calendar</b> toggle. Calendar is an old-school month grid (‹ prev / next ›) with each trailer drawn across its build dates.",
     "<b>Each trailer has its own color</b> with its <b>name + job #</b>, so they're easy to tell apart; long builds flow as one continuous bar across the weeks (‹ › arrows), ⚠ marks past due.",
@@ -8084,7 +8096,7 @@ function dtbBucket(dateISO, today){
 function dtbDecorate(it, today){
   if(it.general){ const g=it.g; return {general:true, gid:g.id, title:g.title||'(task)', dateISO:g.dueISO||'', note:g.note||'', proj:'', ms:false, done:!!g.done, bucket:dtbBucket(g.dueISO||'',today)}; }
   const t=it.t, key=dtbKey(it.proj,t), dateISO=t.finISO||t.startISO||'';
-  return {general:false, key, handle:projTaskHandle(t), title:t.t||'(task)', dateISO, note:DTB.notes[key]||'', proj:it.proj, who:t.who, ms:projIsMs(t), done:projIsDone(t), pending:projIsPendingVerify(t), bucket:dtbBucket(dateISO,today)};
+  return {general:false, key, handle:projTaskHandle(t), title:t.t||'(task)', dateISO, note:DTB.notes[key]||'', proj:it.proj, who:t.who, ms:projIsMs(t), done:projIsDone(t), pending:projIsPendingVerify(t), base:projBaseStatus(t.st), pct:(projTaskPct(t.st)||0), bucket:dtbBucket(dateISO,today)};
 }
 function openDesignTeam(){ dtbLoadLocal(); document.getElementById('dtbOverlay').classList.add('show'); renderDesignTeam();
   dtbFetchRemote().then(r=>{ if(r && Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); if(!(DTB_EDIT.note||DTB_EDIT.gen)) renderDesignTeam(); } }); }   // adopt the shared file (skip if we just wrote locally)
@@ -8123,6 +8135,24 @@ function dtbMarkReady(proj, handle){
   shopWrite(payload); t.st=PROJ_VERIFY_STATUS; t.done=false; oRecomputeProject(p); oApply();
   renderDesignTeam();
 }
+// Compose a status string from a base + a typed %, mirroring the editor (no auto-complete — completion stays via Mark ready).
+function _dtbCompose(base, pct){ base=String(base||'Not Started'); pct=Math.max(0,Math.min(100,parseInt(pct,10)||0));
+  if(base==='Not Started' && pct>0) base='In Progress';
+  if(base==='Completed') return 'Completed';
+  if(base==='Not Started') return 'Not Started';
+  return pct>0 ? (base+' '+pct+'%') : base; }
+// Team can set status / % right on the board → writes to the project schedule (by exact _id, dup-safe). Open board, no login.
+function dtbWriteStatus(proj, handle, newStatus){
+  const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return;
+  const payload={ action:'editProjectTask', project:proj, pin:'1974', user:(t.who||'Design Team'),
+    id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
+    assigned:t.who||'', status:newStatus, start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
+    milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
+    budget:(t.bud!=null?t.bud:''), comments:t.cm||'' };
+  shopWrite(payload); t.st=newStatus; t.done=/^completed$/i.test(newStatus); oRecomputeProject(p); oApply(); renderDesignTeam();
+}
+function dtbSetStatus(proj, handle, base){ const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return; dtbWriteStatus(proj, handle, _dtbCompose(base, projTaskPct(t.st)||0)); }
+function dtbSetPct(proj, handle, v){ const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return; dtbWriteStatus(proj, handle, _dtbCompose(projBaseStatus(t.st)||'Not Started', v)); }
 function dtbTaskHtml(x){
   if(x.general && DTB_EDIT.gen===x.gid){
     return `<div class="dtb-task gen"><div class="dtb-note-edit">`
@@ -8142,7 +8172,7 @@ function dtbTaskHtml(x){
     noteHtml=`<div class="dtb-note-edit"><textarea id="dtbne" rows="2" placeholder="Add a design note (shared with the team)">${esc(x.note||'')}</textarea>`
       +`<div class="dtb-tacts"><button onclick="dtbSaveNote('${escJsAttr(x.key)}')">💾 Save</button><button onclick="dtbCancel()">Cancel</button></div></div>`;
   } else if(x.note){ noteHtml=`<div class="dtb-note">📝 ${esc(x.note)}</div>`; }
-  let acts='';
+  let acts='', prog='';
   if(x.general){ acts=`<button onclick="dtbToggleGen('${escJsAttr(x.gid)}')">${x.done?'↩ reopen':'✓ done'}</button>`
       +`<button onclick="dtbEditGen('${escJsAttr(x.gid)}')">✎ edit</button><button onclick="dtbDelGen('${escJsAttr(x.gid)}')">🗑</button>`; }
   else {   // project-fed task: "✓ Mark ready" → sends it to the PM to verify (doesn't complete it); ad-hoc above just self-closes
@@ -8150,11 +8180,21 @@ function dtbTaskHtml(x){
     if(x.pending) mr=`<span class="dtb-pending" title="Marked ready — the PM needs to verify &amp; close it on the Projects tab">⏳ awaiting PM sign-off</span>`;
     else if(!x.done) mr=`<button onclick="dtbMarkReady('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Mark this done and flag it for the PM to verify &amp; close — it is NOT completed until they sign off">✓ Mark ready</button>`;
     acts=mr+`<button onclick="dtbEditNote('${escJsAttr(x.key)}')">${x.note?'✎ note':'✎ add note'}</button>`;
+    if(!x.done){   // team can set status + % right on the board (writes to the project schedule). Completion stays via "✓ Mark ready".
+      const opts=['Not Started','In Progress','On Hold'];
+      const cur=x.base||'Not Started', extra=(cur&&opts.indexOf(cur)<0)?`<option selected>${esc(cur)}</option>`:'';
+      prog=`<div class="dtb-prog">`
+        +`<select class="dtb-stat" onchange="dtbSetStatus('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}',this.value)" title="Set this task's status — saves to the project schedule">`
+        + opts.map(s=>`<option${cur===s?' selected':''}>${s}</option>`).join('') + extra + `</select>`
+        +`<span class="dtb-pctwrap"><input type="number" class="dtb-pct" min="0" max="100" step="5" value="${x.pct||0}" onchange="dtbSetPct('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}',this.value)" title="Type % complete (0–100)"><span class="dtb-pctsign">%</span></span>`
+        +`</div>`;
+    }
   }
   if(x.pending) chips.push(`<span class="dtb-chip pend" title="Waiting on PM verification">⏳ pending verify</span>`);
   return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}">`
+    +`${x.general?'<span class="dtb-addpin" title="Added on this board (not from a project file)">📌</span>':''}`
     +`<div class="dtb-title">${x.ms?'◆ ':''}${esc(x.title)}</div>`
-    +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}`
+    +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}${prog}`
     +`<div class="dtb-tacts">${acts}</div></div>`;
 }
 function renderDesignTeam(){
