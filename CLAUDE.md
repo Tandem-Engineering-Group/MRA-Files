@@ -335,6 +335,14 @@ Treat help + rev as PART OF the feature, not an afterthought.
   added (`href="catalogue/index.html"` — Azure Static Web doesn't serve subfolder index docs, so link the file explicitly).
   Files committed under `catalogue/`; `deploy.yml` uploads them on every deploy. ⚠️ NOTE: it's on the PUBLIC site (same as
   the dashboard) — incl. `mra-product-history.json`. Fine if the catalogue is OK public; lock down with Step 4 SSO if not.
+  - **✅ STREAMLINED 2026-06-26 (Rich): catalogue is now SELF-CONTAINED — no longer loads from the secondary JSON files.**
+    The 3 JSONs (247 products / 302 history) + `logo.png` are **embedded directly into `catalogue/index.html`** as
+    `window.MRA_CAT_EMBED` (built by a python pass: `jsfor(o)=json.dumps(o).replace('</','<\\/')`); `fetchJsonFile()` now
+    returns the embed (no network), the 15-min `setInterval(refreshExternalFiles)` was removed, and the logo is a data URI.
+    Page is ~455KB, loads instantly, zero external fetches. The `catalogue/*.json` source files stay in the repo (still
+    uploaded, now unused by the HTML) = the editable source of truth. **TO UPDATE the catalogue data later:** edit/replace
+    those JSONs (or use the in-page editor's ⬇ download), then RE-EMBED (re-run the python inline pass) and redeploy —
+    just dropping a new JSON in the folder no longer changes the live page since the HTML reads the embed.
 
 - **Standardize Assigned-To names in the workbook (Rich asked 2026-06-18: "go back and fix
   them all the same", and "stop forgetting open items").** The `Project Tasks` `Assigned To`
