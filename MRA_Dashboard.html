@@ -264,6 +264,31 @@
   .dtb-chart{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px 15px}
   .dtb-chart-wide{grid-column:1/-1}
   .dtb-charth{font-size:12.5px;font-weight:800;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+  /* 📅 Next-2-weeks design calendar */
+  .dcal-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .dcal-chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:14px;padding:3px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .dcal-chip.off{opacity:.4;text-decoration:line-through}
+  .dcal-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .dcal-dow{display:grid;grid-template-columns:repeat(7,1fr);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;overflow:hidden}
+  .dcal-dow>div{padding:5px 7px;border-right:1px solid rgba(255,255,255,.06)}
+  .dcal-dow>div:last-child{border-right:none}
+  .dcal-week{display:grid;grid-template-columns:repeat(7,1fr)}
+  .dcal-week:last-of-type{border-radius:0 0 8px 8px;overflow:hidden}
+  .dcal-cell{min-height:82px;border-right:1px solid rgba(255,255,255,.06);border-top:1px solid var(--line);border-left:1px solid var(--line);padding:4px 5px;min-width:0;display:flex;flex-direction:column;gap:3px}
+  .dcal-cell:nth-child(7n){border-right:1px solid var(--line)}
+  .dcal-cell.past{background:rgba(255,255,255,.02)}
+  .dcal-cell.today{background:rgba(59,130,246,.10)}
+  .dcal-dnum{font-size:10.5px;color:var(--muted);font-weight:700}
+  .dcal-cell.today .dcal-dnum{color:#fff;background:var(--red);border-radius:9px;align-self:flex-start;padding:0 6px}
+  .dcal-ev{font-size:10px;line-height:1.2;background:var(--panel2);border-left:3px solid #888;border-radius:3px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:5px}
+  .dcal-ev.od{background:rgba(239,68,68,.13)}
+  .dcal-evdot{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+  .dcal-evt{overflow:hidden;text-overflow:ellipsis}
+  .dcal-more{font-size:9.5px;color:var(--muted);font-weight:600}
+  .dtb-overlay.napkin .dcal-chip{background:#f6f1e2;color:#2b2620;border-color:rgba(60,40,15,.3)}
+  .dtb-overlay.napkin .dcal-cell,.dtb-overlay.napkin .dcal-dow>div{border-color:rgba(60,40,15,.18)}
+  .dtb-overlay.napkin .dcal-ev{background:rgba(255,255,255,.5);color:#2b2620}
+  .dtb-overlay.napkin .dcal-cell.past{background:rgba(60,40,15,.05)}
   .dtb-charthsub{font-size:10px;font-weight:600;color:var(--muted)}
   .dtb-balwrap{display:flex;flex-direction:column;gap:8px}
   .dtb-balrow{display:grid;grid-template-columns:118px 1fr 50px;align-items:center;gap:9px}
@@ -2623,6 +2648,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"9.2", date:"2026-06-26", title:"📅 Design board: Next-2-Weeks calendar (with name filters)", items:[
+    "New <b>Next 2 Weeks</b> calendar at the top of the Team Board's analytics — this week + next, with each task on its due date, colored by person.",
+    "<b>Click a name</b> (Steve, Sarah, Mark, Brandon…) to show/hide that person — all on by default. Today is highlighted; overdue items show red." ] },
   { rev:"9.1", date:"2026-06-26", title:"🎨 Design board: set status + % on the board · added-here tasks stand out", items:[
     "Project tasks on the Team Board now have a <b>status dropdown</b> (Not Started / In Progress / On Hold) and a <b>% complete</b> field (type it in) — updates save straight to the project schedule for everyone. (Completion still goes through <b>✓ Mark ready → PM verifies</b>.)",
     "<b>Tasks you add on the board</b> now stand out — a teal accent edge + tint and a <b>📌</b> in the corner — so they're easy to spot vs the project-fed ones.",
@@ -8247,7 +8275,7 @@ function renderDesignTeam(){
         </div>
       </div></div>`;
   }).join('');
-  document.getElementById('dtbBody').innerHTML=`<div class="dtb-lanes">${html}</div>`+dtbChartsHtml(today);
+  document.getElementById('dtbBody').innerHTML=`<div class="dtb-lanes">${html}</div>`+`<div class="dtb-charts">`+dtbCalHtml(today)+`</div>`+dtbChartsHtml(today);
   try{ dtbDrawGantt(today); }catch(e){}
   const ov2=document.getElementById('dtbOverlay'); if(ov2) ov2.classList.toggle('napkin', NAPKIN);
   const nb=document.getElementById('dtbNapkinBtn'); if(nb) nb.classList.toggle('active', NAPKIN);
@@ -8276,6 +8304,34 @@ function dtbDeadlineLoad(today, weeks){
     if(d.done||!d.dateISO) return; const dm=parseISO(d.dateISO).getTime(); if(dm<t.getTime()) return;
     const wi=Math.floor((dm-t.getTime())/(7*DAY)); if(wi>=0&&wi<weeks){ wk[wi].total++; wk[wi].bypers.push(DESIGN_COLORS[name]||'#64748b'); } }); });
   return wk;
+}
+// 📅 Next-2-weeks calendar for the design team (above the analytics). Clickable name chips, all-on by default.
+let DCAL_OFF = new Set();   // designers toggled OFF ('' empty set = everyone shown)
+function dtbCalToggle(name){ if(DCAL_OFF.has(name)) DCAL_OFF.delete(name); else DCAL_OFF.add(name); renderDesignTeam(); }
+function dtbCalHtml(today){
+  const lanes=dtbGather();
+  const order=DESIGN_TEAM.concat([DESIGN_TEAM_LANE]).filter(n=>(lanes[n]||[]).length);   // only people with tasks
+  const t=parseISO(today)||todayMid();
+  const start=new Date(t.getFullYear(),t.getMonth(),t.getDate()); start.setDate(start.getDate()-start.getDay());   // back to Sunday of this week
+  const days=[]; const byIso={};
+  for(let i=0;i<14;i++){ const d=new Date(start.getTime()+i*DAY), iso=localISO(d.getTime()); const cell={d,iso,items:[]}; days.push(cell); byIso[iso]=cell; }
+  order.forEach(name=>{ if(DCAL_OFF.has(name)) return; (lanes[name]||[]).forEach(it=>{ const x=dtbDecorate(it,today);
+    if(x.done || !x.dateISO) return; const cell=byIso[x.dateISO]; if(!cell) return;
+    cell.items.push({name, title:x.title, color:DESIGN_COLORS[name]||'#64748b', od:x.bucket&&x.bucket.k==='overdue', proj:x.proj, general:x.general}); }); });
+  const chips=order.map(n=>`<button class="dcal-chip${DCAL_OFF.has(n)?' off':''}" onclick="dtbCalToggle('${escJsAttr(n)}')" title="Show / hide ${escA(n)}"><span class="dcal-dot" style="background:${DESIGN_COLORS[n]||'#64748b'}"></span>${esc(n)}</button>`).join('');
+  const dn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let grid=`<div class="dcal-dow">`+dn.map(d=>`<div>${d}</div>`).join('')+`</div>`;
+  for(let wk=0; wk<2; wk++){
+    grid+=`<div class="dcal-week">`;
+    for(let i=0;i<7;i++){ const cell=days[wk*7+i], isToday=(cell.iso===today), past=(cell.iso<today);
+      const evs=cell.items.slice(0,4).map(it=>`<div class="dcal-ev${it.od?' od':''}" style="border-left-color:${it.color}" title="${escA(it.title+' · '+(it.general?'added here':it.proj||'')+' · '+it.name+(it.od?' · OVERDUE':''))}"><span class="dcal-evdot" style="background:${it.color}"></span><span class="dcal-evt">${esc(it.title)}</span></div>`).join('');
+      const more=cell.items.length>4?`<div class="dcal-more">+${cell.items.length-4} more</div>`:'';
+      grid+=`<div class="dcal-cell${isToday?' today':''}${past?' past':''}"><div class="dcal-dnum">${cell.d.getDate()}</div>${evs}${more}</div>`;
+    }
+    grid+=`</div>`;
+  }
+  return `<div class="dtb-chart dtb-chart-wide dcal-wrap"><div class="dtb-charth">📅 Next 2 Weeks <span class="dtb-charthsub">what's due · click a name to show / hide (all on by default)</span></div>`
+    +`<div class="dcal-chips">${chips}</div>${grid}</div>`;
 }
 function dtbChartsHtml(today){
   const S=dtbStats(today), maxOpen=Math.max(1,...S.map(s=>s.open));
