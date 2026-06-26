@@ -2613,7 +2613,7 @@ const GENERAL_HELP = `
     <p>The <span class="k">ASSETS</span> and <span class="k">FLEETIO</span> tabs each show a <b>live map</b> of where the units are (GPS from Samsara). A small map sits at the top; hit <span class="k">⛶ Expand map</span> to pop it full-screen to pan/zoom and click a pin for that unit's details (type, location, last fix, open Fleetio items). Pins are colored by location: <b style="color:#e04826">orange = at the MRA facility</b>, <b style="color:#2f6fe0">blue = elsewhere in Michigan</b>, grey = out of state; a faded pin means the GPS fix is <b>stale</b> (no recent report). Units that pack together (e.g. the MRA yard) <b>cluster</b> into a number that spreads apart as you zoom in. Equipment is placed at the location of the unit(s) on its job.</p></div>
   <div class="hsec"><h4>㉔ 🎨 Design Team board (☰ Menu)</h4>
     <p>Open <span class="k">☰ Menu → 🎨 Design Team board</span> for a dedicated view of the design / CAD crew (<b>Steve K, Sarah, Mark, Brandon</b>). Each person gets a <b>lane</b> showing the tasks they're assigned across all projects — <b>pulled live from the Projects tab</b> (assign someone on a project task and it lands here automatically). A 5th <b>MRA Design</b> lane catches anything tagged to the team generally.</p>
-    <p>Use the <b>Today / Week / Month / All</b> buttons up top to set the window — tasks group into <b>Overdue · Today · This Week · This Month · Upcoming · No-date</b>. Each person's <b>tile scrolls on its own</b>, so a long list doesn't move the whole page. You can <b>tweak it here without ever touching the project files</b>: hit <span class="k">✎ add note</span> on any task to attach a design note, or type in the <b>+ task</b> box at the bottom of a lane to add an ad-hoc/general task (with an optional due date). These <b>save to a shared file, so every device sees them</b> (about 30 seconds to sync) — but they still <b>never change the workbook or the Projects tab</b>. <span class="k">✓ Show done</span> (highlights when on) reveals completed items.</p>
+    <p>Use the <b>Today / Week / Month / All</b> buttons up top to set the window — tasks group into <b>Overdue · Today · This Week · This Month · Upcoming · No-date</b>. Each person's <b>tile scrolls on its own</b>, so a long list doesn't move the whole page. You can <b>tweak it here without ever touching the project files</b>: hit <span class="k">✎ add note</span> on any task to attach a design note, or type in the <b>+ task</b> box at the bottom of a lane to add an ad-hoc/general task (with an optional due date). These <b>save to a shared file, so every device sees them</b> (about 30 seconds to sync) — but they still <b>never change the workbook or the Projects tab</b>. <span class="k">✓ Show done</span> (highlights when on) reveals completed items. <b>📧 New:</b> when you add a task to someone's lane, that person automatically gets an <b>email</b> (task + due date + a link to the board) — as long as they have an email filled in on the <b>MRA Users</b> list.</p>
     <p><b>📊 Analytics at the bottom</b> show workload &amp; balance: <b>Workload balance</b> (open tasks per designer by urgency), <b>🥧 Share of load</b> (who holds what % of the work), <b>📈 Deadline load</b> (tasks due over the next 8 weeks), and <b>📅 Who's booked when</b> (a timeline bar per designer). All based on task counts pulled live from Projects.</p>
     <p>Each tile caps at <b>10 tasks</b> with a <span class="k">▾ Show all</span> button so the board stays tidy for a screenshot. The <span class="k">🖨</span> on a lane prints a <b>one-pager for that person</b>; <span class="k">🖨 Print board</span> (top) prints the <b>whole team on one landscape page</b> — everyone side by side, grouped by due date, with a share-of-load strip. And <span class="k">🍸 Napkin</span> mode flips the whole board (header included) into a fun bar-napkin look (cream cards, marker handwriting, MRA logo) — toggle back to clean anytime.</p></div>
 `;
@@ -2649,6 +2649,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"9.3", date:"2026-06-26", title:"✉️ Auto-email the assignee when a task is added", items:[
+    "<b>Project tasks:</b> when a new task is created and assigned to someone, they now get an automatic email (task · project · due date · notes + a link to the dashboard). Runs off the <b>MRA Users</b> list — the person needs an email there, and the assignee name has to match their name on the list.",
+    "<b>Design Team board:</b> adding an \"added here\" card for a designer now emails that person the same way. (Steve's lane maps to <b>Steve Kowalski</b> so the lookup matches the Users list.)" ] },
   { rev:"9.2", date:"2026-06-26", title:"📅 Design board: Next-2-Weeks calendar (with name filters)", items:[
     "New <b>Next 2 Weeks</b> calendar at the top of the Team Board's analytics — this week + next, with each task on its due date, colored by person.",
     "Each item shows the person's <b>first name + color dot</b> so you see who at a glance. <b>Click a name</b> (Steve, Sarah, Mark, Brandon…) to show/hide that person — all on by default. Today is highlighted; overdue items show red." ] },
@@ -8085,6 +8088,18 @@ function dtbPostRemote(){ if(!dtbShared()) return Promise.resolve();
   // no-cors can only send a "simple" content type — text/plain (same as the EOTM flow); application/json gets stripped.
   try{ return fetch(DESIGN_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},
     body:JSON.stringify({pin:DESIGN_PIN, json:JSON.stringify(dtbNorm(DTB))})}).catch(()=>{}); }catch(e){ return Promise.resolve(); } }
+// ---- Email the assignee when an 'added here' card is created (design board) ----
+// The board posts the WHOLE design file on every change, so there's no per-task "created" event for a flow to
+// watch. Instead, the moment a NEW general card is added we fire its {who,title,due} at a dedicated HTTP-triggered
+// flow ("MRA Design Email") that looks the person up in MRA Users and emails them. Empty URL = feature off (no-op).
+const DESIGN_EMAIL_URL='';   // paste the "MRA Design Email" flow's HTTP POST URL here to switch it on
+const DESIGN_EMAIL_ALIAS={'Steve K':'Steve Kowalski'};   // board lane label -> exact MRA Users "Name" so the email lookup matches
+function dtbNotifyNewTask(who, title, due){
+  if(!DESIGN_EMAIL_URL) return;
+  const name=DESIGN_EMAIL_ALIAS[who]||who||'';
+  try{ fetch(DESIGN_EMAIL_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},
+    body:JSON.stringify({pin:DESIGN_PIN, who:name, title:title||'', due:due||''})}).catch(()=>{}); }catch(e){}
+}
 // Apply a change everywhere: optimistic locally, then (if shared) re-fetch the latest, re-apply the SAME change
 // on top of it, and push back — so two people editing close together converge instead of clobbering.
 function dtbApply(mutator){
@@ -8138,7 +8153,8 @@ function dtbToggleExpand(name){ if(DTB_EXPAND.has(name)) DTB_EXPAND.delete(name)
 function dtbAddGen(who){ const sl=dtbSlug(who), ti=document.getElementById('dtbadd-'+sl), di=document.getElementById('dtbdate-'+sl);
   const title=((ti&&ti.value)||'').trim(); if(!title){ if(ti) ti.focus(); return; }
   const due=(di&&di.value)||'', id='g'+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36);
-  dtbApply(t=>{ if(!t.general.some(g=>g.id===id)) t.general.push({id, who, title, dueISO:due, note:'', done:false}); }); }
+  dtbApply(t=>{ if(!t.general.some(g=>g.id===id)) t.general.push({id, who, title, dueISO:due, note:'', done:false}); });
+  dtbNotifyNewTask(who, title, due); }
 function dtbDelGen(id){ if(typeof ensureAuth==='function' && !ensureAuth('delete a task')){ return; }   // deleting needs a login (Al / Megan / Rich…)
   if(!confirm('Delete this added task? (It only exists on the Design board — the project files are untouched.)')) return;
   if(DTB_EDIT.gen===id) DTB_EDIT={}; dtbApply(t=>{ t.general=t.general.filter(g=>g.id!==id); }); if(typeof dtbSyncAuth==='function') dtbSyncAuth(); }
