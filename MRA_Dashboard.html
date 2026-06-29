@@ -171,7 +171,9 @@
   .g-row.g-subrow .g-gutter{padding-left:32px}
   .g-row.g-subrow .g-lbl{font-weight:500; color:var(--muted); font-size:11px}
   .g-row.g-subrow2 .g-gutter{padding-left:50px}   /* a SUBTASK nests one level deeper under its parent task */
-  .g-row.g-haskids .g-lbl{font-weight:600; color:var(--txt)}   /* a parent task that has subtasks */
+  .g-row.g-haskids{background:rgba(45,212,191,.10)}   /* a parent task that has subtasks — teal tint so it stands out (milestones are gold) */
+  .g-row.g-haskids .g-gutter{box-shadow:inset 3px 0 0 var(--teal)}
+  .g-row.g-haskids .g-lbl{font-weight:700; color:var(--txt)}
   .gsubcaret{cursor:pointer; display:inline-block; width:13px; color:var(--muted)}
   .gsubcaret:hover{color:var(--txt)}
   /* phase / section header rows sit indented UNDER the project, tasks indent further under the phase (project › phase › task) */
@@ -631,6 +633,8 @@
   .petask-t{font-size:13px; line-height:1.3}
   .petask-m{font-size:11px; color:var(--muted); margin-top:2px}
   .petask.isdone .petask-t{text-decoration:line-through; color:var(--muted)}
+  .petask.petask-parent{background:rgba(45,212,191,.12); border-left:3px solid var(--teal); padding-left:7px}   /* parent task that has subtasks — teal (milestones are gold) */
+  .petask.petask-parent .petask-t{font-weight:700}
   .petask.ismile{background:rgba(245,158,11,.14); border-left:3px solid var(--amber); padding-left:7px}
   .petask.ismile .petask-t{font-weight:600}
   .petask.ismile .petask-t::before{content:"◆ "; color:var(--amber)}
@@ -2702,7 +2706,8 @@ const FLEETIO_HELP = `
 const CHANGELOG = [
   { rev:"9.6", date:"2026-06-29", title:"📑 Subtasks now nest on the Gantt (collapsible)", items:[
     "Subtasks now <b>tuck under their parent task on the Gantt</b> — indented, with a <b>▾/▸</b> caret on the parent to collapse or expand that sub-group (MS-Project style). Works on the Projects Gantt, the full-screen detail view, and the multi-project Expand view.",
-    "Driven by the same <b>Sub</b> flag as the editor — mark a task with an <b>x</b> in the Sub column (intake template) or set <b>“Subtask of”</b> in the editor, and it nests everywhere." ] },
+    "Driven by the same <b>Sub</b> flag as the editor — mark a task with an <b>x</b> in the Sub column (intake template) or set <b>“Subtask of”</b> in the editor, and it nests everywhere.",
+    "<b>Parent tasks stand out in teal</b> (the way milestones are gold) — on the Gantt, in the ✎ task editor, and in the downloaded Excel — so a task with a sub-group under it is easy to spot." ] },
   { rev:"9.5", date:"2026-06-26", title:"🔧 Subtasks (the “x” / nest-under) now work end-to-end", items:[
     "Fixed subtasks not nesting. The intake template's <b>Sub</b> column (put an <b>x</b> to tuck a task under the one above it, collapsible MS-Project style) now carries all the way through to the live board — both on <b>⬆ Upload Filled</b> and when you set <b>“Subtask of”</b> in the task editor.",
     "Background: the board reads from the SharePoint lists now, and the “x” was being dropped on the way in — so it never showed as a sub-group. It's wired through properly now." ] },
@@ -5139,7 +5144,7 @@ function renderProjTaskList(){
         ? `<span class="ttool reopen" ${idA} onclick="reopenProjTaskBtn(this)" title="Reopen">↩</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`
         : `<span class="ttool done" ${idA} onclick="completeProjTaskBtn(this)" title="Mark complete" style="color:var(--green)">✓</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`;
       const lead = (opt.caret!=null) ? `<span class="pesubcaret" onclick="togglePeSub(event,'${escA(opt.pkey)}')" title="Collapse / expand subtasks">${opt.caret}</span>` : (opt.sub?'<span class="pesubtick">›</span>':'');
-      return `<div class="petask${opt.sub?' petask-sub':''}${projIsDone(t)?' isdone':''}${/yes/i.test(t.ml||'')?' ismile':''}"><div class="petask-main"><div class="petask-t">${lead}${esc(t.t||'(task)')}</div>`+
+      return `<div class="petask${opt.sub?' petask-sub':''}${opt.caret!=null?' petask-parent':''}${projIsDone(t)?' isdone':''}${/yes/i.test(t.ml||'')?' ismile':''}"><div class="petask-main"><div class="petask-t">${lead}${esc(t.t||'(task)')}</div>`+
         (meta?`<div class="petask-m">${meta}</div>`:'')+`</div>`+
         `<div class="petask-r">${projStatusBadge(t)}<span class="petask-tools">${tools}</span></div></div>`;
     };
@@ -6086,17 +6091,23 @@ function downloadProjectXlsx(){
     // header row 6: dark fill, white bold
     const hdr=ws.getRow(6); hdr.font={bold:true,color:{argb:'FFFFFFFF'}};
     hdr.eachCell({includeEmpty:true},c=>{ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF23272E'}}; });
-    // data rows: gold for milestones, light-grey zebra otherwise
+    // Which tasks are PARENTS (have subtasks under them): explicit t.parent, or a non-sub row
+    // immediately followed by a sub row (adjacency). Shaded teal so they stand out (milestones are gold).
+    const _tarr=(p.tasks||[]); const _parentSet=new Set();
+    { const _idMap={}; _tarr.forEach(t=>{ if(t.id!=null&&t.id!=='') _idMap[String(t.id)]=t; });
+      _tarr.forEach(t=>{ const pid=(t.parent!=null&&String(t.parent)!=='')?String(t.parent):''; if(pid&&_idMap[pid]) _parentSet.add(_idMap[pid]); });
+      _tarr.forEach((t,i)=>{ if(!t.sub && _tarr[i+1] && _tarr[i+1].sub) _parentSet.add(t); }); }
+    // data rows: gold for milestones, teal for parent tasks, light-grey zebra otherwise
     let ri=0;
-    (p.tasks||[]).forEach(t=>{
+    _tarr.forEach(t=>{
       const ml=(t.ml===true||t.ml==='Yes'||/^y/i.test(String(t.ml||'')))?"Yes":"";
       const row=ws.addRow([ p.name, t.phase||"", t.type||"", t.t||"", t.startISO||"", t.finISO||"",
                  (t.dur!=null&&t.dur!==''?String(t.dur):""), t.who||"", t.st||"", pm, ml, t.cm||"",
                  (t.id!=null?String(t.id):""), t.pred||"", t.sub?"x":"" ]);
-      const isMs=(ml==='Yes');
-      const fill=isMs?'FFFFF1C2':(ri%2?'FFF2F4F7':null);
+      const isMs=(ml==='Yes'), isParent=(!isMs && _parentSet.has(t));
+      const fill=isMs?'FFFFF1C2':(isParent?'FFCCFBF1':(ri%2?'FFF2F4F7':null));
       if(fill) row.eachCell({includeEmpty:true},c=>{ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:fill}}; });
-      if(isMs) row.font={bold:true};
+      if(isMs||isParent) row.font={bold:true};
       ri++;
     });
     ws.autoFilter={ from:{row:6,column:1}, to:{row:6+(p.tasks||[]).length, column:15} };   // filter dropdowns on the header
