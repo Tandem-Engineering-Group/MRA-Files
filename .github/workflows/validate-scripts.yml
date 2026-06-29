@@ -1,0 +1,61 @@
+name: Validate scripts
+
+# Guard against the class of bug that froze the board on 2026-06-19:
+#  - a PowerShell SYNTAX error shipped in Export-Data.ps1 (broke the export)
+#  - caused by NON-ASCII characters (em-dashes) that Windows PowerShell 5.1
+#    mis-reads, breaking the parser.
+# This runs a real PowerShell parse on every .ps1 + enforces ASCII-only .ps1,
+# so a broken/encoding-unsafe script can never be committed or sent again.
+
+on:
+  push:
+    paths: ['**/*.ps1', '**/*.ts', 'MRA_Dashboard.html', '.github/workflows/validate-scripts.yml']
+  pull_request:
+    paths: ['**/*.ps1', '**/*.ts', 'MRA_Dashboard.html']
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PowerShell syntax check (.ps1)
+        shell: pwsh
+        run: |
+          $bad = $false
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errs) | Out-Null
+            if ($errs) {
+              $bad = $true
+              Write-Host "::error file=$($_.Name)::Syntax errors:"
+              $errs | ForEach-Object { Write-Host "  line $($_.Extent.StartLineNumber): $($_.Message)" }
+            } else {
+              Write-Host "OK (syntax): $($_.Name)"
+            }
+          }
+          if ($bad) { Write-Host "::error::PowerShell syntax check FAILED"; exit 1 }
+
+      - name: ASCII-only check (.ps1 must be pure ASCII)
+        shell: bash
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            if grep -nP '[^\x00-\x7F]' "$f"; then
+              echo "::error file=$f::Non-ASCII characters found (Windows PowerShell 5.1 mis-reads these and breaks parsing). Use ASCII only in .ps1."
+              fail=1
+            fi
+          done < <(find . -name '*.ps1')
+          if [ "$fail" -eq 0 ]; then echo "OK: all .ps1 are pure ASCII"; fi
+          exit $fail
+
+      - name: Dashboard JS sanity (MRA_Dashboard.html)
+        if: ${{ hashFiles('MRA_Dashboard.html') != '' }}
+        shell: bash
+        run: |
+          node -e '
+            const fs=require("fs");const s=fs.readFileSync("MRA_Dashboard.html","utf8");
+            const m=s.match(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)||[];let e=0;
+            m.forEach(b=>{const c=b.replace(/^<script[^>]*>/i,"").replace(/<\/script>$/i,"");if(!c.trim())return;try{new Function(c);}catch(x){e++;console.log("::error::JS parse error:",x.message);}});
+            if(e){process.exit(1);} console.log("OK: dashboard JS parses");'

@@ -61,6 +61,11 @@ def ff(row, *keys):
 def is_yes(v):
     return str(v).strip().lower() in ('yes','y','true','1')
 
+def is_sub(v):
+    """Subtask flag. The workbook + intake template mark subtasks with an 'x'
+    (MS-Project-style nest-under-the-row-above); also accept yes/true/1."""
+    return str(v).strip().lower() in ('x','yes','y','true','1')
+
 def as_num(v):
     try:
         return float(str(v).strip())
@@ -242,7 +247,7 @@ def main():
         s_iso    = iso_or_none(ff(it, P_START))
         f_iso    = iso_or_none(ff(it, P_FINISH))
         p_mile   = 'Yes' if is_yes(ff(it, P_MILE)) else 'No'   # mirror Export-Data: non-milestone → No
-        p_sub    = is_yes(ff(it, P_SUB))
+        p_sub    = is_sub(ff(it, P_SUB))
 
         o = pmap.get(name)
         if o is None:

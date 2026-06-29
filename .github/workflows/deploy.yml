@@ -7,7 +7,25 @@ on:
       - 'MRA_Dashboard.html'
       - 'data.js'
       - 'index.html'
-  workflow_dispatch:   # allows manual trigger from GitHub UI
+      - 'preview.html'
+      - 'MRA_Project_Intake_Template.xlsx'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = AzCopy token; cleanup = delete temp preview.html blob; listscand = build data.js FROM the Lists (validation only, no publish); listspreview = publish a side-by-side Lists-built board at /preview-lists.html (does NOT touch the live board); listspreview-cleanup = remove that preview'
+        type: choice
+        options:
+          - preview
+          - live
+          - data
+          - sas
+          - cleanup
+          - listscand
+          - listspreview
+          - listspreview-cleanup
+          - ganttpreview
+          - ganttpreview-cleanup
+        default: preview
 
 jobs:
   deploy:
@@ -15,17 +33,299 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Upload files to Azure blob storage
-        uses: azure/CLI@v2
+      # listscand: build a CANDIDATE data.js straight from the SharePoint Lists — via the
+      # "MRA Lists to JSON" Power Automate flow, which drops lists.json into the private
+      # "pipeline" blob (NO Graph app / NO IT). Downloads it, runs build_from_lists.py,
+      # prints lists-vs-live counts. Validation ONLY — uploads an artifact, never publishes.
+      - name: Build candidate data.js from the Lists blob (no publish)
+        if: ${{ inputs.mode == 'listscand' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage container create --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --name pipeline --only-show-errors >/dev/null
+          az storage blob download \
+            --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name pipeline --name lists.json --file lists.json --only-show-errors
+          if [ ! -f lists.json ]; then echo "::error::lists.json not in 'pipeline' container — is the MRA Lists to JSON flow's Create blob step running?"; exit 1; fi
+          echo "lists.json bytes: $(wc -c < lists.json)"
+          python3 build_from_lists.py --lists lists.json --base data.js --out data.fromlists.js
+          echo "=== candidate (Lists) vs live (workbook) ==="
+          python3 -c "import json; load=lambda p:(lambda r:json.loads(r[r.index('{'):r.rindex('}')+1]))(open(p,encoding='utf-8').read()); C=load('data.fromlists.js'); D=load('data.js'); [print('  %s: lists=%d  live=%d'%(k,len(C.get(k,[])),len(D.get(k,[])))) for k in ['jobs','projects','teamTasks','users','holidays']]"
+
+      - name: Upload candidate data.js artifact
+        if: ${{ inputs.mode == 'listscand' }}
+        uses: actions/upload-artifact@v4
         with:
-          azcliversion: latest
-          inlineScript: |
+          name: data-fromlists
+          path: data.fromlists.js
+          retention-days: 3
+
+      # listspreview: publish a SIDE-BY-SIDE Lists-built board so Rich can eyeball it next to
+      # the live one BEFORE any cutover. Builds data.lists.js from the pipeline/lists.json blob,
+      # makes preview-lists.html = the live dashboard pointed at data.lists.js (+ a PREVIEW banner),
+      # and uploads BOTH to $web. It never touches data.js / index.html / MRA_Dashboard.html.
+      - name: Publish the Lists-built side-by-side preview
+        if: ${{ inputs.mode == 'listspreview' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage container create --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --name pipeline --only-show-errors >/dev/null
+          az storage blob download --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name pipeline --name lists.json --file lists.json --only-show-errors
+          if [ ! -f lists.json ]; then echo "::error::lists.json not in 'pipeline' container — run the MRA Lists to JSON flow first."; exit 1; fi
+          # inherit fleet/logistics from the LIVE data.js so the preview's FLEET tab is current
+          curl -s "https://mrashopdash.z13.web.core.windows.net/data.js?cb=$GITHUB_RUN_ID" -o base.live.js || cp data.js base.live.js
+          python3 build_from_lists.py --lists lists.json --base base.live.js --out data.lists.js
+          BANNER="<div style='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b45309;color:#fff;text-align:center;font:700 12px Segoe UI,Arial,sans-serif;padding:4px 8px'>PREVIEW build #${GITHUB_RUN_NUMBER} · reads + writes the SharePoint Lists — edits here do NOT touch the live board</div>"
+          # Build the preview: point it at data.lists.js, add the banner, AND flip USE_LISTS_WRITE=true
+          # so edits on the preview go to the Lists (MRA Lists Write 2) — the live board stays dormant.
+          sed -e "s|<script src=\"data.js\"></script>|${BANNER}<script src=\"data.lists.js\"></script>|" \
+              -e "s|const USE_LISTS_WRITE = false;|const USE_LISTS_WRITE = true;|" \
+              MRA_Dashboard.html > preview-lists2.html
+          grep -q "const USE_LISTS_WRITE = true;" preview-lists2.html || { echo "::error::failed to enable USE_LISTS_WRITE in the preview"; exit 1; }
+          az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name data.lists.js --file data.lists.js \
+            --content-type 'application/javascript' --content-cache-control 'no-cache, must-revalidate' --overwrite --only-show-errors
+          az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name preview-lists2.html --file preview-lists2.html \
+            --content-type 'text/html' --content-cache-control 'no-cache, must-revalidate' --overwrite --only-show-errors
+          echo "PREVIEW LIVE (build #${GITHUB_RUN_NUMBER}) → https://mrashopdash.z13.web.core.windows.net/preview-lists2.html"
+
+      - name: Remove the Lists-built preview
+        if: ${{ inputs.mode == 'listspreview-cleanup' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          for f in preview-lists.html preview-lists2.html data.lists.js; do
+            az storage blob delete --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+              --container-name '$web' --name "$f" --only-show-errors || true
+          done
+          echo "Removed preview-lists*.html + data.lists.js from the live site."
+
+      # ganttpreview: publish MRA_Dashboard.html as /preview-gantt.html so Rich can VERIFY the new
+      # task-level Projects Gantt before it goes live. It reads the LIVE data.js (relative) and does
+      # NOT touch the live board (index.html / MRA_Dashboard.html). Build # is stamped in the banner.
+      - name: Publish the Projects-Gantt preview
+        if: ${{ inputs.mode == 'ganttpreview' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          BANNER="<div style='position:fixed;top:0;left:0;right:0;z-index:99999;background:#2563eb;color:#fff;text-align:center;font:700 12px Segoe UI,Arial,sans-serif;padding:4px 8px'>PREVIEW build #${GITHUB_RUN_NUMBER} · Projects-Gantt task-level test — reads the LIVE data, does NOT change the live board</div>"
+          # turn the task-level Gantt ON for the preview (it's dormant/false on the live board)
+          sed -e "s|<script src=\"data.js\"></script>|${BANNER}<script src=\"data.js\"></script>|" \
+              -e "s|const GANTT_TASKLEVEL=false;|const GANTT_TASKLEVEL=true;|" \
+              MRA_Dashboard.html > preview-gantt.html
+          grep -q 'PREVIEW build #' preview-gantt.html || { echo "::error::failed to stamp the preview banner"; exit 1; }
+          grep -q 'const GANTT_TASKLEVEL=true;' preview-gantt.html || { echo "::error::failed to enable GANTT_TASKLEVEL in the preview"; exit 1; }
+          az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name preview-gantt.html --file preview-gantt.html \
+            --content-type 'text/html' --content-cache-control 'no-cache, must-revalidate' --overwrite --only-show-errors
+          echo "PREVIEW LIVE (build #${GITHUB_RUN_NUMBER}) → https://mrashopdash.z13.web.core.windows.net/preview-gantt.html"
+
+      - name: Remove the Projects-Gantt preview
+        if: ${{ inputs.mode == 'ganttpreview-cleanup' }}
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage blob delete --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name 'preview-gantt.html' --only-show-errors || true
+          echo "Removed preview-gantt.html from the live site."
+
+      # Generate a long-lived, write-scoped SAS for AzCopy on a no-admin PC.
+      # Writes the full upload target URL to an artifact (masked in logs).
+      - name: Generate AzCopy upload token
+        if: ${{ inputs.mode == 'sas' }}
+        run: |
+            EXPIRY=$(date -u -d "+730 days" '+%Y-%m-%dT%H:%MZ')
+            SAS=$(az storage container generate-sas \
+              --account-name mrashopdash \
+              --account-key "$AZURE_STORAGE_KEY" \
+              --name '$web' \
+              --permissions rcwl \
+              --expiry "$EXPIRY" \
+              -o tsv)
+            echo "::add-mask::$SAS"
+            mkdir -p out
+            printf 'https://mrashopdash.blob.core.windows.net/$web/data.js?%s' "$SAS" > out/azure-target.txt
+            echo "Generated azure-target.txt (token valid until $EXPIRY). Value is masked in logs."
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      - name: Upload token artifact
+        if: ${{ inputs.mode == 'sas' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-target
+          path: out/azure-target.txt
+          retention-days: 1
+
+      # Always safe: preview.html is a standalone file, separate from the live board.
+      - name: Upload preview.html
+        if: ${{ hashFiles('preview.html') != '' }}
+        run: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'preview.html' \
+              --file preview.html \
+              --content-type 'text/html' \
+              --content-cache-control 'no-cache, must-revalidate' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Logo — uploaded whenever logo.png exists in the repo (it's a static asset).
+      - name: Upload logo.png
+        if: ${{ hashFiles('logo.png') != '' }}
+        run: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'logo.png' \
+              --file logo.png \
+              --content-type 'image/png' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Full logo (with tagline, light caption) for the footer.
+      - name: Upload logo-full-dark.png
+        if: ${{ hashFiles('logo-full-dark.png') != '' }}
+        run: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'logo-full-dark.png' \
+              --file logo-full-dark.png \
+              --content-type 'image/png' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Employee-of-the-Month photo (wall view). Swap monthly — replace eotm.png/.jpg.
+      - name: Upload eotm.png
+        if: ${{ hashFiles('eotm.png') != '' }}
+        run: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'eotm.png' \
+              --file eotm.png \
+              --content-type 'image/png' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+      - name: Upload eotm.jpg
+        if: ${{ hashFiles('eotm.jpg') != '' }}
+        run: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'eotm.jpg' \
+              --file eotm.jpg \
+              --content-type 'image/jpeg' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Project intake template — static asset, uploaded whenever it exists in the repo.
+      - name: Upload MRA_Project_Intake_Template.xlsx
+        if: ${{ hashFiles('MRA_Project_Intake_Template.xlsx') != '' }}
+        run: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'MRA_Project_Intake_Template.xlsx' \
+              --file MRA_Project_Intake_Template.xlsx \
+              --content-type 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # MRA Product Catalogue — standalone app hosted in /catalogue/ (its logo.png + JSONs live there, so
+      # they don't clash with the dashboard's root assets). Linked from the dashboard ☰ Menu.
+      - name: Upload Product Catalogue (/catalogue/)
+        if: ${{ hashFiles('catalogue/index.html') != '' }}
+        run: |
+            az storage blob upload --account-name mrashopdash --container-name '$web' \
+              --name 'catalogue/index.html' --file catalogue/index.html --content-type 'text/html' \
+              --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+            for f in mra-product-history.json mra-reference-lists.json mra-allowed-units.json; do
+              az storage blob upload --account-name mrashopdash --container-name '$web' \
+                --name "catalogue/$f" --file "catalogue/$f" --content-type 'application/json' \
+                --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+            done
+            az storage blob upload --account-name mrashopdash --container-name '$web' \
+              --name 'catalogue/logo.png' --file catalogue/logo.png --content-type 'image/png' \
+              --overwrite --auth-mode key --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Cleanup — delete the temporary preview.html blob from the live site.
+      - name: Delete preview.html
+        if: ${{ inputs.mode == 'cleanup' }}
+        run: |
+            az storage blob delete \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'preview.html' \
+              --auth-mode key \
+              --only-show-errors
+            echo "Deleted preview.html from the live site."
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # data.js only — for when the local Export-Data.ps1 can't push to Azure itself.
+      # Uploads the repo's current data.js (replace it first, then dispatch mode=data).
+      - name: Upload data.js
+        if: ${{ inputs.mode == 'data' }}
+        run: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'data.js' \
+              --file data.js \
+              --content-type 'application/javascript' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # Live board shell (HTML) — only on a push to main, or an explicit mode=live dispatch.
+      # data.js is intentionally NOT uploaded here: it is owned by the local Export-Data.ps1,
+      # which regenerates it from the workbook and pushes it to Azure on a schedule.
+      - name: Upload live board files
+        if: ${{ github.event_name == 'push' || inputs.mode == 'live' }}
+        run: |
             az storage blob upload \
               --account-name mrashopdash \
               --container-name '$web' \
               --name 'index.html' \
               --file index.html \
               --content-type 'text/html' \
+              --content-cache-control 'no-cache, must-revalidate' \
               --overwrite \
               --auth-mode key \
               --only-show-errors
@@ -36,16 +336,7 @@ jobs:
               --name 'MRA_Dashboard.html' \
               --file MRA_Dashboard.html \
               --content-type 'text/html' \
-              --overwrite \
-              --auth-mode key \
-              --only-show-errors
-
-            az storage blob upload \
-              --account-name mrashopdash \
-              --container-name '$web' \
-              --name 'data.js' \
-              --file data.js \
-              --content-type 'application/javascript' \
+              --content-cache-control 'no-cache, must-revalidate' \
               --overwrite \
               --auth-mode key \
               --only-show-errors
