@@ -585,6 +585,7 @@
   .ttool.edit{color:#7aa2d6} .ttool.edit:hover{border-color:var(--blue)}
   .ttool.del{color:#fca5a5} .ttool.del:hover{border-color:var(--red)}
   .ttool.reopen{color:var(--amber)} .ttool.reopen:hover{border-color:var(--amber)}
+  .ttool.subt{color:var(--teal)} .ttool.subt:hover{border-color:var(--teal)}   /* make subtask / make main task */
   body.closemode .ttool{display:inline-block}
   /* "Add leave" button — only visible in Edit mode (like the other edit affordances) */
   .leaveadd{display:none; margin-left:8px; background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:3px 9px; font-size:11px; font-weight:700; cursor:pointer; font-family:inherit}
@@ -2704,6 +2705,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"9.8", date:"2026-06-29", title:"↳ One-click make-subtask / make-main-task in the editor", items:[
+    "In <b>✎ Edit Project Tasks</b>, every task now has a <b>↳ / ↰</b> button: <b>↳</b> tucks it under the task above it (makes it a subtask), <b>↰</b> pops it back out to a main task. One click, saves that row instantly — no Excel round-trip.",
+    "This is the reliable way to restructure subtasks. Note: nesting is by this flag + the task's <b>position</b> (it tucks under the nearest main task above it) — the old “Subtask of” dropdown didn't reflect that and was misleading, so use the ↳/↰ button instead." ] },
   { rev:"9.7", date:"2026-06-29", title:"🔁 Re-uploading a project now replaces it cleanly (even with repeated task names)", items:[
     "Fixed <b>⬆ Upload Filled</b> not applying changes on projects that reuse the same task name a lot (e.g. Medtronic's many “Review, Comment and Final Approval” / “Modifications, If Required” rows). The replace step now clears each old row by its <b>unique ID</b> instead of by name, so edited subtask structure lands reliably.",
     "If a re-upload ever seemed to “do nothing” on a big project, this was why — it's fixed now." ] },
@@ -5143,9 +5147,10 @@ function renderProjTaskList(){
       const bud=(t.bud!=null)?('$'+Number(t.bud).toLocaleString()):'';
       const meta=[ t.who?esc(t.who):'', dates, est, bud, predT?('after: '+esc(predT.t)):'', /yes/i.test(t.ml||'')?'◆ milestone':'' ].filter(Boolean).join(' · ');
       const idA=`data-id="${escA(projTaskHandle(t))}"`;   // real TaskID, or "s<_id>" so id-less rows are still editable/closable
+      const subBtn=`<span class="ttool subt" ${idA} onclick="toggleProjTaskSub(this)" title="${t.sub?'Make this a MAIN task (move it out from under its parent)':'Make this a SUBTASK (tuck it under the task above it)'}">${t.sub?'↰':'↳'}</span>`;
       const tools=projIsDone(t)
-        ? `<span class="ttool reopen" ${idA} onclick="reopenProjTaskBtn(this)" title="Reopen">↩</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`
-        : `<span class="ttool done" ${idA} onclick="completeProjTaskBtn(this)" title="Mark complete" style="color:var(--green)">✓</span><span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`;
+        ? `<span class="ttool reopen" ${idA} onclick="reopenProjTaskBtn(this)" title="Reopen">↩</span>${subBtn}<span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`
+        : `<span class="ttool done" ${idA} onclick="completeProjTaskBtn(this)" title="Mark complete" style="color:var(--green)">✓</span>${subBtn}<span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`;
       const lead = (opt.caret!=null) ? `<span class="pesubcaret" onclick="togglePeSub(event,'${escA(opt.pkey)}')" title="Collapse / expand subtasks">${opt.caret}</span>` : (opt.sub?'<span class="pesubtick">›</span>':'');
       return `<div class="petask${opt.sub?' petask-sub':''}${opt.caret!=null?' petask-parent':''}${projIsDone(t)?' isdone':''}${/yes/i.test(t.ml||'')?' ismile':''}"><div class="petask-main"><div class="petask-t">${lead}${esc(t.t||'(task)')}</div>`+
         (meta?`<div class="petask-m">${meta}</div>`:'')+`</div>`+
@@ -5577,6 +5582,24 @@ function delProjTaskBtn(el){
     r.p.tasks=r.p.tasks.filter(x=>x!==r.t); oRecomputeProject(r.p);
     renderProjTaskList(); oApply();
   }).catch(()=>{ el.textContent="🗑"; el.style.pointerEvents=""; alert("Couldn't reach the service — try again."); });
+}
+// One-click flip between SUBTASK and MAIN task. Nesting on the board is by this flag + position
+// (a subtask tucks under the nearest MAIN task above it) — NOT the "Subtask of" dropdown. This
+// writes the single row by its id (reliable), so it's the right way to restructure (not a re-upload).
+function toggleProjTaskSub(el){
+  if(!ensureAuth("change a task's subtask setting")) return;
+  const id=el.dataset.id, r=projRowFind(id);
+  if(!r.t){ alert("Couldn't find that task."); return; }
+  const t=r.t, p=r.p, makeSub=!t.sub;
+  el.style.pointerEvents="none"; el.style.opacity=".5";
+  const payload={ action:"editProjectTask", project:p.name, pin:CLOSE_PIN, user:CURRENT_USER,
+    id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t,
+    phase:t.phase||"", type:t.type||"", assigned:t.who||"", status:t.st||"",
+    start:t.startISO||"", finish:t.finISO||"", pred:t.pred||"", milestone:t.ml||"",
+    parentId:"", sub:(makeSub?"x":""),
+    estDays:(t.eD!=null?t.eD:""), estHours:(t.eH!=null?t.eH:""), budget:(t.bud!=null?t.bud:""), comments:t.cm||"" };
+  shopWrite(payload).then(()=>{ t.sub=makeSub; t.parent=""; oRecomputeProject(p); renderProjTaskList(); oApply(); })
+    .catch(()=>{ el.style.pointerEvents=""; el.style.opacity=""; alert("Couldn't reach the service — try again."); });
 }
 function ptMoveCopy(isMove){
   if(window._ptId==null) return;
