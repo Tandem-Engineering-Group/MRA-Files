@@ -170,6 +170,10 @@
   .g-bar.done{opacity:.6}
   .g-row.g-subrow .g-gutter{padding-left:32px}
   .g-row.g-subrow .g-lbl{font-weight:500; color:var(--muted); font-size:11px}
+  .g-row.g-subrow2 .g-gutter{padding-left:50px}   /* a SUBTASK nests one level deeper under its parent task */
+  .g-row.g-haskids .g-lbl{font-weight:600; color:var(--txt)}   /* a parent task that has subtasks */
+  .gsubcaret{cursor:pointer; display:inline-block; width:13px; color:var(--muted)}
+  .gsubcaret:hover{color:var(--txt)}
   /* phase / section header rows sit indented UNDER the project, tasks indent further under the phase (project › phase › task) */
   .g-row.g-phaserow .g-gutter{padding-left:15px; cursor:pointer}
   .g-row.g-phaserow{background:rgba(255,255,255,.028)}
@@ -2422,6 +2426,53 @@ function ganttTaskSubRow(t,p){ const today=(window.MRA_DATA||{}).todayISO||'';
     pct:(hasBar&&!done&&tp!=null&&tp>0&&tp<100)?tp:undefined,
     milestones:(isMs&&mdate)?[{name:t.t,dateISO:mdate}]:[],
     barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }; }
+// ---- Subtask nesting on the Gantt (mirrors the ✎ editor) ------------------------------------
+// Group a phase's tasks into [{head, subs}] units so children tuck under their parent task,
+// collapsible. A task is a child two ways: explicit t.parent (a Task ID), or legacy adjacency
+// (t.sub with no resolvable parent → nests under the nearest non-sub above it). Pass the tasks in
+// ORIGINAL array order (parent before its children); top-level units are re-sorted by Order/date.
+const GSUB_CLOSED=new Set();   // collapsed subtask groups on the Gantt, key = proj|phase|head
+function toggleGSub(key){ key=String(key||''); if(GSUB_CLOSED.has(key)) GSUB_CLOSED.delete(key); else GSUB_CLOSED.add(key);
+  if(window.MRA_DATA){ if(typeof renderProjects==='function') renderProjects(window.MRA_DATA);
+    const fs=document.getElementById('ganttFS'); if(fs&&fs.classList.contains('show')&&typeof renderGanttFS==='function') renderGanttFS(); } }
+function ganttSubUnits(tasks){
+  const g=(tasks||[]).slice();
+  const gIds={}; g.forEach(t=>{ if(t.id!=null&&t.id!=='') gIds[String(t.id)]=t; });
+  const parentOf=t=>{ const pid=(t.parent!=null&&String(t.parent)!=='')?String(t.parent):''; return (pid&&gIds[pid]&&pid!==String(t.id))?pid:''; };
+  const childArr={}, explicitChild=new Set();
+  g.forEach(t=>{ const pid=parentOf(t); if(pid){ (childArr[pid]=childArr[pid]||[]).push(t); explicitChild.add(t); } });
+  const units=[]; let i=0;
+  while(i<g.length){ const t=g[i];
+    if(explicitChild.has(t)){ i++; continue; }                  // emitted under its explicit parent below
+    if(t.sub){ units.push({head:t,subs:[],orphan:true}); i++; continue; }   // leading orphan sub → flat
+    const subs=[]; let j=i+1; while(j<g.length && g[j].sub && !explicitChild.has(g[j])){ subs.push(g[j]); j++; }
+    const ec=childArr[String(t.id)]; if(ec) ec.forEach(s=>subs.push(s));
+    units.push({head:t,subs}); i=j;
+  }
+  { const seen=new Set(); units.forEach(u=>{ seen.add(u.head); (u.subs||[]).forEach(s=>seen.add(s)); });
+    g.forEach(t=>{ if(!seen.has(t)) units.push({head:t,subs:[],orphan:!!t.sub}); }); }   // safety: never drop a task
+  const dk=t=>(t.startISO||t.finISO||'9999-99-99');
+  units.sort((a,b)=>(projOrdKey(a.head)-projOrdKey(b.head)) || dk(a.head).localeCompare(dk(b.head)));
+  return units;
+}
+// Push a phase's tasks WITH subtask nesting into the gantt rows[]. rowFn(t)->base row; a head with
+// children gets a ▾/▸ caret (click toggles just that group); children indent (g-subrow2) + hide when
+// collapsed. visFn(row)->bool gates window visibility (pass null to push every row, e.g. detail view).
+function ganttPushTaskUnits(rows, tasks, rowFn, projName, ph, visFn){
+  const vis=visFn||(()=>true);
+  ganttSubUnits(tasks).forEach(u=>{
+    const head=rowFn(u.head);
+    const subRows=(u.subs||[]).map(s=>rowFn(s)).filter(Boolean);
+    if(head && subRows.length){
+      const skey=projName+'|'+ph+'|'+(u.head.id!=null&&u.head.id!==''?u.head.id:(u.head.t||''));
+      const closed=GSUB_CLOSED.has(skey);
+      head.caret=`<span class="gsubcaret" onclick="event.stopPropagation();toggleGSub('${escJsAttr(skey)}')" title="Collapse / expand subtasks">${closed?'▸':'▾'}</span>`;
+      head.cls=(head.cls?head.cls+' ':'')+'g-haskids';
+      if(vis(head)) rows.push(head);
+      if(!closed) subRows.forEach(sr=>{ sr.cls=(sr.cls?sr.cls+' ':'')+'g-subrow2'; if(vis(sr)) rows.push(sr); });
+    } else if(head && vis(head)) rows.push(head);
+  });
+}
 // Row order for the Projects Gantt (operates on project objects). Start date is the default.
 function projSortCmp(a,b){
   const today=(window.MRA_DATA&&window.MRA_DATA.todayISO)||'';
@@ -2649,6 +2700,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"9.6", date:"2026-06-29", title:"📑 Subtasks now nest on the Gantt (collapsible)", items:[
+    "Subtasks now <b>tuck under their parent task on the Gantt</b> — indented, with a <b>▾/▸</b> caret on the parent to collapse or expand that sub-group (MS-Project style). Works on the Projects Gantt, the full-screen detail view, and the multi-project Expand view.",
+    "Driven by the same <b>Sub</b> flag as the editor — mark a task with an <b>x</b> in the Sub column (intake template) or set <b>“Subtask of”</b> in the editor, and it nests everywhere." ] },
   { rev:"9.5", date:"2026-06-26", title:"🔧 Subtasks (the “x” / nest-under) now work end-to-end", items:[
     "Fixed subtasks not nesting. The intake template's <b>Sub</b> column (put an <b>x</b> to tuck a task under the one above it, collapsible MS-Project style) now carries all the way through to the live board — both on <b>⬆ Upload Filled</b> and when you set <b>“Subtask of”</b> in the task editor.",
     "Background: the board reads from the SharePoint lists now, and the “x” was being dropped on the way in — so it never showed as a sub-group. It's wired through properly now." ] },
@@ -6940,8 +6994,7 @@ function renderProjects(D){
             pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
             cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
             gutterClick:`togglePhase('${escJsAttr(p.name)}','${escJsAttr(ph)}')` });
-          if(open){ tks.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')))
-            .forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && (sr.noBar || barGeom(sr.startISO,sr.endISO,win))) rows.push(sr); }); }
+          if(open){ ganttPushTaskUnits(rows, tks, t=>ganttTaskSubRow(t,p), p.name, ph, r=>r.noBar || barGeom(r.startISO,r.endISO,win)); }
         });
       }
     });
@@ -9662,10 +9715,13 @@ function renderGanttFS(){
             pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
             cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
             gutterClick:`togglePhaseFS('${escJsAttr(ph)}')` });
-          tks.forEach(t=>{ const isMs=/yes/i.test(t.ml||'');
-            if(!(open || isMs)) return;   // tasks-level/open phase → all tasks · phases-level → milestones only
-            const r=isMs?msRow(t):taskRow(t);
-            r.cls=/\bg-subrow\b/.test(r.cls||'')?r.cls:((r.cls?r.cls+' ':'')+'g-subrow'); rows.push(r); });   // indent under the phase header
+          const _rowFn=t=>{ const r=/yes/i.test(t.ml||'')?msRow(t):taskRow(t);
+            r.cls=/\bg-subrow\b/.test(r.cls||'')?r.cls:((r.cls?r.cls+' ':'')+'g-subrow'); return r; };   // indent under the phase header
+          if(open){   // open phase → every task, with SUBTASKS nested under their parent (original order preserves adjacency)
+            ganttPushTaskUnits(rows, tks.slice().sort((a,b)=>_pix.get(a)-_pix.get(b)), _rowFn, p.name, ph, null);
+          } else {    // collapsed phase (level 2) → just the milestone ◆s, flat
+            tks.forEach(t=>{ if(/yes/i.test(t.ml||'')) rows.push(_rowFn(t)); });
+          }
         });
       }
     } else {
@@ -9795,8 +9851,7 @@ function renderGanttFS(){
             pct:(roll.pct>0&&roll.pct<100)?roll.pct:undefined, done:(roll.n>0&&roll.done===roll.n), color:'#64748b',
             cls:'g-phaserow', caret:`<span class="gcaret">${open?'▾':'▸'}</span>`,
             gutterClick:`togglePhasePS('${escJsAttr(p.name)}','${escJsAttr(ph)}')` });
-          if(open){ tks.slice().sort((a,b)=>String(a.startISO||a.finISO||'9999').localeCompare(String(b.startISO||b.finISO||'9999')))
-            .forEach(t=>{ const sr=ganttTaskSubRow(t,p); if(sr && (sr.noBar || barGeom(sr.startISO,sr.endISO,win))) rows.push(sr); }); }
+          if(open){ ganttPushTaskUnits(rows, tks, t=>ganttTaskSubRow(t,p), p.name, ph, r=>r.noBar || barGeom(r.startISO,r.endISO,win)); }
         });
       } else if(exp){
         (p.milestones||[]).slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')).forEach(m=>{
