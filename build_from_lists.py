@@ -143,11 +143,31 @@ def main():
 
     with open(args.lists, encoding='utf-8') as fh:
         L = json.load(fh)
-    jobs_in    = L.get('jobs', []) or []
-    shop_in    = L.get('shopTasks', []) or []
-    proj_in    = L.get('projectTasks', []) or []
-    users_in   = L.get('users', []) or []
-    hol_in     = L.get('holidays', []) or []
+
+    def dedup_by_id(rows):
+        """Drop duplicate list items by SharePoint item Id. The 'MRA Lists to JSON'
+        Get-items pagination can return the same row twice when the list is being
+        written during the read, which used to inflate the board (e.g. Medtronic
+        showing 195 instead of its true count). Keep first occurrence; rows without
+        an Id pass through untouched."""
+        seen, out, dropped = set(), [], 0
+        for it in (rows or []):
+            rid = it.get('ID', it.get('id'))
+            if rid is None:
+                out.append(it); continue
+            if rid in seen:
+                dropped += 1; continue
+            seen.add(rid); out.append(it)
+        return out, dropped
+
+    jobs_in,  d_j = dedup_by_id(L.get('jobs', []))
+    shop_in,  d_s = dedup_by_id(L.get('shopTasks', []))
+    proj_in,  d_p = dedup_by_id(L.get('projectTasks', []))
+    users_in, d_u = dedup_by_id(L.get('users', []))
+    hol_in,   d_h = dedup_by_id(L.get('holidays', []))
+    if (d_j or d_s or d_p or d_u or d_h):
+        print("  deduped duplicate list rows: jobs=%d shop=%d projTasks=%d users=%d hol=%d"
+              % (d_j, d_s, d_p, d_u, d_h), file=sys.stderr)
 
     # --- Shop Tasks grouped by project (normalized) --------------------------
     shop_by_proj = {}
