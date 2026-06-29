@@ -2649,6 +2649,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"9.5", date:"2026-06-26", title:"🔧 Subtasks (the “x” / nest-under) now work end-to-end", items:[
+    "Fixed subtasks not nesting. The intake template's <b>Sub</b> column (put an <b>x</b> to tuck a task under the one above it, collapsible MS-Project style) now carries all the way through to the live board — both on <b>⬆ Upload Filled</b> and when you set <b>“Subtask of”</b> in the task editor.",
+    "Background: the board reads from the SharePoint lists now, and the “x” was being dropped on the way in — so it never showed as a sub-group. It's wired through properly now." ] },
   { rev:"9.4", date:"2026-06-26", title:"🐛 Bulk Edits + Gantt LOD bug fixes", items:[
     "<b>Bulk Edits — assignee filter now works:</b> picking a name from the \"All assignees\" dropdown now actually filters the task list to that person.",
     "<b>Bulk Edits — fields reset after apply/save:</b> after applying or saving a bulk change, the input fields are cleared so you can make a new selection without having to delete the old value first. Affects all four fields (Assignee, Phase, Type, Status).",
@@ -4003,14 +4006,14 @@ function _listOpsRaw(p){
                 : [O('create','Holidays',null,{Name:p.name,Date:p.date,Country:p.country})];
     }
     case 'deleteHoliday':    return [O('delete','Holidays',{Name:p.name,Date:p.date})];
-    case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
-    case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,Task:p.taskOld,__id:p._id},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,Task:p.taskOld,__id:p._id},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
     case 'deleteProjectTask':return [O('delete','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id})];
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'importProject': {
       const ops=[]; if(p.replace) ops.push(...taskOps('delete','ProjectTasks',_projTaskRows(p.project)));
-      (p.tasks||[]).forEach(t=>ops.push(O('create','ProjectTasks',null,{Task:t.task,Project:p.project,Phase:t.phase,Type:t.type,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Duration:t.duration,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,PM:p.pm})));
+      (p.tasks||[]).forEach(t=>ops.push(O('create','ProjectTasks',null,{Task:t.task,Project:p.project,Phase:t.phase,Type:t.type,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Duration:t.duration,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,Sub:(t.sub?'x':''),PM:p.pm})));
       return ops;
     }
     default: return null;   // unmapped -> fall back to the legacy workbook send
@@ -5304,6 +5307,9 @@ function submitProjTask(){
     comments:document.getElementById('ptComments').value.trim() };
   const editing=(window._ptId!=null);
   const _oldEdit=editing?projTaskByAnyId(p,window._ptId):null;   // resolve by real TaskID or "s<_id>" handle
+  // Subtask flag carried to the Lists (field_14). A picked "Subtask of" parent → sub; when editing,
+  // preserve an existing sub even if the parent dropdown is blank (Lists rows carry sub, not a parent id).
+  f.sub = (_parent ? 'x' : ((editing && _oldEdit && _oldEdit.sub) ? 'x' : ''));
   const payload=Object.assign({ action: editing?"editProjectTask":"addProjectTask", project:name, pin:CLOSE_PIN, user:CURRENT_USER }, f);
   if(editing){ payload.id=window._ptId; payload.taskOld=_oldEdit?_oldEdit.t:task;
     if(_oldEdit&&_oldEdit._id!=null) payload._id=_oldEdit._id; else if(window._ptSpId!=null) payload._id=window._ptSpId; }   // exact SharePoint row → dup-safe
