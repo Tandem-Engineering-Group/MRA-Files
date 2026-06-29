@@ -2704,6 +2704,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"9.7", date:"2026-06-29", title:"🔁 Re-uploading a project now replaces it cleanly (even with repeated task names)", items:[
+    "Fixed <b>⬆ Upload Filled</b> not applying changes on projects that reuse the same task name a lot (e.g. Medtronic's many “Review, Comment and Final Approval” / “Modifications, If Required” rows). The replace step now clears each old row by its <b>unique ID</b> instead of by name, so edited subtask structure lands reliably.",
+    "If a re-upload ever seemed to “do nothing” on a big project, this was why — it's fixed now." ] },
   { rev:"9.6", date:"2026-06-29", title:"📑 Subtasks now nest on the Gantt (collapsible)", items:[
     "Subtasks now <b>tuck under their parent task on the Gantt</b> — indented, with a <b>▾/▸</b> caret on the parent to collapse or expand that sub-group (MS-Project style). Works on the Projects Gantt, the full-screen detail view, and the multi-project Expand view.",
     "Driven by the same <b>Sub</b> flag as the editor — mark a task with an <b>x</b> in the Sub column (intake template) or set <b>“Subtask of”</b> in the editor, and it nests everywhere.",
@@ -4002,7 +4005,7 @@ function _allProjTasks(){ const out=[]; (_D().projects||[]).forEach(p=>(p.tasks|
 function _allShopTasks(){ const out=[]; (_D().jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>out.push(t))); return out; }
 // Row collections carrying the PROJECT name + title, for TEXT-matched cascade fan-out
 // (the write flow can't match by internal item id, so every match is by Project + task name).
-function _projTaskRows(name){ const p=(_D().projects||[]).find(x=>x.name===name); return (((p&&p.tasks)||[])).map(t=>({_proj:name,t:t.t,who:t.who})); }
+function _projTaskRows(name){ const p=(_D().projects||[]).find(x=>x.name===name); return (((p&&p.tasks)||[])).map(t=>({_proj:name,t:t.t,who:t.who,_id:t._id})); }
 function _shopRowsOf(name){ const out=[]; _jobsOf(name).forEach(j=>(j.tasks||[]).forEach(t=>out.push({_proj:name,t:t.t,who:t.who,jobNum:j.jobNum}))); return out; }
 function _allProjTaskRows(){ const out=[]; (_D().projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>out.push({_proj:p.name,t:t.t,who:t.who}))); return out; }
 function _allShopRows(){ const out=[]; (_D().jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>out.push({_proj:j.project,t:t.t,who:t.who,jobNum:j.jobNum}))); return out; }
@@ -4014,7 +4017,7 @@ function _listOpsRaw(p){
   // Fan a multi-row change into one TEXT-matched op per row (the write flow can't match by item id).
   // Tasks match by {Project, Task[, extra]}; jobs match by Project (the list's Title). `extra` lets a
   // cascade include the OLD value of the field it's about to change, so duplicate task names don't collide.
-  const taskOps=(verb,list,rows,set,extra)=>(rows||[]).filter(r=>r&&(r.t||r.task)).map(r=>O(verb,list,Object.assign({Project:r._proj,Task:(r.t||r.task)},extra||{}),set));
+  const taskOps=(verb,list,rows,set,extra)=>(rows||[]).filter(r=>r&&(r.t||r.task)).map(r=>O(verb,list,Object.assign({Project:r._proj,Task:(r.t||r.task)},(r._id!=null&&r._id!==''?{__id:r._id}:{}),extra||{}),set));
   const jobOps =(verb,rows,set)=>(rows||[]).filter(r=>r&&r.project).map(r=>O(verb,'Jobs',{Project:r.project},set));
   switch(a){
     case 'closeTask':        return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Done',Closed:today})];
