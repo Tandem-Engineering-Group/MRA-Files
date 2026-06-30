@@ -2091,6 +2091,7 @@
           <div><label>Name</label><input id="usName" autocomplete="off" placeholder="e.g. Luc Tremblay"></div>
           <div><label>Code</label><input id="usCode" autocomplete="off" placeholder="e.g. 4821"></div>
         </div>
+        <div><label>Role</label><select id="usRole"><option value="">— none —</option><option>Admin</option><option>Editor</option><option>View</option></select></div>
         <div style="display:flex; gap:8px; align-items:center; margin-top:6px">
           <button class="btn-primary" onclick="addUserBtn()">Add / update</button>
           <span id="usMsg" style="color:var(--muted); font-size:12px"></span>
@@ -2727,6 +2728,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"10.9", date:"2026-06-30", title:"👥 Manage Logins: set a Role (Admin/Editor/View)", items:[
+    "The <b>Add / update</b> form now has a <b>Role</b> picker, and each person's row has a <b>role dropdown</b> you can change on the spot. You can also add someone with just a role (no code) as a roster entry. Roles save to the list and show as tags. (Roles are informational today; they'll drive what each person sees once per-person sign-in lands.)" ] },
   { rev:"10.8", date:"2026-06-30", title:"🧹 Write-path audit: Holidays add/edit/delete now save by ID too", items:[
     "Completed a sweep of every save action. Holidays was the last one still using the unreliable name-lookup save (could fail like the logins did) — it now saves <b>by record ID</b> like everything else. All five lists (Jobs, Shop Tasks, Project Tasks, Users, Holidays) now write reliably." ] },
   { rev:"10.7", date:"2026-06-30", title:"👥 Manage Logins: add / edit / remove now actually save", items:[
@@ -4108,10 +4111,12 @@ function _listOpsRaw(p){
     case 'setUser': {        // upsert: update the PERSISTED row by its item id (reliable); otherwise create.
       // Was matching on local presence + text-filter update, which broke when the row wasn't in the
       // list yet (PATCH on /items() with no id -> BadRequest). Now keyed on the saved _id.
+      // Only writes the fields actually provided, so a role-only change keeps the code and vice-versa.
       const u=(_D().users||[]).find(x=>(x.name||'').toLowerCase()===(p.name||'').toLowerCase());
+      const set={Active:'Yes'}; if(p.code) set.Code=p.code; if(p.role) set.Role=p.role;
       return (u && u._id!=null && u._id!=='')
-        ? [O('update','Users',{Name:p.name,__id:u._id},{Code:p.code,Active:'Yes'})]
-        : [O('create','Users',null,{Name:p.name,Code:p.code,Active:'Yes'})];
+        ? [O('update','Users',{Name:p.name,__id:u._id},set)]
+        : [O('create','Users',null,Object.assign({Name:p.name},set))];
     }
     case 'deleteUser':       return [O('delete','Users',{Name:p.name})];
     case 'renameUser':       return [O('update','Users',{Name:p.oldName},{Name:p.newName})];
@@ -5061,6 +5066,7 @@ function openUsers(){
   if(typeof ensureAuth==='function' && !ensureAuth('manage logins')) return;
   if(!isAdmin()){ alert('Only '+ADMIN_USER+' can manage logins for now.'); return; }
   document.getElementById('usName').value=''; document.getElementById('usCode').value='';
+  { const r=document.getElementById('usRole'); if(r) r.value=''; }
   document.getElementById('usMsg').textContent='';
   renderUsersList();
   document.getElementById('usersModal').classList.add('show');
@@ -5074,8 +5080,10 @@ function renderUsersList(){
   let h=`<div style="color:var(--muted); font-size:11px; margin:2px 0 6px">${US_ROWS.length} ${US_ROWS.length===1?'person':'people'} · ${canLogin} with a login code${canLogin<US_ROWS.length?` · <span style="color:#fbbf24">the rest need a code (🔑) to log in</span>`:''}</div>`;
   h+= US_ROWS.map((u,i)=>{
     const me=String(u.name||'')===CURRENT_USER; const noCode=(u.h==null);
-    return `<div class="trow"><div class="tlead">${esc(u.name||'(unnamed)')}${me?' <span class="badge green">you</span>':''}${u.role?` <span class="badge" style="background:rgba(148,163,184,.2);color:var(--muted)">${esc(u.role)}</span>`:''}${noCode?' <span class="badge" style="background:rgba(251,191,36,.18);color:#fbbf24">no code — can\'t log in yet</span>':''}</div>`+
-      `<div class="tright"><button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="renameUserIdx(${i})" title="Rename ${escA(u.name||'')} (keeps their code)">✎</button> `+
+    const roleSel=`<select onchange="setUserRoleIdx(${i},this.value)" title="Set ${escA(u.name||'')}'s role" style="padding:2px 6px; font-size:11px; background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:5px">`+
+      ['','Admin','Editor','View'].map(r=>`<option value="${r}"${(u.role||'')===r?' selected':''}>${r||'— role —'}</option>`).join('')+`</select>`;
+    return `<div class="trow"><div class="tlead">${esc(u.name||'(unnamed)')}${me?' <span class="badge green">you</span>':''}${noCode?' <span class="badge" style="background:rgba(251,191,36,.18);color:#fbbf24">no code — can\'t log in yet</span>':''}</div>`+
+      `<div class="tright">${roleSel} <button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="renameUserIdx(${i})" title="Rename ${escA(u.name||'')} (keeps their code)">✎</button> `+
       `<button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="changeUserCodeIdx(${i})" title="Set a new code for ${escA(u.name||'')}">🔑 New code</button> `+
       `<button class="btn-ghost" style="padding:2px 8px; font-size:11px; border-color:rgba(239,68,68,.5); color:#fca5a5" onclick="removeUserIdx(${i})" title="Remove ${escA(u.name||'')}"${me?' disabled':''}>🗑</button></div></div>`;
   }).join('');
@@ -5084,14 +5092,24 @@ function renderUsersList(){
 function addUserBtn(){
   if(!isAdmin()){ alert('Only '+ADMIN_USER+' can manage logins.'); return; }
   const name=document.getElementById('usName').value.trim(), code=document.getElementById('usCode').value.trim();
+  const role=(document.getElementById('usRole')?document.getElementById('usRole').value:'');
   if(!name){ alert('Enter a name.'); return; }
-  if(!code){ alert("Enter a code (the number they'll type to log in)."); return; }
+  if(!code && !role){ alert("Enter a code (to let them log in) and/or pick a role."); return; }
   const D=window.MRA_DATA||{}; D.users=D.users||[];                  // optimistic (store hash so it works right away)
-  const ex=D.users.find(u=>String(u.name||'')===name); if(ex){ ex.h=pinHash(code); } else { D.users.push({name:name, h:pinHash(code)}); }
-  if(typeof shopWrite==='function') shopWrite({ action:'setUser', name:name, code:code, pin:CLOSE_PIN, user:CURRENT_USER });
+  const ex=D.users.find(u=>String(u.name||'')===name);
+  if(ex){ if(code) ex.h=pinHash(code); if(role) ex.role=role; } else { const o={name:name}; if(code) o.h=pinHash(code); if(role) o.role=role; D.users.push(o); }
+  if(typeof shopWrite==='function') shopWrite({ action:'setUser', name:name, code:code, role:role, pin:CLOSE_PIN, user:CURRENT_USER });
   if(typeof markPending==='function') markPending();
-  document.getElementById('usMsg').textContent=(ex?('Updated '+name+"'s code.") : ('Added '+name+'.'))+' Saves within ~15 min.';
-  document.getElementById('usName').value=''; document.getElementById('usCode').value='';
+  document.getElementById('usMsg').textContent=(ex?('Updated '+name+'.') : ('Added '+name+'.'))+' Saves within ~15 min.';
+  document.getElementById('usName').value=''; document.getElementById('usCode').value=''; { const r=document.getElementById('usRole'); if(r) r.value=''; }
+  renderUsersList();
+}
+// Set a person's role inline from their row (keeps their code).
+function setUserRoleIdx(i, role){ const u=US_ROWS[i]; if(!u || !isAdmin()) return;
+  const D=window.MRA_DATA||{}; const ex=(D.users||[]).find(x=>String(x.name||'')===u.name); if(ex) ex.role=role;
+  if(typeof shopWrite==='function') shopWrite({ action:'setUser', name:u.name, role:role, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  document.getElementById('usMsg').textContent='Set '+(u.name||'')+' → '+(role||'no role')+'. Saves within ~15 min.';
   renderUsersList();
 }
 function changeUserCodeIdx(i){ const u=US_ROWS[i]; if(!u || !isAdmin()) return;
