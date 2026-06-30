@@ -1975,8 +1975,9 @@
         </div>
         <div class="addrow2">
           <div><label>Milestone?</label><select id="etMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
-          <div><label>Comments</label><input id="etComments" autocomplete="off"></div>
+          <div><label>Due date</label><input id="etDue" type="date"></div>
         </div>
+        <div><label>Comments</label><input id="etComments" autocomplete="off"></div>
         <div id="etMoveRow" style="display:none; border-top:1px solid var(--line); margin-top:6px; padding-top:8px; align-items:center; gap:8px; flex-wrap:wrap">
           <label style="margin:0">⇄ Move / copy to trailer</label>
           <select id="etMoveDest" style="min-width:170px"></select>
@@ -2726,6 +2727,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"10.6", date:"2026-06-30", title:"📅 Set/change a due date when editing a task too", items:[
+    "The <b>Edit task</b> popup now has a <b>Due date</b> box (it was only on Add). Open any task, set or change its due date, Save — it shows the 📅 due on the line and feeds the Today/Week/Month picker." ] },
   { rev:"10.5", date:"2026-06-30", title:"📅 Task due dates + a Today/Week/Month picker + everyone shows in Manage Logins", items:[
     "<b>Due dates:</b> the <b>➕ Add task</b> form now has a <b>Due date</b> box. Each task line shows <b>📅 due M/D/YY</b> (red if overdue) alongside the <b>· added</b> date.",
     "<b>Timeframe picker</b> at the top of <b>Open Tasks by Assignee</b> — <b>Today / Week / 2 wks / Month / All</b> — so you can see just what's due in that window. (Default All.)",
@@ -4065,7 +4068,7 @@ function _listOpsRaw(p){
   switch(a){
     case 'closeTask':        return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Done',Closed:today})];
     case 'addTask':          return [O('create','ShopTasks',null,{Task:p.task,Project:p.project,JobNum:p.jobNum,Bay:p.bay,Assigned:p.assigned,Opened:today,Status:'Open',Milestone:p.milestone,Comments:p.comments,Due:(p.due||undefined)})];
-    case 'editTask':         return [O('update','ShopTasks',{Project:p.project,Task:p.taskOld},{Task:p.task,Assigned:p.assigned,Status:p.status,Milestone:p.milestone,Comments:p.comments,Closed:(_doneStatus(p.status)?today:'')})];
+    case 'editTask':         return [O('update','ShopTasks',{Project:p.project,Task:p.taskOld},{Task:p.task,Assigned:p.assigned,Status:p.status,Milestone:p.milestone,Comments:p.comments,Due:(p.due||undefined),Closed:(_doneStatus(p.status)?today:'')})];
     case 'deleteTask':       return [O('delete','ShopTasks',{Project:p.project,Task:p.task})];
     case 'reopenTask':       return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Open',Closed:''})];
     case 'addJob':           return [O('create','Jobs',null,{Project:p.project,Client:p.client,JobNum:p.jobNum,Bay:p.bay,Start:p.start,Finish:p.completion,Status:p.status,Notes:p.notes,PM:p.pm})];
@@ -4339,6 +4342,7 @@ function openEditTask(proj, raw){
   const asel=document.getElementById('etAssigned'); asel.innerHTML=aOpts; asel.value=who;
   document.getElementById('etStatus').value=(t&&t.st)||"Open";
   document.getElementById('etMilestone').value=(t&&/yes/i.test(t.ml||""))?"Yes":"";
+  { const dd=document.getElementById('etDue'); if(dd) dd.value=(t&&t.due)?String(t.due).slice(0,10):""; }
   document.getElementById('etComments').value=(t&&t.cm)||"";
   { const sel=document.getElementById('etMoveDest'), mr=document.getElementById('etMoveRow');
     if(sel&&mr){ const jobs=(D.jobs||[]).filter(x=>x.project&&x.project!==proj);
@@ -4356,12 +4360,14 @@ function submitEditTask(){
   const payload={ action:"editTask", project:window._etProj, taskOld:window._etOld, task:task,
     assigned:document.getElementById('etAssigned').value, status:document.getElementById('etStatus').value,
     milestone:document.getElementById('etMilestone').value, comments:document.getElementById('etComments').value.trim(),
+    due:(document.getElementById('etDue')?document.getElementById('etDue').value:''),
     pin:CLOSE_PIN, user:CURRENT_USER };
   const btn=document.getElementById('etSubmit'); btn.disabled=true; btn.textContent="Saving…";
   msg.style.color='var(--muted)'; msg.textContent='Saving…';
   shopWrite(payload).then(()=>{
       const j=oJob(window._etProj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===window._etOld);
         if(t){ t.t=payload.task; t.who=payload.assigned; t.ml=payload.milestone; t.cm=payload.comments;
+          if(payload.due) t.due=payload.due;
           if(payload.status){ t.st=payload.status; t.done=/done|complete/i.test(payload.status); t.cl=t.done?localISO(Date.now()):null; } }
         oRecompute(j); }
       oApply();
