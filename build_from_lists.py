@@ -171,6 +171,7 @@ def main():
 
     # --- Shop Tasks grouped by project (normalized) --------------------------
     shop_by_proj = {}
+    shop_proj_raw = {}   # normalized key -> first-seen real project name (for orphan cards)
     for it in shop_in:
         task = ff(it, 'Title')
         if not task:
@@ -183,8 +184,11 @@ def main():
                'cm': ff(it, S_COMMENTS),
                'op': op or None, 'cl': cl or None}
         rec['done'] = bool(re.search(r'(?i)done|complete', rec['st']) or rec['cl'])
-        key = norm_gen(ff(it, S_PROJECT))
+        proj_raw = ff(it, S_PROJECT)
+        key = norm_gen(proj_raw)
         shop_by_proj.setdefault(key, []).append(rec)
+        if proj_raw and key not in shop_proj_raw:
+            shop_proj_raw[key] = proj_raw
 
     # --- Jobs ----------------------------------------------------------------
     jobs, gen_job, used = [], None, set()
@@ -246,6 +250,22 @@ def main():
     jobs_out = list(jobs)
     if gen_job:
         jobs_out.append(gen_job)
+
+    # ORPHAN shop tasks: a task whose project matches no Job/trailer (e.g. a task added to a
+    # brand-new project from the shop-board "+ New project") used to be DROPPED here, so it never
+    # showed. Surface each orphan project as its own card (bay "(no trailer yet)") so its tasks
+    # appear under the assignee on the board. (Was just a log line before.)
+    for k in shop_by_proj:
+        if k in used or k == 'general':
+            continue
+        ot = build_tasks_from_rows(shop_by_proj[k])
+        jobs_out.append({'row': 'orphan:' + k, '_id': None,
+                         'bay': '(no trailer yet)', 'project': shop_proj_raw.get(k) or k,
+                         'client': '', 'jobNum': '', 'status': '', 'pm': '',
+                         'startISO': None, 'completionISO': None, 'startText': '', 'completionText': '',
+                         'category': 'pipeline', 'notesRaw': '',
+                         'openTasks': ot['open'], 'openCount': ot['openCount'], 'doneCount': ot['doneCount'],
+                         'salOpen': ot['salOpen'], 'doneTasks': ot['done'], 'tasks': ot['tasks']})
 
     # --- Project Tasks -> projects + teamTasks -------------------------------
     pmap = {}
@@ -378,7 +398,7 @@ def main():
     print(f"  jobs={len(jobs_out)}  projects={len(projects)}  teamTasks={len(team_tasks)}"
           f"  users={len(users)}  holidays={len(holidays)}")
     if orphans:
-        print(f"  NOTE: shop tasks for {len(orphans)} project(s) matched no job: {', '.join(orphans)}")
+        print(f"  NOTE: shop tasks for {len(orphans)} project(s) matched no job — surfaced as '(no trailer yet)' cards: {', '.join(orphans)}")
 
 
 if __name__ == '__main__':
