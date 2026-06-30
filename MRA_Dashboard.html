@@ -2705,6 +2705,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"10.1", date:"2026-06-30", title:"🛡️ Project uploads are now non-destructive (can't gut a project)", items:[
+    "<b>⬆ Upload Filled</b> no longer deletes-then-recreates a project. It now <b>updates the existing tasks in place</b> and only <b>adds</b> new ones — so a failed or partial upload can never wipe out tasks. Much safer.",
+    "Removing a task is now done on the board with <b>🗑</b> (taking a row out of the file just leaves that task untouched). The upload preview warns you if your file has fewer tasks than the board." ] },
   { rev:"10.0", date:"2026-06-29", title:"🏆 Employee-of-the-Month OFF now actually means off (everywhere)", items:[
     "Fixed the EOTM screen not staying off. If the on/off file is missing or can't be read, the board now treats it as <b>OFF</b> (it used to default to ON, so it kept coming back on every screen).",
     "Note: the in-app on/off button still needs its Power Automate flow trigger fixed (same text/plain issue as the other flows) to flip it back ON later — but it's now OFF everywhere as intended." ] },
@@ -4085,8 +4088,19 @@ function _listOpsRaw(p){
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'importProject': {
-      const ops=[]; if(p.replace) ops.push(...taskOps('delete','ProjectTasks',_projTaskRows(p.project)));
-      (p.tasks||[]).forEach(t=>ops.push(O('create','ProjectTasks',null,{Task:t.task,Project:p.project,Phase:t.phase,Type:t.type,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Duration:t.duration,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,Sub:(t.sub?'x':''),PM:p.pm})));
+      // NON-DESTRUCTIVE upload (rev 10.1). Was delete-ALL-then-recreate, which could gut a project
+      // if the recreates failed. Now: UPDATE existing rows in place (by item _id), CREATE only the
+      // surplus, and NEVER bulk-delete. A failed upload can no longer remove tasks. (Removing a task
+      // is done on the board with 🗑 — taking it out of the file leaves it untouched, by design.)
+      const body=t=>({Task:t.task,Project:p.project,Phase:t.phase,Assigned:t.assigned,Status:t.status,Start:t.start,Finish:t.finish,Milestone:t.milestone,Comments:t.comments,Predecessor:t.predecessor,Sub:(t.sub?'x':''),PM:p.pm});
+      const ups=(p.tasks||[]); const ops=[];
+      const ex = p.replace ? _projTaskRows(p.project) : [];   // existing rows in order, each carries its _id
+      ups.forEach((t,i)=>{
+        const e=ex[i];
+        if(e && e._id!=null && e._id!=='') ops.push(O('update','ProjectTasks',{Project:p.project,Task:e.t,__id:e._id}, body(t)));   // update the matching existing row in place (by id)
+        else ops.push(O('create','ProjectTasks',null, body(t)));   // new project, or a row beyond the existing count → create
+      });
+      // existing rows beyond the uploaded count are intentionally LEFT (not deleted) — non-destructive.
       return ops;
     }
     default: return null;   // unmapped -> fall back to the legacy workbook send
@@ -6052,9 +6066,11 @@ function upParse(bytes){
   UP_DATA={ project:finalName, pm:pmName, replace, tasks };
   msg.textContent="";
   const sum=document.getElementById('upSummary'); sum.style.display="block";
+  const exN=(match&&match.tasks)?match.tasks.length:0;
   sum.innerHTML = (replace
-      ? `<span style="color:var(--amber);font-weight:700">↻ Replaces</span> the existing project <b>${esc(finalName)}</b>`
-        + ((match&&match.tasks)?` (${match.tasks.length} task${match.tasks.length===1?'':'s'} now → ${tasks.length} from this file)`:'')
+      ? `<span style="color:var(--teal);font-weight:700">↻ Updates</span> the existing project <b>${esc(finalName)}</b>`
+        + (exN?` (${exN} task${exN===1?'':'s'} now → ${tasks.length} in this file)`:'')
+        + (tasks.length<exN ? `<div style="color:var(--amber);font-size:11.5px;margin-top:4px">Note: your file has <b>${exN-tasks.length} fewer</b> task${(exN-tasks.length)===1?'':'s'} than the board. Upload updates tasks in place and adds new ones — it does <b>not</b> delete. To remove a task, use the 🗑 on the board.</div>`:'')
       : `<span style="color:var(--green);font-weight:700">＋ New project</span> <b>${esc(finalName)}</b> — ${tasks.length} task${tasks.length===1?'':'s'}`)
     + (pmName?` · Program Development ${esc(pmName)}`:'');
   const show=tasks.slice(0,12);
