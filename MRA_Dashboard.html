@@ -573,6 +573,7 @@
   .salcard li{font-size:var(--ds-task,11.5px); color:#e7cba2; margin-bottom:4px; line-height:1.32}   /* match .taskline */
   .salcard li.done{text-decoration:line-through; opacity:.5; color:var(--muted)}
   .salcard li.salclosed .cldate{text-decoration:none; font-size:10px; color:var(--green); margin-left:4px; white-space:nowrap}
+  .salcard li .opdate{font-size:10px; color:var(--faint); white-space:nowrap}
   .closebtn{display:none; cursor:pointer; color:var(--green); font-weight:700; font-size:9.5px;
     margin-right:6px; border:1px solid rgba(34,197,94,.4); border-radius:5px; padding:0 5px; user-select:none; white-space:nowrap}
   .closebtn:hover{background:rgba(34,197,94,.15)}
@@ -2706,6 +2707,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"10.4", date:"2026-06-30", title:"🗓 Each shop task shows when it was added", items:[
+    "Every task in <b>Open Tasks by Assignee</b> now shows a small <b>· added M/D/YY</b> so you can see when it was entered. (Due-date + the Today/Week/Month picker are coming next.)" ] },
   { rev:"10.3", date:"2026-06-30", title:"🆕 Tasks added to a brand-new project now show up", items:[
     "Fixed: adding a shop task and typing a <b>new project</b> name used to accept it but the task went nowhere (it had no trailer to attach to, so it was dropped). New-project tasks now appear right away under the assignee on a <b>“(no trailer yet)”</b> card, and stick after the refresh." ] },
   { rev:"10.2", date:"2026-06-30", title:"👁 Show closed (7 days) on Open Tasks by Assignee", items:[
@@ -6823,8 +6826,8 @@ function renderSal(D){
       const within7=t=>{ if(!t.cl) return false; const a=daysAgo(t.cl); return a!=null && a>=0 && a<=7; };
       const tasks=(j.tasks&&j.tasks.length)
         ? j.tasks.filter(t=> !t.done || (SAL_SHOWCLOSED && within7(t)) )
-                 .map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||"", closed:!!t.done, cl:t.cl||null}))
-        : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:"", closed:false, cl:null}));
+                 .map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||"", closed:!!t.done, cl:t.cl||null, op:t.op||null}))
+        : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:"", closed:false, cl:null, op:null}));
       const open=tasks.filter(t=>re.test(basisFor(t))).filter(x=>x.disp);
       if(open.length) out.push({bay:j.bay,project:j.project,jobNum:j.jobNum,open});
     });
@@ -6835,8 +6838,9 @@ function renderSal(D){
   const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
     `<ol>${s.open.map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
-      if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
-      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
+      const oent = o.op?` <span class="opdate">· added ${esc(fmtMDY(o.op))}</span>`:'';
+      if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${oent}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
+      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${oent}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
   let pageBTot=0;
   GROUPS.forEach(g=>{
     const cards=build(g.re);
