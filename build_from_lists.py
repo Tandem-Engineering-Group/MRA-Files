@@ -371,7 +371,7 @@ def main():
             continue
         if ctry not in ('US', 'CA', 'BOTH'):
             ctry = 'US'
-        holidays.append({'name': name, 'dateISO': d, 'country': ctry})
+        holidays.append({'name': name, 'dateISO': d, 'country': ctry, '_id': it.get('ID') or it.get('id')})
 
     # --- inherit fleet + logistics + physicalBays from the existing data.js ---
     fleetio, mra_status, phys = None, [], PHYSICAL_BAYS_DEFAULT
