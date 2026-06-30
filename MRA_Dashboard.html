@@ -2705,6 +2705,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"10.0", date:"2026-06-29", title:"🏆 Employee-of-the-Month OFF now actually means off (everywhere)", items:[
+    "Fixed the EOTM screen not staying off. If the on/off file is missing or can't be read, the board now treats it as <b>OFF</b> (it used to default to ON, so it kept coming back on every screen).",
+    "Note: the in-app on/off button still needs its Power Automate flow trigger fixed (same text/plain issue as the other flows) to flip it back ON later — but it's now OFF everywhere as intended." ] },
   { rev:"9.9", date:"2026-06-29", title:"🛟 CRITICAL: dashboard saves were silently failing — fixed", items:[
     "Found and fixed why edits and uploads weren't sticking: the board was trying to save a column (“Type”) that doesn't exist on the SharePoint list, so SharePoint rejected the <b>entire</b> save every time (a “BadRequest”). Hundreds of saves had been failing silently.",
     "Removed that column (and the Duration number-column) from saves. Editing tasks, the ↳/↰ subtask toggle, and project uploads now actually save through to the list." ] },
@@ -3566,7 +3569,7 @@ function setAsgRotateSec(v){ v=parseInt(v,10); if(isNaN(v)) v=15; v=Math.max(5,M
   if(WALL && ASG_ROTATE) startAsgRotate(); }   // re-arm the timer at the new interval
 /* ---------- Employee of the Month: centered card on the wall/TV view, every 5 min ----------
    Swap monthly: change EOTM.name and replace the eotm.jpg image (bump ?v=). */
-const EOTM = { name: "John", photo: "eotm.png?cb="+Date.now(), on: true };   // cache-buster per load so a new photo shows on refresh
+const EOTM = { name: "John", photo: "eotm.png?cb="+Date.now(), on: false };   // DEFAULT OFF: only turns on if eotm.txt explicitly carries a name. cache-buster per load so a new photo shows on refresh
 // Optional eotm.txt (pushed up next to data.js) controls the name + on/off with NO
 // code change: first line = the winner's name (turns it ON); the word "off" (or an
 // empty file) PAUSES it. If eotm.txt is absent, the defaults above are used.
@@ -3574,8 +3577,9 @@ function eotmLoadConfig(){
   return fetch('eotm.txt?cb='+Date.now()).then(r=>{ if(!r.ok) throw 0; return r.text(); }).then(t=>{
     t=(t||'').trim(); const low=t.toLowerCase();
     if(!t || ['off','none','pause','paused','hide','no','disable','disabled'].indexOf(low)>=0){ EOTM.on=false; }
+    else if(/<!doctype|<html/i.test(t)){ EOTM.on=false; }   // a missing file returns the site's HTML fallback — treat as OFF, never "on"
     else { EOTM.on=true; EOTM.name=(t.split(/[\r\n]+/)[0]||'').trim()||EOTM.name; }
-  }).catch(()=>{}).then(()=>eotmSetup());
+  }).catch(()=>{ EOTM.on=false; }).then(()=>eotmSetup());   // missing/unreadable eotm.txt => OFF everywhere (was leaving the default ON)
 }
 function eotmSetup(){   // set photo + name on BOTH the pop-up card and the always-on badge (or hide when paused)
   const b=document.getElementById('eotmBadge'); if(b) b.style.display = EOTM.on ? '' : 'none';
