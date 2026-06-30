@@ -353,7 +353,7 @@ def main():
         if (U_ACTIVE in it) and not is_yes(it[U_ACTIVE]):
             continue
         code = code_norm(ff(it, U_CODE))
-        u = {'name': name, 'hasCode': bool(code)}
+        u = {'name': name, 'hasCode': bool(code), '_id': it.get('ID') or it.get('id')}
         if code:
             u['h'] = pin_hash(code)
         role = ff(it, U_ROLE)
