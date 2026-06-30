@@ -572,6 +572,7 @@
   .salcard ol{margin:8px 0 0 18px; padding:0}
   .salcard li{font-size:var(--ds-task,11.5px); color:#e7cba2; margin-bottom:4px; line-height:1.32}   /* match .taskline */
   .salcard li.done{text-decoration:line-through; opacity:.5; color:var(--muted)}
+  .salcard li.salclosed .cldate{text-decoration:none; font-size:10px; color:var(--green); margin-left:4px; white-space:nowrap}
   .closebtn{display:none; cursor:pointer; color:var(--green); font-weight:700; font-size:9.5px;
     margin-right:6px; border:1px solid rgba(34,197,94,.4); border-radius:5px; padding:0 5px; user-select:none; white-space:nowrap}
   .closebtn:hover{background:rgba(34,197,94,.15)}
@@ -1350,7 +1351,7 @@
     </div>
 
     <div class="panel" id="openTasksPanel">
-      <h2>🧰 Open Tasks by Assignee <span id="asgPageInd" style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span><button class="btn-ghost" onclick="openAddGeneralTask()" style="float:right;padding:4px 11px;font-size:11.5px" title="Add a crew task that isn't tied to a trailer (move a trailer, parts run, etc.) — assign it to a person and it shows in their column">➕ General task</button><button class="btn-ghost" onclick="openAddTask()" style="float:right;padding:4px 11px;font-size:11.5px;margin-right:8px" title="Add a task to any trailer/job and assign it — right here, no scrolling back up to the menu">➕ Add task</button></h2>
+      <h2>🧰 Open Tasks by Assignee <span id="asgPageInd" style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span><button class="btn-ghost" onclick="openAddGeneralTask()" style="float:right;padding:4px 11px;font-size:11.5px" title="Add a crew task that isn't tied to a trailer (move a trailer, parts run, etc.) — assign it to a person and it shows in their column">➕ General task</button><button class="btn-ghost" onclick="openAddTask()" style="float:right;padding:4px 11px;font-size:11.5px;margin-right:8px" title="Add a task to any trailer/job and assign it — right here, no scrolling back up to the menu">➕ Add task</button><button class="btn-ghost" id="salClosedBtn" onclick="toggleSalClosed()" style="float:right;padding:4px 11px;font-size:11.5px;margin-right:8px" title="Also show tasks each crew CLOSED in the last 7 days (✓, struck through). Click again to hide.">👁 Show closed (7d)</button></h2>
       <div class="assignees" id="assigneesA">
         <div class="asg asgSalWrap" data-asg="Sal"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
         <div class="asg" data-asg="Wrap Team"><div class="asg-h">🎨 Wrap Team <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
@@ -2705,6 +2706,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"10.2", date:"2026-06-30", title:"👁 Show closed (7 days) on Open Tasks by Assignee", items:[
+    "New <b>👁 Show closed (7d)</b> button on the <b>Open Tasks by Assignee</b> panel — flip it on to also see what each crew (Sal, Wrap, Electricians, Doug, Josh, Jeff) <b>closed in the last 7 days</b> (shown ✓ struck-through with the close date). Click again to hide. The “X open” counts still count only open work." ] },
   { rev:"10.1", date:"2026-06-30", title:"🛡️ Project uploads are now non-destructive (can't gut a project)", items:[
     "<b>⬆ Upload Filled</b> no longer deletes-then-recreates a project. It now <b>updates the existing tasks in place</b> and only <b>adds</b> new ones — so a failed or partial upload can never wipe out tasks. Much safer.",
     "Removing a task is now done on the board with <b>🗑</b> (taking a row out of the file just leaves that task untouched). The upload preview warns you if your file has fewer tasks than the board." ] },
@@ -6791,6 +6794,10 @@ function renderFloor(D){
 }
 
 /* ---------- Sal's open task queue (across all trailers) ---------- */
+let SAL_SHOWCLOSED=false;   // "Show closed (7d)" on the Open-Tasks-by-Assignee panel
+function toggleSalClosed(){ SAL_SHOWCLOSED=!SAL_SHOWCLOSED;
+  const b=document.getElementById('salClosedBtn'); if(b){ b.classList.toggle('on',SAL_SHOWCLOSED); b.textContent=SAL_SHOWCLOSED?'👁 Hide closed':'👁 Show closed (7d)'; }
+  if(window.MRA_DATA) renderSal(window.MRA_DATA); }
 function renderSal(D){
   const order=D.physicalBays;
   const GROUPS=[
@@ -6810,9 +6817,11 @@ function renderSal(D){
   const build=(re)=>{
     const out=[];
     (D.jobs||[]).filter(j=>j.category!=="leave" && !["shipped","on hold"].includes((j.status||"").toLowerCase())).forEach(j=>{
+      const within7=t=>{ if(!t.cl) return false; const a=daysAgo(t.cl); return a!=null && a>=0 && a<=7; };
       const tasks=(j.tasks&&j.tasks.length)
-        ? j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||""}))
-        : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:""}));
+        ? j.tasks.filter(t=> !t.done || (SAL_SHOWCLOSED && within7(t)) )
+                 .map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||"", closed:!!t.done, cl:t.cl||null}))
+        : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:"", closed:false, cl:null}));
       const open=tasks.filter(t=>re.test(basisFor(t))).filter(x=>x.disp);
       if(open.length) out.push({bay:j.bay,project:j.project,jobNum:j.jobNum,open});
     });
@@ -6822,11 +6831,13 @@ function renderSal(D){
   };
   const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
-    `<ol>${s.open.map(o=>{const pend=isPendingClosed(s.project,o.raw); const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):''; return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
+    `<ol>${s.open.map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
+      if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
+      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
   let pageBTot=0;
   GROUPS.forEach(g=>{
     const cards=build(g.re);
-    const tot=cards.reduce((s,x)=>s+x.open.length,0), c=document.getElementById(g.cnt);
+    const tot=cards.reduce((s,x)=>s+x.open.filter(o=>!o.closed).length,0), c=document.getElementById(g.cnt);   // "X open" counts open only, not the shown-closed
     if(g.pageB) pageBTot+=tot;
     if(c) c.textContent=tot+" open · "+cards.length+" trailer"+(cards.length===1?"":"s");
     if(g.id==='asgSal'){
