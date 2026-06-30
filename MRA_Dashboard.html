@@ -2727,6 +2727,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"10.8", date:"2026-06-30", title:"🧹 Write-path audit: Holidays add/edit/delete now save by ID too", items:[
+    "Completed a sweep of every save action. Holidays was the last one still using the unreliable name-lookup save (could fail like the logins did) — it now saves <b>by record ID</b> like everything else. All five lists (Jobs, Shop Tasks, Project Tasks, Users, Holidays) now write reliably." ] },
   { rev:"10.7", date:"2026-06-30", title:"👥 Manage Logins: add / edit / remove now actually save", items:[
     "Fixed people added or edited in <b>Manage Logins</b> not sticking. The save was using a name-lookup path that failed when the row wasn't found (it tried to update “no row” and errored). It now saves <b>by the person's record ID</b> — same reliable path the rest of the board uses — so new logins, code changes, renames, and removals all persist." ] },
   { rev:"10.6", date:"2026-06-30", title:"📅 Set/change a due date when editing a task too", items:[
@@ -4113,10 +4115,11 @@ function _listOpsRaw(p){
     }
     case 'deleteUser':       return [O('delete','Users',{Name:p.name})];
     case 'renameUser':       return [O('update','Users',{Name:p.oldName},{Name:p.newName})];
-    case 'setHoliday': {     // upsert by name+date
-      const ex=(_D().holidays||[]).some(h=>(h.name||'')===(p.name||'') && ((h.dateISO||h.date||''))===(p.date||''));
-      return ex ? [O('update','Holidays',{Name:p.name,Date:p.date},{Country:p.country})]
-                : [O('create','Holidays',null,{Name:p.name,Date:p.date,Country:p.country})];
+    case 'setHoliday': {     // upsert: update the PERSISTED row by item id; else create
+      const hh=(_D().holidays||[]).find(h=>(h.name||'')===(p.name||'') && ((h.dateISO||h.date||''))===(p.date||''));
+      return (hh && hh._id!=null && hh._id!=='')
+        ? [O('update','Holidays',{Name:p.name,Date:p.date,__id:hh._id},{Country:p.country})]
+        : [O('create','Holidays',null,{Name:p.name,Date:p.date,Country:p.country})];
     }
     case 'deleteHoliday':    return [O('delete','Holidays',{Name:p.name,Date:p.date})];
     case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
@@ -4166,6 +4169,7 @@ function _findId(listKey, match){
   if(listKey==='ShopTasks'){ for(const j of (D.jobs||[])){ if(j.project!==P) continue; const tk=(j.tasks||[]).find(t=>t.t===T); if(tk&&tk._id!=null) return tk._id; } return null; }
   if(listKey==='ProjectTasks'){ const pr=(D.projects||[]).find(x=>x.name===P); if(!pr) return null; const tk=(pr.tasks||[]).find(t=>t.t===T); return tk&&tk._id!=null?tk._id:null; }
   if(listKey==='Users'){ const nm=(match.Name||match.name||''); const u=(D.users||[]).find(x=>String(x.name||'').toLowerCase()===String(nm).toLowerCase()); return u&&u._id!=null?u._id:null; }
+  if(listKey==='Holidays'){ const nm=(match.Name||match.name||''), dt=(match.Date||match.date||''); const hh=(D.holidays||[]).find(x=>String(x.name||'')===String(nm) && String(x.dateISO||x.date||'')===String(dt)); return hh&&hh._id!=null?hh._id:null; }
   return null;
 }
 function _listOps(p){
@@ -4176,7 +4180,7 @@ function _listOps(p){
     const r={verb:o.verb, list:lf.list};
     if(o.set){ const b={}; for(const k in o.set){ if(lf.cols[k]) b[lf.cols[k]]=o.set[k]; } r.body=b; }
     let id=null;
-    if((o.verb==='update'||o.verb==='delete') && (o.list==='Jobs'||o.list==='ShopTasks'||o.list==='ProjectTasks'||o.list==='Users')) id=_findId(o.list,o.match);
+    if((o.verb==='update'||o.verb==='delete') && (o.list==='Jobs'||o.list==='ShopTasks'||o.list==='ProjectTasks'||o.list==='Users'||o.list==='Holidays')) id=_findId(o.list,o.match);
     if(id!=null){ r.verb=(o.verb==='delete')?'deleteById':'mergeById'; r.id=id; }   // by item id (no text match)
     else if(o.match){ r.filter=Object.keys(o.match).map(k=>{ const col=lf.cols[k]||k; const v=o.match[k];
       return (col==='Id'||col==='ID') ? (col+' eq '+v) : (col+" eq '"+_odEsc(v)+"'"); }).join(' and '); }
