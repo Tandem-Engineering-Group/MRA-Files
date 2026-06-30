@@ -574,6 +574,13 @@
   .salcard li.done{text-decoration:line-through; opacity:.5; color:var(--muted)}
   .salcard li.salclosed .cldate{text-decoration:none; font-size:10px; color:var(--green); margin-left:4px; white-space:nowrap}
   .salcard li .opdate{font-size:10px; color:var(--faint); white-space:nowrap}
+  .salcard li .duedate{font-size:10px; color:#93c5fd; white-space:nowrap; margin-left:4px}
+  .salcard li .duedate.od{color:#fca5a5; font-weight:700}   /* overdue */
+  .saldue-pick{display:flex; align-items:center; gap:5px; margin:0 0 10px; flex-wrap:wrap}
+  .saldue-pick .saldue-lbl{font-size:11px; color:var(--muted); margin-right:2px}
+  .saldue-pick button{padding:3px 10px; font-size:11px; border:1px solid var(--line); border-radius:6px; background:var(--panel2); color:var(--muted); cursor:pointer}
+  .saldue-pick button:hover{border-color:var(--blue)}
+  .saldue-pick button.on{background:var(--blue); color:#fff; border-color:var(--blue)}
   .closebtn{display:none; cursor:pointer; color:var(--green); font-weight:700; font-size:9.5px;
     margin-right:6px; border:1px solid rgba(34,197,94,.4); border-radius:5px; padding:0 5px; user-select:none; white-space:nowrap}
   .closebtn:hover{background:rgba(34,197,94,.15)}
@@ -1353,6 +1360,14 @@
 
     <div class="panel" id="openTasksPanel">
       <h2>🧰 Open Tasks by Assignee <span id="asgPageInd" style="margin-left:10px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">scroll within each · 📺 Wall mode auto-scrolls</span><button class="btn-ghost" onclick="openAddGeneralTask()" style="float:right;padding:4px 11px;font-size:11.5px" title="Add a crew task that isn't tied to a trailer (move a trailer, parts run, etc.) — assign it to a person and it shows in their column">➕ General task</button><button class="btn-ghost" onclick="openAddTask()" style="float:right;padding:4px 11px;font-size:11.5px;margin-right:8px" title="Add a task to any trailer/job and assign it — right here, no scrolling back up to the menu">➕ Add task</button><button class="btn-ghost" id="salClosedBtn" onclick="toggleSalClosed()" style="float:right;padding:4px 11px;font-size:11.5px;margin-right:8px" title="Also show tasks each crew CLOSED in the last 7 days (✓, struck through). Click again to hide.">👁 Show closed (7d)</button></h2>
+      <div id="salDuePick" class="saldue-pick" title="Show only tasks DUE within this window (by due date). 'All' shows everything.">
+        <span class="saldue-lbl">Due:</span>
+        <button data-d="today" onclick="setSalDue('today')">Today</button>
+        <button data-d="week" onclick="setSalDue('week')">Week</button>
+        <button data-d="2wk" onclick="setSalDue('2wk')">2 wks</button>
+        <button data-d="month" onclick="setSalDue('month')">Month</button>
+        <button data-d="all" class="on" onclick="setSalDue('all')">All</button>
+      </div>
       <div class="assignees" id="assigneesA">
         <div class="asg asgSalWrap" data-asg="Sal"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
         <div class="asg" data-asg="Wrap Team"><div class="asg-h">🎨 Wrap Team <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
@@ -1827,7 +1842,11 @@
         </div>
         <div class="addrow2">
           <div><label>Assigned to</label><select id="atAssigned"></select></div>
+          <div><label>Due date (optional)</label><input id="atDue" type="date"></div>
+        </div>
+        <div class="addrow2">
           <div><label>Milestone?</label><select id="atMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
+          <div></div>
         </div>
         <div><label>Comments (optional)</label><input id="atComments" autocomplete="off"></div>
         <div id="atMsg" style="font-size:12px; min-height:16px"></div>
@@ -2707,8 +2726,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"10.4", date:"2026-06-30", title:"🗓 Each shop task shows when it was added", items:[
-    "Every task in <b>Open Tasks by Assignee</b> now shows a small <b>· added M/D/YY</b> so you can see when it was entered. (Due-date + the Today/Week/Month picker are coming next.)" ] },
+  { rev:"10.5", date:"2026-06-30", title:"📅 Task due dates + a Today/Week/Month picker + everyone shows in Manage Logins", items:[
+    "<b>Due dates:</b> the <b>➕ Add task</b> form now has a <b>Due date</b> box. Each task line shows <b>📅 due M/D/YY</b> (red if overdue) alongside the <b>· added</b> date.",
+    "<b>Timeframe picker</b> at the top of <b>Open Tasks by Assignee</b> — <b>Today / Week / 2 wks / Month / All</b> — so you can see just what's due in that window. (Default All.)",
+    "<b>Manage Logins now lists EVERYONE</b> on the MRA Users list, not just people who already have a code. Anyone without a code shows a <b>“no code — can't log in yet”</b> tag; hit <b>🔑 New code</b> to give them one. (Before, a person with no code was invisible here — which is why Mark/Sarah didn't appear.)" ] },
   { rev:"10.3", date:"2026-06-30", title:"🆕 Tasks added to a brand-new project now show up", items:[
     "Fixed: adding a shop task and typing a <b>new project</b> name used to accept it but the task went nowhere (it had no trailer to attach to, so it was dropped). New-project tasks now appear right away under the assignee on a <b>“(no trailer yet)”</b> card, and stick after the refresh." ] },
   { rev:"10.2", date:"2026-06-30", title:"👁 Show closed (7 days) on Open Tasks by Assignee", items:[
@@ -4043,7 +4064,7 @@ function _listOpsRaw(p){
   const jobOps =(verb,rows,set)=>(rows||[]).filter(r=>r&&r.project).map(r=>O(verb,'Jobs',{Project:r.project},set));
   switch(a){
     case 'closeTask':        return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Done',Closed:today})];
-    case 'addTask':          return [O('create','ShopTasks',null,{Task:p.task,Project:p.project,JobNum:p.jobNum,Bay:p.bay,Assigned:p.assigned,Opened:today,Status:'Open',Milestone:p.milestone,Comments:p.comments})];
+    case 'addTask':          return [O('create','ShopTasks',null,{Task:p.task,Project:p.project,JobNum:p.jobNum,Bay:p.bay,Assigned:p.assigned,Opened:today,Status:'Open',Milestone:p.milestone,Comments:p.comments,Due:(p.due||undefined)})];
     case 'editTask':         return [O('update','ShopTasks',{Project:p.project,Task:p.taskOld},{Task:p.task,Assigned:p.assigned,Status:p.status,Milestone:p.milestone,Comments:p.comments,Closed:(_doneStatus(p.status)?today:'')})];
     case 'deleteTask':       return [O('delete','ShopTasks',{Project:p.project,Task:p.task})];
     case 'reopenTask':       return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Open',Closed:''})];
@@ -4120,7 +4141,7 @@ function _listOpsRaw(p){
    (verified against the live lists). ProjectTasks omits columns the restored list lacks. */
 const _LF = {
   Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
-  ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9"} },   /* field_8 is a Number column in the list (always 0.0) — NOT milestone; don't write it (shop tasks have no milestone on the board) */
+  ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9",Due:"Due"} },   /* field_8 is a Number column (always 0.0) — NOT milestone; don't write it. "Due" = a Date column added 2026-06-30 (its own internal name, not field_N) — only written when a due date is set. */
   ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14"} },   /* field_4 (Type) + field_8 (Duration) REMOVED 2026-06-29: the list has no field_4 → SharePoint rejected EVERY write ("property 'field_4' does not exist", BadRequest), which is why nothing saved. field_8/Duration is a Number col. field_13 (Predecessor)+field_2 (TaskID) also not written. Match by item _id (dup-safe) else {Project, Task name}. */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
@@ -4378,6 +4399,7 @@ function openAddTask(prefillProj){
   document.getElementById('atTask').value=""; document.getElementById('atComments').value="";
   document.getElementById('atMsg').textContent=""; document.getElementById('atNewProj').value="";
   document.getElementById('atMilestone').value=""; document.getElementById('atSubmit').disabled=false;
+  { const dd=document.getElementById('atDue'); if(dd) dd.value=""; }
   if(prefillProj){ const sel=document.getElementById('atProject'); if([...sel.options].some(o=>o.value===prefillProj)) sel.value=prefillProj; }
   atProjectChange();
   document.getElementById('addModal').classList.add('show');
@@ -4409,12 +4431,13 @@ function submitAddTask(){
   const payload={ action:"addTask", project:proj, jobNum:document.getElementById('atJob').value.trim(),
     bay:document.getElementById('atBay').value, task:taskText, assigned:document.getElementById('atAssigned').value,
     milestone:document.getElementById('atMilestone').value, comments:document.getElementById('atComments').value.trim(),
+    due:(document.getElementById('atDue')?document.getElementById('atDue').value:''),
     pin:CLOSE_PIN, user:CURRENT_USER };
   const btn=document.getElementById('atSubmit'); btn.disabled=true; btn.textContent="Adding…";
   msg.style.color='var(--muted)'; msg.textContent='Sending…';
   shopWrite(payload)
     .then(()=>{
-      const tobj={t:payload.task, who:payload.assigned, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:payload.milestone, cm:payload.comments};
+      const tobj={t:payload.task, who:payload.assigned, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:payload.milestone, cm:payload.comments, due:payload.due||null};
       let j=oJob(proj);
       if(!j && proj===GENERAL_PROJ){ j={row:'general',bay:'General',project:GENERAL_PROJ,jobNum:'',status:'',category:'general',tasks:[],openTasks:[],openCount:0,doneCount:0,salOpen:0}; (window.MRA_DATA.jobs=window.MRA_DATA.jobs||[]).push(j); }   // first general task: spin up the lane so it shows instantly
       else if(!j){ j={row:'orphan:'+proj,bay:'(no trailer yet)',project:proj,jobNum:payload.jobNum||'',status:'',category:'pipeline',tasks:[],openTasks:[],openCount:0,doneCount:0,salOpen:0}; (window.MRA_DATA.jobs=window.MRA_DATA.jobs||[]).push(j); }   // brand-NEW project (no trailer yet): show a card instantly so the task isn't lost — matches the rebuild's orphan handling
@@ -5031,10 +5054,11 @@ function renderUsersList(){
   US_ROWS=(((window.MRA_DATA||{}).users)||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
   const box=document.getElementById('usList');
   if(!US_ROWS.length){ box.innerHTML=`<div class="empty">No logins published yet — add the first one above.</div>`; return; }
-  let h=`<div style="color:var(--muted); font-size:11px; margin:2px 0 6px">${US_ROWS.length} login${US_ROWS.length===1?'':'s'} who can edit</div>`;
+  const canLogin=US_ROWS.filter(u=>u.h!=null).length;
+  let h=`<div style="color:var(--muted); font-size:11px; margin:2px 0 6px">${US_ROWS.length} ${US_ROWS.length===1?'person':'people'} · ${canLogin} with a login code${canLogin<US_ROWS.length?` · <span style="color:#fbbf24">the rest need a code (🔑) to log in</span>`:''}</div>`;
   h+= US_ROWS.map((u,i)=>{
-    const me=String(u.name||'')===CURRENT_USER;
-    return `<div class="trow"><div class="tlead">${esc(u.name||'(unnamed)')}${me?' <span class="badge green">you</span>':''}</div>`+
+    const me=String(u.name||'')===CURRENT_USER; const noCode=(u.h==null);
+    return `<div class="trow"><div class="tlead">${esc(u.name||'(unnamed)')}${me?' <span class="badge green">you</span>':''}${u.role?` <span class="badge" style="background:rgba(148,163,184,.2);color:var(--muted)">${esc(u.role)}</span>`:''}${noCode?' <span class="badge" style="background:rgba(251,191,36,.18);color:#fbbf24">no code — can\'t log in yet</span>':''}</div>`+
       `<div class="tright"><button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="renameUserIdx(${i})" title="Rename ${escA(u.name||'')} (keeps their code)">✎</button> `+
       `<button class="btn-ghost" style="padding:2px 8px; font-size:11px" onclick="changeUserCodeIdx(${i})" title="Set a new code for ${escA(u.name||'')}">🔑 New code</button> `+
       `<button class="btn-ghost" style="padding:2px 8px; font-size:11px; border-color:rgba(239,68,68,.5); color:#fca5a5" onclick="removeUserIdx(${i})" title="Remove ${escA(u.name||'')}"${me?' disabled':''}>🗑</button></div></div>`;
@@ -6804,8 +6828,18 @@ let SAL_SHOWCLOSED=false;   // "Show closed (7d)" on the Open-Tasks-by-Assignee 
 function toggleSalClosed(){ SAL_SHOWCLOSED=!SAL_SHOWCLOSED;
   const b=document.getElementById('salClosedBtn'); if(b){ b.classList.toggle('on',SAL_SHOWCLOSED); b.textContent=SAL_SHOWCLOSED?'👁 Hide closed':'👁 Show closed (7d)'; }
   if(window.MRA_DATA) renderSal(window.MRA_DATA); }
+let SAL_DUE='all';   // timeframe picker on the Open-Tasks-by-Assignee panel (by DUE date)
+const _SAL_DUE_N={today:0, week:7, '2wk':14, month:30};   // days-from-today ceiling; 'all' = no filter
+function setSalDue(v){ SAL_DUE=v||'all';
+  document.querySelectorAll('#salDuePick button').forEach(b=>b.classList.toggle('on', b.getAttribute('data-d')===SAL_DUE));
+  if(window.MRA_DATA) renderSal(window.MRA_DATA); }
 function renderSal(D){
   const order=D.physicalBays;
+  const today=D.todayISO||localISO(Date.now());
+  // A task passes the timeframe filter if its DUE date is on/before the window's ceiling (overdue counts).
+  // 'all' shows everything; undated OPEN tasks are hidden in a windowed view (they have no due to be "coming up").
+  const dueInWindow=(due)=>{ if(SAL_DUE==='all') return true; const n=_SAL_DUE_N[SAL_DUE]; if(n==null) return true;
+    if(!due) return false; const d=daysBetween(due,today); return d!=null && d<=n; };
   const GROUPS=[
     {id:"asgSal",cnt:"cntSal",re:/\bsal\b/i,label:"Sal"},
     {id:"asgWrap",cnt:"cntWrap",re:/wrap|w2 graphic|\bw2\b/i,label:"Wrap Team"},
@@ -6826,9 +6860,10 @@ function renderSal(D){
       const within7=t=>{ if(!t.cl) return false; const a=daysAgo(t.cl); return a!=null && a>=0 && a<=7; };
       const tasks=(j.tasks&&j.tasks.length)
         ? j.tasks.filter(t=> !t.done || (SAL_SHOWCLOSED && within7(t)) )
-                 .map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||"", closed:!!t.done, cl:t.cl||null, op:t.op||null}))
-        : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:"", closed:false, cl:null, op:null}));
-      const open=tasks.filter(t=>re.test(basisFor(t))).filter(x=>x.disp);
+                 .map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||"", closed:!!t.done, cl:t.cl||null, op:t.op||null, due:t.due||null}))
+        : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:"", closed:false, cl:null, op:null, due:null}));
+      const open=tasks.filter(t=>re.test(basisFor(t))).filter(x=>x.disp)
+        .filter(t=> t.closed || dueInWindow(t.due));   // timeframe picker filters OPEN tasks by due date (closed-7d always show)
       if(open.length) out.push({bay:j.bay,project:j.project,jobNum:j.jobNum,open});
     });
     out.sort((a,b)=>{const ai=order.indexOf(a.bay),bi=order.indexOf(b.bay);
@@ -6839,8 +6874,10 @@ function renderSal(D){
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
     `<ol>${s.open.map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
       const oent = o.op?` <span class="opdate">· added ${esc(fmtMDY(o.op))}</span>`:'';
+      const odOver = o.due && !o.closed && daysBetween(o.due,today)<0;
+      const odue = o.due?` <span class="duedate${odOver?' od':''}">📅 due ${esc(fmtMDY(o.due))}</span>`:'';
       if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${oent}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
-      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${oent}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
+      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
   let pageBTot=0;
   GROUPS.forEach(g=>{
     const cards=build(g.re);

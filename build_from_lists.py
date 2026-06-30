@@ -38,6 +38,7 @@ J_PM,J_NOTES,J_CATEGORY   = 'field_7','field_8','field_9'
 S_PROJECT,S_ASSIGNED      = 'field_1','field_4'
 S_STATUS,S_OPENED,S_CLOSED= 'field_5','field_6','field_7'
 S_COMMENTS                = 'field_9'
+S_DUE                     = 'Due'   # Date column added via the list UI (its own internal name, not field_N)
 # projectTasks: Title=Task
 P_PROJECT,P_TASKID,P_PHASE,P_TYPE = 'field_1','field_2','field_3','field_4'
 P_ASSIGNED,P_START,P_FINISH,P_DUR = 'field_5','field_6','field_7','field_8'
@@ -129,7 +130,7 @@ def build_tasks_from_rows(rows):
                 sal_open += 1
         tasks.append({'t': r['task'], 'who': who, 'op': r['op'], 'cl': r['cl'],
                       'st': r['st'], 'done': r['done'], 'ml': r['ml'], 'cm': r['cm'],
-                      '_id': r['_id']})
+                      'due': r.get('due'), '_id': r['_id']})
     return {'open': open_, 'openCount': len(open_), 'doneCount': done_count,
             'salOpen': sal_open, 'done': done, 'tasks': tasks}
 
@@ -179,10 +180,14 @@ def main():
         st = ff(it, S_STATUS)
         op = ff(it, S_OPENED)
         cl = ff(it, S_CLOSED)
+        due = ff(it, S_DUE)
+        # SharePoint Date columns come back as 'YYYY-MM-DDT...' — keep just the date.
+        if due and 'T' in due:
+            due = due.split('T', 1)[0]
         rec = {'task': task, '_id': it.get('ID') or it.get('id'),
                'who': ff(it, S_ASSIGNED), 'st': st, 'ml': '',
                'cm': ff(it, S_COMMENTS),
-               'op': op or None, 'cl': cl or None}
+               'op': op or None, 'cl': cl or None, 'due': due or None}
         rec['done'] = bool(re.search(r'(?i)done|complete', rec['st']) or rec['cl'])
         proj_raw = ff(it, S_PROJECT)
         key = norm_gen(proj_raw)
@@ -336,16 +341,25 @@ def main():
                          'taskCount': o['taskCount'], 'doneCount': o['doneCount'], 'pct': pct,
                          'milestones': o['milestones'], 'tasks': o['tasks']})
 
-    # --- Users (hash the plaintext code; skip inactive/blank) ----------------
+    # --- Users: include every ACTIVE person so they all show in Manage Logins. Anyone with a
+    # code can log in (h = hashed code); anyone without is still listed (hasCode:false) so an
+    # admin can SEE them and assign a code. (Previously a user with no code was silently dropped
+    # -> "I added Mark/Sarah, where are they?".)
     users = []
     for it in users_in:
         name = ff(it, 'Title')
-        code = code_norm(ff(it, U_CODE))
-        if not name or not code:
+        if not name:
             continue
         if (U_ACTIVE in it) and not is_yes(it[U_ACTIVE]):
             continue
-        users.append({'name': name, 'h': pin_hash(code)})
+        code = code_norm(ff(it, U_CODE))
+        u = {'name': name, 'hasCode': bool(code)}
+        if code:
+            u['h'] = pin_hash(code)
+        role = ff(it, U_ROLE)
+        if role:
+            u['role'] = role
+        users.append(u)
 
     # --- Holidays ------------------------------------------------------------
     holidays = []
