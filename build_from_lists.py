@@ -40,10 +40,14 @@ S_STATUS,S_OPENED,S_CLOSED= 'field_5','field_6','field_7'
 S_COMMENTS                = 'field_9'
 S_DUE                     = 'Due'   # Date column added via the list UI (its own internal name, not field_N)
 # projectTasks: Title=Task
-P_PROJECT,P_TASKID,P_PHASE,P_TYPE = 'field_1','field_2','field_3','field_4'
+# NOTE: field_4 never existed on this list (the original 'Type' slot). The live Type
+# column was (re)added via the list UI, so its internal name = its display name 'Type'
+# (same pattern as the 'Due' column). Read tolerates the old field_4 too, just in case.
+P_PROJECT,P_TASKID,P_PHASE,P_TYPE = 'field_1','field_2','field_3','Type'
 P_ASSIGNED,P_START,P_FINISH,P_DUR = 'field_5','field_6','field_7','field_8'
 P_STATUS,P_PM,P_MILE,P_COMMENTS   = 'field_9','field_10','field_11','field_12'
 P_PRED,P_SUB                      = 'field_13','field_14'
+P_NONOFF                          = 'NonOfficial'   # per-task flag ('Yes'); a project is 'non-official' if ANY of its tasks carry it
 # users: Title=Name
 U_CODE,U_ROLE,U_ACTIVE    = 'field_1','field_2','field_3'
 # holidays: Title=Name
@@ -281,7 +285,8 @@ def main():
             continue
         p_task   = ff(it, 'Title')
         p_phase  = ff(it, P_PHASE)
-        p_type   = ff(it, P_TYPE)
+        p_type   = ff(it, P_TYPE, 'field_4')            # 'Type' col (UI-added); tolerate the legacy field_4 name
+        p_nonoff = is_yes(ff(it, P_NONOFF))             # non-official-project flag on the task
         p_status = ff(it, P_STATUS) or 'Not Started'   # mirror Export-Data: blank → Not Started
         p_pm     = ff(it, P_PM)
         p_assign = ff(it, P_ASSIGNED)
@@ -297,9 +302,11 @@ def main():
         o = pmap.get(name)
         if o is None:
             o = {'name': name, 'pm': '', 'minStart': None, 'maxFinish': None,
-                 'taskCount': 0, 'doneCount': 0, 'pctSum': 0,
+                 'taskCount': 0, 'doneCount': 0, 'pctSum': 0, 'nonOfficial': False,
                  'milestones': [], 'tasks': []}
             pmap[name] = o
+        if p_nonoff:
+            o['nonOfficial'] = True      # #2: any task flagged → the whole project is non-official
         o['taskCount'] += 1
         if p_status == 'Completed':
             o['doneCount'] += 1
@@ -339,6 +346,7 @@ def main():
         projects.append({'name': o['name'], 'pm': o['pm'],
                          'startISO': o['minStart'], 'finishISO': o['maxFinish'],
                          'taskCount': o['taskCount'], 'doneCount': o['doneCount'], 'pct': pct,
+                         'nonOfficial': o['nonOfficial'],
                          'milestones': o['milestones'], 'tasks': o['tasks']})
 
     # --- Users: include every ACTIVE person so they all show in Manage Logins. Anyone with a
