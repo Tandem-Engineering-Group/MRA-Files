@@ -1,0 +1,44 @@
+name: fleetio-write-test
+on:
+  workflow_dispatch:
+jobs:
+  wtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fleetio write-back test (self-cleaning; token never printed)
+        env:
+          FKEY: ${{ secrets.FLEETIO_API_KEY }}
+          FACC: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
+        run: |
+          set +e
+          B="https://secure.fleetio.com/api/v1"
+          H=(-H "Authorization: Token $FKEY" -H "Account-Token: $FACC" -H "Accept: application/json")
+          JH=(-H "Content-Type: application/json")
+          echo "== 1) pick a vehicle to attach a throwaway issue to =="
+          curl -s "${H[@]}" "$B/vehicles?per_page=1" -o veh.json -w "  GET vehicles -> %{http_code}\n"
+          VID=$(jq -r '.[0].id // .records[0].id // empty' veh.json 2>/dev/null)
+          echo "  vehicle_id=$VID"
+          echo "== 2) create a test issue =="
+          curl -s "${H[@]}" "${JH[@]}" -X POST "$B/issues" \
+            -d "{\"vehicle_id\":$VID,\"summary\":\"ZZ API TEST - safe to delete\",\"description\":\"automated write-back test\"}" \
+            -o iss.json -w "  POST issues -> %{http_code}\n"
+          IID=$(jq -r '.id // empty' iss.json 2>/dev/null)
+          echo "  created issue id=$IID"
+          echo "  (create response, trimmed): $(head -c 300 iss.json)"
+          echo "== 3) add a comment - try shape A {commentable_type,commentable_id,comment} =="
+          curl -s "${H[@]}" "${JH[@]}" -X POST "$B/comments" \
+            -d "{\"commentable_type\":\"Issue\",\"commentable_id\":$IID,\"comment\":\"ZZ test comment A\"}" \
+            -o cA.json -w "  POST comments(A) -> %{http_code}\n"
+          echo "  (A response, trimmed): $(head -c 300 cA.json)"
+          echo "== 3b) add a comment - try shape B {...,content} =="
+          curl -s "${H[@]}" "${JH[@]}" -X POST "$B/comments" \
+            -d "{\"commentable_type\":\"Issue\",\"commentable_id\":$IID,\"content\":\"ZZ test comment B\"}" \
+            -o cB.json -w "  POST comments(B) -> %{http_code}\n"
+          echo "  (B response, trimmed): $(head -c 300 cB.json)"
+          echo "== 4) resolve the issue (PUT /issues/{id}/resolve, empty body) =="
+          curl -s "${H[@]}" "${JH[@]}" -X PUT "$B/issues/$IID/resolve" -d '{}' \
+            -o res.json -w "  PUT resolve -> %{http_code}\n"
+          echo "  (resolve response, trimmed): $(head -c 300 res.json)"
+          echo "== 5) CLEANUP: delete the test issue =="
+          curl -s "${H[@]}" -X DELETE "$B/issues/$IID" -o /dev/null -w "  DELETE issue -> %{http_code}\n"
+          echo "== done =="
