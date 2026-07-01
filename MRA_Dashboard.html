@@ -744,6 +744,8 @@
   .hchip{font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px; margin-left:6px; white-space:nowrap}
   .hchip.late{background:#3a1414; color:#fca5a5} .hchip.behind{background:#3a2e12; color:var(--amber)} .hchip.ok{background:#13331f; color:#86efac}
   body.light .hchip.late{background:#fde0e0; color:#c22222} body.light .hchip.behind{background:#fdeccb; color:#8a5e00} body.light .hchip.ok{background:#dcf5e6; color:#15803d}
+  .hchip.nonoff{background:#3a3212; color:#eab308} body.light .hchip.nonoff{background:#fdf3cf; color:#a16207}
+  .nonoff-tag{font-size:10px; font-weight:700; color:#eab308} body.light .nonoff-tag{color:#a16207}
   .missed-hd{font-size:11px; font-weight:800; color:#fca5a5; letter-spacing:.3px; margin:2px 0 5px; text-transform:uppercase}
   body.light .missed-hd{color:#c22222}
   #statusBody{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; white-space:pre-wrap; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; max-height:48vh; overflow:auto; color:var(--txt)}
@@ -1367,6 +1369,13 @@
         <button data-d="2wk" onclick="setSalDue('2wk')">2 wks</button>
         <button data-d="month" onclick="setSalDue('month')">Month</button>
         <button data-d="all" class="on" onclick="setSalDue('all')">All</button>
+        <span class="saldue-lbl" style="margin-left:16px">Sort:</span>
+        <select id="salSortSel" onchange="setSalSort(this.value)" title="Order each crew's tasks — earliest due first (default), latest due, most recently added, or by trailer" style="font-size:11px;padding:3px 8px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt)">
+          <option value="due">📅 Due — soonest first</option>
+          <option value="duedesc">📅 Due — latest first</option>
+          <option value="added">🆕 Recently added</option>
+          <option value="bay">🏭 Trailer / bay</option>
+        </select>
       </div>
       <div class="assignees" id="assigneesA">
         <div class="asg asgSalWrap" data-asg="Sal"><div class="asg-h">🔧 Sal <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
@@ -2010,6 +2019,7 @@
         <button class="btn-primary" onclick="openProjTaskNew()">➕ Add task</button>
         <button class="btn-ghost" onclick="renameProjectBtn()" title="Rename this project everywhere — its tasks, the Gantt/Progress, and the matching floor job (nothing orphans)">✎ Rename</button>
         <button class="btn-ghost" id="pePMBtn" onclick="setProjectPMBtn()" title="Set the Program Development lead for this project — applies to all its tasks and the matching floor job (no Excel)">👤 Set PM</button>
+        <button class="btn-ghost" id="peNonOffBtn" onclick="toggleProjNonOfficial()" title="Flag this as a NON-OFFICIAL project — informal work on someone's plate (e.g. JFSD Trailer Weight). It still shows on the Gantt, Progress and PM Load, just tagged so everyone knows it isn't a formal job.">🏷 Non-official</button>
         <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
         <button class="btn-ghost" onclick="peOpenDetail()" title="Open this project's full-screen Gantt (detailed view)">⛶ Gantt view</button>
         <button class="btn-ghost" onclick="deleteProjectBtn()" title="Delete this ENTIRE project — all its tasks + the matching floor job (can't be undone; re-upload the template to restore)" style="border-color:rgba(239,68,68,.5); color:#fca5a5">🗑 Delete project</button>
@@ -2133,7 +2143,8 @@
         <div><label>Subtask of <span style="color:var(--muted); font-weight:400; font-size:10.5px">(optional — nest under another task; uses that task's phase)</span></label><select id="ptParent"></select></div>
         <div class="addrow2">
           <div><label>Phase</label><input id="ptPhase" list="ptPhaseList" autocomplete="off"><datalist id="ptPhaseList"></datalist></div>
-          <div><label>Type</label><input id="ptType" list="ptTypeList" autocomplete="off"><datalist id="ptTypeList"></datalist></div>
+          <div><label>Type</label><select id="ptType" onchange="ptTypeChange()"></select>
+            <input id="ptTypeNew" autocomplete="off" placeholder="new type name" style="display:none; margin-top:6px"></div>
         </div>
         <div class="addrow2">
           <div><label>Assigned to <span style="color:var(--muted); font-weight:400; font-size:10.5px">(group/person · add a person to assign 2-deep)</span></label>
@@ -2601,7 +2612,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
     <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. Per-tile collapse state is remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. <span class="k">☰ Actions ▸ 🖨 Print Sal tasks</span> prints just Sal's open tasks on one page (grouped by trailer, with Fleetio descriptions — plus any Fleetio <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files, which open directly without a Fleetio login).</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap · Electricians ⇄ Doug · Josh · Jeff</h4>
-    <p>Live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
+    <p>Live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date, and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; it's remembered per device. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
     <p><b>Sizing on the TV (admin 🎨 Design panel):</b> every crew tile on <i>both</i> pages — Sal · Wrap · Electricians and Doug · Josh · Jeff — can be sized independently (width + height) from the tile picker, same as the bays.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
     <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show completed</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). The picker is <b>two-level</b>: a group (MRA Design, MRA Shop, Electricians, Wrap Team, Maintenance) <b>rolls up everyone</b> ("MRA Design — all") with each member indented under it ("› Steve K") — pick the group to see all of it, or a person to drill in. Members come from the workbook's <b>Sub-Resource</b> column (Assigned To = group, Sub-Resource = person); until that's filled, the board reads them from existing "Group / Person" assignments. Name variants are still merged (e.g. <b>MasterWraps → Wrap Team</b>, <b>Electrician → Electricians</b>). <span class="k">🖨 Print</span> lays the Gantt + full task list on one <b>11×17 (tabloid) landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
@@ -2670,7 +2681,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented). Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule — handy for a "what's left" handout.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
-    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text (stacks with the assignee filter); <span class="k">Type</span> is a dropdown; <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt (which now has its own <span class="k">✓ Hide completed</span>); and a task <b>requires both a Start and a Finish date</b> (the Finish can't be before the Start; a single-date milestone is fine and gets mirrored). The editor header, the project picker and the detailed-view title now show the project's <b>Job #</b> — <b>“J1557 · Project Name”</b> — when it's linked to a trailer.</p></div>
+    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text (stacks with the assignee filter); <span class="k">Type</span> is now a real <b>dropdown</b> (with an <b>➕ Other…</b> option to add a new type) and it <b>saves</b>; <span class="k">🏷 Non-official</span> flags a project as informal work (e.g. JFSD Trailer Weight) — it stays on the Gantt, Progress and PM Load, just tagged; <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt (which now has its own <span class="k">✓ Hide completed</span>); and a task <b>requires both a Start and a Finish date</b> (the Finish can't be before the Start; a single-date milestone is fine and gets mirrored). The editor header, the project picker and the detailed-view title now show the project's <b>Job #</b> — <b>“J1557 · Project Name”</b> — when it's linked to a trailer.</p></div>
   <div class="hsec"><h4>⑯ᵃ ⇄ Bulk Edits — change many tasks at once (PROJECTS tab)</h4>
     <p>Don't open tasks one at a time. Click <span class="k">⇄ Bulk Edits</span> on the PROJECTS toolbar to change <b>assignee</b>, <b>phase</b>, <b>type</b> or <b>status</b> across a batch of tasks:</p>
     <p><b>1.</b> Pick a <b>project</b> (or ★ All projects). <b>2.</b> Optionally narrow to a current assignee and/or 🔎 filter by text. <b>3.</b> <b>Check the tasks</b> (or <span class="k">Select all</span>). <b>4.</b> Pick the <b>field tab</b> at the bottom — 👤 Assignee · 📂 Phase · 🏷 Type · 📊 Status — set the value and hit <span class="k">Apply to checked</span> (you'll see the change staged in green). <b>5.</b> Stage more if you like (even different fields), then <span class="k">💾 Save</span>.</p>
@@ -2747,6 +2758,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"11.1", date:"2026-07-01", title:"✅ Al's list — batch 2 (Type dropdown · non-official projects) + crew task sorting", items:[
+    "<b>Task Type is now a dropdown</b> in Add/Edit Project Task (with an “➕ Other…” option to add a new type) — and it now actually <b>saves</b>. (Al #7)",
+    "<b>Non-official projects.</b> In ✎ Edit Project Tasks there's a new <b>🏷 Non-official</b> button — flag informal work (e.g. JFSD Trailer Weight, Hybrid Power Design) and it's tagged on the <b>Gantt</b>, <b>Project Progress</b> and each PM's <b>Program Development Load</b>, while still being counted. (Al #2)",
+    "<b>Open Tasks by Assignee — sort dropdown.</b> The crew panel now sorts by <b>📅 Due — soonest first</b> by default, with a Sort menu for latest-due, recently-added, or trailer order. (Rich)" ] },
   { rev:"11.0", date:"2026-07-01", title:"✅ Al's request list — batch 1 (login masking · job #s · date rules)", items:[
     "<b>Code entry is now hidden (starred out).</b> Signing in uses a proper pop-up with a masked field instead of the old browser box that showed your code in plain text. (Al #4)",
     "<b>Job # now shows with the project name.</b> The full-screen <b>Detailed View</b> title, the <b>Edit Project Tasks</b> project picker, and the Add/Edit task pop-up all read <b>“J1557 · Project Name”</b> when the project is linked to a trailer. (Al #5, #6)",
@@ -4172,11 +4187,12 @@ function _listOpsRaw(p){
         : [O('create','Holidays',null,{Name:p.name,Date:p.date,Country:p.country})];
     }
     case 'deleteHoliday':    return [O('delete','Holidays',{Name:p.name,Date:p.date})];
-    case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),NonOfficial:(p.nonOfficial?'Yes':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
     case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,Task:p.taskOld,__id:p._id},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
     case 'deleteProjectTask':return [O('delete','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id})];
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
+    case 'setProjectNonOfficial': return taskOps('update','ProjectTasks',_projTaskRows(p.project),{NonOfficial:(p.value?'Yes':'')});   // #2: flag/unflag every task of the project
     case 'importProject': {
       // NON-DESTRUCTIVE upload (rev 10.1). Was delete-ALL-then-recreate, which could gut a project
       // if the recreates failed. Now: UPDATE existing rows in place (by item _id), CREATE only the
@@ -4203,7 +4219,7 @@ function _listOpsRaw(p){
 const _LF = {
   Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
   ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9",Due:"Due"} },   /* field_8 is a Number column (always 0.0) — NOT milestone; don't write it. "Due" = a Date column added 2026-06-30 (its own internal name, not field_N) — only written when a due date is set. */
-  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14"} },   /* field_4 (Type) + field_8 (Duration) REMOVED 2026-06-29: the list has no field_4 → SharePoint rejected EVERY write ("property 'field_4' does not exist", BadRequest), which is why nothing saved. field_8/Duration is a Number col. field_13 (Predecessor)+field_2 (TaskID) also not written. Match by item _id (dup-safe) else {Project, Task name}. */
+  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"Type",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial"} },   /* 'Type' + 'NonOfficial' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
 };
@@ -4763,6 +4779,10 @@ function delLeaveBtn(row){ if(!ensureAuth("delete a leave entry")) return;
 
 /* ===================== Projects editor — add / edit / delete / complete project tasks ===================== */
 const PROJ_STATUS_OPTIONS = ['Not Started','In Progress','Completed','On Hold'];
+// #7 — starting menu for the Task "Type" dropdown. Any types already used on the board are merged
+// in automatically, and "➕ Other…" lets you add a new one (which then joins the list). Tell me your
+// exact list and I'll lock the dropdown to just these.
+const PROJ_TYPE_SEED = ['Design','Engineering','Production','Graphics','Fabrication','Electrical','Assembly','Review','Approval','Logistics','Install','Launch'];
 let PE_EXPANDED = new Set();   // phase sections currently expanded in the editor (default: all collapsed)
 let PE_SUBCLOSED = new Set();  // parent tasks whose subtasks are collapsed
 let PE_HIDEDONE = false; try{ PE_HIDEDONE = localStorage.getItem('mra_pe_hidedone')==='1'; }catch(e){}  // hide completed tasks in the editor
@@ -4962,6 +4982,23 @@ function setProjectPMBtn(){
   if(typeof renderAll==='function') renderAll();
   renderProjTaskList();
 }
+// #2 — flag/unflag this project as "non-official" (informal work). Stamps every task's NonOfficial column;
+// the board tags it distinctly on the Gantt, Project Progress and PM Load but still counts/shows it.
+function toggleProjNonOfficial(){
+  const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('flag a non-official project')) return;
+  const p=oProj(name); const now=!!(p&&p.nonOfficial); const val=!now;
+  if(!confirm((val?'Mark':'Un-mark')+' "'+name+'" as a NON-OFFICIAL project?\n\nIt still shows on the Gantt, Project Progress and PM Load — just tagged so everyone knows it isn\'t a formal job.')) return;
+  if(p) p.nonOfficial=val;
+  if(typeof shopWrite==='function') shopWrite({ action:'setProjectNonOfficial', project:name, value:(val?1:0), pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  renderProjTaskList(); syncNonOffBtn();
+  if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(typeof GFS!=='undefined'&&GFS&&typeof renderGanttFS==='function') renderGanttFS(); }
+}
+function syncNonOffBtn(){ const b=document.getElementById('peNonOffBtn'); if(!b) return;
+  const p=oProj(peCurrentProject()); const on=!!(p&&p.nonOfficial);
+  b.textContent=on?'🏷 Non-official ✓':'🏷 Non-official';
+  b.style.borderColor=on?'rgba(234,179,8,.7)':''; b.style.color=on?'#eab308':''; }
 // Delete a whole project everywhere — its Project Tasks + the matching floor job + Shop Tasks (cascade).
 function deleteProjectBtn(){
   const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
@@ -5246,6 +5283,7 @@ function projStatusBadge(t){
 function renderProjTaskList(){
   const name=peCurrentProject(), p=oProj(name);
   const pmBtn=document.getElementById('pePMBtn'); if(pmBtn) pmBtn.textContent=(p&&p.pm)?('👤 PM: '+p.pm):'👤 Set PM';
+  syncNonOffBtn();
   const list=document.getElementById('peList'), cnt=document.getElementById('peCount');
   const tasks=(p&&p.tasks)||[];
   // assignee filter dropdown — populate from this project's people; self-reset if the picked one isn't here
@@ -5382,9 +5420,26 @@ function fillAssignAndPhase(p){
   document.getElementById('ptAssignList').innerHTML = opts;
   document.getElementById('ptPersonList').innerHTML = opts;
   document.getElementById('ptPhaseList').innerHTML = projPhases(p).map(ph=>`<option value="${escA(ph)}">`).join("");
-  document.getElementById('ptTypeList').innerHTML = projTypes(p).map(ty=>`<option value="${escA(ty)}">`).join("");
+  // #7 Type dropdown: seed list + any types already on the board + an "Other…" escape.
+  { const sel=document.getElementById('ptType');
+    const all=[...new Set([...PROJ_TYPE_SEED, ...projTypes(p)])].sort((a,b)=>a.localeCompare(b));
+    sel.innerHTML = `<option value="">— none —</option>`
+      + all.map(ty=>`<option value="${escA(ty)}">${esc(ty)}</option>`).join("")
+      + `<option value="__new__">➕ Other…</option>`; }
   document.getElementById('ptStatus').innerHTML = PROJ_STATUS_OPTIONS.map(s=>`<option>${esc(s)}</option>`).join("");
 }
+// Set the Type dropdown to a value; if it's a custom type not in the list, add it so it shows selected.
+function ptSetType(v){ const sel=document.getElementById('ptType'); v=(v||'').trim();
+  if(v && ![...sel.options].some(o=>o.value===v)){ const o=document.createElement('option'); o.value=v; o.textContent=v;
+    sel.insertBefore(o, sel.options[sel.options.length-1]); }   // before "➕ Other…"
+  sel.value=v; ptTypeChange(); }
+// Reveal the free-text box when "➕ Other…" is chosen.
+function ptTypeChange(){ const sel=document.getElementById('ptType'), nw=document.getElementById('ptTypeNew');
+  const isNew=(sel.value==='__new__'); nw.style.display=isNew?'':'none'; if(isNew){ nw.value=''; setTimeout(()=>{try{nw.focus();}catch(e){}},40); } }
+// The Type value the form will save (dropdown pick, or the typed-in "Other…" value).
+function ptCurrentType(){ const sel=document.getElementById('ptType'); if(!sel) return '';
+  if(sel.value==='__new__') return (document.getElementById('ptTypeNew').value||'').trim();
+  return sel.value; }
 // ---- % Complete control (slider + number box), kept in light sync with the Status dropdown ----
 function ptSetPctSilent(p){ p=Math.max(0,Math.min(100,Math.round((parseInt(p,10)||0)/5)*5));   // snap to clean 5% steps
   const sl=document.getElementById('ptPct'), nb=document.getElementById('ptPctNum'), lab=document.getElementById('ptPctVal');
@@ -5441,7 +5496,7 @@ function openProjTaskNew(){
   document.getElementById('ptTitle').textContent="➕ Add project task";
   document.getElementById('ptSub').innerHTML=`<b>${esc(projLabel(name))}</b>`;
   fillAssignAndPhase(p); fillPredOptions(p,null); fillParentOptions(p,null);
-  document.getElementById('ptTask').value=""; document.getElementById('ptType').value=""; document.getElementById('ptParent').value="";
+  document.getElementById('ptTask').value=""; ptSetType(""); document.getElementById('ptParent').value="";
   document.getElementById('ptPhase').value=""; document.getElementById('ptAssigned').value=""; document.getElementById('ptAssigned2').value="";
   document.getElementById('ptStatus').value="Not Started"; ptSetPctSilent(0);
   document.getElementById('ptStart').value=""; document.getElementById('ptFinish').value="";
@@ -5467,7 +5522,7 @@ function openProjTaskEdit(id){
   fillAssignAndPhase(p); fillPredOptions(p,t.id); fillParentOptions(p,t.id);   // exclude self by real TaskID (handle may be an "s<_id>" token)
   document.getElementById('ptTask').value=t.t||"";
   document.getElementById('ptParent').value=(t.parent!=null?String(t.parent):"");
-  document.getElementById('ptType').value=t.type||"";
+  ptSetType(t.type||"");
   document.getElementById('ptPhase').value=t.phase||"";
   { const parts=String(t.who||'').split(/\s+\/\s+/); document.getElementById('ptAssigned').value=(parts[0]||'').trim(); document.getElementById('ptAssigned2').value=parts.slice(1).join(' / ').trim(); }
   { const base=projBaseStatus(t.st); const sd=document.getElementById('ptStatus');
@@ -5510,7 +5565,7 @@ function submitProjTask(){
   const _parentT=_parent?projTaskById(p,_parent):null;
   let _phase=document.getElementById('ptPhase').value.trim();
   if(_parentT && (_parentT.phase||'').trim()) _phase=(_parentT.phase||'').trim();   // a subtask inherits its parent's phase
-  const f={ task:task, phase:_phase, type:document.getElementById('ptType').value.trim(),
+  const f={ task:task, phase:_phase, type:ptCurrentType(),
     assigned:_assigned, status:ptComposeStatus(),
     start:document.getElementById('ptStart').value, finish:document.getElementById('ptFinish').value,
     pred:document.getElementById('ptPred').value, milestone:document.getElementById('ptMilestone').value,
@@ -5518,6 +5573,7 @@ function submitProjTask(){
     estDays:document.getElementById('ptEstDays').value, estHours:document.getElementById('ptEstHours').value,
     budget:document.getElementById('ptBudget').value,
     comments:document.getElementById('ptComments').value.trim() };
+  f.nonOfficial = !!(p && p.nonOfficial);   // #2: a task added to a non-official project inherits the flag
   const editing=(window._ptId!=null);
   const _oldEdit=editing?projTaskByAnyId(p,window._ptId):null;   // resolve by real TaskID or "s<_id>" handle
   // Subtask flag carried to the Lists (field_14). A picked "Subtask of" parent → sub; when editing,
@@ -6925,9 +6981,24 @@ const _SAL_DUE_N={today:0, week:7, '2wk':14, month:30};   // days-from-today cei
 function setSalDue(v){ SAL_DUE=v||'all';
   document.querySelectorAll('#salDuePick button').forEach(b=>b.classList.toggle('on', b.getAttribute('data-d')===SAL_DUE));
   if(window.MRA_DATA) renderSal(window.MRA_DATA); }
+// Sort order for the Open-Tasks-by-Assignee panel (Rich): default earliest-due first, with a dropdown.
+let SAL_SORT='due';   // 'due' (soonest, default) | 'duedesc' (latest) | 'added' (newest first) | 'bay' (trailer order)
+try{ const s=localStorage.getItem('mra_sal_sort'); if(s) SAL_SORT=s; }catch(e){}
+function setSalSort(v){ SAL_SORT=v||'due'; try{localStorage.setItem('mra_sal_sort',SAL_SORT);}catch(e){}
+  const sel=document.getElementById('salSortSel'); if(sel) sel.value=SAL_SORT;
+  if(window.MRA_DATA) renderSal(window.MRA_DATA); }
+// Task order within a trailer: closed tasks always sink; then by due (or added) per SAL_SORT.
+function _salTaskCmp(a,b){
+  if(!!a.closed!==!!b.closed) return a.closed?1:-1;
+  const ad=a.due||'', bd=b.due||'';
+  if(SAL_SORT==='added'){ const ao=a.op||'', bo=b.op||''; if(!ao&&!bo) return 0; if(!ao) return 1; if(!bo) return -1; return bo.localeCompare(ao); }
+  if(SAL_SORT==='duedesc'){ if(!ad&&!bd) return 0; if(!ad) return 1; if(!bd) return -1; return bd.localeCompare(ad); }
+  if(!ad&&!bd) return 0; if(!ad) return 1; if(!bd) return -1; return ad.localeCompare(bd);   // 'due' soonest
+}
 function renderSal(D){
   const order=D.physicalBays;
   const today=D.todayISO||localISO(Date.now());
+  { const ss=document.getElementById('salSortSel'); if(ss && ss.value!==SAL_SORT) ss.value=SAL_SORT; }   // reflect the saved sort choice
   // A task passes the timeframe filter if its DUE date is on/before the window's ceiling (overdue counts).
   // 'all' shows everything; undated OPEN tasks are hidden in a windowed view (they have no due to be "coming up").
   const dueInWindow=(due)=>{ if(SAL_DUE==='all') return true; const n=_SAL_DUE_N[SAL_DUE]; if(n==null) return true;
@@ -6958,8 +7029,27 @@ function renderSal(D){
         .filter(t=> t.closed || dueInWindow(t.due));   // timeframe picker filters OPEN tasks by due date (closed-7d always show)
       if(open.length) out.push({bay:j.bay,project:j.project,jobNum:j.jobNum,open});
     });
-    out.sort((a,b)=>{const ai=order.indexOf(a.bay),bi=order.indexOf(b.bay);
-      return (ai<0?99:ai)-(bi<0?99:bi) || a.project.localeCompare(b.project);});
+    // Sort tasks WITHIN each trailer (unless keeping raw trailer order).
+    if(SAL_SORT!=='bay') out.forEach(s=>s.open.sort(_salTaskCmp));
+    // Then order the trailer cards themselves.
+    const openDues=s=>s.open.filter(o=>!o.closed && o.due).map(o=>o.due);
+    const openAdds=s=>s.open.filter(o=>!o.closed && o.op).map(o=>o.op);
+    if(SAL_SORT==='due'){        // earliest due first (Rich's default); no-due trailers last
+      out.sort((a,b)=>{const ad=openDues(a),bd=openDues(b);
+        const am=ad.length?ad.reduce((m,d)=>d<m?d:m):'9999-12-31', bm=bd.length?bd.reduce((m,d)=>d<m?d:m):'9999-12-31';
+        return String(am).localeCompare(String(bm)) || a.project.localeCompare(b.project);});
+    } else if(SAL_SORT==='duedesc'){   // latest due first
+      out.sort((a,b)=>{const ad=openDues(a),bd=openDues(b);
+        const am=ad.length?ad.reduce((m,d)=>d>m?d:m):'', bm=bd.length?bd.reduce((m,d)=>d>m?d:m):'';
+        return String(bm).localeCompare(String(am)) || a.project.localeCompare(b.project);});
+    } else if(SAL_SORT==='added'){     // most-recently added first
+      out.sort((a,b)=>{const ad=openAdds(a),bd=openAdds(b);
+        const am=ad.length?ad.reduce((m,d)=>d>m?d:m):'', bm=bd.length?bd.reduce((m,d)=>d>m?d:m):'';
+        return String(bm).localeCompare(String(am)) || a.project.localeCompare(b.project);});
+    } else {                            // 'bay' — original trailer order (bay layout, then name)
+      out.sort((a,b)=>{const ai=order.indexOf(a.bay),bi=order.indexOf(b.bay);
+        return (ai<0?99:ai)-(bi<0?99:bi) || a.project.localeCompare(b.project);});
+    }
     return out;
   };
   const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
@@ -7179,7 +7269,7 @@ function renderProjects(D){
       const hasTasks=!!(p.tasks&&p.tasks.length);
       const expanded = hasTasks && (GANTT_LOD!=='proj' || GANTT_EXP.has(p.name) || !!PROJ_WHO);   // P1/P2/P3
       rows.push({
-        label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
+        label:(p.nonOfficial?'🏷 ':'')+p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
         barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
         cls:'clickable', caret: hasTasks?`<span class="gcaret">${expanded?'▾':'▸'}</span>`:'',
@@ -7207,7 +7297,7 @@ function renderProjects(D){
     });
   } else {
     dated.forEach(p=>{ if(!barGeom(p.startISO,p.finishISO,win)) return;
-      rows.push({ label:p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
+      rows.push({ label:(p.nonOfficial?'🏷 ':'')+p.name, sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
         barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
         cls:'clickable', onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
@@ -7232,13 +7322,14 @@ function renderProjects(D){
   // Program Development Load (stacked: active / upcoming / done)
   const pmMap={};
   projects.forEach(p=>{const pm=(p.pm&&p.pm!=="TBD")?p.pm:"Unassigned/TBD";
-    pmMap[pm]=pmMap[pm]||{active:0,upcoming:0,done:0};
-    pmMap[pm][projStatus(p,today)]++;});
+    pmMap[pm]=pmMap[pm]||{active:0,upcoming:0,done:0,nonoff:0};
+    pmMap[pm][projStatus(p,today)]++;
+    if(p.nonOfficial) pmMap[pm].nonoff++;});   // #2: count each PM's non-official projects
   // Sort by total (biggest first), but always keep Unassigned/TBD at the bottom.
   const pmArr=Object.entries(pmMap).map(([nm,v])=>({nm,...v,tot:v.active+v.upcoming+v.done})).sort((a,b)=>{const at=a.nm==="Unassigned/TBD",bt=b.nm==="Unassigned/TBD"; if(at!==bt)return at?1:-1; return b.tot-a.tot;});
   const maxTot=Math.max(1,...pmArr.map(p=>p.tot));
   document.getElementById('pms').innerHTML=pmArr.map(p=>
-    `<div class="pmrow"><div class="nm">${esc(p.nm)}</div><div class="pmbar">`+
+    `<div class="pmrow"${p.nonoff?` title="${escA(p.nonoff+' non-official project'+(p.nonoff===1?'':'s')+' on this plate')}"`:''}><div class="nm">${esc(p.nm)}${p.nonoff?` <span class="nonoff-tag">🏷${p.nonoff}</span>`:''}</div><div class="pmbar">`+
     `<div class="seg" style="width:${p.active/maxTot*100}%;background:var(--green)"></div>`+
     `<div class="seg" style="width:${p.upcoming/maxTot*100}%;background:var(--amber)"></div>`+
     `<div class="seg" style="width:${p.done/maxTot*100}%;background:var(--grey)"></div>`+
@@ -7305,7 +7396,8 @@ function renderProjects(D){
     const odTxt=od?` · <span style="color:var(--red);font-weight:700">${od} overdue</span>`:'';
     const tick=(h.expectedPct!=null && h.state!=='upcoming')
       ? `<div class="exp-tick" style="left:${h.expectedPct}%" title="should be ~${h.expectedPct}% complete by today"></div>` : '';
-    return `<div class="row" style="cursor:pointer" onclick="openProjectEditor('${escJsAttr(p.name)}')" title="Click to add / edit this project's tasks"><div style="flex:1"><div class="lead">${esc(p.name)} <span class="ttool edit" style="display:inline-block">✎</span>${chip}</div>`+
+    const noChip = p.nonOfficial?`<span class="hchip nonoff" title="Non-official project — informal work, not a formal job">🏷 non-official</span>`:'';
+    return `<div class="row" style="cursor:pointer" onclick="openProjectEditor('${escJsAttr(p.name)}')" title="Click to add / edit this project's tasks"><div style="flex:1"><div class="lead">${esc(p.name)} <span class="ttool edit" style="display:inline-block">✎</span>${chip}${noChip}</div>`+
     `<div class="meta">${esc(p.pm||"—")}${p.finishISO?" · due "+fmtMDY(p.finishISO):""}${odTxt}</div>`+
     `<div class="pmbar" style="margin-top:5px;height:8px"><div class="seg" style="width:${p.pct}%;background:${p._color}"></div>${tick}</div>`+
     `</div><div class="right"><span class="badge grey">${p.pct}%</span></div></div>`;}).join("")||`<div class="empty">No active projects</div>`;
@@ -10038,7 +10130,7 @@ function renderGanttFS(){
       const hasTasks=(p.tasks||[]).length>0, hasMs=(p.milestones||[]).length>0;
       const canExp=GANTT_TASKLEVEL?hasTasks:hasMs, exp=expandedProjects.has(p.name), done=projStatus(p,today)==='done';
       const key='p'+i; GFS_PKEY[key]=p.name; BARPOP[key]=projPop(p);
-      rows.push({label:(canExp?(exp?'▾ ':'▸ '):'   ')+p.name,
+      rows.push({label:(canExp?(exp?'▾ ':'▸ '):'   ')+(p.nonOfficial?'🏷 ':'')+p.name,
         sub:(p.pm||'—')+' · '+p.taskCount+' tasks'+(hasMs?' · '+p.milestones.length+' gates':''),
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct, barLabel:'',
         milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name), done, popKey:key,
