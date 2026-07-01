@@ -1629,6 +1629,13 @@
         <div id="fIssueDetail" class="fl-detailpane"></div>
       </div>
     </div>
+    <div class="panel" id="fp-returns">
+      <h2>↩️ Coming Back to MRA <span class="count" id="fReturnsCount"></span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">units a Fleetio issue marks as returning/back to MRA — earliest first</span>
+        <button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fReturns')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
+      </h2>
+      <div id="fReturns" class="fscroll"></div>
+    </div>
     <div class="panel" id="fp-svc">
       <h2>🔧 Service — Due &amp; Overdue <span class="count" id="fSvcCount"></span><button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fService')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
       <div id="fService" class="fscroll"></div>
@@ -2756,6 +2763,8 @@ const FLEETIO_HELP = `
     <p><b>Service Backlog</b> donut = overdue (red) vs due-soon (amber). <b>Open Issues by Type</b> = your Fleetio issue labels, ranked. <b>Top Units</b> = the units with the most open items.</p></div>
   <div class="hsec"><h4>③ ⚠ Open Issues &amp; 📋 Work Orders</h4>
     <p>The <b>⚠ Open Issues</b> list sits up top and shows <b>every</b> open Fleetio issue (no longer capped) — each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. A <b>Sort</b> dropdown orders them: <b>Overdue first</b> (default), <b>Oldest first</b>, <b>Newest first</b>, <b>Priority</b>, or by <b>issue #</b> (remembered per device). <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>hover an issue and its details (description, photos, files) dock on the right</b> with an ↗ link to Fleetio for the Resolve button (tap on touch; ✕ / Esc closes). <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
+  <div class="hsec"><h4>③ᵇ ↩️ Coming Back to MRA</h4>
+    <p>Right under Open Issues: any unit whose <b>Fleetio issue description</b> says it's <b>returning / back / due back to MRA</b> (or <b>back for storage at MRA</b>) shows here with its <b>date</b>, <b>earliest first</b>. Green <span class="k">here since …</span> once the date has passed, amber <span class="k">due …</span> within two weeks. It reads the wording straight from the issue, so add a line like <b>“Back to MRA as of 7/1/26”</b> or <b>“Returning to MRA 7/6–7/10”</b> to a Fleetio issue and the unit appears here automatically (click the row to open the issue in Fleetio).</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
     <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio). Honors the 🧤/🍁 flag picker up top.</p></div>
   <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
@@ -2775,6 +2784,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"11.4", date:"2026-07-01", title:"↩️ FLEETIO: Coming Back to MRA panel", items:[
+    "New <b>↩️ Coming Back to MRA</b> panel on the FLEETIO tab: any Fleetio issue whose description says a unit is <b>returning / back / due back to MRA</b> (or <b>back for storage at MRA</b>) shows here with its <b>date</b>, <b>sorted earliest first</b> — green “here since” once the date has passed, amber “due” within two weeks.",
+    "Reads it straight from the issue description, so just write a line like <b>“Back to MRA as of 7/1/26”</b> (or “Returning to MRA 7/6–7/10”) in the Fleetio issue and it lands here automatically." ] },
   { rev:"11.3", date:"2026-07-01", title:"🚛 FLEETIO Open Issues: show ALL + a Sort picker", items:[
     "The <b>⚠ Open Issues</b> panel now lists <b>every</b> open issue (it was capped at 40 — the box scrolls, or hit ⤢ Expand / ⛶ Full screen).",
     "New <b>Sort</b> dropdown on that panel: <b>Overdue first</b> (default), <b>Oldest first</b>, <b>Newest first</b>, <b>Priority</b>, or by <b>issue #</b> (high→low / low→high). Remembered per device." ] },
@@ -7655,6 +7667,34 @@ function _fioIssCmp(a,b){
         || ((b.ageDays||0)-(a.ageDays||0));
   }
 }
+// Parse a return/back-to-MRA date out of a Fleetio issue description (e.g. "back for storage at MRA
+// as of 7.1.26", "Returning to MRA 6.29 - 7.2", "Due Back to MRA 6.19"). Year defaults to the board's.
+function _parseReturnDate(txt, curY){
+  // The return date sits right after the "…MRA" mention (e.g. "Returning to MRA 6.27.26",
+  // "storage at MRA as of 7.1.26"). Look there first so an unrelated "as of" date elsewhere
+  // (e.g. an approved-estimate line) doesn't win.
+  const after = txt.replace(/^[\s\S]*?\bMRA\b/i, '');
+  let m = after.match(/(?:as of\s*)?(\d{1,2})[.\/-](\d{1,2})(?:[.\/-](\d{2,4}))?/)
+       || txt.match(/as of\s*(\d{1,2})[.\/-](\d{1,2})(?:[.\/-](\d{2,4}))?/i)
+       || txt.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);
+  if(!m) return {iso:null,text:''};
+  let mo=+m[1], d=+m[2], y=m[3]?+m[3]:(curY||2026);
+  if(y<100) y+=2000;
+  if(mo<1||mo>12||d<1||d>31) return {iso:null,text:''};
+  return { iso:y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'), text:mo+'/'+d+'/'+String(y).slice(2) };
+}
+// Units a Fleetio issue flags as returning/back to MRA — with the parsed date, earliest first.
+function fioReturns(F, todayISO){
+  const iss=(F&&F.issues)||[]; const curY=+((todayISO||'2026').slice(0,4))||2026;
+  // Explicit return-to-MRA phrases only (avoids false hits like "back OF THE TRAILER" or an approved estimate).
+  const trig=/\b(returning to mra|coming back to mra|(?:due )?back to mra|back at mra|(?:back for )?storage at mra|back to storage at mra)\b/i;
+  const out=[];
+  iss.forEach(i=>{ const t=((i.detail||'')+' '+(i.summary||'')); if(!trig.test(t)) return;
+    const dt=_parseReturnDate(t, curY);
+    out.push({num:i.num, asset:i.asset||'', jobNum:i.jobNum||'', raw:(i.detail||i.summary||''), dateISO:dt.iso, dateText:dt.text}); });
+  out.sort((a,b)=>(a.dateISO||'9999-99-99').localeCompare(b.dateISO||'9999-99-99'));
+  return out;
+}
 function renderFleetio(D){
   { const s=document.getElementById('fIssSortSel'); if(s && s.value!==FIO_ISS_SORT) s.value=FIO_ISS_SORT; }   // reflect saved sort choice
   const F=D.fleetio, today=D.todayISO;
@@ -7768,6 +7808,20 @@ function renderFleetio(D){
       `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${pr} ${b}</div></div>`;
   }).join('') : `<div class="empty">${issEmpty}</div>`);
   document.getElementById('fIssueCount').textContent=issues.length;
+
+  // ↩️ Coming Back to MRA — units a Fleetio issue marks as returning/back, earliest date first
+  { const rets=fioReturns(F, today); const el=document.getElementById('fReturns');
+    if(el) el.innerHTML = rets.length ? rets.map(r=>{
+      const past = r.dateISO && r.dateISO<=today;
+      const soon = r.dateISO && !past && (daysBetween(r.dateISO,today)??99)<=14;
+      const badge = r.dateISO
+        ? `<span class="badge ${past?'ok':soon?'amber':'grey'}" style="${past?'background:#13331f;color:#86efac':''}">${past?'here since '+esc(r.dateText):'due '+esc(r.dateText)}</span>`
+        : `<span class="badge grey">date?</span>`;
+      const snip = (r.raw||'').replace(/\s+/g,' ').trim().slice(0,90);
+      return `<div class="row"><div><div class="lead">${fioTitle('issue',r.num,r.asset||('Issue '+r.num))}</div>`+
+        `<div class="meta">${r.jobNum?esc(r.jobNum)+' · ':''}${esc(snip)}</div></div><div class="right">${badge}</div></div>`;
+    }).join('') : `<div class="empty">No units marked coming back to MRA</div>`;
+    const c=document.getElementById('fReturnsCount'); if(c) c.textContent=rets.length; }
 
   let woShow=wos.slice();
   if(FASSIGN) woShow=woShow.filter(w=>fAsg(w).indexOf(FASSIGN)>=0);
