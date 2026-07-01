@@ -2766,6 +2766,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"11.2", date:"2026-07-01", title:"🔧 Type saves · non-official shows instantly · crew panel tightened", items:[
+    "<b>Type dropdown now saves</b> — it writes to a dedicated <b>TaskType</b> column (the old built-in “Type” column had an unusable internal name that was silently dropping the value, and briefly blocking task edits — now fixed).",
+    "<b>Non-official flag shows on your screen instantly</b> and stays put through refreshes/updates until the ~15-min cycle catches up (it was flashing then reverting).",
+    "<b>Open Tasks by Assignee:</b> the Due window + Sort menu now sit on the header line with Show closed, to save vertical space." ] },
   { rev:"11.1", date:"2026-07-01", title:"✅ Al's list — batch 2 (Type dropdown · non-official projects) + crew task sorting", items:[
     "<b>Task Type is now a dropdown</b> in Add/Edit Project Task (with an “➕ Other…” option to add a new type) — and it now actually <b>saves</b>. (Al #7)",
     "<b>Non-official projects.</b> In ✎ Edit Project Tasks there's a new <b>🏷 Non-official</b> button — flag informal work (e.g. JFSD Trailer Weight, Hybrid Power Design) and it's tagged on the <b>Gantt</b>, <b>Project Progress</b> and each PM's <b>Program Development Load</b>, while still being counted. (Al #2)",
@@ -4195,11 +4199,12 @@ function _listOpsRaw(p){
         : [O('create','Holidays',null,{Name:p.name,Date:p.date,Country:p.country})];
     }
     case 'deleteHoliday':    return [O('delete','Holidays',{Name:p.name,Date:p.date})];
-    // NOTE: Type + NonOfficial are written by SEPARATE single-column ops (below), never mixed into the
-    // core add/edit body — SharePoint rejects the WHOLE PATCH if one column name is off, which would
-    // silently break every task edit. Keeping them isolated means a bad name only drops that one field.
-    case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
-    case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,Task:p.taskOld,__id:p._id},{Task:p.task,Phase:p.phase,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    // Type writes into the 'TaskType' column (a fresh, cleanly-named column). NonOfficial is written by a
+    // SEPARATE per-task op (setProjectNonOfficial), not mixed here. IMPORTANT: only add a column to this
+    // body once its internal name is verified — SharePoint rejects the WHOLE PATCH on one bad name, which
+    // would silently break every task edit (that's what the old empty 'Type' column did).
+    case 'addProjectTask':   return [O('create','ProjectTasks',null,{Task:p.task,Project:p.project,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
+    case 'editProjectTask':  return [O('update','ProjectTasks',{Project:p.project,Task:p.taskOld,__id:p._id},{Task:p.task,Phase:p.phase,Type:p.type,Assigned:p.assigned,Status:p.status,Start:p.start,Finish:p.finish,Predecessor:p.pred,Milestone:p.milestone,Parent:p.parentId,Sub:(p.sub?'x':''),EstDays:p.estDays,EstHours:p.estHours,Budget:p.budget,Comments:p.comments,Order:p.ord})];
     case 'deleteProjectTask':return [O('delete','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id})];
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
@@ -4324,8 +4329,22 @@ const SNAP_KEY='mra_edit_snapshot_v1', SNAP_TTL=12*3600*1000;   // 12h
 function snapLoad(){ try{ return JSON.parse(localStorage.getItem(SNAP_KEY)||'null'); }catch(e){ return null; } }
 function snapSave(){ try{ if(EDIT_BASE_GEN && window.MRA_DATA) localStorage.setItem(SNAP_KEY, JSON.stringify({baseGen:EDIT_BASE_GEN, savedAt:Date.now(), data:window.MRA_DATA})); }catch(e){} }
 function snapClear(){ try{ localStorage.removeItem(SNAP_KEY); }catch(e){} }
+// #2 — remember a just-toggled non-official flag on THIS device so it shows instantly and
+// survives the 30s poll / a new export until data.js actually reflects it (mirrors pendAdd).
+const PENDING_NONOFF_KEY='mra_pending_nonoff_v1';
+function pnoLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_NONOFF_KEY)||'{}'); }catch(e){ return {}; } }
+function pnoSave(o){ try{ localStorage.setItem(PENDING_NONOFF_KEY, JSON.stringify(o)); }catch(e){} }
+function pendNonOff(name,val){ const o=pnoLoad(); o[name]={val:!!val, ts:Date.now()}; pnoSave(o); }
 function mergePending(D){
   if(!D) return;
+  // Pending non-official flags: keep this device's just-toggled projects flagged until the export catches up.
+  { const no=pnoLoad(); let ch=false; const t=Date.now();
+    for(const nm in no){ const e=no[nm];
+      if(t-(e.ts||0) > PENDING_TTL){ delete no[nm]; ch=true; continue; }        // 12h safety
+      const p=(D.projects||[]).find(x=>x.name===nm); if(!p) continue;           // project not present yet — keep waiting
+      if(!!p.nonOfficial === !!e.val){ delete no[nm]; ch=true; continue; }      // data.js caught up — prune
+      p.nonOfficial=!!e.val; }                                                  // still pending — apply optimistic value
+    if(ch) pnoSave(no); }
   const a=pendLoad(); if(!a.length) return;
   const now=Date.now(), keep=[];
   for(const e of a){
@@ -5001,6 +5020,7 @@ function toggleProjNonOfficial(){
   const p=oProj(name); const now=!!(p&&p.nonOfficial); const val=!now;
   if(!confirm((val?'Mark':'Un-mark')+' "'+name+'" as a NON-OFFICIAL project?\n\nIt still shows on the Gantt, Project Progress and PM Load — just tagged so everyone knows it isn\'t a formal job.')) return;
   if(p) p.nonOfficial=val;
+  pendNonOff(name, val);   // hold this flag on-screen through polls/exports until data.js reflects it
   if(typeof shopWrite==='function') shopWrite({ action:'setProjectNonOfficial', project:name, value:(val?1:0), pin:CLOSE_PIN, user:CURRENT_USER });
   if(typeof markPending==='function') markPending();
   renderProjTaskList(); syncNonOffBtn();
