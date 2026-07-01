@@ -5,7 +5,7 @@ jobs:
   wtest:
     runs-on: ubuntu-latest
     steps:
-      - name: Fleetio write-back test v3 (self-cleaning; token never printed)
+      - name: Fleetio resolve-method probe (self-cleaning; token never printed)
         env:
           FKEY: ${{ secrets.FLEETIO_API_KEY }}
           FACC: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
@@ -14,26 +14,22 @@ jobs:
           B="https://secure.fleetio.com/api/v1"
           H=(-H "Authorization: Token $FKEY" -H "Account-Token: $FACC" -H "Accept: application/json")
           JH=(-H "Content-Type: application/json")
+          V=(-H "X-Api-Version: 2024-03-15")
           NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -s "${H[@]}" "$B/issues?per_page=1" -o iss0.json -w "GET issues -> %{http_code}\n"
-          VID=$(jq -r 'if type=="array" then .[0].vehicle_id else (.records[0].vehicle_id // empty) end' iss0.json 2>/dev/null)
-          echo "vehicle_id=$VID  reported_at=$NOW"
-          echo "== create test issue =="
-          curl -s "${H[@]}" "${JH[@]}" -X POST "$B/issues" \
-            -d "{\"vehicle_id\":$VID,\"summary\":\"ZZ API TEST - safe to delete\",\"reported_at\":\"$NOW\"}" \
-            -o iss.json -w "POST issues -> %{http_code}\n"
-          echo "  create resp: $(head -c 400 iss.json)"
-          IID=$(jq -r '.id // empty' iss.json 2>/dev/null)
-          echo "  issue id=$IID"
-          if [ -z "$IID" ]; then echo "!! no issue id; abort"; exit 0; fi
-          echo "== comment A: POST /comments {commentable_type,commentable_id,comment} =="
-          curl -s "${H[@]}" "${JH[@]}" -X POST "$B/comments" -d "{\"commentable_type\":\"Issue\",\"commentable_id\":$IID,\"comment\":\"ZZ A\"}" -o cA.json -w "A -> %{http_code}\n"; echo "   $(head -c 220 cA.json)"
-          echo "== comment B: POST /comments {commentable_type,commentable_id,content} =="
-          curl -s "${H[@]}" "${JH[@]}" -X POST "$B/comments" -d "{\"commentable_type\":\"Issue\",\"commentable_id\":$IID,\"content\":\"ZZ B\"}" -o cB.json -w "B -> %{http_code}\n"; echo "   $(head -c 220 cB.json)"
-          echo "== comment C: POST /issues/{id}/comments {comment} =="
-          curl -s "${H[@]}" "${JH[@]}" -X POST "$B/issues/$IID/comments" -d "{\"comment\":\"ZZ C\"}" -o cC.json -w "C -> %{http_code}\n"; echo "   $(head -c 220 cC.json)"
-          echo "== resolve: PUT /issues/{id}/resolve =="
-          curl -s "${H[@]}" "${JH[@]}" -X PUT "$B/issues/$IID/resolve" -d '{}' -o res.json -w "resolve -> %{http_code}\n"; echo "   $(head -c 220 res.json)"
-          echo "== CLEANUP delete =="
-          curl -s "${H[@]}" -X DELETE "$B/issues/$IID" -o /dev/null -w "delete -> %{http_code}\n"
-          echo "== done =="
+          VID=$(curl -s "${H[@]}" "$B/issues?per_page=1" | jq -r 'if type=="array" then .[0].vehicle_id else .records[0].vehicle_id end')
+          mk(){ curl -s "${H[@]}" "${JH[@]}" -X POST "$B/issues" -d "{\"vehicle_id\":$VID,\"summary\":\"ZZ RESOLVE TEST\",\"reported_at\":\"$NOW\"}" | jq -r '.id'; }
+          st(){ curl -s "${H[@]}" "$B/issues/$1" | jq -r '.state // .workflow_state // "?"'; }
+          echo "vehicle_id=$VID"
+          I1=$(mk); echo "R2 PUT /resolve + X-Api-Version -> issue $I1"
+          curl -s "${H[@]}" "${V[@]}" "${JH[@]}" -X PUT "$B/issues/$I1/resolve" -d '{}' -o r2.json -w "   R2 code %{http_code}\n"; echo "   resp:$(head -c 160 r2.json)  state=$(st $I1)"
+          curl -s "${H[@]}" -X DELETE "$B/issues/$I1" -o /dev/null
+          I2=$(mk); echo "R3 PATCH state=resolved -> issue $I2"
+          curl -s "${H[@]}" "${JH[@]}" -X PATCH "$B/issues/$I2" -d '{"state":"resolved"}' -o r3.json -w "   R3 code %{http_code}\n"; echo "   resp:$(head -c 160 r3.json)  state=$(st $I2)"
+          curl -s "${H[@]}" -X DELETE "$B/issues/$I2" -o /dev/null
+          I3=$(mk); echo "R4 PATCH resolved_at -> issue $I3"
+          curl -s "${H[@]}" "${JH[@]}" -X PATCH "$B/issues/$I3" -d "{\"resolved_at\":\"$NOW\"}" -o r4.json -w "   R4 code %{http_code}\n"; echo "   resp:$(head -c 160 r4.json)  state=$(st $I3)"
+          curl -s "${H[@]}" -X DELETE "$B/issues/$I3" -o /dev/null
+          I4=$(mk); echo "R5 POST /resolve + X-Api-Version -> issue $I4"
+          curl -s "${H[@]}" "${V[@]}" "${JH[@]}" -X POST "$B/issues/$I4/resolve" -d '{}' -o r5.json -w "   R5 code %{http_code}\n"; echo "   resp:$(head -c 160 r5.json)  state=$(st $I4)"
+          curl -s "${H[@]}" -X DELETE "$B/issues/$I4" -o /dev/null
+          echo "== done (all test issues deleted) =="
