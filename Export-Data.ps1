@@ -900,6 +900,8 @@ if (Test-Path $FleetioTokenFile) {
                 asset = $i.vehicle_name; jobNum = (Get-FleetJob $i.vehicle_name)
                 priority = $pr; openedISO = (FleetD10 $i.reported_at); overdue = [bool]$i.overdue
                 detail = $det; reporter = (Get-FleetReporter $i); assignees = (Get-FleetAssignees $i)
+                backMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.back_to_mra_date } else { '' })
+                leaveMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.leaving_mra_date } else { '' })
                 docs = (Get-FleetDocs $i $fhead)
             })
         }

@@ -2764,7 +2764,7 @@ const FLEETIO_HELP = `
   <div class="hsec"><h4>③ ⚠ Open Issues &amp; 📋 Work Orders</h4>
     <p>The <b>⚠ Open Issues</b> list sits up top and shows <b>every</b> open Fleetio issue (no longer capped) — each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. A <b>Sort</b> dropdown orders them: <b>Overdue first</b> (default), <b>Oldest first</b>, <b>Newest first</b>, <b>Priority</b>, or by <b>issue #</b> (remembered per device). <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>hover an issue and its details (description, photos, files) dock on the right</b> with an ↗ link to Fleetio for the Resolve button (tap on touch; ✕ / Esc closes). <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
   <div class="hsec"><h4>③ᵇ ↩️ Coming Back to MRA</h4>
-    <p>Right under Open Issues: any unit whose <b>Fleetio issue description</b> says it's <b>returning / back / due back to MRA</b> (or <b>back for storage at MRA</b>) shows here with its <b>date</b>, <b>earliest first</b>. Green <span class="k">here since …</span> once the date has passed, amber <span class="k">due …</span> within two weeks. It reads the wording straight from the issue, so add a line like <b>“Back to MRA as of 7/1/26”</b> or <b>“Returning to MRA 7/6–7/10”</b> to a Fleetio issue and the unit appears here automatically (click the row to open the issue in Fleetio).</p></div>
+    <p>Right under Open Issues: units a Fleetio issue marks as coming back to MRA, <b>earliest date first</b>. <b>Best way (exact):</b> fill the issue's <b>Back to MRA Date</b> field (and optional <b>Leaving MRA Date</b> for a range) — the panel shows the date/range and marks it <span class="k">here</span> (green) while the unit's in that window, <span class="k">due</span> (amber) within two weeks. <b>Fallback:</b> if those fields are blank it still reads the <b>description</b> (e.g. “Returning to MRA 7/6–7/10”, “Back to MRA as of 7/1/26”). Click a row to open the issue in Fleetio.</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
     <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio). Honors the 🧤/🍁 flag picker up top.</p></div>
   <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
@@ -2784,6 +2784,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"11.5", date:"2026-07-01", title:"↩️ Coming Back to MRA now reads the Fleetio date fields", items:[
+    "The <b>↩️ Coming Back to MRA</b> panel now uses Fleetio's new <b>Back to MRA Date</b> (and optional <b>Leaving MRA Date</b>) custom fields when they're filled — showing the exact date, or a <b>date range</b> when both are set, and marking a unit <b>“here”</b> while it's within that window.",
+    "Still falls back to reading the issue <b>description</b> (e.g. “Returning to MRA 7/6–7/10”) for any issue that doesn't have the fields filled yet — so nothing breaks while the crew starts using them." ] },
   { rev:"11.4", date:"2026-07-01", title:"↩️ FLEETIO: Coming Back to MRA panel", items:[
     "New <b>↩️ Coming Back to MRA</b> panel on the FLEETIO tab: any Fleetio issue whose description says a unit is <b>returning / back / due back to MRA</b> (or <b>back for storage at MRA</b>) shows here with its <b>date</b>, <b>sorted earliest first</b> — green “here since” once the date has passed, amber “due” within two weeks.",
     "Reads it straight from the issue description, so just write a line like <b>“Back to MRA as of 7/1/26”</b> (or “Returning to MRA 7/6–7/10”) in the Fleetio issue and it lands here automatically." ] },
@@ -7683,15 +7686,34 @@ function _parseReturnDate(txt, curY){
   if(mo<1||mo>12||d<1||d>31) return {iso:null,text:''};
   return { iso:y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'), text:mo+'/'+d+'/'+String(y).slice(2) };
 }
-// Units a Fleetio issue flags as returning/back to MRA — with the parsed date, earliest first.
+// Normalize a Fleetio custom-field date value (ISO 'YYYY-MM-DD' from the date picker, or a typed M/D/YY).
+function _normFieldDate(v, curY){
+  v=String(v||'').trim(); if(!v) return {iso:null,text:''};
+  let m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m){ const y=+m[1],mo=+m[2],d=+m[3]; return {iso:y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'), text:mo+'/'+d+'/'+String(y).slice(2)}; }
+  m=v.match(/(\d{1,2})[.\/-](\d{1,2})(?:[.\/-](\d{2,4}))?/);
+  if(m){ let mo=+m[1],d=+m[2],y=m[3]?+m[3]:(curY||2026); if(y<100)y+=2000;
+    if(mo<1||mo>12||d<1||d>31) return {iso:null,text:''};
+    return {iso:y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'), text:mo+'/'+d+'/'+String(y).slice(2)}; }
+  return {iso:null,text:''};
+}
+// Units a Fleetio issue flags as coming back to MRA. PREFERS the structured custom fields
+// (Back to MRA Date / Leaving MRA Date); falls back to parsing the description text. Earliest first.
 function fioReturns(F, todayISO){
   const iss=(F&&F.issues)||[]; const curY=+((todayISO||'2026').slice(0,4))||2026;
-  // Explicit return-to-MRA phrases only (avoids false hits like "back OF THE TRAILER" or an approved estimate).
   const trig=/\b(returning to mra|coming back to mra|(?:due )?back to mra|back at mra|(?:back for )?storage at mra|back to storage at mra)\b/i;
   const out=[];
-  iss.forEach(i=>{ const t=((i.detail||'')+' '+(i.summary||'')); if(!trig.test(t)) return;
-    const dt=_parseReturnDate(t, curY);
-    out.push({num:i.num, asset:i.asset||'', jobNum:i.jobNum||'', raw:(i.detail||i.summary||''), dateISO:dt.iso, dateText:dt.text}); });
+  iss.forEach(i=>{
+    const hasField = i.backMRA && String(i.backMRA).trim();
+    const t=((i.detail||'')+' '+(i.summary||''));
+    if(!hasField && !trig.test(t)) return;
+    let a, endISO=null, endText='';
+    if(hasField){ a=_normFieldDate(i.backMRA, curY);
+      if(i.leaveMRA && String(i.leaveMRA).trim()){ const l=_normFieldDate(i.leaveMRA, curY); endISO=l.iso; endText=l.text; } }
+    else { a=_parseReturnDate(t, curY); }
+    out.push({num:i.num, asset:i.asset||'', jobNum:i.jobNum||'', raw:(i.detail||i.summary||''),
+      dateISO:a.iso, dateText:a.text, endISO, endText, src:(hasField?'field':'text')});
+  });
   out.sort((a,b)=>(a.dateISO||'9999-99-99').localeCompare(b.dateISO||'9999-99-99'));
   return out;
 }
@@ -7812,10 +7834,14 @@ function renderFleetio(D){
   // ↩️ Coming Back to MRA — units a Fleetio issue marks as returning/back, earliest date first
   { const rets=fioReturns(F, today); const el=document.getElementById('fReturns');
     if(el) el.innerHTML = rets.length ? rets.map(r=>{
-      const past = r.dateISO && r.dateISO<=today;
-      const soon = r.dateISO && !past && (daysBetween(r.dateISO,today)??99)<=14;
+      const arrived = r.dateISO && r.dateISO<=today;               // arrival date has passed
+      const gone = r.endISO && r.endISO<today;                     // already left again
+      const here = arrived && !gone;                               // currently back at MRA
+      const dn = r.dateISO ? daysBetween(r.dateISO,today) : null;  // days until arrival (neg = past)
+      const soon = !here && dn!=null && dn>=0 && dn<=14;
+      const dtxt = r.endText ? (esc(r.dateText)+' – '+esc(r.endText)) : esc(r.dateText);
       const badge = r.dateISO
-        ? `<span class="badge ${past?'ok':soon?'amber':'grey'}" style="${past?'background:#13331f;color:#86efac':''}">${past?'here since '+esc(r.dateText):'due '+esc(r.dateText)}</span>`
+        ? `<span class="badge ${here?'ok':soon?'amber':'grey'}" style="${here?'background:#13331f;color:#86efac':''}">${gone?'was here':here?'here':'due'} ${dtxt}</span>`
         : `<span class="badge grey">date?</span>`;
       const snip = (r.raw||'').replace(/\s+/g,' ').trim().slice(0,90);
       return `<div class="row"><div><div class="lead">${fioTitle('issue',r.num,r.asset||('Issue '+r.num))}</div>`+
