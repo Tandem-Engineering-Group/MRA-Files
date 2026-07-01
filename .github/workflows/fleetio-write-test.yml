@@ -5,27 +5,28 @@ jobs:
   wtest:
     runs-on: ubuntu-latest
     steps:
-      - name: Fleetio resolve probe v5 (self-cleaning)
+      - name: Fleetio resolve probe v6 - new API base (self-cleaning)
         env:
           FKEY: ${{ secrets.FLEETIO_API_KEY }}
           FACC: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
         run: |
           set +e
-          B="https://secure.fleetio.com/api/v1"
+          V1="https://secure.fleetio.com/api/v1"
+          NEW="https://secure.fleetio.com/api"
           H=(-H "Authorization: Token $FKEY" -H "Account-Token: $FACC" -H "Accept: application/json")
           JH=(-H "Content-Type: application/json")
+          VER=(-H "X-Api-Version: 2024-03-15")
           NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          VID=$(curl -s "${H[@]}" "$B/issues?per_page=1" | jq -r 'if type=="array" then .[0].vehicle_id else .records[0].vehicle_id end')
-          UID=$(curl -s "${H[@]}" "$B/contacts?per_page=1" | jq -r 'if type=="array" then .[0].id else .records[0].id end' 2>/dev/null)
-          mk(){ curl -s "${H[@]}" "${JH[@]}" -X POST "$B/issues" -d "{\"vehicle_id\":$VID,\"summary\":\"ZZ RESOLVE TEST\",\"reported_at\":\"$NOW\"}" | jq -r '.id'; }
-          st(){ curl -s "${H[@]}" "$B/issues/$1" | jq -r '.state // "?"'; }
-          echo "vehicle_id=$VID contact_id=$UID"
-          I=$(mk); echo "A) PUT /resolve + X-Api-Version 2025-05-05 (issue $I)"
-          curl -s "${H[@]}" -H "X-Api-Version: 2025-05-05" "${JH[@]}" -X PUT "$B/issues/$I/resolve" -d '{}' -o a.json -w "   A code %{http_code}\n"; echo "   $(head -c 140 a.json) | state=$(st $I)"; curl -s "${H[@]}" -X DELETE "$B/issues/$I" -o /dev/null
-          I=$(mk); echo "B) PATCH state_event=resolve (issue $I)"
-          curl -s "${H[@]}" "${JH[@]}" -X PATCH "$B/issues/$I" -d '{"state_event":"resolve"}' -o b.json -w "   B code %{http_code}\n"; echo "   state=$(st $I)"; curl -s "${H[@]}" -X DELETE "$B/issues/$I" -o /dev/null
-          I=$(mk); echo "C) PATCH resolved_at + resolved_by (issue $I)"
-          curl -s "${H[@]}" "${JH[@]}" -X PATCH "$B/issues/$I" -d "{\"resolved_at\":\"$NOW\",\"resolved_by_id\":$UID}" -o c.json -w "   C code %{http_code}\n"; echo "   state=$(st $I)"; curl -s "${H[@]}" -X DELETE "$B/issues/$I" -o /dev/null
-          I=$(mk); echo "D) PUT /resolve, header AND path /api/v1 (issue $I) body resolved_at"
-          curl -s "${H[@]}" -H "X-Api-Version: 2025-05-05" "${JH[@]}" -X PUT "$B/issues/$I/resolve" -d "{\"resolved_at\":\"$NOW\"}" -o d.json -w "   D code %{http_code}\n"; echo "   $(head -c 140 d.json) | state=$(st $I)"; curl -s "${H[@]}" -X DELETE "$B/issues/$I" -o /dev/null
-          echo "== done (deleted) =="
+          VID=$(curl -s "${H[@]}" "$V1/issues?per_page=1" | jq -r 'if type=="array" then .[0].vehicle_id else .records[0].vehicle_id end')
+          IID=$(curl -s "${H[@]}" "${JH[@]}" -X POST "$V1/issues" -d "{\"vehicle_id\":$VID,\"summary\":\"ZZ RESOLVE TEST6\",\"reported_at\":\"$NOW\"}" | jq -r '.id')
+          echo "issue=$IID"
+          echo "E) GET new base /api/issues/{id} + version:"
+          curl -s "${H[@]}" "${VER[@]}" "$NEW/issues/$IID" -o e.json -w "   E code %{http_code}\n"; echo "   $(head -c 120 e.json)"
+          echo "F) PUT new base /api/issues/{id}/resolve + version:"
+          curl -s "${H[@]}" "${VER[@]}" "${JH[@]}" -X PUT "$NEW/issues/$IID/resolve" -d '{}' -o f.json -w "   F code %{http_code}\n"; echo "   $(head -c 160 f.json)"
+          echo "   state now (v1 GET): $(curl -s "${H[@]}" "$V1/issues/$IID" | jq -r '.state')"
+          echo "G) PATCH new base /api/issues/{id} state_event=resolve:"
+          curl -s "${H[@]}" "${VER[@]}" "${JH[@]}" -X PATCH "$NEW/issues/$IID" -d '{"state_event":"resolve"}' -o g.json -w "   G code %{http_code}\n"; echo "   $(head -c 120 g.json)"
+          echo "   state now: $(curl -s "${H[@]}" "$V1/issues/$IID" | jq -r '.state')"
+          curl -s "${H[@]}" -X DELETE "$V1/issues/$IID" -o /dev/null -w "   cleanup delete %{http_code}\n"
+          echo "== done =="
