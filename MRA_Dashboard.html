@@ -1662,15 +1662,15 @@
     <div id="fSearchResults" style="margin:0 0 10px"></div>
     <div class="kpis" id="fleetioKpis"></div>
     <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
-      <div class="panel">
+      <div class="panel" id="fp-svcchart">
         <h2>📊 Service Backlog</h2>
         <div id="fSvcChart"></div>
       </div>
-      <div class="panel">
+      <div class="panel" id="fp-isstype">
         <h2>🏷️ Open Issues by Type <span class="count" id="fLabelCount"></span></h2>
         <div id="fIssueChart"></div>
       </div>
-      <div class="panel">
+      <div class="panel" id="fp-topunits">
         <h2>🚚 Top Units — Open Items</h2>
         <div id="fTopUnits"></div>
       </div>
@@ -2856,7 +2856,7 @@ const FLEETIO_HELP = `
   <div class="hsec"><h4>③ᵇ ↩️ Coming Back to MRA</h4>
     <p>Right under Open Issues: units a Fleetio issue marks as coming back to MRA, <b>earliest date first</b>. <b>Best way (exact):</b> fill the issue's <b>Back to MRA Date</b> field (and optional <b>Leaving MRA Date</b> for a range) — the panel shows the date/range and marks it <span class="k">here</span> (green) while the unit's in that window, <span class="k">due</span> (amber) within two weeks. <b>Fallback:</b> if those fields are blank it still reads the <b>description</b> (e.g. “Returning to MRA 7/6–7/10”, “Back to MRA as of 7/1/26”). Click a row to open the issue in Fleetio. The <span class="k">🗓 Meeting view</span> button opens the <b>weekly maintenance-meeting agenda</b> full screen — coming-back units with owners, Parking-Lot work by crew, and a <b>⚡ Decisions needed</b> list (unassigned / undated items); assign from the board as usual and it updates live, and <span class="k">🖨 Print</span> makes a one-pager.</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
-    <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio). Honors the 🧤/🍁 flag picker up top.</p></div>
+    <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio) — or <span class="k">➕ Queue all (N)</span> on the card to add <b>every un-queued issue at once</b> (they land unassigned; divvy up after). This panel and the three charts <b>start collapsed</b> — click the ▾ to open (remembered). Honors the 🧤/🍁 flag picker up top.</p></div>
   <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
     <p>One card per trailer (matched to the shop by <b>J#</b>), color-coded by urgency: <span style="color:var(--red)">red</span> = service overdue, <span style="color:var(--amber)">amber</span> = open issues, <span style="color:var(--blue)">blue</span> = work orders, <span style="color:var(--green)">green</span> = clear. Worst-first. <b>Click a card</b> to see that trailer's exact issues, work orders and service items.</p></div>
   <div class="hsec"><h4>⑥ 🔧 Service — Due & Overdue</h4>
@@ -2874,6 +2874,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"12.4", date:"2026-07-02", title:"🚛 FLEETIO tidy-up: quieter charts · ➕ Queue all", items:[
+    "The <b>Service Backlog / Issues-by-Type / Top Units charts</b> and the <b>🔧 In the Shop</b> panel now <b>start collapsed</b> (counts stay in the header; open one and it's remembered) — 🚛 By Trailer covers the same drill-in with less scrolling.",
+    "<b>➕ Queue all:</b> on an In-the-Shop unit card, one tap adds <b>every un-queued Fleetio issue</b> on that unit as assignable Shop Tasks (they land unassigned — divvy them up after). No more adding ten issues one at a time." ] },
   { rev:"12.3", date:"2026-07-02", title:"🗓 Maintenance-Meeting view (Wednesday agenda on one screen)", items:[
     "New <b>🗓 Meeting view</b> button on the FLEETIO <b>↩️ Coming Back to MRA</b> panel — a full-screen, three-column agenda for the weekly maintenance meeting: <b>↩️ Coming back (next 30 days + here now)</b> with each unit's open issues and who owns them, <b>🅿️ In the Parking Lot</b> with open tasks by crew, and <b>⚡ Decisions needed</b> (unassigned issues on returning units · unassigned lot tasks · tasks missing a due date).",
     "Make the calls right in the meeting — assign crews / set dates on the board as usual and the view <b>updates live</b>. <b>🖨 Print</b> produces a one-page agenda to hand out. Esc or ✕ closes." ] },
@@ -4449,6 +4452,21 @@ function addFleetioTask(row,num){
   }).catch(()=>alert("Couldn't reach the service — try again."));
 }
 
+// Bulk version of the per-issue ➕: queue EVERY un-queued open Fleetio issue on a unit as an
+// assignable Shop Task in one tap (the Wednesday-meeting "make it real work" move). Assign after.
+function queueAllFleetio(rowRef){
+  const D=window.MRA_DATA||{}; const j=(D.jobs||[]).find(x=>String(x.row)===String(rowRef)); if(!j) return;
+  if(!ensureAuth("queue this unit's Fleetio issues as tasks")) return;
+  const njob=s=>String(s||'').toUpperCase().replace(/[^0-9]/g,'');
+  const mine=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>{
+    if(njob(i.jobNum)&&njob(i.jobNum)===njob(j.jobNum)) return true;
+    const m=String(i.asset||'').toUpperCase().match(/\d{3,5}/g); return !!(m&&njob(j.jobNum)&&m.indexOf(njob(j.jobNum))>=0); });
+  const have=new Set(); (j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) have.add(m[1]); });
+  const todo=mine.filter(i=>!have.has(String(i.num)));
+  if(!todo.length){ alert("All of this unit's open issues are already on the board."); return; }
+  if(!confirm('Add '+todo.length+' Fleetio issue'+(todo.length===1?'':'s')+' on '+(j.project||j.jobNum)+' as Shop Tasks?\n\nAssign crews afterwards — they land unassigned.')) return;
+  todo.forEach(i=>addFleetioTask(j.row, String(i.num)));
+}
 /* ---------- Instant on-screen update: reflect a save immediately, and stop the
    30s poll from reverting it until the workbook's data.js actually regenerates. ---------- */
 let EDIT_PENDING=false, EDIT_BASE_GEN=null;
@@ -7974,7 +7992,7 @@ function setupFloorCollapse(){
     c.textContent=col?'▸':'▾'; c.title='Collapse / expand this panel';
   });
 }
-function setupFleetioCollapse(){ setupCollapse('#fleetioView','fiocol_'); applyFScroll(); }
+function setupFleetioCollapse(){ setupCollapse('#fleetioView','fiocol_', new Set(['fp-svcchart','fp-isstype','fp-topunits','fp-inbay'])); applyFScroll(); }   // charts + In-the-Shop start collapsed (By Trailer covers the drill-in)
 function setupProjectsCollapse(){ setupCollapse('#projectsView','prjcol_', new Set(['pp-pmload','pp-ms60','workloadPanel','pp-health','pp-team'])); applyFScroll(); }   // analytics panels start collapsed
 // Capped/expandable scroll lists (Needs Attention, By Assignee, Progress, Team)
 function toggleFScroll(btn,id){ const el=document.getElementById(id); if(!el) return;
@@ -8363,7 +8381,9 @@ function renderInBayFleetio(D){
       const bd=fs.overdue?` <span class="badge red">overdue</span>`:(fs.soon?` <span class="badge amber">due soon</span>`:(s.dueISO?` <span class="badge grey">${fmtMD(s.dueISO)}</span>`:''));
       lines+=`<div class="taskline fleet" title="${escA(s.service||'Service')}">🔧 ${esc(s.service||'Service')}${bd}${fioArrow('svc','')}</div>`; });
     const cnt=b.iss.length+b.wo.length+b.svc.length;
-    return `<div class="teamcard" style="border-left-color:${edge}"><div class="th"><span class="tn">${esc(j.project||j.jobNum)} <span class="jn">${esc(j.jobNum||'')}</span></span><span class="tc">${cnt}</span></div>`+
+    const unq=b.iss.filter(i=>!(String(i.num) in addedBy)).length;   // issues not yet queued as shop tasks
+    const qa=unq>1?`<button class="expandbtn" style="padding:1px 8px;font-size:10px;margin-left:6px" onclick="event.stopPropagation();queueAllFleetio('${escJsAttr(String(j.row))}')" title="Add ALL ${unq} un-queued issues on this unit as assignable Shop Tasks in one go (assign crews after)">➕ Queue all (${unq})</button>`:'';
+    return `<div class="teamcard" style="border-left-color:${edge}"><div class="th"><span class="tn">${esc(j.project||j.jobNum)} <span class="jn">${esc(j.jobNum||'')}</span></span>${qa}<span class="tc">${cnt}</span></div>`+
       `<div class="tmeta"><span class="bayt">${esc(j.bay)}</span></div>`+
       `<div class="fitasks">${lines}</div></div>`;
   }).join('') : `<div class="empty">No open Fleetio items for units currently on the floor.</div>`;
