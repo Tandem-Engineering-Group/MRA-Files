@@ -1,0 +1,36 @@
+name: fleetio-write-test
+on:
+  workflow_dispatch:
+jobs:
+  wtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fleetio resolve probe v6 - new API base (self-cleaning; token never printed)
+        env:
+          FKEY: ${{ secrets.FLEETIO_API_KEY }}
+          FACC: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
+        run: |
+          set +e
+          V1="https://secure.fleetio.com/api/v1"
+          NEW="https://secure.fleetio.com/api"
+          H=(-H "Authorization: Token $FKEY" -H "Account-Token: $FACC" -H "Accept: application/json")
+          JH=(-H "Content-Type: application/json")
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          VID=$(curl -s "${H[@]}" "$V1/issues?per_page=1" | jq -r 'if type=="array" then .[0].vehicle_id else .records[0].vehicle_id end')
+          mk(){ curl -s "${H[@]}" "${JH[@]}" -X POST "$V1/issues" -d "{\"vehicle_id\":$VID,\"summary\":\"ZZ RESOLVE TEST6\",\"reported_at\":\"$NOW\"}" | jq -r '.id'; }
+          st(){ curl -s "${H[@]}" "$V1/issues/$1" | jq -r '.state // "?"'; }
+          IID=$(mk); echo "test issue=$IID (vehicle $VID)"
+          for VER in 2024-03-15 2025-05-05; do
+            echo "== PUT $NEW/issues/$IID/resolve  X-Api-Version:$VER =="
+            curl -s "${H[@]}" -H "X-Api-Version: $VER" "${JH[@]}" -X PUT "$NEW/issues/$IID/resolve" -d '{}' -o r.json -w "   code %{http_code}\n"
+            echo "   resp: $(head -c 200 r.json) | state=$(st $IID)"
+          done
+          echo "== POST $NEW/issues/$IID/resolve  X-Api-Version:2025-05-05 =="
+          curl -s "${H[@]}" -H "X-Api-Version: 2025-05-05" "${JH[@]}" -X POST "$NEW/issues/$IID/resolve" -d '{}' -o r2.json -w "   code %{http_code}\n"
+          echo "   resp: $(head -c 200 r2.json) | state=$(st $IID)"
+          echo "== GET sanity on new base: =="
+          curl -s "${H[@]}" -H "X-Api-Version: 2025-05-05" "$NEW/issues/$IID" -o g.json -w "   GET code %{http_code}\n"
+          echo "   keys: $(jq -r 'if type=="object" then (keys|join(","))[0:200] else "ARRAY?" end' g.json 2>/dev/null | head -c 220)"
+          echo "== CLEANUP =="
+          curl -s "${H[@]}" -X DELETE "$V1/issues/$IID" -o /dev/null -w "   delete %{http_code}\n"
+          echo "== done =="
