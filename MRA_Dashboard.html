@@ -2045,6 +2045,7 @@
         <button class="btn-primary" onclick="openProjTaskNew()">➕ Add task</button>
         <button class="btn-ghost" onclick="renameProjectBtn()" title="Rename this project everywhere — its tasks, the Gantt/Progress, and the matching floor job (nothing orphans)">✎ Rename</button>
         <button class="btn-ghost" id="pePMBtn" onclick="setProjectPMBtn()" title="Set the Program Development lead for this project — applies to all its tasks and the matching floor job (no Excel)">👤 Set PM</button>
+        <button class="btn-ghost" id="peJobBtn" onclick="setProjectJobNumBtn()" title="Set this project's Job # — shows as 'Jxxxx · Project Name' on the Gantt, the detailed view, and the task editors">🔖 Job #</button>
         <button class="btn-ghost" id="peNonOffBtn" onclick="toggleProjNonOfficial()" title="Flag this as a NON-OFFICIAL project — informal work on someone's plate (e.g. JFSD Trailer Weight). It still shows on the Gantt, Progress and PM Load, just tagged so everyone knows it isn't a formal job.">🏷 Non-official</button>
         <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
         <button class="btn-ghost" onclick="peOpenDetail()" title="Open this project's full-screen Gantt (detailed view)">⛶ Gantt view</button>
@@ -2786,6 +2787,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"11.7", date:"2026-07-02", title:"🔖 Project Job # — auto-matched + editable (Al #6, fixed)", items:[
+    "Projects now show their <b>Job #</b> as <b>“Jxxxx · Project Name”</b> on the Gantt, the detailed view, the project picker and the task editors. It <b>auto-matches</b> the project to its trailer job # where the names line up (Medtronic→J1553, Cisco→J1558, Stryker→J1412, Siemens DI→J1524, etc.).",
+    "For projects whose name doesn't match a trailer, there's now a <b>🔖 Job #</b> button in ✎ Edit Project Tasks — set it once and it shows everywhere. <i>(Saving it needs a one-time 'JobNum' column on the Project Tasks list; the auto-match works regardless.)</i>" ] },
   { rev:"11.6", date:"2026-07-02", title:"👥 Shop tasks can have a 2nd assignee (team effort)", items:[
     "The <b>➕ Add task</b> and <b>✎ Edit task</b> pop-ups now have a <b>second Assigned-to</b> dropdown. Pick two (e.g. <b>Wrap Team + Beyer Electric</b>) and the task shows in <b>both</b> crews' columns in Open Tasks by Assignee — for jobs that are a team effort. Leave the 2nd blank for a normal single-assignee task." ] },
   { rev:"11.5", date:"2026-07-01", title:"↩️ Coming Back to MRA now reads the Fleetio date fields", items:[
@@ -4240,6 +4244,7 @@ function _listOpsRaw(p){
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'setProjectNonOfficial': return taskOps('update','ProjectTasks',_projTaskRows(p.project),{NonOfficial:(p.value?'Yes':'')});   // #2: flag/unflag every task of the project
+    case 'setProjectJobNum':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{JobNum:(p.jobNum||'')});   // #6: stamp the project's Job # on every task (isolated)
     case 'importProject': {
       // NON-DESTRUCTIVE upload (rev 10.1). Was delete-ALL-then-recreate, which could gut a project
       // if the recreates failed. Now: UPDATE existing rows in place (by item _id), CREATE only the
@@ -4266,7 +4271,7 @@ function _listOpsRaw(p){
 const _LF = {
   Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
   ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9",Due:"Due"} },   /* field_8 is a Number column (always 0.0) — NOT milestone; don't write it. "Due" = a Date column added 2026-06-30 (its own internal name, not field_N) — only written when a due date is set. */
-  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"TaskType",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial"} },   /* 'Type' + 'NonOfficial' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
+  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"TaskType",JobNum:"JobNum",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial"} },   /* 'Type' + 'NonOfficial' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
 };
@@ -4968,10 +4973,25 @@ function projWhoSelHtml(id){
   return `<select class="projwhosel" id="${id}" onchange="setProjWho(this.value)" title="Show only tasks for one person/crew — or pick 🚫 Unassigned to find tasks with no one assigned — across the projects">${opts.join('')}</select>`; }
 function projPhases(p){ const s=new Set(); ((p&&p.tasks)||[]).forEach(t=>{ if(t.phase) s.add(t.phase.trim()); }); return [...s].filter(Boolean); }
 function projTypes(p){ const s=new Set(); (((window.MRA_DATA||{}).projects)||[]).forEach(pp=>(pp.tasks||[]).forEach(t=>{ if(t.type) s.add(String(t.type).trim()); })); return [...s].filter(Boolean).sort((a,b)=>a.localeCompare(b)); }
-// Job number(s) for a project — derived from the matching floor/trailer job(s) by exact project name.
-// Most projects map to one trailer (one J#); a few share one (Pre/Post ADLM → J1391). Blank if no match.
-function projJobNum(name){ const jobs=((window.MRA_DATA||{}).jobs)||[]; const out=[];
-  jobs.forEach(j=>{ const jn=(j.jobNum||'').trim(); if(j.project===name && jn && out.indexOf(jn)<0) out.push(jn); }); return out.join(' / '); }
+// Job number for a project (#6). Resolves in order: (1) an explicit Job # you set in the editor
+// (project.jobNum, once the JobNum column is added); (2) a floor job with the EXACT same name;
+// (3) a fuzzy match — a floor job whose name CONTAINS the project name or its lead word (>=4 chars),
+// since a project ("Cisco") is often a trailer named "Pod 86 - (Cisco)". Blank if nothing matches.
+function projJobNum(name){
+  const D=window.MRA_DATA||{}, jobs=D.jobs||[], nm=String(name||'').trim().toLowerCase();
+  if(!nm) return '';
+  const p=(D.projects||[]).find(x=>x.name===name);
+  if(p && p.jobNum) return String(p.jobNum).trim();                 // (1) explicit, editor-set
+  const out=[];
+  jobs.forEach(j=>{ const jn=(j.jobNum||'').trim(); if(jn && String(j.project||'').trim().toLowerCase()===nm && out.indexOf(jn)<0) out.push(jn); });
+  if(out.length) return out.join(' / ');                             // (2) exact name
+  const lead=nm.split(/[-–(]/)[0].trim();                            // (3) fuzzy, both directions (guarded)
+  jobs.forEach(j=>{ const jn=(j.jobNum||'').trim(); if(!jn) return;
+    const jp=String(j.project||'').trim().toLowerCase(), jlead=jp.split(/[-–(]/)[0].trim();
+    if( jp.includes(nm) || (lead.length>=4 && jp.includes(lead)) || (jlead.length>=5 && nm.includes(jlead)) ){
+      if(out.indexOf(jn)<0) out.push(jn); } });
+  return out.slice(0,2).join(' / ');
+}
 // "J1557 · Project Name" when a job # is known, else just the name. (Al's "shown with the Job Name".)
 function projLabel(name){ const jn=projJobNum(name); return jn ? (jn+' · '+name) : name; }
 
@@ -5069,6 +5089,23 @@ function syncNonOffBtn(){ const b=document.getElementById('peNonOffBtn'); if(!b)
   const p=oProj(peCurrentProject()); const on=!!(p&&p.nonOfficial);
   b.textContent=on?'🏷 Non-official ✓':'🏷 Non-official';
   b.style.borderColor=on?'rgba(234,179,8,.7)':''; b.style.color=on?'#eab308':''; }
+// #6 — set an explicit Job # for the whole project (overrides the auto-match). Stamps every task's
+// JobNum column (isolated write — safe even before that column exists). Shows as "Jxxxx · Project".
+function setProjectJobNumBtn(){
+  const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('set the project Job #')) return;
+  const p=oProj(name); const cur=(p&&p.jobNum)||projJobNum(name)||'';
+  let nn=(prompt('Set this project\'s Job # (e.g. J1543) — shows as "Jxxxx · '+name+'" everywhere. Blank clears it:', cur)||'').trim();
+  if(nn && !/^J/i.test(nn) && /^\d+$/.test(nn)) nn='J'+nn;   // "1543" -> "J1543"
+  if(nn===cur) return;
+  if(p) p.jobNum=nn;
+  if(typeof shopWrite==='function') shopWrite({ action:'setProjectJobNum', project:name, jobNum:nn, pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  renderProjTaskList(); syncJobBtn();
+  if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(typeof GFS!=='undefined'&&GFS&&typeof renderGanttFS==='function') renderGanttFS(); }
+}
+function syncJobBtn(){ const b=document.getElementById('peJobBtn'); if(!b) return;
+  const jn=projJobNum(peCurrentProject()); b.textContent=jn?('🔖 '+jn):'🔖 Job #'; }
 // Delete a whole project everywhere — its Project Tasks + the matching floor job + Shop Tasks (cascade).
 function deleteProjectBtn(){
   const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
@@ -5353,7 +5390,7 @@ function projStatusBadge(t){
 function renderProjTaskList(){
   const name=peCurrentProject(), p=oProj(name);
   const pmBtn=document.getElementById('pePMBtn'); if(pmBtn) pmBtn.textContent=(p&&p.pm)?('👤 PM: '+p.pm):'👤 Set PM';
-  syncNonOffBtn();
+  syncNonOffBtn(); syncJobBtn();
   const list=document.getElementById('peList'), cnt=document.getElementById('peCount');
   const tasks=(p&&p.tasks)||[];
   // assignee filter dropdown — populate from this project's people; self-reset if the picked one isn't here
