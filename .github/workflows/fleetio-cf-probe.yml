@@ -5,16 +5,33 @@ jobs:
   cf:
     runs-on: ubuntu-latest
     steps:
-      - name: Read filled Back-to-MRA date values (read-only)
+      - name: Does the LIST carry custom_fields? + read #1142 value (read-only)
         env:
           FKEY: ${{ secrets.FLEETIO_API_KEY }}
           FACC: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
         run: |
           set +e
           B="https://secure.fleetio.com/api/v1"
-          H=(-H "Authorization: Token $FKEY" -H "Account-Token: $FACC" -H "Accept: application/json")
-          curl -s "${H[@]}" "$B/issues?per_page=200&q%5Bstate_eq%5D=open" -o all.json -w "GET issues -> %{http_code}\n"
-          echo "count: $(jq '(if type==\"array\" then . else .records end)|length' all.json 2>/dev/null)"
-          echo "issues with a Back to MRA Date filled:"
-          jq -r '(if type=="array" then . else .records end)[] | select(((.custom_fields.back_to_mra_date // "")|length)>0) | "  #\(.number) | back=\(.custom_fields.back_to_mra_date) | leaving=\(.custom_fields.leaving_mra_date) | \(.vehicle_name)"' all.json 2>/dev/null
+          curl -s -H "Authorization: Token $FKEY" -H "Account-Token: $FACC" -H "Accept: application/json" "$B/issues?per_page=200&q%5Bstate_eq%5D=open" -o all.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('all.json'))
+          rows = d if isinstance(d,list) else d.get('records',[])
+          print("open issues fetched:", len(rows))
+          print("list item HAS custom_fields key:", ('custom_fields' in rows[0]) if rows else "n/a")
+          # find #1142
+          m=[r for r in rows if str(r.get('number','')).replace('#','')=='1142']
+          print("found #1142 in list:", bool(m))
+          if m:
+              r=m[0]; print("  #1142 id:", r.get('id'))
+              print("  #1142 list.custom_fields:", r.get('custom_fields','ABSENT'))
+          # any issue in the list with a non-empty back_to_mra_date?
+          filled=[(r.get('number'), r.get('custom_fields',{}).get('back_to_mra_date')) for r in rows if isinstance(r.get('custom_fields'),dict) and r.get('custom_fields',{}).get('back_to_mra_date')]
+          print("list issues with back_to_mra_date filled:", filled)
+          PY
+          # also GET #1142 single to see the value + format
+          IID=$(python3 -c "import json;d=json.load(open('all.json'));rows=d if isinstance(d,list) else d.get('records',[]);print(next((r['id'] for r in rows if str(r.get('number','')).replace('#','')=='1142'),''))")
+          echo "single GET /issues/$IID:"
+          curl -s -H "Authorization: Token $FKEY" -H "Account-Token: $FACC" -H "Accept: application/json" "$B/issues/$IID" -o one.json
+          python3 -c "import json;o=json.load(open('one.json'));print('  custom_fields:',o.get('custom_fields'))"
           echo "== done =="
