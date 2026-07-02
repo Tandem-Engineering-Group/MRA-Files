@@ -1874,7 +1874,8 @@
           <textarea id="atTask" placeholder="What needs doing…"></textarea>
         </div>
         <div class="addrow2">
-          <div><label>Assigned to</label><select id="atAssigned"></select></div>
+          <div><label>Assigned to <span style="color:var(--muted);font-weight:400;font-size:10.5px">(add a 2nd for a team effort)</span></label>
+            <div style="display:flex;gap:6px"><select id="atAssigned" style="flex:1"></select><select id="atAssigned2" style="flex:1"></select></div></div>
           <div><label>Due date (optional)</label><input id="atDue" type="date"></div>
         </div>
         <div class="addrow2">
@@ -2003,7 +2004,8 @@
       <div class="addform">
         <div><label>Task</label><textarea id="etTask" style="min-height:60px"></textarea></div>
         <div class="addrow2">
-          <div><label>Assigned to</label><select id="etAssigned"></select></div>
+          <div><label>Assigned to <span style="color:var(--muted);font-weight:400;font-size:10.5px">(add a 2nd for a team effort)</span></label>
+            <div style="display:flex;gap:6px"><select id="etAssigned" style="flex:1"></select><select id="etAssigned2" style="flex:1"></select></div></div>
           <div><label>Status</label><select id="etStatus"><option>Open</option><option>In Progress</option><option>Done</option><option>N/A</option></select></div>
         </div>
         <div class="addrow2">
@@ -2694,7 +2696,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑭ ➕ Add a task · ✎ Edit / move a job (from the board)</h4>
     <p>Turn on <span class="k">🔒 Edit mode</span> (your code) and the editing tools appear — all write straight back to the workbook (~15 min to show). While you're signed in, a green <span class="k">🔓 your-name · Log out</span> pill shows in the top bar — click it when you're done so the screen goes back to view-only (it also auto-logs-out after 5 min idle). Your <b>code is hidden (starred out)</b> as you type it into the sign-in pop-up:</p>
     <ul>
-      <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule.</li>
+      <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule. <b>Assigned to</b> now has a <b>2nd dropdown</b> — pick two crews for a <b>team-effort</b> task and it shows in both their columns (leave blank for one).</li>
       <li><span class="k">✎ edit</span> on a job card — move bay, change start/finish dates, tweak notes; <b>🗑 Delete job</b> is in that form too. <b>Tip:</b> just <b>click any job # </b>(on a bay tile or a crew task card) to jump straight into that job's editor (asks for your code first).</li>
       <li>On each task line: <span class="k">✓ close</span>, <span class="k">✎</span> edit (text, assignee, status, milestone, comments), <span class="k">🗑</span> delete. Turn on <span class="k">Show closed</span> and closed tasks get <span class="k">↩</span> reopen + 🗑 delete.</li>
       <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.)</li>
@@ -2784,6 +2786,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"11.6", date:"2026-07-02", title:"👥 Shop tasks can have a 2nd assignee (team effort)", items:[
+    "The <b>➕ Add task</b> and <b>✎ Edit task</b> pop-ups now have a <b>second Assigned-to</b> dropdown. Pick two (e.g. <b>Wrap Team + Beyer Electric</b>) and the task shows in <b>both</b> crews' columns in Open Tasks by Assignee — for jobs that are a team effort. Leave the 2nd blank for a normal single-assignee task." ] },
   { rev:"11.5", date:"2026-07-01", title:"↩️ Coming Back to MRA now reads the Fleetio date fields", items:[
     "The <b>↩️ Coming Back to MRA</b> panel now uses Fleetio's new <b>Back to MRA Date</b> (and optional <b>Leaving MRA Date</b>) custom fields when they're filled — showing the exact date, or a <b>date range</b> when both are set, and marking a unit <b>“here”</b> while it's within that window.",
     "Still falls back to reading the issue <b>description</b> (e.g. “Returning to MRA 7/6–7/10”) for any issue that doesn't have the fields filled yet — so nothing breaks while the crew starts using them." ] },
@@ -4462,6 +4466,9 @@ function etMoveCopy(isMove){
     if(isMove) setTimeout(()=>document.getElementById('editTaskModal').classList.remove('show'),900);
   }).catch(()=>{ mm.style.color='var(--red)'; mm.textContent="Couldn't reach the service — try again."; });
 }
+// Combine a primary + optional secondary shop-task assignee into "A / B" — the crew columns match
+// EITHER name, so a team-effort task shows in both people's lists (e.g. "Wrap Team / Beyer Electric").
+function _combineAssignees(a1,a2){ a1=(a1||'').trim(); a2=(a2||'').trim(); return (a2 && a2.toLowerCase()!==a1.toLowerCase()) ? (a1?(a1+' / '+a2):a2) : a1; }
 function openEditTask(proj, raw){
   const D=window.MRA_DATA||{};
   const j=(D.jobs||[]).find(x=>x.project===proj);
@@ -4470,9 +4477,13 @@ function openEditTask(proj, raw){
   document.getElementById('etSub').innerHTML=`<b>${esc(proj)}</b>${(j&&j.jobNum)?" · "+esc(j.jobNum):""} — edits the Shop Tasks row; board updates within ~15 min.`;
   document.getElementById('etTask').value=raw||"";
   const who=(t&&t.who)||"";
-  let aOpts=`<option value="">— none —</option>`+ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
-  if(who && !ASSIGNEE_OPTIONS.some(a=>a.toLowerCase()===who.toLowerCase())) aOpts+=`<option>${esc(who)}</option>`;
-  const asel=document.getElementById('etAssigned'); asel.innerHTML=aOpts; asel.value=who;
+  // split an existing "A / B" into the two dropdowns (team-effort tasks)
+  const parts=String(who).split(/\s+\/\s+/).map(s=>s.trim()).filter(Boolean);
+  const w1=parts[0]||"", w2=parts.slice(1).join(' / ');
+  const optsFor=v=>{ let o=ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
+    if(v && !ASSIGNEE_OPTIONS.some(a=>a.toLowerCase()===v.toLowerCase())) o+=`<option>${esc(v)}</option>`; return `<option value="">— none —</option>`+o; };
+  { const s=document.getElementById('etAssigned'); s.innerHTML=optsFor(w1); s.value=w1; }
+  { const s=document.getElementById('etAssigned2'); s.innerHTML=optsFor(w2); s.value=w2; }
   document.getElementById('etStatus').value=(t&&t.st)||"Open";
   document.getElementById('etMilestone').value=(t&&/yes/i.test(t.ml||""))?"Yes":"";
   { const dd=document.getElementById('etDue'); if(dd) dd.value=(t&&t.due)?String(t.due).slice(0,10):""; }
@@ -4491,7 +4502,7 @@ function submitEditTask(){
   const msg=document.getElementById('etMsg');
   if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
   const payload={ action:"editTask", project:window._etProj, taskOld:window._etOld, task:task,
-    assigned:document.getElementById('etAssigned').value, status:document.getElementById('etStatus').value,
+    assigned:_combineAssignees(document.getElementById('etAssigned').value, document.getElementById('etAssigned2').value), status:document.getElementById('etStatus').value,
     milestone:document.getElementById('etMilestone').value, comments:document.getElementById('etComments').value.trim(),
     due:(document.getElementById('etDue')?document.getElementById('etDue').value:''),
     pin:CLOSE_PIN, user:CURRENT_USER };
@@ -4535,6 +4546,7 @@ function openAddTask(prefillProj){
   document.getElementById('atProject').innerHTML = projs.map(p=>`<option value="${escA(p)}">${esc(p)}</option>`).join("")+`<option value="__new__">➕ New project…</option>`;
   document.getElementById('atBay').innerHTML = BAY_OPTIONS.map(b=>`<option>${esc(b)}</option>`).join("");
   document.getElementById('atAssigned').innerHTML = ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
+  document.getElementById('atAssigned2').innerHTML = `<option value="">— none —</option>`+ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");   // optional 2nd assignee (team effort)
   document.getElementById('atTask').value=""; document.getElementById('atComments').value="";
   document.getElementById('atMsg').textContent=""; document.getElementById('atNewProj').value="";
   document.getElementById('atMilestone').value=""; document.getElementById('atSubmit').disabled=false;
@@ -4568,7 +4580,7 @@ function submitAddTask(){
   let taskText=task; const _gbay=document.getElementById('atBay').value;
   if(proj===GENERAL_PROJ && _gbay && !/^general$/i.test(_gbay)) taskText="📍 "+_gbay+" · "+task;
   const payload={ action:"addTask", project:proj, jobNum:document.getElementById('atJob').value.trim(),
-    bay:document.getElementById('atBay').value, task:taskText, assigned:document.getElementById('atAssigned').value,
+    bay:document.getElementById('atBay').value, task:taskText, assigned:_combineAssignees(document.getElementById('atAssigned').value, document.getElementById('atAssigned2').value),
     milestone:document.getElementById('atMilestone').value, comments:document.getElementById('atComments').value.trim(),
     due:(document.getElementById('atDue')?document.getElementById('atDue').value:''),
     pin:CLOSE_PIN, user:CURRENT_USER };
