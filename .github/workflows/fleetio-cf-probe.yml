@@ -1,0 +1,19 @@
+name: fleetio-cf-probe
+on:
+  workflow_dispatch:
+jobs:
+  cf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read #1142 custom_fields value (read-only)
+        env:
+          FKEY: ${{ secrets.FLEETIO_API_KEY }}
+          FACC: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
+        run: |
+          set +e
+          B="https://secure.fleetio.com/api/v1"
+          H=(-H "Authorization: Token $FKEY" -H "Account-Token: $FACC" -H "Accept: application/json")
+          echo "find issue #1142 and show its custom_fields:"
+          curl -s "${H[@]}" "$B/issues?per_page=100&q%5Bstate_eq%5D=open" -o all.json -w "  GET issues -> %{http_code}\n"
+          jq -r '(if type=="array" then . else .records end)[] | select((.number//"")|test("1142")) | "  number=\(.number) id=\(.id)\n  custom_fields=\(.custom_fields)"' all.json 2>/dev/null
+          echo "== done =="
