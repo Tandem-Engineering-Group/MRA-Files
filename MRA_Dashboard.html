@@ -1016,6 +1016,26 @@
   #fleetioView .panel > h2 .pcaret:hover, #projectsView .panel > h2 .pcaret:hover, #floorView .panel > h2 .pcaret:hover{color:var(--txt)}
   #fleetioView .panel.pcollapsed > h2, #projectsView .panel.pcollapsed > h2, #floorView .panel.pcollapsed > h2{margin-bottom:0}
   #fleetioView .panel.pcollapsed > :not(h2), #projectsView .panel.pcollapsed > :not(h2), #floorView .panel.pcollapsed > :not(h2){display:none}
+  /* 🗓 Maintenance-Meeting view — full-screen 3-column agenda (Coming back · Parking Lot · Decisions) */
+  .mtg-overlay{position:fixed; inset:0; background:var(--bg); z-index:150; display:none; flex-direction:column; padding:14px 22px 20px; overflow:auto}
+  .mtg-overlay.show{display:flex}
+  .mtg-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; border-bottom:2px solid var(--brand); padding-bottom:9px; margin-bottom:13px}
+  .mtg-head h3{margin:0; font-size:19px}
+  .mtg-head .sub{color:var(--muted); font-size:12px}
+  .mtg-cols{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; align-items:start}
+  @media(max-width:980px){ .mtg-cols{grid-template-columns:1fr} }
+  .mtg-col h4{margin:0 0 8px; font-size:13.5px; letter-spacing:.4px; border-bottom:1px solid var(--line); padding-bottom:5px}
+  .mtg-card{background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:8px 11px; margin-bottom:8px}
+  .mtg-card .t{font-weight:800; font-size:12.5px}
+  .mtg-card .m{color:var(--muted); font-size:11px; margin-top:1px}
+  .mtg-card ul{margin:5px 0 1px; padding-left:18px}
+  .mtg-card li{font-size:11.5px; line-height:1.35; margin-bottom:2px}
+  .mtg-card li .who{color:var(--blue); font-weight:700}
+  .mtg-card li.un .who{color:var(--amber)}
+  .mtg-due{color:var(--amber); font-weight:800; font-size:11px}
+  .mtg-here{color:#86efac; font-weight:800; font-size:11px}
+  .mtg-dec{border-left:4px solid var(--amber)}
+  .mtg-empty{color:var(--muted); font-style:italic; font-size:12px}
   /* FLOOR return alarm — pulses when a unit is due back at MRA within 2 weeks */
   .retalarm{display:flex; align-items:center; gap:12px; flex-wrap:wrap; cursor:pointer; margin:0 0 12px;
     background:#3a2e12; border:1px solid var(--amber); border-left:6px solid var(--amber); border-radius:10px; padding:9px 14px;
@@ -1351,6 +1371,23 @@
   }
   </style>
 
+  <!-- ===================== 🗓 MAINTENANCE MEETING VIEW (full-screen) ===================== -->
+  <div class="mtg-overlay" id="mtgOverlay">
+    <div class="mtg-head">
+      <h3>🗓 Maintenance Meeting</h3>
+      <span class="sub" id="mtgStamp"></span>
+      <span style="margin-left:auto; display:flex; gap:8px">
+        <button class="expandbtn" onclick="printMeeting()" title="Print the agenda as a one-pager (Letter portrait)">🖨 Print</button>
+        <button class="expandbtn mtg-x" onclick="closeMeeting()" title="Close (Esc)">✕ Close</button>
+      </span>
+    </div>
+    <div class="mtg-cols">
+      <div class="mtg-col"><h4>↩️ Coming back — next 30 days</h4><div id="mtgBack"></div></div>
+      <div class="mtg-col"><h4>🅿️ In the Parking Lot now</h4><div id="mtgLot"></div></div>
+      <div class="mtg-col"><h4>⚡ Decisions needed</h4><div id="mtgDec"></div></div>
+    </div>
+  </div>
+
   <!-- ===================== FLOOR VIEW ===================== -->
   <div id="floorView">
     <div id="returnAlarm" class="retalarm" style="display:none" onclick="setView('fleetio');setTimeout(()=>{const p=document.getElementById('fp-returns'); if(p){ p.classList.remove('pcollapsed'); p.scrollIntoView({behavior:'smooth'}); }},80)" title="Units marked in Fleetio as coming back to MRA within 2 weeks (or here now) — tap for the full list"></div>
@@ -1667,7 +1704,8 @@
     <div class="panel" id="fp-returns">
       <h2>↩️ Coming Back to MRA <span class="count" id="fReturnsCount"></span>
         <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">units a Fleetio issue marks as returning/back to MRA — earliest first</span>
-        <button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fReturns')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
+        <button class="expandbtn" style="margin-left:auto" onclick="openMeeting()" title="Full-screen Wednesday maintenance-meeting agenda: what's coming back · what's in the Parking Lot · what needs a decision — with a 🖨 print">🗓 Meeting view</button>
+        <button class="expandbtn fexp" onclick="toggleFScroll(this,'fReturns')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
       </h2>
       <div id="fReturns" class="fscroll"></div>
     </div>
@@ -2816,7 +2854,7 @@ const FLEETIO_HELP = `
   <div class="hsec"><h4>③ ⚠ Open Issues &amp; 📋 Work Orders</h4>
     <p>The <b>⚠ Open Issues</b> list sits up top and shows <b>every</b> open Fleetio issue (no longer capped) — each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. A <b>Sort</b> dropdown orders them: <b>Overdue first</b> (default), <b>Oldest first</b>, <b>Newest first</b>, <b>Priority</b>, or by <b>issue #</b> (remembered per device). <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>hover an issue and its details (description, photos, files) dock on the right</b> with an ↗ link to Fleetio for the Resolve button (tap on touch; ✕ / Esc closes). <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
   <div class="hsec"><h4>③ᵇ ↩️ Coming Back to MRA</h4>
-    <p>Right under Open Issues: units a Fleetio issue marks as coming back to MRA, <b>earliest date first</b>. <b>Best way (exact):</b> fill the issue's <b>Back to MRA Date</b> field (and optional <b>Leaving MRA Date</b> for a range) — the panel shows the date/range and marks it <span class="k">here</span> (green) while the unit's in that window, <span class="k">due</span> (amber) within two weeks. <b>Fallback:</b> if those fields are blank it still reads the <b>description</b> (e.g. “Returning to MRA 7/6–7/10”, “Back to MRA as of 7/1/26”). Click a row to open the issue in Fleetio.</p></div>
+    <p>Right under Open Issues: units a Fleetio issue marks as coming back to MRA, <b>earliest date first</b>. <b>Best way (exact):</b> fill the issue's <b>Back to MRA Date</b> field (and optional <b>Leaving MRA Date</b> for a range) — the panel shows the date/range and marks it <span class="k">here</span> (green) while the unit's in that window, <span class="k">due</span> (amber) within two weeks. <b>Fallback:</b> if those fields are blank it still reads the <b>description</b> (e.g. “Returning to MRA 7/6–7/10”, “Back to MRA as of 7/1/26”). Click a row to open the issue in Fleetio. The <span class="k">🗓 Meeting view</span> button opens the <b>weekly maintenance-meeting agenda</b> full screen — coming-back units with owners, Parking-Lot work by crew, and a <b>⚡ Decisions needed</b> list (unassigned / undated items); assign from the board as usual and it updates live, and <span class="k">🖨 Print</span> makes a one-pager.</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
     <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio). Honors the 🧤/🍁 flag picker up top.</p></div>
   <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
@@ -2836,6 +2874,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"12.3", date:"2026-07-02", title:"🗓 Maintenance-Meeting view (Wednesday agenda on one screen)", items:[
+    "New <b>🗓 Meeting view</b> button on the FLEETIO <b>↩️ Coming Back to MRA</b> panel — a full-screen, three-column agenda for the weekly maintenance meeting: <b>↩️ Coming back (next 30 days + here now)</b> with each unit's open issues and who owns them, <b>🅿️ In the Parking Lot</b> with open tasks by crew, and <b>⚡ Decisions needed</b> (unassigned issues on returning units · unassigned lot tasks · tasks missing a due date).",
+    "Make the calls right in the meeting — assign crews / set dates on the board as usual and the view <b>updates live</b>. <b>🖨 Print</b> produces a one-page agenda to hand out. Esc or ✕ closes." ] },
   { rev:"12.2", date:"2026-07-02", title:"🗂 PROJECTS split view · 🏷 non-official toggle · 🔔 return alarm on the FLOOR", items:[
     "The PROJECTS tab now has a <b>View picker</b>: <b>📅 Schedule</b> (Gantt + Progress + Needs Attention — the default), <b>📊 Analytics</b> (Program Development Load, Milestones, Workload, Portfolio Health, Team Capacity), or <b>▦ All</b>. Remembered per device.",
     "The <b>analytics panels start collapsed</b> (counts stay in the header) — open the ones you use and it's remembered.",
@@ -7214,6 +7255,82 @@ function _salTaskCmp(a,b){
   if(SAL_SORT==='duedesc'){ if(!ad&&!bd) return 0; if(!ad) return 1; if(!bd) return -1; return bd.localeCompare(ad); }
   if(!ad&&!bd) return 0; if(!ad) return 1; if(!bd) return -1; return ad.localeCompare(bd);   // 'due' soonest
 }
+/* ---------- MTG Maintenance-Meeting view: the Wednesday agenda on one screen ----------
+   Col 1 = units coming back (30 days) + here now, grouped per unit with its open Fleetio issues
+           (assigned crew shown; "unassigned" = nobody owns it yet).
+   Col 2 = Parking-Lot trailers with their open tasks by crew.
+   Col 3 = the decision list: unowned issues on returning units, lot tasks with no assignee, lot tasks
+           with no due date. Assign/edit from the normal board while this is open - it re-renders live. */
+let MTG_OPEN=false;
+function _mtgData(D){
+  const today=D.todayISO||localISO(Date.now());
+  const F=D.fleetio||{}; const issues=F.issues||[];
+  // task coverage: Fleetio #num -> assigned crew (from any job's open tasks)
+  const cov={};
+  (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ const m=String(t.t||'').match(/#(\d+)/); if(m&&!t.done) cov[m[1]]={who:(t.who||'').trim(), proj:j.project}; }));
+  // Col 1 - group returns by unit (a unit can carry several dated issues)
+  const rets=(typeof fioReturns==='function')?fioReturns(F,today):[];
+  const units={};
+  rets.forEach(r=>{ if(!r.dateISO) return;
+    const dn=daysBetween(r.dateISO,today); const gone=r.endISO&&r.endISO<today;
+    const state=(dn!=null&&dn>=0&&dn<=30)?'soon':((dn!=null&&dn<0&&!gone)?'here':null);
+    if(!state) return;
+    const k=r.asset||('#'+r.num);
+    if(!units[k]||state==='soon') units[k]=Object.assign(units[k]||{},{asset:k, jobNum:r.jobNum, state, dn, dateText:r.dateText, endText:r.endText});
+  });
+  const back=Object.values(units).map(u=>{
+    u.issues=issues.filter(i=>(i.asset||'')===u.asset).map(i=>{ const c=cov[String(i.num)];
+      return {num:i.num, summ:i.summary||('Issue '+i.num), who:(c&&c.who)||((i.assignees||[]).join(', ')), covered:!!(c&&c.who)}; });
+    u.unassigned=u.issues.filter(x=>!x.covered&&!x.who).length;
+    return u;
+  }).sort((a,b)=>(a.state===b.state?0:(a.state==='soon'?-1:1)) || ((a.dn??99)-(b.dn??99)));
+  // Col 2 - parking lot work
+  const lot=(D.jobs||[]).filter(j=>/^\s*parking\s*lot\s*$/i.test(j.bay||'') && (j.status||'').toLowerCase()!=='shipped' && j.category!=='leave')
+    .map(j=>({proj:j.project, jobNum:j.jobNum, tasks:(j.tasks||[]).filter(t=>!t.done).map(t=>({t:cleanTask(t.t,false), who:(t.who||'').trim(), due:t.due||null}))}))
+    .sort((a,b)=>(b.tasks.length-a.tasks.length)||a.proj.localeCompare(b.proj));
+  // Col 3 - decisions
+  const dec=[];
+  back.forEach(u=>u.issues.forEach(x=>{ if(!x.covered&&!x.who) dec.push({k:'assign', txt:'Assign crew - '+u.asset.split(/\s+/).slice(0,2).join(' ')+': #'+x.num+' '+x.summ}); }));
+  lot.forEach(l=>l.tasks.forEach(t=>{ if(!t.who) dec.push({k:'assign', txt:'Assign crew - '+l.proj+': '+String(t.t).slice(0,50)}); }));
+  lot.forEach(l=>l.tasks.forEach(t=>{ if(t.who&&!t.due) dec.push({k:'due', txt:'Set due date - '+l.proj+': '+String(t.t).slice(0,50)}); }));
+  return {today, back, lot, dec};
+}
+function renderMeeting(){
+  const D=window.MRA_DATA||{}; if(!(D.jobs&&D.jobs.length)) return;
+  const M=_mtgData(D);
+  document.getElementById('mtgStamp').textContent=fmtMDY(M.today)+' · '+M.back.length+' returning/here · '+M.lot.length+' in the lot · '+M.dec.length+' decisions';
+  document.getElementById('mtgBack').innerHTML = M.back.length ? M.back.map(u=>{
+    const when=u.state==='here'?`<span class="mtg-here">HERE NOW${u.endText?(' → '+esc(u.endText)):''}</span>`
+      :`<span class="mtg-due">${esc(u.dateText)}${u.dn===0?' · TODAY':' · '+u.dn+'d'}</span>`;
+    const lis=u.issues.slice(0,8).map(x=>`<li class="${(!x.covered&&!x.who)?'un':''}">#${esc(String(x.num))} ${esc(x.summ)} — <span class="who">${x.covered||x.who?esc(x.who||'—'):'⚠ unassigned'}</span></li>`).join('');
+    return `<div class="mtg-card"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''}</div>${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
+  }).join('') : `<div class="mtg-empty">Nothing marked coming back in the next 30 days.</div>`;
+  document.getElementById('mtgLot').innerHTML = M.lot.length ? M.lot.map(l=>{
+    const lis=l.tasks.slice(0,10).map(t=>`<li class="${t.who?'':'un'}">${esc(String(t.t).slice(0,60))} — <span class="who">${t.who?esc(t.who):'⚠ unassigned'}</span>${t.due?` <span class="mtg-due">due ${esc(fmtMDY(t.due))}</span>`:''}</li>`).join('');
+    return `<div class="mtg-card"><div class="t">${esc(l.proj)}</div><div class="m">${l.jobNum?esc(l.jobNum)+' · ':''}${l.tasks.length} open task${l.tasks.length===1?'':'s'}</div>${lis?`<ul>${lis}</ul>`:'<div class="mtg-empty">no open tasks</div>'}${l.tasks.length>10?`<div class="m">+${l.tasks.length-10} more…</div>`:''}</div>`;
+  }).join('') : `<div class="mtg-empty">Nothing in the Parking Lot.</div>`;
+  document.getElementById('mtgDec').innerHTML = M.dec.length ? M.dec.slice(0,30).map(d=>
+    `<div class="mtg-card mtg-dec"><div class="t" style="font-weight:600">${d.k==='due'?'📅':'🧑‍🔧'} ${esc(d.txt)}</div></div>`).join('')
+    + (M.dec.length>30?`<div class="mtg-empty">+${M.dec.length-30} more…</div>`:'')
+    : `<div class="mtg-empty">✅ Nothing needs a decision — everything is assigned and dated.</div>`;
+}
+function openMeeting(){ MTG_OPEN=true; renderMeeting(); document.getElementById('mtgOverlay').classList.add('show'); }
+function closeMeeting(){ MTG_OPEN=false; document.getElementById('mtgOverlay').classList.remove('show'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&MTG_OPEN) closeMeeting(); });
+function printMeeting(){
+  const D=window.MRA_DATA||{}; const M=_mtgData(D);
+  const now=new Date(), stamp=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
+  const sec=(title,inner)=>`<h2>${title}</h2>${inner}`;
+  const backH=M.back.map(u=>`<div class="jb"><b>${esc(u.asset)}</b> — ${u.state==='here'?('HERE NOW'+(u.endText?(' → '+esc(u.endText)):'')):('due '+esc(u.dateText))}${u.jobNum?' · '+esc(u.jobNum):''}<ul>${u.issues.map(x=>`<li>#${esc(String(x.num))} ${esc(x.summ)} — ${x.covered||x.who?esc(x.who||'—'):'UNASSIGNED'}</li>`).join('')}</ul></div>`).join('')||'<i>none</i>';
+  const lotH=M.lot.map(l=>`<div class="jb"><b>${esc(l.proj)}</b>${l.jobNum?' · '+esc(l.jobNum):''}<ul>${l.tasks.map(t=>`<li>${esc(String(t.t).slice(0,70))} — ${t.who?esc(t.who):'UNASSIGNED'}${t.due?(' · due '+esc(fmtMDY(t.due))):''}</li>`).join('')}</ul></div>`).join('')||'<i>none</i>';
+  const decH=M.dec.length?('<ol>'+M.dec.map(d=>`<li>${esc(d.txt)}</li>`).join('')+'</ol>'):'<i>none — all assigned &amp; dated</i>';
+  const css=`@page{size:letter portrait;margin:.5in}body{font-family:'Segoe UI',Arial,sans-serif;color:#111;font-size:11.5px}h1{font-size:19px;margin:0 0 2px}h1 .mra{color:#e04826}.sub{color:#666;margin-bottom:10px}h2{font-size:13px;border-bottom:2px solid #e04826;padding-bottom:3px;margin:14px 0 7px}.jb{margin-bottom:7px;break-inside:avoid}ul,ol{margin:3px 0 3px 20px;padding:0}li{margin-bottom:2px}.printbar{background:#23272e;color:#fff;padding:8px 14px;margin:-8px -8px 12px;font-size:12px}.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-weight:700;cursor:pointer}@media print{.printbar{display:none}}`;
+  const fitJS=`<scr`+`ipt>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},600)};</scr`+`ipt>`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA Maintenance Meeting — ${stamp}</title><style>${css}</style></head><body><div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button></div><h1><span class="mra">MRA</span> Maintenance Meeting</h1><div class="sub">${stamp} · ${M.back.length} returning/here · ${M.lot.length} in the lot · ${M.dec.length} decisions</div>${sec('↩️ Coming back — next 30 days',backH)}${sec('🅿️ In the Parking Lot',lotH)}${sec('⚡ Decisions needed',decH)}${fitJS}</body></html>`;
+  const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
 // 🔔 FLOOR return alarm — units marked in Fleetio as coming back within 14 days (amber, pulsing)
 // or already here inside their date window (green). Hidden entirely when nothing qualifies.
 function renderReturnAlarm(D){
@@ -7242,6 +7359,7 @@ function renderSal(D){
   const order=D.physicalBays;
   const today=D.todayISO||localISO(Date.now());
   renderReturnAlarm(D);
+  if(MTG_OPEN) renderMeeting();   // meeting view stays live while assignments are made
   { const ss=document.getElementById('salSortSel'); if(ss && ss.value!==SAL_SORT) ss.value=SAL_SORT; }   // reflect the saved sort choice
   // A task passes the timeframe filter if its DUE date is on/before the window's ceiling (overdue counts).
   // 'all' shows everything; undated OPEN tasks are hidden in a windowed view (they have no due to be "coming up").
