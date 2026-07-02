@@ -495,8 +495,9 @@
   .tasklist.fleet .fl-h{font-size:9px; letter-spacing:.5px; text-transform:uppercase; color:#fca5a5; font-weight:700; padding:2px 0 3px 2px}
   .taskline.fleet{color:#e7b3b3}
   .taskline.fleet .flnum{color:#fca5a5; font-weight:700; margin-right:5px}
-  .fl-det{font-size:10px; color:var(--muted); line-height:1.3; padding:0 0 3px 22px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
-  body.wall .fl-det{-webkit-line-clamp:initial; overflow:visible; display:block}
+  .fl-det{font-size:10px; color:var(--muted); line-height:1.3; padding:0 0 3px 22px; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer}
+  .fl-det.open{-webkit-line-clamp:initial; overflow:visible; display:block}
+  body.wall .fl-det{-webkit-line-clamp:initial; overflow:visible; display:block; cursor:default}
   .taskline.fleet .fl-asset{color:var(--faint); font-size:10px; margin-left:6px}
   .morebtn{cursor:pointer; color:#7aa2d6; user-select:none}
   .morebtn:hover{text-decoration:underline}
@@ -1011,10 +1012,10 @@
     margin:18px 0 8px; padding-top:14px; border-top:1px solid var(--line); display:flex; align-items:baseline; gap:8px}
   #dsPanel .ds-div span{font-size:9.5px; font-weight:600; text-transform:none; letter-spacing:0; color:var(--faint)}
   /* Collapsible FLEETIO + PROJECTS panels */
-  #fleetioView .panel > h2 .pcaret, #projectsView .panel > h2 .pcaret{cursor:pointer; color:var(--muted); font-size:12px; font-weight:700; margin-right:8px; user-select:none}
-  #fleetioView .panel > h2 .pcaret:hover, #projectsView .panel > h2 .pcaret:hover{color:var(--txt)}
-  #fleetioView .panel.pcollapsed > h2, #projectsView .panel.pcollapsed > h2{margin-bottom:0}
-  #fleetioView .panel.pcollapsed > :not(h2), #projectsView .panel.pcollapsed > :not(h2){display:none}
+  #fleetioView .panel > h2 .pcaret, #projectsView .panel > h2 .pcaret, #floorView .panel > h2 .pcaret{cursor:pointer; color:var(--muted); font-size:12px; font-weight:700; margin-right:8px; user-select:none}
+  #fleetioView .panel > h2 .pcaret:hover, #projectsView .panel > h2 .pcaret:hover, #floorView .panel > h2 .pcaret:hover{color:var(--txt)}
+  #fleetioView .panel.pcollapsed > h2, #projectsView .panel.pcollapsed > h2, #floorView .panel.pcollapsed > h2{margin-bottom:0}
+  #fleetioView .panel.pcollapsed > :not(h2), #projectsView .panel.pcollapsed > :not(h2), #floorView .panel.pcollapsed > :not(h2){display:none}
   /* Capped, scrollable lists (Needs Attention / By Assignee) with an Expand toggle */
   .fscroll{max-height:300px; overflow-y:auto; padding-right:2px}
   .fscroll.exp{max-height:none; overflow:visible}
@@ -1378,9 +1379,16 @@
             <option value="bay">🏭 Trailer / bay</option>
           </select>
         </span>
-        <span style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap">
-          <button class="btn-ghost" onclick="openAddGeneralTask()" style="padding:4px 10px;font-size:11.5px" title="Add a crew task that isn't tied to a trailer (move a trailer, parts run, etc.) — assign it to a person and it shows in their column">➕ General</button>
-          <button class="btn-ghost" onclick="openAddTask()" style="padding:4px 10px;font-size:11.5px" title="Add a task to any trailer/job and assign it — right here, no scrolling back up to the menu">➕ Add task</button>
+        <span id="salOverChip" class="badge red" style="display:none" title="Open tasks whose due date has passed — they show ⚠ in the lists below"></span>
+        <span style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+          <details class="tbmenu" id="salAddMenu">
+            <summary class="btn-ghost" style="padding:4px 10px;font-size:11.5px" title="Add work — a trailer task, a general crew task, or a whole new job">➕ Add ▾</summary>
+            <div class="tbpanel" style="right:0;left:auto">
+              <button class="btn-ghost" onclick="document.getElementById('salAddMenu').removeAttribute('open');openAddTask()" style="text-align:left" title="Add a task to any trailer/job and assign it">🔧 Task on a trailer…</button>
+              <button class="btn-ghost" onclick="document.getElementById('salAddMenu').removeAttribute('open');openAddGeneralTask()" style="text-align:left" title="A crew task that isn't tied to a trailer (move a trailer, parts run, etc.)">🛠 General crew task…</button>
+              <button class="btn-ghost" onclick="document.getElementById('salAddMenu').removeAttribute('open');openAddJob()" style="text-align:left" title="Create a brand-new shop job on the schedule">🚛 New job…</button>
+            </div>
+          </details>
           <button class="btn-ghost" id="salClosedBtn" onclick="toggleSalClosed()" style="padding:4px 10px;font-size:11.5px" title="Also show tasks each crew CLOSED in the last 7 days (✓, struck through). Click again to hide.">👁 Show closed (7d)</button>
         </span>
         <span id="asgPageInd" style="font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none;flex-basis:100%"></span>
@@ -1432,15 +1440,15 @@
     </div>
 
     <div class="grid" style="grid-template-columns:1fr 1fr">
-      <div class="panel">
+      <div class="panel" id="fl-flagged">
         <h2>⚑ Flagged &amp; Past Due <span class="count" id="flagCount"></span></h2>
         <div id="flags"></div>
       </div>
-      <div class="panel">
+      <div class="panel" id="fl-leave">
         <h2>Staff on Leave <span class="count" id="leaveCount"></span><button class="leaveedit" onclick="toggleCloseMode(document.getElementById('btnCloseMode'))" title="Turn on Edit mode here to add or change leave (needs code)">🔒 Edit</button><button class="leaveadd" onclick="openLeave()" title="Add a leave / time-off entry">➕ Add</button></h2>
         <div id="leave"></div>
       </div>
-      <div class="panel">
+      <div class="panel" id="fl-returns">
         <h2>↩️ Coming Back to MRA <span class="count" id="returnsCount"></span></h2>
         <div id="returnsList"></div>
       </div>
@@ -2629,7 +2637,7 @@ const GENERAL_HELP = `
   <h3>How to use the <span class="mra">MRA</span> Command Center</h3>
   <div class="msub">Everything here builds itself from the Excel workbook — you never edit the dashboard by hand.</div>
   <div class="hsec"><h4>① The tabs up top</h4>
-    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs, staff on leave, and <b>↩️ Coming Back to MRA</b> (trailers arriving back + parked at MRA now, from the logistics calendars). In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
+    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs, staff on leave, and <b>↩️ Coming Back to MRA</b> (trailers arriving back + parked at MRA now, from the logistics calendars). The <b>⚑ Flagged, Staff on Leave and ↩️ Coming Back panels start collapsed</b> — their counts stay in the header; click the <span class="k">▾</span> to open one (remembered per device). In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, Program Development load and team capacity. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
@@ -2639,7 +2647,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
     <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. Per-tile collapse state is remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. <span class="k">☰ Actions ▸ 🖨 Print Sal tasks</span> prints just Sal's open tasks on one page (grouped by trailer, with Fleetio descriptions — plus any Fleetio <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files, which open directly without a Fleetio login).</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap · Electricians ⇄ Doug · Josh · Jeff</h4>
-    <p>Live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date, and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; it's remembered per device. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
+    <p>Live queues, one per crew. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date — <b>a shop TV defaults to Month</b> — and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; both remembered per device. An <b>⚠ N overdue</b> chip counts open tasks past their due date. The <span class="k">➕ Add</span> menu here adds a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot. Fleetio descriptions under tasks clamp to <b>one line — tap to expand</b>. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
     <p><b>Sizing on the TV (admin 🎨 Design panel):</b> every crew tile on <i>both</i> pages — Sal · Wrap · Electricians and Doug · Josh · Jeff — can be sized independently (width + height) from the tile picker, same as the bays.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
     <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show completed</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). The picker is <b>two-level</b>: a group (MRA Design, MRA Shop, Electricians, Wrap Team, Maintenance) <b>rolls up everyone</b> ("MRA Design — all") with each member indented under it ("› Steve K") — pick the group to see all of it, or a person to drill in. Members come from the workbook's <b>Sub-Resource</b> column (Assigned To = group, Sub-Resource = person); until that's filled, the board reads them from existing "Group / Person" assignments. Name variants are still merged (e.g. <b>MasterWraps → Wrap Team</b>, <b>Electrician → Electricians</b>). <span class="k">🖨 Print</span> lays the Gantt + full task list on one <b>11×17 (tabloid) landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
@@ -2787,6 +2795,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"12.0", date:"2026-07-02", title:"🧹 FLOOR cleanup: one ➕ Add menu · tidier panels · ⚠ overdue chip", items:[
+    "<b>One ➕ Add menu</b> on the Open Tasks by Assignee header replaces the separate General / Add-task buttons — add a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot.",
+    "<b>⚑ Flagged, Staff on Leave and ↩️ Coming Back now start collapsed</b> (their counts stay in the header) — click the ▾ to open one; your choice is remembered on this device.",
+    "An <b>⚠ N overdue</b> chip on the crew panel header counts open tasks past their due date, and a <b>shop TV (wall mode) defaults the Due window to Month</b> so the big screen shows what matters now.",
+    "Long <b>Fleetio descriptions</b> under tasks clamp to <b>one line — tap to expand</b> (the TV still shows them in full)." ] },
   { rev:"11.9", date:"2026-07-02", title:"🔖 Job #s now show on the Projects Gantt too", items:[
     "Finishing touch on Al #6: the project rows on the <b>Projects Gantt</b> (inline and full-screen) now read <b>\u201CJxxxx \u00B7 Project Name\u201D</b>, matching the detailed view and the editors." ] },
   { rev:"11.8", date:"2026-07-02", title:"🩹 Assigning a just-added task now sticks", items:[
@@ -3655,6 +3668,10 @@ function toggleTheme(btn){
 function toggleWall(btn){
   WALL=!WALL; document.body.classList.toggle('wall',WALL);
   try{ localStorage.setItem('mra_wall', WALL?'1':''); }catch(e){}
+  // Shop TV default: unless this device explicitly picked a Due window, wall mode shows the
+  // MONTH window (what's due this month) and normal mode goes back to All.
+  try{ if(!localStorage.getItem('mra_sal_due')){ SAL_DUE=WALL?'month':'all';
+    document.querySelectorAll('#salDuePick button').forEach(b=>b.classList.toggle('on', b.getAttribute('data-d')===SAL_DUE)); } }catch(e){}
   if(btn){ btn.classList.toggle('on',WALL); btn.textContent=WALL?'📺 Wall: ON':'📺 Wall'; }
   // Wall mode: tuck the Employee-of-the-Month badge up in the header next to the clock
   // (frees the bottom). It stays display:none outside wall, so leaving it there is harmless.
@@ -7099,6 +7116,7 @@ function renderFloor(D){
       `<div class="meta">${esc(j.bay)} · ${esc(j.jobNum||"—")}${j.pm?" · "+esc(j.pm):""}</div></div><div class="right">${b}</div></div>`;
   }).join(""):`<div class="empty">Nothing flagged — all on track ✓</div>`;
   document.getElementById('flagCount').textContent=flagged.length;
+  setupFloorCollapse();   // Flagged / Leave / Coming-Back start collapsed (counts stay visible) — remembered per device
 
   // (Next Up / On Hold now live in the combined bay-board tile above.)
 
@@ -7122,8 +7140,11 @@ function toggleSalClosed(){ SAL_SHOWCLOSED=!SAL_SHOWCLOSED;
   const b=document.getElementById('salClosedBtn'); if(b){ b.classList.toggle('on',SAL_SHOWCLOSED); b.textContent=SAL_SHOWCLOSED?'👁 Hide closed':'👁 Show closed (7d)'; }
   if(window.MRA_DATA) renderSal(window.MRA_DATA); }
 let SAL_DUE='all';   // timeframe picker on the Open-Tasks-by-Assignee panel (by DUE date)
+// Remembered per device; a shop TV (wall mode) with no saved choice defaults to the Month window.
+try{ const _sd=localStorage.getItem('mra_sal_due'); if(_sd) SAL_DUE=_sd; else if(localStorage.getItem('mra_wall')==='1') SAL_DUE='month'; }catch(e){}
 const _SAL_DUE_N={today:0, week:7, '2wk':14, month:30};   // days-from-today ceiling; 'all' = no filter
 function setSalDue(v){ SAL_DUE=v||'all';
+  try{ localStorage.setItem('mra_sal_due', SAL_DUE); }catch(e){}
   document.querySelectorAll('#salDuePick button').forEach(b=>b.classList.toggle('on', b.getAttribute('data-d')===SAL_DUE));
   if(window.MRA_DATA) renderSal(window.MRA_DATA); }
 // Sort order for the Open-Tasks-by-Assignee panel (Rich): default earliest-due first, with a dropdown.
@@ -7205,6 +7226,14 @@ function renderSal(D){
       const odue = o.due?` <span class="duedate${odOver?' od':''}">📅 due ${esc(fmtMDY(o.due))}</span>`:'';
       if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${oent}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
       const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
+  // ⚠ overdue chip in the panel header — distinct open crew tasks whose due date has passed.
+  { const chip=document.getElementById('salOverChip');
+    if(chip){ let n=0;
+      (D.jobs||[]).filter(j=>j.category!=="leave" && !["shipped","on hold"].includes((j.status||"").toLowerCase())).forEach(j=>{
+        (j.tasks||[]).forEach(t=>{ if(t.done||!t.due) return;
+          const bb=basisFor({who:t.who||"", raw:t.t, disp:t.t});
+          if(GROUPS.some(g=>g.re.test(bb)) && (daysBetween(t.due,today)??0)<0) n++; }); });
+      chip.textContent='⚠ '+n+' overdue'; chip.style.display=n?'':'none'; } }
   let pageBTot=0;
   GROUPS.forEach(g=>{
     const cards=build(g.re);
@@ -7689,7 +7718,9 @@ function fioHref(kind,num){
   return FLEETIO_BASE+'/issues'+((num!=null&&num!=='')?('/'+encodeURIComponent(num)):'');
 }
 function fioIssue(num){ const D=window.MRA_DATA||{}; return (((D.fleetio&&D.fleetio.issues)||[]).find(i=>String(i.num)===String(num)))||null; }
-function fioDetHtml(num){ const it=fioIssue(num); const d=(it&&it.detail)?String(it.detail).trim():''; return d?`<div class="fl-det" title="${escA(d)}">${esc(d)}</div>`:''; }
+function fioDetHtml(num){ const it=fioIssue(num); const d=(it&&it.detail)?String(it.detail).trim():'';
+  // Clamped to ONE line to keep task lists tight — tap/click the line to expand the full description.
+  return d?`<div class="fl-det" onclick="event.stopPropagation();this.classList.toggle('open')" title="${escA(d)}">${esc(d)}</div>`:''; }
 function fioTitle(kind,num,label){ return `<a class="fiotitle" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">${num?`<span class="fionum">#${esc(num)}</span> `:''}${esc(label)}<span class="fioarrow"> ↗</span></a>`; }
 function fioArrow(kind,num){ return ` <a class="fioarrow" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">↗</a>`; }
 // A hover-popover body listing Fleetio items, each a clickable ↗ link (issue / wo / svc).
@@ -7720,6 +7751,24 @@ function setupCollapse(rootSel, keyPrefix){
         try{ localStorage.setItem(key, now?'1':'0'); }catch(e){} };
       h.insertBefore(c, h.firstChild); }
     c.textContent = col?'▸':'▾'; c.title='Collapse / expand this panel';
+  });
+}
+// FLOOR: only the three low-traffic panels are collapsible, and they DEFAULT to collapsed
+// (their counts stay visible in the header) — expand once and the choice is remembered.
+function setupFloorCollapse(){
+  ['fl-flagged','fl-leave','fl-returns'].forEach(id=>{
+    const pl=document.getElementById(id); if(!pl) return;
+    const h=pl.querySelector(':scope > h2'); if(!h) return;
+    const key='flcol_'+id; let st=null; try{ st=localStorage.getItem(key); }catch(e){}
+    const col=(st==null)?true:(st==='1');
+    pl.classList.toggle('pcollapsed', col);
+    let c=h.querySelector('.pcaret');
+    if(!c){ c=document.createElement('span'); c.className='pcaret';
+      c.onclick=function(e){ e.stopPropagation(); const now=!pl.classList.contains('pcollapsed');
+        pl.classList.toggle('pcollapsed',now); c.textContent=now?'▸':'▾';
+        try{ localStorage.setItem(key, now?'1':'0'); }catch(e){} };
+      h.insertBefore(c, h.firstChild); }
+    c.textContent=col?'▸':'▾'; c.title='Collapse / expand this panel';
   });
 }
 function setupFleetioCollapse(){ setupCollapse('#fleetioView','fiocol_'); applyFScroll(); }
