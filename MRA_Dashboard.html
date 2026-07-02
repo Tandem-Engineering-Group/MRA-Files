@@ -1016,6 +1016,25 @@
   #fleetioView .panel > h2 .pcaret:hover, #projectsView .panel > h2 .pcaret:hover, #floorView .panel > h2 .pcaret:hover{color:var(--txt)}
   #fleetioView .panel.pcollapsed > h2, #projectsView .panel.pcollapsed > h2, #floorView .panel.pcollapsed > h2{margin-bottom:0}
   #fleetioView .panel.pcollapsed > :not(h2), #projectsView .panel.pcollapsed > :not(h2), #floorView .panel.pcollapsed > :not(h2){display:none}
+  /* FLOOR return alarm — pulses when a unit is due back at MRA within 2 weeks */
+  .retalarm{display:flex; align-items:center; gap:12px; flex-wrap:wrap; cursor:pointer; margin:0 0 12px;
+    background:#3a2e12; border:1px solid var(--amber); border-left:6px solid var(--amber); border-radius:10px; padding:9px 14px;
+    animation:retglow 2.2s ease-in-out infinite}
+  .retalarm .bell{font-size:19px; display:inline-block; animation:retring 1.8s infinite; transform-origin:top center}
+  .retalarm .rt{font-weight:800; letter-spacing:.4px; color:var(--amber)}
+  .retalarm .chip{background:rgba(0,0,0,.25); border:1px solid rgba(245,158,11,.45); border-radius:7px; padding:2px 9px; font-size:12px; font-weight:700}
+  .retalarm .chip .d{color:var(--amber); font-weight:800}
+  .retalarm .chip.here{border-color:rgba(34,197,94,.5)} .retalarm .chip.here .d{color:#86efac}
+  .retalarm .more{color:var(--muted); font-size:11.5px}
+  @keyframes retring{0%,60%,100%{transform:rotate(0)}8%{transform:rotate(16deg)}16%{transform:rotate(-12deg)}24%{transform:rotate(8deg)}32%{transform:rotate(-4deg)}40%{transform:rotate(0)}}
+  @keyframes retglow{0%,100%{box-shadow:0 0 0 rgba(245,158,11,0)}50%{box-shadow:0 0 18px rgba(245,158,11,.45)}}
+  body.light .retalarm{background:#fdf3cf; border-color:#d97706; border-left-color:#d97706}
+  body.light .retalarm .chip{background:rgba(255,255,255,.6); color:#3a2e12} body.light .retalarm .chip .d{color:#a16207}
+  /* PROJECTS split view — Schedule hides the analytics panels, Analytics hides the schedule panels;
+     inside a mode the two-up grids stack full-width (matches the mobile layout, keeps media queries intact) */
+  #projectsView.pv-sched .panel.pv-a{display:none}
+  #projectsView.pv-ana .panel.pv-s{display:none}
+  #projectsView.pv-sched .grid, #projectsView.pv-ana .grid{grid-template-columns:1fr}
   /* Capped, scrollable lists (Needs Attention / By Assignee) with an Expand toggle */
   .fscroll{max-height:300px; overflow-y:auto; padding-right:2px}
   .fscroll.exp{max-height:none; overflow:visible}
@@ -1334,6 +1353,7 @@
 
   <!-- ===================== FLOOR VIEW ===================== -->
   <div id="floorView">
+    <div id="returnAlarm" class="retalarm" style="display:none" onclick="setView('fleetio');setTimeout(()=>{const p=document.getElementById('fp-returns'); if(p){ p.classList.remove('pcollapsed'); p.scrollIntoView({behavior:'smooth'}); }},80)" title="Units marked in Fleetio as coming back to MRA within 2 weeks (or here now) — tap for the full list"></div>
     <div class="kpis" id="kpis"></div>
 
     <div class="panel" id="bayStatusPanel">
@@ -1457,6 +1477,12 @@
 
   <!-- ===================== PROJECTS VIEW ===================== -->
   <div id="projectsView" class="hidden">
+    <div class="saldue-pick" id="projViewPick" style="margin:0 0 9px" title="Pick what this tab shows — Schedule (Gantt + Progress), Analytics (loads · milestones · workload · health · capacity), or everything">
+      <span class="saldue-lbl">View:</span>
+      <button data-v="sched" onclick="setProjView('sched')">📅 Schedule</button>
+      <button data-v="ana" onclick="setProjView('ana')">📊 Analytics</button>
+      <button data-v="all" onclick="setProjView('all')">▦ All</button>
+    </div>
     <div class="kpis" id="projKpis"></div>
     <!-- 🟡 Tasks a designer marked "ready" on the Design board, waiting for the PM to verify & close -->
     <div id="verifyQueue" style="display:none"></div>
@@ -1480,7 +1506,7 @@
       </details>
     </div>
 
-    <div class="panel">
+    <div class="panel pv-s">
       <h2>Project Schedules — Gantt <input id="projSearch" type="search" placeholder="Find project or job #…" oninput="setPFilter(this.value)" class="projsearch" title="Filter the Gantt + Project Progress to matching builds — type a project name, Program Development, or job # (e.g. 1543). Clear to show all.">
         <select id="projSort" class="projsort" onchange="setProjSort(this.value)" title="Order the projects top-to-bottom on the Gantt">
           <option value="start">Sort: Start date</option>
@@ -1511,6 +1537,7 @@
             <span class="vmlabel">🎌 Holidays</span>
             <span class="rangebtns" id="projHolPick" title="Which holidays to shade on the Gantt"></span>
             <button class="expandbtn mraHlBtn" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects — spot over-scheduling. Click to toggle.">🟧 MRA Shop load</button>
+            <button id="nonoffToggle" class="expandbtn" onclick="toggleNonOff()" title="Hide / show 🏷 non-official projects (informal work) across this tab — Gantt, Progress, loads and KPIs">🏷 Hide non-official</button>
             <button id="archToggle" class="expandbtn" onclick="toggleArchived()" title="Wrapped projects (shipped, or 100% done, more than 8 days ago) auto-archive off the active board. Click to show/hide them — they're always in 🔍 search too.">🗄 Show archived</button>
           </div>
         </details>
@@ -1531,16 +1558,16 @@
     </div>
 
     <div class="grid">
-      <div class="panel">
+      <div class="panel pv-a" id="pp-pmload">
         <h2>Program Development Load <span class="count" id="pmCount"></span></h2>
         <div id="pms"></div>
         <div class="legend"><span class="lg-a">In progress</span><span class="lg-t">Upcoming</span><span class="lg-o">Done</span></div>
       </div>
-      <div class="panel">
+      <div class="panel pv-a" id="pp-ms60">
         <h2>Upcoming Milestones — 60 days <span class="count" id="msCount"></span></h2>
         <div id="milestones"></div>
       </div>
-      <div class="panel">
+      <div class="panel pv-s">
         <h2>Project Progress <span class="count" id="progCount"></span>
           <button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'progress')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
         </h2>
@@ -1548,7 +1575,7 @@
       </div>
     </div>
 
-    <div class="panel" id="workloadPanel">
+    <div class="panel pv-a" id="workloadPanel">
       <h2>📊 Workload — open tasks <span class="count" id="wlCount"></span>
         <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">a fuzzy gauge of remaining work (open‑task counts) — <span style="color:var(--red)">overdue in red</span>. Fill Est. Hours per task to weight by real effort.</span>
       </h2>
@@ -1559,11 +1586,11 @@
     </div>
 
     <div class="grid" style="grid-template-columns:minmax(260px,1fr) 2fr">
-      <div class="panel">
+      <div class="panel pv-a" id="pp-health">
         <h2>🩺 Portfolio Health</h2>
         <div id="projHealthChart"></div>
       </div>
-      <div class="panel" id="pp-attention">
+      <div class="panel pv-s" id="pp-attention">
         <h2>⚡ Needs Attention <span class="count" id="projAttentionCount"></span>
           <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">past-due &amp; behind projects, overdue tasks &amp; missed/soon milestones — click to open the project</span>
           <button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'projAttention')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
@@ -1572,7 +1599,7 @@
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel pv-a" id="pp-team">
       <h2>👥 Team Capacity — Open Tasks <span class="count" id="teamCount" style="margin-left:8px"></span>
         <div class="rangebtns" id="teamFilterBtns" style="margin-left:auto">
           <div class="rb active" data-tf="all" onclick="setTeamFilter('all')">Everyone</div>
@@ -2444,6 +2471,19 @@ function projDoneISO(p){ if(!p) return null; const D=window.MRA_DATA||{}; const 
   }
   return null; }
 function projArchived(p){ const d=projDoneISO(p); if(!d) return false; const a=daysAgo(d); return a!=null && a>PROJ_ARCHIVE_DAYS; }
+// PROJECTS split view: 'sched' (Gantt + Progress + Needs Attention) · 'ana' (loads/milestones/workload/health/capacity) · 'all'
+let PROJ_VIEWMODE='sched'; try{ const _pv=localStorage.getItem('mra_projview'); if(_pv) PROJ_VIEWMODE=_pv; }catch(e){}
+function setProjView(v){ PROJ_VIEWMODE=(v==='ana'||v==='all')?v:'sched';
+  try{ localStorage.setItem('mra_projview',PROJ_VIEWMODE); }catch(e){}
+  applyProjView(); }
+function applyProjView(){ const pv=document.getElementById('projectsView'); if(!pv) return;
+  pv.classList.toggle('pv-sched', PROJ_VIEWMODE==='sched');
+  pv.classList.toggle('pv-ana',   PROJ_VIEWMODE==='ana');
+  document.querySelectorAll('#projViewPick button').forEach(b=>b.classList.toggle('on', b.getAttribute('data-v')===PROJ_VIEWMODE)); }
+// 🏷 hide/show non-official projects across the whole tab (KPIs, Gantt, Progress, loads — like Show archived)
+let HIDE_NONOFF=false; try{ HIDE_NONOFF=localStorage.getItem('mra_hide_nonoff')==='1'; }catch(e){}
+function toggleNonOff(){ HIDE_NONOFF=!HIDE_NONOFF; try{ localStorage.setItem('mra_hide_nonoff',HIDE_NONOFF?'1':'0'); }catch(e){}
+  if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(typeof GFS!=='undefined'&&GFS&&typeof renderGanttFS==='function') renderGanttFS(); } }
 const PALETTE = ['#3b82f6','#22c55e','#f59e0b','#a78bfa','#2dd4bf','#ef4444',
                  '#ec4899','#84cc16','#06b6d4','#fb923c','#8b5cf6','#14b8a6'];
 
@@ -2637,7 +2677,7 @@ const GENERAL_HELP = `
   <h3>How to use the <span class="mra">MRA</span> Command Center</h3>
   <div class="msub">Everything here builds itself from the Excel workbook — you never edit the dashboard by hand.</div>
   <div class="hsec"><h4>① The tabs up top</h4>
-    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs, staff on leave, and <b>↩️ Coming Back to MRA</b> (trailers arriving back + parked at MRA now, from the logistics calendars). The <b>⚑ Flagged, Staff on Leave and ↩️ Coming Back panels start collapsed</b> — their counts stay in the header; click the <span class="k">▾</span> to open one (remembered per device). In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
+    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs, staff on leave, and <b>↩️ Coming Back to MRA</b> (trailers arriving back + parked at MRA now, from the logistics calendars). A <b>🔔 pulsing banner appears at the top when a unit is due back at MRA within 2 weeks</b> (tap it for details; it hides when nothing is due). The <b>⚑ Flagged, Staff on Leave and ↩️ Coming Back panels start collapsed</b> — their counts stay in the header; click the <span class="k">▾</span> to open one (remembered per device). In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, Program Development load and team capacity. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
@@ -2669,7 +2709,8 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
     <p>On the Project Schedules Gantt these live in the <span class="k">⚙ View</span> menu (top-right of the Gantt): the <span class="k">🔍</span> slider <b>zooms</b> — drag to show anywhere from <b>1 week</b> up to <b>1 year</b> at once. The <span class="k">↔</span> slider <b>scrolls</b> the visible window left (earlier) or right (later) without changing the zoom — or just tap the <span class="k">‹</span> / <span class="k">›</span> <b>arrows</b> at the left/right edge of the Gantt to scroll a step at a time (the arrows stay on the Gantt, not in the menu). <span class="k">All</span> snaps to the whole timeline. In the full-screen Projects / detail views they live in the same <span class="k">⚙ View</span> menu, with the <span class="k">‹</span> / <span class="k">›</span> arrows up top. Your zoom is remembered per device. <span class="k">🖨 Print</span> lays the whole project Gantt + a project list onto one <b>11×17 landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>⑥ᶜ ↕ Sort the Gantt</h4>
-    <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>Program Development</b> (groups each person's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p></div>
+    <p>The <span class="k">Sort:</span> dropdown next to the search box sets the <b>top-to-bottom order</b> of projects on the Gantt — <b>Start date</b> (default, earliest first), <b>Finish date</b> (due soonest first), <b>At risk first</b> (behind/past-due on top, like the Progress list), <b>% complete</b> (least done first), <b>Bay</b>, <b>Program Development</b> (groups each person's projects), or <b>A–Z name</b>. Remembered per device, and it applies to the full-screen view too. (The <b>Project Progress</b> list below always stays attention-first.)</p>
+    <p>Up top, the <span class="k">View:</span> picker splits the tab — <b>📅 Schedule</b> (Gantt + Progress + Needs Attention, the default), <b>📊 Analytics</b> (loads · milestones · workload · health · capacity, which start collapsed), or <b>▦ All</b>. And next to <span class="k">🗄 Show archived</span>, <span class="k">🏷 Hide non-official</span> tucks informal projects out of every list on the tab (the button shows the count).</p></div>
   <div class="hsec"><h4>⑥ᵈ 🔎 Project detail view (click a Gantt bar)</h4>
     <p><b>Click any project's bar</b> (on the Projects Gantt or the floor schedules) to open a <b>full-screen detailed view</b> of just that project — every task as its own dated bar, colored by status. Tasks are <b>grouped under their phase</b>: each phase is a <b>collapsible header with a summary bar</b> showing the phase's full span and <b>% complete</b> (▾/▸ to open or close it), and the tasks indent underneath. ◆ milestones show as diamonds in their phase. A <span class="k">📊</span> <b>detail slider</b> up top dials how much shows — slide it down through <b>Tasks → Phases → Milestones → Summary</b> (one rollup bar for the whole project) and back up — same slider as the main Projects Gantt. The <span class="k">🔍 zoom</span> + <span class="k">↔ scroll</span> sliders (and <span class="k">All</span> to fit the whole project), the <span class="k">🎌 holidays</span> picker and the editing buttons now live in the <span class="k">⚙ View</span> menu; the <span class="k">‹</span> / <span class="k">›</span> scroll arrows sit up top, just outside it.</p>
     <p>Hit <span class="k">🔒 Edit / add tasks</span> (top-left, your code) and the <b>full controls</b> appear right next to <span class="k">↶ Undo</span> / <span class="k">↷ Redo</span>: <span class="k">➕ Add task</span> and <span class="k">✎ Edit tasks</span> (the same editor as the Projects tab — add, edit, ✓ complete, ↩ reopen, 🗑 delete, set predecessors). <b>Click any task's name on the left</b> to open that one task's edit form directly — where you can also set its <b>% Complete</b> (slider or type a number); a partly-done task shows a <b>partial bar fill + the %</b>. You can also <b>drag a bar to reschedule</b> — middle moves the whole task, the ends change start / finish — with <b>Ctrl/⌘+Z</b> to undo. Changes write back to the workbook like any edit. The top bar also has a <span class="k">☀️ Light / 🌙 Dark</span> button to switch the theme right from this screen (it flips the whole dashboard, remembered per device).</p></div>
@@ -2795,6 +2836,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"12.2", date:"2026-07-02", title:"🗂 PROJECTS split view · 🏷 non-official toggle · 🔔 return alarm on the FLOOR", items:[
+    "The PROJECTS tab now has a <b>View picker</b>: <b>📅 Schedule</b> (Gantt + Progress + Needs Attention — the default), <b>📊 Analytics</b> (Program Development Load, Milestones, Workload, Portfolio Health, Team Capacity), or <b>▦ All</b>. Remembered per device.",
+    "The <b>analytics panels start collapsed</b> (counts stay in the header) — open the ones you use and it's remembered.",
+    "New <b>🏷 Hide non-official</b> toggle on the Gantt toolbar (next to Show archived) hides informal projects across the tab — Gantt, Progress, KPIs and loads. The button shows how many are tucked away.",
+    "<b>🔔 Return alarm on the FLOOR:</b> when a unit's Fleetio <b>Back to MRA Date</b> is <b>within 2 weeks</b>, a pulsing amber banner appears at the top of the shop screen (green chips = units here right now). Tap it for the full Coming-Back list. It hides itself when nothing's due." ] },
   { rev:"12.1", date:"2026-07-02", title:"📍 Placement rule: Parking Lot tasks show in crew lists — Next Up / On Hold tasks wait", items:[
     "A trailer <b>in the Parking Lot</b> counts as active work: its tasks show in <b>Open Tasks by Assignee</b> (and the crew prints). A trailer waiting in <b>Next Up / On Hold / Off-Site</b> keeps its assigned tasks on its own card only — they <b>join the crew lists automatically the moment it's moved out</b> (e.g. to the lot or a bay). You can still assign everything ahead of time." ] },
   { rev:"12.0", date:"2026-07-02", title:"🧹 FLOOR cleanup: one ➕ Add menu · tidier panels · ⚠ overdue chip", items:[
@@ -6094,7 +6140,8 @@ function buildStatusReport(){
   const odMap=overdueByProject(D);
   // Use the SAME project set as the on-page board: drop archived/wrapped projects unless Show-archived is on.
   const _all=(D.projects||[]).slice();
-  const projects=(typeof SHOW_ARCHIVED!=='undefined' && SHOW_ARCHIVED) ? _all : _all.filter(p=>!projArchived(p));
+  const _sr=(typeof SHOW_ARCHIVED!=='undefined' && SHOW_ARCHIVED) ? _all : _all.filter(p=>!projArchived(p));
+  const projects=(typeof HIDE_NONOFF!=='undefined' && HIDE_NONOFF) ? _sr.filter(p=>!p.nonOfficial) : _sr;
   const active=projects.filter(p=>projStatus(p,today)!=='done')
     .map(p=>({p,h:projHealth(p,today)}))
     .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||'9999').localeCompare(b.p.finishISO||'9999')));
@@ -7167,9 +7214,34 @@ function _salTaskCmp(a,b){
   if(SAL_SORT==='duedesc'){ if(!ad&&!bd) return 0; if(!ad) return 1; if(!bd) return -1; return bd.localeCompare(ad); }
   if(!ad&&!bd) return 0; if(!ad) return 1; if(!bd) return -1; return ad.localeCompare(bd);   // 'due' soonest
 }
+// 🔔 FLOOR return alarm — units marked in Fleetio as coming back within 14 days (amber, pulsing)
+// or already here inside their date window (green). Hidden entirely when nothing qualifies.
+function renderReturnAlarm(D){
+  const el=document.getElementById('returnAlarm'); if(!el) return;
+  const today=D.todayISO||localISO(Date.now());
+  const rets=(typeof fioReturns==='function')?fioReturns(D.fleetio, today):[];
+  const soon=[], here=[];
+  rets.forEach(r=>{ if(!r.dateISO) return;
+    const dn=daysBetween(r.dateISO,today);
+    const gone=r.endISO && r.endISO<today;
+    if(dn!=null && dn>=0 && dn<=14) soon.push({...r,dn});
+    else if(dn!=null && dn<0 && !gone) here.push(r); });
+  if(!soon.length && !here.length){ el.style.display='none'; el.innerHTML=''; return; }
+  const nm=r=>{ const a=String(r.asset||'').split(/\s+/).slice(0,2).join(' '); return a||('#'+r.num); };
+  const chips=[
+    ...soon.slice(0,5).map(r=>`<span class="chip">${esc(nm(r))} <span class="d">${esc(r.dateText)}${r.dn===0?' · TODAY':' · '+r.dn+'d'}</span></span>`),
+    ...here.slice(0,3).map(r=>`<span class="chip here">${esc(nm(r))} <span class="d">HERE${r.endText?(' → '+esc(r.endText)):''}</span></span>`)
+  ];
+  const extra=(soon.length>5?soon.length-5:0)+(here.length>3?here.length-3:0);
+  el.innerHTML=`<span class="bell">🔔</span><span class="rt">COMING BACK TO MRA${soon.length?(' — '+soon.length+' within 2 wks'):''}</span>`
+    + chips.join(' ') + (extra?` <span class="more">+${extra} more…</span>`:'')
+    + ` <span class="more" style="margin-left:auto">tap for details ↗</span>`;
+  el.style.display='flex';
+}
 function renderSal(D){
   const order=D.physicalBays;
   const today=D.todayISO||localISO(Date.now());
+  renderReturnAlarm(D);
   { const ss=document.getElementById('salSortSel'); if(ss && ss.value!==SAL_SORT) ss.value=SAL_SORT; }   // reflect the saved sort choice
   // A task passes the timeframe filter if its DUE date is on/before the window's ceiling (overdue counts).
   // 'all' shows everything; undated OPEN tasks are hidden in a windowed view (they have no due to be "coming up").
@@ -7378,7 +7450,13 @@ function renderProjects(D){
   try{ renderVerifyQueue(); }catch(_){}   // 🟡 PM sign-off queue (design-board "mark ready" tasks)
   const allProjects=(D.projects||[]).slice();
   const archN=allProjects.filter(projArchived).length;
-  const projects = SHOW_ARCHIVED ? allProjects : allProjects.filter(p=>!projArchived(p));   // auto-archive wrapped projects off the active board
+  const _preNO = SHOW_ARCHIVED ? allProjects : allProjects.filter(p=>!projArchived(p));   // auto-archive wrapped projects off the active board
+  const _noN=_preNO.filter(p=>p.nonOfficial).length;
+  const projects = HIDE_NONOFF ? _preNO.filter(p=>!p.nonOfficial) : _preNO;   // 🏷 view filter (like Show archived)
+  { const nb=document.getElementById('nonoffToggle'); if(nb){ nb.classList.toggle('on',HIDE_NONOFF);
+      nb.textContent = HIDE_NONOFF ? ('🏷 Show non-official'+(_noN?(' ('+_noN+')'):'')) : '🏷 Hide non-official';
+      nb.style.display = _noN||HIDE_NONOFF ? '' : 'none'; } }
+  applyProjView();
   projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
   try{ dlFillProjects(); }catch(e){}   // keep the ⬇ Download a Project picker current
   { const ab=document.getElementById('archToggle'); if(ab){ ab.classList.toggle('on',SHOW_ARCHIVED);
@@ -7743,12 +7821,13 @@ function fioItemsListPop(title, items){
 // Age-banded "open" badge: green <30d, amber 30–90d, red >90d.
 function ageBadge(age){ if(age==null) return ''; const cls=age>90?'red':age>=30?'amber':'green'; return `<span class="badge ${cls}">${age}d open</span>`; }
 // Collapsible panels — decorate each panel header with a ▾ caret, remembered per device.
-function setupCollapse(rootSel, keyPrefix){
+function setupCollapse(rootSel, keyPrefix, defCollapsed){
   document.querySelectorAll(rootSel+' .panel').forEach(pl=>{
     const h=pl.querySelector(':scope > h2'); if(!h) return;
     if(pl.classList.contains('vq-panel') || /Project Schedules/i.test(h.textContent||'')){ const ex=h.querySelector('.pcaret'); if(ex) ex.remove(); pl.classList.remove('pcollapsed'); return; }   // never collapse the main Gantt or the Awaiting-verification annunciation
     const key=keyPrefix+(pl.id || (h.textContent||'').trim().slice(0,20).replace(/\s+/g,'_'));
-    let col=false; try{ col=localStorage.getItem(key)==='1'; }catch(e){}
+    let col=!!(defCollapsed && defCollapsed.has(pl.id));   // some panels START collapsed until this device opens them
+    try{ const st=localStorage.getItem(key); if(st!=null) col=(st==='1'); }catch(e){}
     pl.classList.toggle('pcollapsed', col);
     let c=h.querySelector('.pcaret');
     if(!c){ c=document.createElement('span'); c.className='pcaret';
@@ -7778,7 +7857,7 @@ function setupFloorCollapse(){
   });
 }
 function setupFleetioCollapse(){ setupCollapse('#fleetioView','fiocol_'); applyFScroll(); }
-function setupProjectsCollapse(){ setupCollapse('#projectsView','prjcol_'); applyFScroll(); }
+function setupProjectsCollapse(){ setupCollapse('#projectsView','prjcol_', new Set(['pp-pmload','pp-ms60','workloadPanel','pp-health','pp-team'])); applyFScroll(); }   // analytics panels start collapsed
 // Capped/expandable scroll lists (Needs Attention, By Assignee, Progress, Team)
 function toggleFScroll(btn,id){ const el=document.getElementById(id); if(!el) return;
   const exp=el.classList.toggle('exp'); if(btn) btn.textContent=exp?'⤡ Less':'⤢ Expand';
@@ -9726,7 +9805,7 @@ function printGanttFS(){
 // Print the Projects Gantt (bars + project list) — one 11×17 landscape page, auto-fit.
 function printProjects(){
   const D=window.MRA_DATA||{};
-  const projects=(D.projects||[]).filter(p=>SHOW_ARCHIVED||!projArchived(p)); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
+  const projects=(D.projects||[]).filter(p=>(SHOW_ARCHIVED||!projArchived(p)) && !(HIDE_NONOFF&&p.nonOfficial)); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
   const dated=projects.filter(p=>p.startISO&&p.finishISO).sort(projSortCmp);
   if(!dated.length){ alert('No dated projects to print yet.'); return; }
   const t=parseISO(D.todayISO), defStart=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime();
@@ -10391,7 +10470,7 @@ function renderGanttFS(){
         +`<span class="gwinwrap" title="Scroll the timeline (same zoom)">↔<input id="gpanSliderFS" type="range" min="0" max="100" value="50" oninput="setGpan(this.value)" class="gwinslider" title="Scroll: slide the window left (earlier) or right (later) through the timeline — the zoom level stays the same"></span>`
         +`<div class="rb" data-m="all" onclick="setRange('all')" title="Show the entire timeline at once">All</div>`;
     }
-    const projects=(D.projects||[]).filter(p=>SHOW_ARCHIVED||!projArchived(p)); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
+    const projects=(D.projects||[]).filter(p=>(SHOW_ARCHIVED||!projArchived(p)) && !(HIDE_NONOFF&&p.nonOfficial)); projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
     // Window: zoom (GWIN_DAYS / RANGE) sets the LENGTH; the pan slider (GPAN) scrolls it. Mirrors renderProjects so both stay in sync.
     const t=parseISO(today);
     const defStartMs=new Date(t.getFullYear(),t.getMonth(),t.getDate()-7).getTime();
