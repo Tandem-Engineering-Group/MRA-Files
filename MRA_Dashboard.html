@@ -2787,6 +2787,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"11.8", date:"2026-07-02", title:"🩹 Assigning a just-added task now sticks", items:[
+    "Fixed the gotcha where assigning (or editing) a task the <b>instant you added it</b> didn't save — a brand-new task had no ID yet for the change to land on. The edit now <b>queues and auto-applies the moment the task syncs</b> (usually the next cycle), so there's no more 'add → wait → assign' dance. Applies to shop tasks and project tasks." ] },
   { rev:"11.7", date:"2026-07-02", title:"🔖 Project Job # — auto-matched + editable (Al #6, fixed)", items:[
     "Projects now show their <b>Job #</b> as <b>“Jxxxx · Project Name”</b> on the Gantt, the detailed view, the project picker and the task editors. It <b>auto-matches</b> the project to its trailer job # where the names line up (Medtronic→J1553, Cisco→J1558, Stryker→J1412, Siemens DI→J1524, etc.).",
     "For projects whose name doesn't match a trailer, there's now a <b>🔖 Job #</b> button in ✎ Edit Project Tasks — set it once and it shows everywhere. <i>(Saving it needs a one-time 'JobNum' column on the Project Tasks list; the auto-match works regardless.)</i>" ] },
@@ -4301,7 +4303,12 @@ function _listOps(p){
     if((o.verb==='update'||o.verb==='delete') && (o.list==='Jobs'||o.list==='ShopTasks'||o.list==='ProjectTasks'||o.list==='Users'||o.list==='Holidays')) id=_findId(o.list,o.match);
     if(id!=null){ r.verb=(o.verb==='delete')?'deleteById':'mergeById'; r.id=id; }   // by item id (no text match)
     else if(o.match){ r.filter=Object.keys(o.match).map(k=>{ const col=lf.cols[k]||k; const v=o.match[k];
-      return (col==='Id'||col==='ID') ? (col+' eq '+v) : (col+" eq '"+_odEsc(v)+"'"); }).join(' and '); }
+      return (col==='Id'||col==='ID') ? (col+' eq '+v) : (col+" eq '"+_odEsc(v)+"'"); }).join(' and ');
+      // No item id yet → this row was just added and hasn't synced back, so the text-filter UPDATE is
+      // unreliable. Queue the change to re-fire BY ID the moment the row lands (fixes "assign a brand-new task").
+      if(o.verb==='update' && (o.list==='ShopTasks'||o.list==='ProjectTasks') && r.body && Object.keys(r.body).length)
+        pendRewrite(lf.list, o.match.Project, o.match.Task, r.body);
+    }
     out.push(r);
   }
   return out;
@@ -4371,8 +4378,37 @@ const PENDING_NONOFF_KEY='mra_pending_nonoff_v1';
 function pnoLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_NONOFF_KEY)||'{}'); }catch(e){ return {}; } }
 function pnoSave(o){ try{ localStorage.setItem(PENDING_NONOFF_KEY, JSON.stringify(o)); }catch(e){} }
 function pendNonOff(name,val){ const o=pnoLoad(); o[name]={val:!!val, ts:Date.now()}; pnoSave(o); }
+// ---- Pending re-writes: an edit made to a row that has no item id yet (just added, not synced back).
+// The text-filter UPDATE can't reliably hit it, so we queue the change and re-fire it BY ID once the
+// row appears in a fresh export with its id. Self-prunes on success or after the 12h TTL.
+const PENDING_REWRITE_KEY='mra_pending_rewrite_v1';
+function prwLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_REWRITE_KEY)||'[]'); }catch(e){ return []; } }
+function prwSave(a){ try{ localStorage.setItem(PENDING_REWRITE_KEY, JSON.stringify(a)); }catch(e){} }
+function pendRewrite(listName, project, task, body){
+  if(!listName||!task||!body||!Object.keys(body).length) return;
+  const a=prwLoad(); const i=a.findIndex(e=>e.list===listName && e.project===project && e.task===task);
+  const rec={list:listName, project:project||'', task:task, body:body, ts:Date.now()};
+  if(i>=0) a[i]=rec; else a.push(rec); prwSave(a);
+}
+function prwRetry(D){
+  if(!CLOSE_PIN) return;                       // need a signed-in code to write; retry once signed in
+  const a=prwLoad(); if(!a.length) return;
+  const now=Date.now(), keep=[]; let fired=false;
+  for(const e of a){
+    if(now-(e.ts||0) > PENDING_TTL) continue;  // give up after 12h
+    let _id=null, tobj=null;
+    if(e.list==='MRA Shop Tasks'){ (D.jobs||[]).forEach(j=>{ if(_id!=null||j.project!==e.project) return; const t=(j.tasks||[]).find(x=>x.t===e.task); if(t&&t._id!=null){ _id=t._id; tobj=t; } }); }
+    else if(e.list==='MRA Project Tasks'){ (D.projects||[]).forEach(p=>{ if(_id!=null||p.name!==e.project) return; const t=(p.tasks||[]).find(x=>x.t===e.task); if(t&&t._id!=null){ _id=t._id; tobj=t; } }); }
+    if(_id==null){ keep.push(e); continue; }   // row hasn't synced yet — keep waiting
+    _wq.push({op:{verb:'mergeById', list:e.list, id:_id, body:e.body}, pin:CLOSE_PIN, user:CURRENT_USER}); fired=true;
+    if(tobj){ if(e.body.field_4!=null) tobj.who=e.body.field_4; if(e.body.field_9!=null) tobj.cm=e.body.field_9; if(e.body.Due!=null) tobj.due=e.body.Due; }   // reflect on-screen now
+  }
+  prwSave(keep);
+  if(fired && typeof _wqDrain==='function') _wqDrain();
+}
 function mergePending(D){
   if(!D) return;
+  prwRetry(D);   // re-fire any edits that were queued because their row had no id yet
   // Pending non-official flags: keep this device's just-toggled projects flagged until the export catches up.
   { const no=pnoLoad(); let ch=false; const t=Date.now();
     for(const nm in no){ const e=no[nm];
