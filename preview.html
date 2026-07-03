@@ -1060,6 +1060,12 @@
   .pipe-card{background:var(--panel2); border:1px solid var(--line); border-left-width:4px; border-radius:8px; padding:7px 10px; margin-bottom:7px; cursor:pointer}
   .pipe-card .t{font-weight:800; font-size:12px} .pipe-card .m{color:var(--muted); font-size:10.5px; margin-top:1px}
   body.light .pr-bar.inbound{background:#fdf3cf} body.light .pr-bar.here{background:#dcf5e6} body.light .pr-bar.decided{background:#dbe7fd}
+  /* task-attachment staging chips (add/edit dialogs) */
+  .attstage{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+  .attchip{display:inline-flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:11px}
+  .attchip img{height:22px;width:auto;max-width:36px;object-fit:cover;border-radius:3px}
+  .attchip b{cursor:pointer;color:#fca5a5;font-weight:700}
+  .muted-note{color:var(--muted);font-weight:400;font-size:10.5px}
   /* crew-name links in the Open-Tasks headers -> that crew's live sheet */
   .asg-h .asgname{color:inherit; text-decoration:none; cursor:pointer}
   .asg-h .asgname:hover{color:var(--blue); text-decoration:underline; text-underline-offset:2px}
@@ -2009,6 +2015,14 @@
           <div><label>Milestone?</label><select id="atMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
           <div></div>
         </div>
+        <div><label>Attachments <span class="muted-note">(photos · PDFs · links — show on the task, the crew sheets and prints)</span></label>
+          <div id="atAtts" class="attstage"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="btn-ghost attbtn" onclick="attPickFile('at','img')" title="Take or pick a photo — it's shrunk automatically and attached">📷 Photo</button>
+            <button type="button" class="btn-ghost attbtn" onclick="attPickFile('at','pdf')" title="Attach a PDF or file">📎 PDF / file</button>
+            <button type="button" class="btn-ghost" onclick="attAddLink('at')" title="Attach a web link (a SharePoint doc, a spec page…)">🔗 Link</button>
+          </div>
+        </div>
         <div><label>Comments (optional)</label><input id="atComments" autocomplete="off"></div>
         <div id="atMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
@@ -2138,6 +2152,14 @@
         <div class="addrow2">
           <div><label>Milestone?</label><select id="etMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
           <div><label>Due date</label><input id="etDue" type="date"></div>
+        </div>
+        <div><label>Attachments <span class="muted-note">(photos · PDFs · links — show on the task, the crew sheets and prints)</span></label>
+          <div id="etAtts" class="attstage"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="btn-ghost attbtn" onclick="attPickFile('et','img')" title="Take or pick a photo — it's shrunk automatically and attached">📷 Photo</button>
+            <button type="button" class="btn-ghost attbtn" onclick="attPickFile('et','pdf')" title="Attach a PDF or file">📎 PDF / file</button>
+            <button type="button" class="btn-ghost" onclick="attAddLink('et')" title="Attach a web link (a SharePoint doc, a spec page…)">🔗 Link</button>
+          </div>
         </div>
         <div><label>Comments</label><input id="etComments" autocomplete="off"></div>
         <div id="etMoveRow" style="display:none; border-top:1px solid var(--line); margin-top:6px; padding-top:8px; align-items:center; gap:8px; flex-wrap:wrap">
@@ -2950,6 +2972,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"13.3", date:"2026-07-03", title:"📷 Attach photos, PDFs & links to ANY task", items:[
+    "The ➕ Add-task and ✎ Edit-task forms now have <b>📷 Photo · 📎 PDF · 🔗 Link</b> buttons — snap a picture at check-in (it shrinks itself before upload), attach a PDF, or paste a link. Attachments show up <b>everywhere the Fleetio ones do</b>: thumbnails on the task line (hover to zoom, click for full size), the crew sheets / custom dash links, and the prints.",
+    "<i>Photo/PDF upload switches on once the small upload flow is connected (Rich has the steps) — 🔗 links work as soon as the Files column exists.</i>" ] },
   { rev:"13.2", date:"2026-07-03", title:"🔗 Crew sheets: 🌙 dark mode + one-click access from the board", items:[
     "The crew sheets (custom dash links) now have a <b>🌙 / ☀️ toggle</b> — pick dark or light and the sheet remembers it on that device (printing always comes out light).",
     "<b>Click a crew's name</b> on Open Tasks by Assignee (Sal · Wrap Team · Electricians · Doug · Josh · Jeff) and their live sheet opens in a new tab — the same link you can text them." ] },
@@ -4242,6 +4267,10 @@ const CLOSE_FLOW_URL = "https://default57714027b784449484126e3b00c9bf.2c.environ
 // with read-from-lists). While false, every write goes to the workbook exactly as before.
 const USE_LISTS_WRITE = true;   // CUTOVER 2026-06-25: dashboard reads+writes the SharePoint Lists (by item id); workbook retired as live source
 const LISTS_WRITE_URL = "https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/12d3826052ea4f5584ec2921fc83172c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=sFy30x3sqmmrAYw64u6fytwIXUSZ9DQwn7fVsfvC_cQ";   // "MRA Lists Write 2" flow (create/update/delete proven). Flip USE_LISTS_WRITE at cutover.
+// "MRA File Upload" flow (HTTP trigger -> Create blob in $web/uploads). EMPTY until Rich builds it —
+// while empty the 📷/📎 buttons hide (🔗 links still work; they need no upload).
+const FILE_UPLOAD_URL = "";
+const UPLOADS_BASE = "https://mrashopdash.z13.web.core.windows.net/uploads/";
 let CLOSE_PIN = null;       // current signed-in person's code (this browser session)
 let CURRENT_USER = "";      // current signed-in person's name (display + attribution)
 // Tasks closed from the dashboard this session — kept greyed until the next export confirms
@@ -4458,6 +4487,7 @@ function _listOpsRaw(p){
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'setProjectNonOfficial': return taskOps('update','ProjectTasks',_projTaskRows(p.project),{NonOfficial:(p.value?'Yes':'')});   // #2: flag/unflag every task of the project
+    case 'setTaskFiles':     return [O('update','ShopTasks',{Project:p.project,Task:p.task,__id:p._id},{Files:JSON.stringify(p.files||[])})];   // attachments (isolated single-column write — safe before the Files column exists)
     case 'setProjectJobNum':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{JobNum:(p.jobNum||'')});   // #6: stamp the project's Job # on every task (isolated)
     case 'importProject': {
       // NON-DESTRUCTIVE upload (rev 10.1). Was delete-ALL-then-recreate, which could gut a project
@@ -4484,7 +4514,7 @@ function _listOpsRaw(p){
    (verified against the live lists). ProjectTasks omits columns the restored list lacks. */
 const _LF = {
   Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
-  ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9",Due:"Due"} },   /* field_8 is a Number column (always 0.0) — NOT milestone; don't write it. "Due" = a Date column added 2026-06-30 (its own internal name, not field_N) — only written when a due date is set. */
+  ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9",Due:"Due",Files:"Files"} },   /* Files = UI-added multiline col (attachment JSON; isolated setTaskFiles op only). field_8 is a Number column (always 0.0) — NOT milestone; don't write it. "Due" = a Date column added 2026-06-30 (its own internal name, not field_N) — only written when a due date is set. */
   ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"TaskType",JobNum:"JobNum",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial"} },   /* 'Type' + 'NonOfficial' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
@@ -4569,6 +4599,50 @@ function queueAllFleetio(rowRef){
   if(!todo.length){ alert("All of this unit's open issues are already on the board."); return; }
   if(!confirm('Add '+todo.length+' Fleetio issue'+(todo.length===1?'':'s')+' on '+(j.project||j.jobNum)+' as Shop Tasks?\n\nAssign crews afterwards — they land unassigned.')) return;
   todo.forEach(i=>addFleetioTask(j.row, String(i.num)));
+}
+/* ---------- 📷 Task attachments: photos / PDFs / links on ANY shop task ----------
+   Photos shrink in the browser (~1600px JPEG) then upload through the "MRA File Upload" flow into
+   $web/uploads (public URL known in advance -> no response needed). Links attach with no upload.
+   The list rides a JSON 'Files' column on the task (isolated setTaskFiles write). */
+const ATT_STAGE={at:[], et:[]};
+function attRender(px){ const el=document.getElementById(px+'Atts'); if(!el) return;
+  const a=ATT_STAGE[px]||[];
+  el.innerHTML=a.length?a.map((x,i)=>`<span class="attchip">${/^image\//i.test(x.mime||'')?`<img loading="lazy" src="${escA(x.url)}">`:'\u{1F4CE}'} ${esc(String(x.n||'file').slice(0,20))} <b onclick="attRemove('${px}',${i})" title="Remove this attachment">✕</b></span>`).join(''):`<span class="muted-note">none yet</span>`;
+  document.querySelectorAll('.attbtn').forEach(b=>{ b.style.display=FILE_UPLOAD_URL?'':'none'; });
+}
+function attRemove(px,i){ (ATT_STAGE[px]||[]).splice(i,1); attRender(px); }
+function attAddLink(px){ const u=(prompt('Paste the link (URL) to attach:')||'').trim(); if(!u) return;
+  if(!/^https?:\/\//i.test(u)){ alert("That doesn't look like a link — it should start with http…"); return; }
+  const n=(prompt('Name it (what is this link?):','link')||'link').trim();
+  const mime=/\.pdf(\?|$)/i.test(u)?'application/pdf':(/\.(jpe?g|png|gif|webp)(\?|$)/i.test(u)?'image/jpeg':'link');
+  ATT_STAGE[px].push({n:n,url:u,mime:mime}); attRender(px); }
+function attPickFile(px,kind){ let inp=document.getElementById('attFileInp');
+  if(!inp){ inp=document.createElement('input'); inp.type='file'; inp.id='attFileInp'; inp.style.display='none'; document.body.appendChild(inp); }
+  inp.accept = kind==='img' ? 'image/*' : '.pdf,application/pdf';
+  inp.onchange=async ()=>{ const f=inp.files&&inp.files[0]; inp.value=''; if(!f) return;
+    const chip=await uploadAttachment(f,kind); if(chip){ ATT_STAGE[px].push(chip); attRender(px); } };
+  inp.click(); }
+function _readB64(blob){ return new Promise((res,rej)=>{ const r=new FileReader();
+  r.onload=()=>res(String(r.result).split(',')[1]||''); r.onerror=rej; r.readAsDataURL(blob); }); }
+function _shrinkImage(file,maxPx,q){ return new Promise(res=>{ const img=new Image();
+  img.onload=()=>{ try{ let w=img.naturalWidth,h=img.naturalHeight; const sc=Math.min(1,maxPx/Math.max(w,h)); w=Math.round(w*sc); h=Math.round(h*sc);
+    const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
+    c.toBlob(b=>res(b||null),'image/jpeg',q||0.8); }catch(e){ res(null); } };
+  img.onerror=()=>res(null); img.src=URL.createObjectURL(file); }); }
+async function uploadAttachment(file,kind){
+  if(!FILE_UPLOAD_URL){ alert('Photo/PDF upload is not switched on yet (the upload flow is pending) — use 🔗 Link for now.'); return null; }
+  let blob=file, mime=file.type||'application/octet-stream';
+  if(kind==='img'){ const r=await _shrinkImage(file,1600,0.8); if(r){ blob=r; mime='image/jpeg'; } }
+  if(blob.size>10*1024*1024){ alert('That file is over 10 MB — too big to attach.'); return null; }
+  const b64=await _readB64(blob);
+  let safe=String(file.name||'photo').toLowerCase().replace(/[^a-z0-9.]+/g,'-').replace(/^-+|-+$/g,'').slice(-40)||'file';
+  if(kind==='img'&&!/\.jpe?g$/i.test(safe)) safe+='.jpg';
+  if(kind!=='img'&&!/\.[a-z0-9]{2,4}$/i.test(safe)) safe+='.pdf';
+  const name='u'+Date.now().toString(36)+'-'+safe;
+  try{ await fetch(FILE_UPLOAD_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},
+    body:JSON.stringify({pin:CLOSE_PIN||'',user:CURRENT_USER||'',name:name,contentType:mime,dataB64:b64})}); }
+  catch(e){ alert('Upload failed — check the connection and try again.'); return null; }
+  return {n:String(file.name||name), url:UPLOADS_BASE+name, mime:mime};
 }
 /* ---------- 👤 Quick-assign: tap the chip on a task line, pick a crew, done ---------- */
 let QA_CB=null;
@@ -4660,7 +4734,7 @@ function prwRetry(D){
     else if(e.list==='MRA Project Tasks'){ (D.projects||[]).forEach(p=>{ if(_id!=null||p.name!==e.project) return; const t=(p.tasks||[]).find(x=>x.t===e.task); if(t&&t._id!=null){ _id=t._id; tobj=t; } }); }
     if(_id==null){ keep.push(e); continue; }   // row hasn't synced yet — keep waiting
     _wq.push({op:{verb:'mergeById', list:e.list, id:_id, body:e.body}, pin:CLOSE_PIN, user:CURRENT_USER}); fired=true;
-    if(tobj){ if(e.body.field_4!=null) tobj.who=e.body.field_4; if(e.body.field_9!=null) tobj.cm=e.body.field_9; if(e.body.Due!=null) tobj.due=e.body.Due; }   // reflect on-screen now
+    if(tobj){ if(e.body.field_4!=null) tobj.who=e.body.field_4; if(e.body.field_9!=null) tobj.cm=e.body.field_9; if(e.body.Due!=null) tobj.due=e.body.Due; if(e.body.Files!=null){ try{ tobj.files=JSON.parse(e.body.Files); }catch(x){} } }   // reflect on-screen now
   }
   prwSave(keep);
   if(fired && typeof _wqDrain==='function') _wqDrain();
@@ -4788,6 +4862,7 @@ function openEditTask(proj, raw){
   document.getElementById('etMilestone').value=(t&&/yes/i.test(t.ml||""))?"Yes":"";
   { const dd=document.getElementById('etDue'); if(dd) dd.value=(t&&t.due)?String(t.due).slice(0,10):""; }
   document.getElementById('etComments').value=(t&&t.cm)||"";
+  ATT_STAGE.et=(t&&t.files)?t.files.slice():[]; window._etFilesOrig=JSON.stringify(ATT_STAGE.et); attRender('et');
   { const sel=document.getElementById('etMoveDest'), mr=document.getElementById('etMoveRow');
     if(sel&&mr){ const jobs=(D.jobs||[]).filter(x=>x.project&&x.project!==proj);
       sel.innerHTML = jobs.length ? jobs.map(x=>`<option value="${escA(x.project)}">${esc(x.bay||x.project)}${x.jobNum?(' · '+esc(x.jobNum)):''}</option>`).join('') : '<option value="">(no other trailers)</option>';
@@ -4810,6 +4885,9 @@ function submitEditTask(){
   msg.style.color='var(--muted)'; msg.textContent='Saving…';
   shopWrite(payload).then(()=>{
       const j=oJob(window._etProj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===window._etOld);
+        if(t && JSON.stringify(ATT_STAGE.et)!==window._etFilesOrig){
+          t.files=ATT_STAGE.et.slice();
+          shopWrite({action:'setTaskFiles', project:window._etProj, task:payload.task, _id:(t._id!=null?t._id:undefined), files:t.files, pin:CLOSE_PIN, user:CURRENT_USER}); }
         if(t){ t.t=payload.task; t.who=payload.assigned; t.ml=payload.milestone; t.cm=payload.comments;
           if(payload.due) t.due=payload.due;
           if(payload.status){ t.st=payload.status; t.done=/done|complete/i.test(payload.status); t.cl=t.done?localISO(Date.now()):null; } }
@@ -4852,6 +4930,7 @@ function openAddTask(prefillProj){
   document.getElementById('atMsg').textContent=""; document.getElementById('atNewProj').value="";
   document.getElementById('atMilestone').value=""; document.getElementById('atSubmit').disabled=false;
   { const dd=document.getElementById('atDue'); if(dd) dd.value=""; } window._atDueAuto=true;
+  ATT_STAGE.at=[]; attRender('at');
   if(prefillProj){ const sel=document.getElementById('atProject'); if([...sel.options].some(o=>o.value===prefillProj)) sel.value=prefillProj; }
   atProjectChange();
   document.getElementById('addModal').classList.add('show');
@@ -4895,6 +4974,8 @@ function submitAddTask(){
   shopWrite(payload)
     .then(()=>{
       const tobj={t:payload.task, who:payload.assigned, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:payload.milestone, cm:payload.comments, due:payload.due||null};
+      const _staged=(ATT_STAGE.at||[]).slice();
+      if(_staged.length){ tobj.files=_staged; shopWrite({action:'setTaskFiles', project:proj, task:payload.task, files:_staged, pin:CLOSE_PIN, user:CURRENT_USER}); }
       let j=oJob(proj);
       if(!j && proj===GENERAL_PROJ){ j={row:'general',bay:'General',project:GENERAL_PROJ,jobNum:'',status:'',category:'general',tasks:[],openTasks:[],openCount:0,doneCount:0,salOpen:0}; (window.MRA_DATA.jobs=window.MRA_DATA.jobs||[]).push(j); }   // first general task: spin up the lane so it shows instantly
       else if(!j){ j={row:'orphan:'+proj,bay:'(no trailer yet)',project:proj,jobNum:payload.jobNum||'',status:'',category:'pipeline',tasks:[],openTasks:[],openCount:0,doneCount:0,salOpen:0}; (window.MRA_DATA.jobs=window.MRA_DATA.jobs||[]).push(j); }   // brand-NEW project (no trailer yet): show a card instantly so the task isn't lost — matches the rebuild's orphan handling
@@ -7319,7 +7400,7 @@ function renderFloor(D){
     if(jOpen){
       if(!WALL && (j.openTasks||[]).length){
         const opens=(j.tasks&&j.tasks.length)
-          ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t),who:shopWho(t)}))
+          ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t),who:shopWho(t),files:t.files||null}))
           : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk),who:shopWho({raw:tk})}));
         const grp={}, gkeys=[];
         opens.forEach(o=>{ const k=o.who||''; if(!(k in grp)){ grp[k]=[]; gkeys.push(k); } grp[k].push(o); });
@@ -7328,7 +7409,7 @@ function renderFloor(D){
         const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
         const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
           const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?(fioDetHtml(fm[1])+fioDocsHtml(fm[1])):''}`; };
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}`; };
         let inner="";
         gkeys.forEach(k=>{
           if(!onlyUnassigned){
@@ -7713,7 +7794,7 @@ function renderSal(D){
       const within7=t=>{ if(!t.cl) return false; const a=daysAgo(t.cl); return a!=null && a>=0 && a<=7; };
       const tasks=(j.tasks&&j.tasks.length)
         ? j.tasks.filter(t=> !t.done || (SAL_SHOWCLOSED && within7(t)) )
-                 .map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||"", closed:!!t.done, cl:t.cl||null, op:t.op||null, due:t.due||null}))
+                 .map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||"", closed:!!t.done, cl:t.cl||null, op:t.op||null, due:t.due||null, files:t.files||null}))
         : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:"", closed:false, cl:null, op:null, due:null}));
       const open=tasks.filter(t=>re.test(basisFor(t))).filter(x=>x.disp)
         .filter(t=> t.closed || dueInWindow(t.due));   // timeframe picker filters OPEN tasks by due date (closed-7d always show)
@@ -7749,7 +7830,7 @@ function renderSal(D){
       const odOver = o.due && !o.closed && daysBetween(o.due,today)<0;
       const odue = o.due?` <span class="duedate${odOver?' od':''}">📅 due ${esc(fmtMDY(o.due))}</span>`:'';
       if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${oent}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
-      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?(fioDetHtml(fm[1])+fioDocsHtml(fm[1])):""}</li>`;}).join("")}</ol></div>`;
+      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}</li>`;}).join("")}</ol></div>`;
   // ⚠ overdue chip in the panel header — distinct open crew tasks whose due date has passed.
   { const chip=document.getElementById('salOverChip');
     if(chip){ let n=0;
@@ -8250,7 +8331,11 @@ function fioHref(kind,num){
 function fioIssue(num){ const D=window.MRA_DATA||{}; return (((D.fleetio&&D.fleetio.issues)||[]).find(i=>String(i.num)===String(num)))||null; }
 // Small photo thumbnails + 📎 file links for a Fleetio-derived task line (floor tiles + crew columns).
 // Hover a thumb to zoom; click opens the full image / PDF in a new tab. Lazy-loaded, max 2 of each.
-function fioDocsHtml(num){ const it=fioIssue(num); const docs=(it&&it.docs)||[]; if(!docs.length) return '';
+function fioDocsHtml(num){ const it=fioIssue(num); return mediaHtml((it&&it.docs)||[]); }
+// Merge a task's OWN attachments (photos/PDFs/links added on the board) with its Fleetio issue docs.
+function _taskMedia(files,num){ const a=(files||[]).slice(); const it=num?fioIssue(num):null;
+  ((it&&it.docs)||[]).forEach(d=>{ if(!a.some(x=>x.url===d.url)) a.push(d); }); return a; }
+function mediaHtml(docs){ docs=docs||[]; if(!docs.length) return '';
   const imgs=docs.filter(x=>/^image\//i.test(x.mime||'')), files=docs.filter(x=>!/^image\//i.test(x.mime||''));
   let h='<span class="fmedia">';
   imgs.slice(0,2).forEach(x=>{ h+=`<img class="fthumb" loading="lazy" src="${escA(x.url)}" alt="" onmouseenter="fthumbZoom(event,this.src)" onmouseleave="fthumbHide()" onclick="event.stopPropagation();fthumbHide();window.open('${escJsAttr(x.url)}','_blank')" title="Click to open full size">`; });
@@ -9231,7 +9316,8 @@ function buildCrewSheetHtml(sel, opts){
       + c.open.map(o=>{
           const m=String(o.raw||'').match(/#(\d+)/), num=m?m[1]:null;
           const d=(num&&fdet[num])?String(fdet[num]).replace(/\s+/g,' ').trim():'';
-          const att=(num&&fdocs[num]||[]).map(x=> /^image\//i.test(x.mime||'')
+          const _docs=[...(o.files||[]), ...((num&&fdocs[num])||[])].filter((x,ix,ar)=>ar.findIndex(y=>y.url===x.url)===ix);
+          const att=_docs.map(x=> /^image\//i.test(x.mime||'')
               ? `<a href="${escA(x.url)}" target="_blank" rel="noopener"><img class="att" src="${escA(x.url)}" alt="${escA((x.n||'photo'))}"></a>`
               : `<a class="attlink" href="${escA(x.url)}" target="_blank" rel="noopener">\u{1F4CE} ${esc((x.n||'attachment').slice(0,42))}</a>`
             ).join('');
@@ -9246,7 +9332,7 @@ function buildCrewSheetHtml(sel, opts){
   const secs=sel.map(cr=>{
     const cards=[]; let n=0, od=0;
     jobs.forEach(j=>{
-      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||""})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:""}));
+      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||"",files:t.files||null})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:"",files:null}));
       const open=tl.filter(t=>cr.re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
       open.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));   // due-soonest first, undated last
       open.forEach(o=>{ if(o.due&&o.due<todayISO) od++; });

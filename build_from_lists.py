@@ -39,6 +39,7 @@ S_PROJECT,S_ASSIGNED      = 'field_1','field_4'
 S_STATUS,S_OPENED,S_CLOSED= 'field_5','field_6','field_7'
 S_COMMENTS                = 'field_9'
 S_DUE                     = 'Due'   # Date column added via the list UI (its own internal name, not field_N)
+S_FILES                   = 'Files' # UI-added multiline col: JSON [{n,url,mime}] task attachments (photos/PDFs/links)
 # projectTasks: Title=Task
 # NOTE: field_4 never existed on this list (the original 'Type' slot). The live Type
 # column was (re)added via the list UI, so its internal name = its display name 'Type'
@@ -135,7 +136,7 @@ def build_tasks_from_rows(rows):
                 sal_open += 1
         tasks.append({'t': r['task'], 'who': who, 'op': r['op'], 'cl': r['cl'],
                       'st': r['st'], 'done': r['done'], 'ml': r['ml'], 'cm': r['cm'],
-                      'due': r.get('due'), '_id': r['_id']})
+                      'due': r.get('due'), 'files': r.get('files'), '_id': r['_id']})
     return {'open': open_, 'openCount': len(open_), 'doneCount': done_count,
             'salOpen': sal_open, 'done': done, 'tasks': tasks}
 
@@ -189,10 +190,18 @@ def main():
         # SharePoint Date columns come back as 'YYYY-MM-DDT...' — keep just the date.
         if due and 'T' in due:
             due = due.split('T', 1)[0]
+        files = []
+        try:
+            fv = json.loads(ff(it, S_FILES) or '[]')
+            if isinstance(fv, list):
+                files = [x for x in fv if isinstance(x, dict) and x.get('url')]
+        except Exception:
+            files = []
         rec = {'task': task, '_id': it.get('ID') or it.get('id'),
                'who': ff(it, S_ASSIGNED), 'st': st, 'ml': '',
                'cm': ff(it, S_COMMENTS),
-               'op': op or None, 'cl': cl or None, 'due': due or None}
+               'op': op or None, 'cl': cl or None, 'due': due or None,
+               'files': files or None}
         rec['done'] = bool(re.search(r'(?i)done|complete', rec['st']) or rec['cl'])
         proj_raw = ff(it, S_PROJECT)
         key = norm_gen(proj_raw)
