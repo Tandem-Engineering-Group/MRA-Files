@@ -1060,6 +1060,14 @@
   .pipe-card{background:var(--panel2); border:1px solid var(--line); border-left-width:4px; border-radius:8px; padding:7px 10px; margin-bottom:7px; cursor:pointer}
   .pipe-card .t{font-weight:800; font-size:12px} .pipe-card .m{color:var(--muted); font-size:10.5px; margin-top:1px}
   body.light .pr-bar.inbound{background:#fdf3cf} body.light .pr-bar.here{background:#dcf5e6} body.light .pr-bar.decided{background:#dbe7fd}
+  /* Fleetio media on task lines: mini thumbs (hover to zoom, click to open) + 📎 file links */
+  .fmedia{display:inline-flex; align-items:center; gap:4px; margin-left:6px; vertical-align:middle}
+  .fthumb{height:26px; width:auto; max-width:44px; object-fit:cover; border:1px solid var(--line); border-radius:4px; cursor:zoom-in; vertical-align:middle}
+  body.wall .fthumb{height:34px; max-width:56px}
+  .fdoc{font-size:12px; text-decoration:none}
+  .fmore{font-size:9.5px; color:var(--muted)}
+  #fzoom{position:fixed; z-index:600; display:none; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:6px; box-shadow:0 12px 34px rgba(0,0,0,.5); pointer-events:none}
+  #fzoom img{max-width:420px; max-height:320px; border-radius:6px; display:block}
   /* 👤 quick-assign chip + popover */
   .qa{display:inline-block; margin-left:6px; padding:0 6px; border:1px solid var(--line); border-radius:6px; font-size:10px; cursor:pointer; color:var(--muted); user-select:none}
   .qa:hover{border-color:var(--blue); color:var(--blue)}
@@ -2451,6 +2459,7 @@
       <div class="msub">An end-of-day shop update — what's in the bays, open work per crew, what's coming back to MRA, and project/fleet flags. Copy it into an email or print to PDF.</div>
       <div style="display:flex; gap:8px; margin:8px 0 10px; flex-wrap:wrap; align-items:center">
         <label style="font-size:12px;color:var(--muted)">Date <input type="date" id="nightDate" onchange="renderNight()" style="background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--txt);padding:5px 8px;font-size:12px;margin-left:4px"></label>
+        <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="nightCrews" onchange="renderNight()" style="width:auto;margin:0"> Include tasks by crew</label>
         <button class="editbtn" onclick="copyNight()" id="copyNightBtn" title="Copy the letter to your clipboard">📋 Copy text</button>
         <button class="editbtn" onclick="printNight()" title="Open a clean printable page — then Save as PDF">🖨 Print / PDF</button>
       </div>
@@ -2937,6 +2946,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"12.9", date:"2026-07-03", title:"✉ Daily Update: tasks-by-crew toggle · 📷 Fleetio photos on the floor", items:[
+    "The Daily Shop Letter has an <b>“Include tasks by crew”</b> checkbox — off by default (one-pager), tick it and both the copy-text and the printed report add each crew's full task list (task — trailer).",
+    "<b>Fleetio photos & files now show on the shop floor</b> — a 🔧 task with pictures gets <b>mini thumbnails</b> right on its line (bay tiles and the crew columns, wall TV included, slightly bigger there). <b>Hover to zoom, click to open</b> full size in a new tab; 📎 opens PDFs/files. Same as the crew print, now live on the board." ] },
   { rev:"12.8", date:"2026-07-03", title:"✉ Daily Update print got a facelift", items:[
     "The Daily Update's <b>🖨 Print / PDF</b> is now a proper formatted report — stat tiles up top (builds · open tasks · done-7d · at-risk · coming back · service overdue), job cards per bay with crew names highlighted, ✅ recently completed, crew chips, coming-back and milestone sections. No more typewriter look. <i>(📋 Copy text is unchanged — still plain text for pasting into an email.)</i>" ] },
   { rev:"12.7", date:"2026-07-02", title:"🖨 One Print menu — whole board or any mix of crews", items:[
@@ -6469,7 +6481,15 @@ function _nightData(dateISO){
   const svc=((D.fleetio&&D.fleetio.service)||[]).map(s=>fleetState(s.dueISO,today));
   const svcOver=svc.filter(x=>x.overdue).length, svcSoon=svc.filter(x=>x.soon).length;
   const park=jobs.filter(j=>isParking(j.bay)), held=jobs.filter(j=>isHeld(j.bay));
-  return {D, today, onFloor, totalOpen, park, held, compRecent, CREWS, crewCount, arr, atRisk, upMs, svcOver, svcSoon};
+  // per-crew task lists (all 6 queues), same routing/filters as the crew columns
+  const PC=(typeof PRINT_CREWS!=='undefined')?PRINT_CREWS:CREWS;
+  const KNOWN2=new RegExp(PC.map(g=>g.re.source).join("|"),"i");
+  const basis2=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN2.test(who))?who:(who?(who+" "+txt):txt); };
+  const crewTasks={}; PC.forEach(c=>crewTasks[c.label]=[]);
+  jobs.forEach(j=>{ if((j.status||"").toLowerCase()==="on hold"||isHeld(j.bay)) return;
+    const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk}));
+    tl.forEach(t=>{ if(!t.disp) return; PC.forEach(c=>{ if(c.re.test(basis2(t.who,t.raw||t.disp))) crewTasks[c.label].push({t:t.disp, proj:j.project, jobNum:j.jobNum}); }); }); });
+  return {D, today, onFloor, totalOpen, park, held, compRecent, CREWS, crewCount, crewTasks, arr, atRisk, upMs, svcOver, svcSoon};
 }
 function buildNightLetter(dateISO){
   const N=_nightData(dateISO);
@@ -6504,6 +6524,13 @@ function buildNightLetter(dateISO){
   L.push('OPEN TASKS BY CREW');
   CREWS.forEach(c=>L.push(`  • ${c.label} — ${crewCount[c.label]}`));
   L.push('');
+  const _inc=document.getElementById('nightCrews'); 
+  if(_inc&&_inc.checked&&N.crewTasks){
+    Object.keys(N.crewTasks).forEach(cl=>{ const ts=N.crewTasks[cl]; if(!ts.length) return;
+      L.push(cl.toUpperCase()+`  (${ts.length})`);
+      ts.forEach(x=>L.push(`  • ${x.t} — ${x.proj}${x.jobNum?' ['+x.jobNum+']':''}`));
+      L.push(''); });
+  }
   if(arr.length){ L.push('COMING BACK TO MRA  (next 14 days)');
     arr.forEach(x=>L.push(`  • ${x.job||'(trailer)'} — ${x.d<=0?'today':'in '+x.d+'d'} (${fmtMDY(x.arrivingISO)})`)); L.push(''); }
   L.push('PROJECTS');
@@ -6593,6 +6620,8 @@ function printNight(){
     `<div style="margin:2px 0 0;color:#555">\u{1F17F}\uFE0F Parking Lot: <b>${N.park.length}</b> unit${N.park.length===1?'':'s'} &nbsp;·&nbsp; \u{1F6EC} Next Up / On Hold: <b>${N.held.length}</b></div>`+
     `<h2>✅ RECENTLY COMPLETED — LAST 7 DAYS (${N.compRecent.length})</h2>${compH}`+
     `<h2>👥 OPEN TASKS BY CREW</h2><div>${crewChips}</div>`+
+    ((document.getElementById('nightCrews')||{}).checked&&N.crewTasks?Object.keys(N.crewTasks).filter(cl=>N.crewTasks[cl].length).map(cl=>
+      `<h2>👤 ${esc(cl.toUpperCase())} (${N.crewTasks[cl].length})</h2><div class="cols"><ul>${N.crewTasks[cl].map(x=>`<li>${esc(x.t)} <span class="dt">— ${esc(x.proj)}${x.jobNum?' ['+esc(x.jobNum)+']':''}</span></li>`).join('')}</ul></div>`).join(''):'')+
     (N.arr.length?`<h2>↩️ COMING BACK TO MRA — NEXT 14 DAYS</h2>${backH}`:'')+
     `<h2>📅 PROJECTS</h2><div style="margin-bottom:5px"><b>${N.atRisk.length}</b> at risk · <b>${N.upMs.length}</b> milestone${N.upMs.length===1?'':'s'} due in the next 7 days</div>${msH}`+
     (N.svcOver||N.svcSoon?`<h2>🚛 FLEET</h2><div><b style="color:#b91c1c">${N.svcOver}</b> service overdue · <b style="color:#b45309">${N.svcSoon}</b> due soon</div>`:'')+
@@ -7288,7 +7317,7 @@ function renderFloor(D){
         const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
         const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
           const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}`; };
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?(fioDetHtml(fm[1])+fioDocsHtml(fm[1])):''}`; };
         let inner="";
         gkeys.forEach(k=>{
           if(!onlyUnassigned){
@@ -7302,7 +7331,7 @@ function renderFloor(D){
       if(fl.length){
         tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
           const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
-          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>${fioDetHtml(it.num)}`;
+          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>${fioDetHtml(it.num)}${fioDocsHtml(it.num)}`;
         }).join("")+`</div>`;
       }
     }
@@ -7709,7 +7738,7 @@ function renderSal(D){
       const odOver = o.due && !o.closed && daysBetween(o.due,today)<0;
       const odue = o.due?` <span class="duedate${odOver?' od':''}">📅 due ${esc(fmtMDY(o.due))}</span>`:'';
       if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${oent}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
-      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}</li>`;}).join("")}</ol></div>`;
+      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?(fioDetHtml(fm[1])+fioDocsHtml(fm[1])):""}</li>`;}).join("")}</ol></div>`;
   // ⚠ overdue chip in the panel header — distinct open crew tasks whose due date has passed.
   { const chip=document.getElementById('salOverChip');
     if(chip){ let n=0;
@@ -8208,6 +8237,23 @@ function fioHref(kind,num){
   return FLEETIO_BASE+'/issues'+((num!=null&&num!=='')?('/'+encodeURIComponent(num)):'');
 }
 function fioIssue(num){ const D=window.MRA_DATA||{}; return (((D.fleetio&&D.fleetio.issues)||[]).find(i=>String(i.num)===String(num)))||null; }
+// Small photo thumbnails + 📎 file links for a Fleetio-derived task line (floor tiles + crew columns).
+// Hover a thumb to zoom; click opens the full image / PDF in a new tab. Lazy-loaded, max 2 of each.
+function fioDocsHtml(num){ const it=fioIssue(num); const docs=(it&&it.docs)||[]; if(!docs.length) return '';
+  const imgs=docs.filter(x=>/^image\//i.test(x.mime||'')), files=docs.filter(x=>!/^image\//i.test(x.mime||''));
+  let h='<span class="fmedia">';
+  imgs.slice(0,2).forEach(x=>{ h+=`<img class="fthumb" loading="lazy" src="${escA(x.url)}" alt="" onmouseenter="fthumbZoom(event,this.src)" onmouseleave="fthumbHide()" onclick="event.stopPropagation();fthumbHide();window.open('${escJsAttr(x.url)}','_blank')" title="Click to open full size">`; });
+  files.slice(0,2).forEach(x=>{ h+=`<a class="fdoc" href="${escA(x.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${escA(x.n||'attachment')}">\u{1F4CE}</a>`; });
+  const extra=(imgs.length>2?imgs.length-2:0)+(files.length>2?files.length-2:0);
+  if(extra) h+=`<span class="fmore">+${extra}</span>`;
+  return h+'</span>';
+}
+function fthumbZoom(ev,src){ let z=document.getElementById('fzoom');
+  if(!z){ z=document.createElement('div'); z.id='fzoom'; document.body.appendChild(z); }
+  z.innerHTML=`<img src="${escA(src)}">`;
+  const x=Math.min((ev&&ev.clientX||200)+18, innerWidth-430), y=Math.max(10, Math.min((ev&&ev.clientY||200)-120, innerHeight-330));
+  z.style.left=Math.max(8,x)+'px'; z.style.top=y+'px'; z.style.display='block'; }
+function fthumbHide(){ const z=document.getElementById('fzoom'); if(z) z.style.display='none'; }
 function fioDetHtml(num){ const it=fioIssue(num); const d=(it&&it.detail)?String(it.detail).trim():'';
   // Clamped to ONE line to keep task lists tight — tap/click the line to expand the full description.
   return d?`<div class="fl-det" onclick="event.stopPropagation();this.classList.toggle('open')" title="${escA(d)}">${esc(d)}</div>`:''; }
