@@ -2370,6 +2370,7 @@
         </div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="ppClose()">Cancel</button>
+          <button class="btn-ghost" id="ppShareBtn" onclick="ppShare()" title="Copies a personal LIVE link for the ticked crews — they can bookmark it forever: always shows their current tasks with photos (hover to zoom, click to open) and auto-refreshes every 5 minutes while open. No login needed.">🔗 Custom dash link</button>
           <button class="btn-primary" onclick="ppPrint()">🖨 Print selected</button>
         </div>
       </div>
@@ -2946,6 +2947,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"13.0", date:"2026-07-03", title:"🔗 Custom dash links — a personal live task sheet per crew", items:[
+    "The 🖨 Print picker now has <b>🔗 Copy share link</b>: tick any mix of crews (say Sal + Electricians + Wrap), copy the link, and <b>text or email it</b>. Whoever opens it gets the <b>live task sheet</b> — grouped by trailer with descriptions and <b>photos that zoom on hover and open full-size on click</b> (📎 PDFs too, no Fleetio login needed). It's a <b>bookmark-forever personal dash</b>: always current, and it <b>auto-refreshes every 5 minutes</b> while open — and prints from there too." ] },
   { rev:"12.9", date:"2026-07-03", title:"✉ Daily Update: tasks-by-crew toggle · 📷 Fleetio photos on the floor", items:[
     "The Daily Shop Letter has an <b>“Include tasks by crew”</b> checkbox — off by default (one-pager), tick it and both the copy-text and the printed report add each crew's full task list (task — trailer).",
     "<b>Fleetio photos & files now show on the shop floor</b> — a 🔧 task with pictures gets <b>mini thumbnails</b> right on its line (bay tiles and the crew columns, wall TV included, slightly bigger there). <b>Hover to zoom, click to open</b> full size in a new tab; 📎 opens PDFs/files. Same as the crew print, now live on the board." ] },
@@ -9196,8 +9199,17 @@ function ppPrint(){ const sel=[...document.querySelectorAll('#ppCrews input:chec
 // Prints ONE crew (legacy 2-arg call) or ANY MIX of crews (array of {label,re}) — one sheet, a section per crew.
 function printCrewTasks(label, re){
   const sel=Array.isArray(label)?label:[{label:label, re:re}];
+  const html=buildCrewSheetHtml(sel,{autoPrint:true});
+  if(html==null) return;
+  const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+// Builds the crew task-sheet page — used by the print window AND the 🔗 share-link live sheet
+// (?sheet=sal,elec,…). Photos hover-zoom (CSS) and click through full size; files open in a new tab.
+function buildCrewSheetHtml(sel, opts){
+  opts=opts||{};
   const D=window.MRA_DATA||{};
-  if(!(D.jobs&&D.jobs.length)){ alert("The board isn't loaded yet — try again in a moment."); return; }
+  if(!(D.jobs&&D.jobs.length)){ alert("The board isn't loaded yet — try again in a moment."); return null; }
   const live=j=>j.category!=="leave" && !["shipped","on hold"].includes((j.status||"").toLowerCase()) && !bayIsHeld(j.bay);   // On-Hold / Next-Up / Off-Site trailers stay off the crew print, matching the screen queues
   const jobs=(D.jobs||[]).filter(live);
   const KNOWN=/\bsal\b|wrap|w2 graphic|\bw2\b|electr|beyer/i;
@@ -9253,16 +9265,28 @@ function printCrewTasks(label, re){
     `.job li .d{color:#555;font-size:.84em;line-height:1.25;margin:1px 0 2px;font-style:italic}`+
     `.atts{margin:2px 0 1px}.att{max-height:90px;max-width:135px;border:1px solid #ccc;border-radius:3px;margin:2px 5px 0 0;vertical-align:top}`+
     `.attlink{display:inline-block;font-size:.84em;color:#1a56db;text-decoration:underline;margin:1px 8px 1px 0;font-style:normal}`+
+    `.att{transition:transform .15s ease}a:hover .att{transform:scale(3.4);position:relative;z-index:60;box-shadow:0 10px 34px rgba(0,0,0,.45)}`+
     `.ch{font-size:1.25em;font-weight:800;border-bottom:2px solid #23272e;margin:12px 0 7px;padding-bottom:2px}.ch .cn{color:#777;font-weight:600;font-size:.8em}.csec{margin-bottom:6px}`+
     `.none{font-size:1.1em;color:#999;font-style:italic}`+
     `@media print{.printbar{display:none}}`;
   const fitJS=`<scr`+`ipt>(function(){function fit(){var s=document.getElementById('sheet');if(!s)return;var fs=11;s.style.fontSize='11px';for(var i=0;i<6;i++){var h=s.getBoundingClientRect().height;if(h<=940)break;fs=fs*(940/h)*0.985;if(fs<8){s.style.fontSize='8px';break;}s.style.fontSize=fs.toFixed(2)+'px';}}window.onload=function(){fit();setTimeout(function(){try{window.focus();window.print();}catch(e){}},650);};})();</scr`+`ipt>`;
-  const fitJS2 = sel.length===1 ? fitJS : fitJS.replace('fit();','');   // multi-crew sheets flow to extra pages instead of shrinking
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA — ${esc(labelAll)} Tasks — ${stamp}</title><style>${css}</style></head><body>`+
-    `<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span class="tip">Letter · Portrait${sel.length===1?' · auto-fits to one page':''}.</span></div>`+
+  let fitJS2 = sel.length===1 ? fitJS : fitJS.replace('fit();','');   // multi-crew sheets flow to extra pages instead of shrinking
+  if(opts.autoPrint===false) fitJS2=fitJS2.replace('window.print();','');   // 🔗 share view: no print dialog on open
+  const html=`<!doctype html><html><head><meta charset="utf-8">${opts.share?'<meta http-equiv="refresh" content="300">':''}<title>MRA — ${esc(labelAll)} Tasks — ${stamp}</title><style>${css}</style></head><body>`+
+    `<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span class="tip">${opts.share?'Your live task sheet — auto-updates every 5 min · hover a photo to zoom, click to open full size':'Letter · Portrait'+(sel.length===1?' · auto-fits to one page':'')+'.'}</span></div>`+
     `<div id="sheet"><div class="hd"><h1><span class="mra">MRA</span> ${esc(labelAll)} — Open Tasks</h1><div class="sub">${stamp} · ${total} open</div></div>${body}</div>`+fitJS2+`</body></html>`;
-  const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
-  w.document.open(); w.document.write(html); w.document.close();
+  return html;
+}
+// 🔗 shareable link for the currently-ticked crews: recipients open it and get the LIVE task sheet.
+const _SHEET_KEYS={'Sal':'sal','Wrap Team':'wrap','Electricians':'elec','Doug':'doug','Josh':'josh','Jeff':'jeff'};
+function ppShare(){
+  const sel=[...document.querySelectorAll('#ppCrews input:checked')].map(x=>PRINT_CREWS[+x.dataset.i]);
+  if(!sel.length){ alert('Tick at least one crew first.'); return; }
+  const url=location.origin+location.pathname+'?sheet='+sel.map(c=>_SHEET_KEYS[c.label]||c.label.toLowerCase()).join(',');
+  const b=document.getElementById('ppShareBtn');
+  const ok=()=>{ if(b){ b.textContent='✓ Link copied — text/email it'; setTimeout(()=>{b.textContent='🔗 Custom dash link';},2200); } };
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok,()=>fallbackCopy(url,ok));
+  else fallbackCopy(url,ok);
 }
 function printSalTasks(){ printCrewTasks('Sal', /\bsal\b/i); }
 
@@ -11091,6 +11115,22 @@ async function refresh(){
 // First paint comes from a fresh (cache-busted) fetch, so a browser reload never
 // flashes the stale cached data.js. Only fall back to the inline <script src>
 // copy if the fetch can't run (e.g. opened directly as a file://).
+// 🔗 Share-link mode: MRA_Dashboard.html?sheet=sal,elec,… renders the LIVE crew task sheet
+// instead of the board — what the 🔗 Copy-share-link button in the 🖨 Print picker hands out.
+const _sheetSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('sheet'); if(!q) return null;
+  const map={sal:'Sal',wrap:'Wrap Team',wrapteam:'Wrap Team',elec:'Electricians',electricians:'Electricians',doug:'Doug',josh:'Josh',jeff:'Jeff'};
+  const want=q.split(',').map(x=>map[String(x).trim().toLowerCase()]).filter(Boolean);
+  const sel=PRINT_CREWS.filter(c=>want.indexOf(c.label)>=0);
+  return sel.length?sel:null; }catch(e){ return null; } })();
+if(_sheetSel){
+  const _sh=buildCrewSheetHtml(_sheetSel,{autoPrint:false, share:true});
+  if(_sh!=null){
+    // swap the whole page in place (document.write mid-parse never fires load)
+    const inner=_sh.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
+    document.documentElement.innerHTML=inner;
+    document.title='MRA — Crew Task Sheet';
+  }
+} else {
 renderLinks();
 renderEquipment();
 renderFleet();
@@ -11104,6 +11144,7 @@ applyDesignVars();   // apply this screen's saved size/spacing tweaks (Design pa
 refresh().then(ok=>{ if(!ok) renderAll(); try{ if(localStorage.getItem('mra_wall')){ const b=document.getElementById('btnWall'); if(b && !WALL) toggleWall(b); } }catch(e){} });
 tick(); setInterval(tick,1000);
 setInterval(refresh, REFRESH_SECONDS*1000);
+}
 </script>
 </body>
 </html>
