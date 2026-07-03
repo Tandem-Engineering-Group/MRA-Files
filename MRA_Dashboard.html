@@ -2947,6 +2947,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"13.1", date:"2026-07-03", title:"🔗 Crew sheets: due dates, overdue flags, comments", items:[
+    "The crew task sheets (🖨 prints and the 🔗 custom dash links) now show each task's <b>due date</b> — red <b>OVERDUE</b> when it's past — with tasks <b>sorted due-soonest first</b> inside each trailer, task <b>comments/notes</b> included, and an <b>overdue count</b> in the header." ] },
   { rev:"13.0", date:"2026-07-03", title:"🔗 Custom dash links — a personal live task sheet per crew", items:[
     "The 🖨 Print picker now has <b>🔗 Copy share link</b>: tick any mix of crews (say Sal + Electricians + Wrap), copy the link, and <b>text or email it</b>. Whoever opens it gets the <b>live task sheet</b> — grouped by trailer with descriptions and <b>photos that zoom on hover and open full-size on click</b> (📎 PDFs too, no Fleetio login needed). It's a <b>bookmark-forever personal dash</b>: always current, and it <b>auto-refreshes every 5 minutes</b> while open — and prints from there too." ] },
   { rev:"12.9", date:"2026-07-03", title:"✉ Daily Update: tasks-by-crew toggle · 📷 Fleetio photos on the floor", items:[
@@ -9227,25 +9229,30 @@ function buildCrewSheetHtml(sel, opts){
               ? `<a href="${escA(x.url)}" target="_blank" rel="noopener"><img class="att" src="${escA(x.url)}" alt="${escA((x.n||'photo'))}"></a>`
               : `<a class="attlink" href="${escA(x.url)}" target="_blank" rel="noopener">\u{1F4CE} ${esc((x.n||'attachment').slice(0,42))}</a>`
             ).join('');
-          return `<li>${esc(o.disp)}${d?`<div class="d">${esc(d.slice(0,240))}${d.length>240?'…':''}</div>`:''}${att?`<div class="atts">${att}</div>`:''}</li>`;
+          const dueS=o.due?` <span class="due${o.due<todayISO?' od':''}">${o.due<todayISO?'OVERDUE ':'due '}${fmt(o.due)}</span>`:'';
+          const note=(o.cm&&!/^Fleetio issue #/i.test(o.cm))?`<div class="d">${esc(String(o.cm).slice(0,200))}${String(o.cm).length>200?'…':''}</div>`:'';
+          return `<li>${esc(o.disp)}${dueS}${d?`<div class="d">${esc(d.slice(0,240))}${d.length>240?'…':''}</div>`:''}${note}${att?`<div class="atts">${att}</div>`:''}</li>`;
         }).join("")
       + `</ul></div>`;
   };
-  let total=0;
+  let total=0, totOd=0;
+  const todayISO=D.todayISO||localISO(Date.now());
   const secs=sel.map(cr=>{
-    const cards=[]; let n=0;
+    const cards=[]; let n=0, od=0;
     jobs.forEach(j=>{
-      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk}));
+      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||""})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:""}));
       const open=tl.filter(t=>cr.re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
+      open.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));   // due-soonest first, undated last
+      open.forEach(o=>{ if(o.due&&o.due<todayISO) od++; });
       if(open.length){ n+=open.length; cards.push({bay:j.bay,project:j.project,jobNum:j.jobNum,startISO:j.startISO,completionISO:j.completionISO,open}); }
     });
     cards.sort((a,b)=>oIdx(a.bay)-oIdx(b.bay)||(a.project||"").localeCompare(b.project||""));
-    total+=n; return {label:cr.label, n, cards};
+    total+=n; totOd+=od; return {label:cr.label, n, od, cards};
   });
   const labelAll=sel.map(x=>x.label).join(' + ');
   const body=secs.map(sec=>{
     const inner=sec.cards.length?sec.cards.map(cardHtml).join(""):`<div class="none">— nothing open for ${esc(sec.label)} —</div>`;
-    const hdr=sel.length>1?`<h2 class="ch">${esc(sec.label)} <span class="cn">· ${sec.n} open</span></h2>`:'';
+    const hdr=sel.length>1?`<h2 class="ch">${esc(sec.label)} <span class="cn">· ${sec.n} open${sec.od?` · <span class="odh">${sec.od} overdue</span>`:''}</span></h2>`:'';
     return `<div class="csec">${hdr}<div class="cols">${inner}</div></div>`;
   }).join("");
   const now=new Date(), stamp=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear()+" "+now.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
@@ -9267,6 +9274,7 @@ function buildCrewSheetHtml(sel, opts){
     `.attlink{display:inline-block;font-size:.84em;color:#1a56db;text-decoration:underline;margin:1px 8px 1px 0;font-style:normal}`+
     `.att{transition:transform .15s ease}a:hover .att{transform:scale(3.4);position:relative;z-index:60;box-shadow:0 10px 34px rgba(0,0,0,.45)}`+
     `.ch{font-size:1.25em;font-weight:800;border-bottom:2px solid #23272e;margin:12px 0 7px;padding-bottom:2px}.ch .cn{color:#777;font-weight:600;font-size:.8em}.csec{margin-bottom:6px}`+
+    `.due{color:#b45309;font-weight:800;font-size:.85em;white-space:nowrap}.due.od{color:#b91c1c}.odh{color:#b91c1c;font-weight:800}`+
     `.none{font-size:1.1em;color:#999;font-style:italic}`+
     `@media print{.printbar{display:none}}`;
   const fitJS=`<scr`+`ipt>(function(){function fit(){var s=document.getElementById('sheet');if(!s)return;var fs=11;s.style.fontSize='11px';for(var i=0;i<6;i++){var h=s.getBoundingClientRect().height;if(h<=940)break;fs=fs*(940/h)*0.985;if(fs<8){s.style.fontSize='8px';break;}s.style.fontSize=fs.toFixed(2)+'px';}}window.onload=function(){fit();setTimeout(function(){try{window.focus();window.print();}catch(e){}},650);};})();</scr`+`ipt>`;
@@ -9274,7 +9282,7 @@ function buildCrewSheetHtml(sel, opts){
   if(opts.autoPrint===false) fitJS2=fitJS2.replace('window.print();','');   // 🔗 share view: no print dialog on open
   const html=`<!doctype html><html><head><meta charset="utf-8">${opts.share?'<meta http-equiv="refresh" content="300">':''}<title>MRA — ${esc(labelAll)} Tasks — ${stamp}</title><style>${css}</style></head><body>`+
     `<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span class="tip">${opts.share?'Your live task sheet — auto-updates every 5 min · hover a photo to zoom, click to open full size':'Letter · Portrait'+(sel.length===1?' · auto-fits to one page':'')+'.'}</span></div>`+
-    `<div id="sheet"><div class="hd"><h1><span class="mra">MRA</span> ${esc(labelAll)} — Open Tasks</h1><div class="sub">${stamp} · ${total} open</div></div>${body}</div>`+fitJS2+`</body></html>`;
+    `<div id="sheet"><div class="hd"><h1><span class="mra">MRA</span> ${esc(labelAll)} — Open Tasks</h1><div class="sub">${stamp} · ${total} open${totOd?` · <span class="odh">${totOd} overdue</span>`:''} · sorted by due date</div></div>${body}</div>`+fitJS2+`</body></html>`;
   return html;
 }
 // 🔗 shareable link for the currently-ticked crews: recipients open it and get the LIVE task sheet.
