@@ -2937,6 +2937,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"12.8", date:"2026-07-03", title:"✉ Daily Update print got a facelift", items:[
+    "The Daily Update's <b>🖨 Print / PDF</b> is now a proper formatted report — stat tiles up top (builds · open tasks · done-7d · at-risk · coming back · service overdue), job cards per bay with crew names highlighted, ✅ recently completed, crew chips, coming-back and milestone sections. No more typewriter look. <i>(📋 Copy text is unchanged — still plain text for pasting into an email.)</i>" ] },
   { rev:"12.7", date:"2026-07-02", title:"🖨 One Print menu — whole board or any mix of crews", items:[
     "The two print buttons (board / Sal tasks) are now <b>one 🖨 Print…</b> that opens a picker: print the <b>whole board</b> like before, or <b>tick any mix of crews</b> — Sal, Wrap Team, Electricians, Doug, Josh, Jeff — and get one clean handout with a <b>section per crew</b> (e.g. Sal + Electricians on one sheet). Single-crew prints still auto-fit to one page." ] },
   { rev:"12.6", date:"2026-07-02", title:"🛬 Pipeline panel replaces the Next Up / On Hold tile", items:[
@@ -6423,7 +6425,7 @@ function printStatus(){
 }
 
 /* ---------- Daily Shop Letter (end-of-day update, copy / print) ---------- */
-function buildNightLetter(dateISO){
+function _nightData(dateISO){
   const D=window.MRA_DATA||{};
   const today = dateISO || D.todayISO || '';
   const isParking=b=>/^\s*parking\s*lot\s*$/i.test(b||"");
@@ -6466,6 +6468,14 @@ function buildNightLetter(dateISO){
   // fleet service flags
   const svc=((D.fleetio&&D.fleetio.service)||[]).map(s=>fleetState(s.dueISO,today));
   const svcOver=svc.filter(x=>x.overdue).length, svcSoon=svc.filter(x=>x.soon).length;
+  const park=jobs.filter(j=>isParking(j.bay)), held=jobs.filter(j=>isHeld(j.bay));
+  return {D, today, onFloor, totalOpen, park, held, compRecent, CREWS, crewCount, arr, atRisk, upMs, svcOver, svcSoon};
+}
+function buildNightLetter(dateISO){
+  const N=_nightData(dateISO);
+  const D=N.D, today=N.today, onFloor=N.onFloor, totalOpen=N.totalOpen, park=N.park, held=N.held,
+        compRecent=N.compRecent, CREWS=N.CREWS, crewCount=N.crewCount, arr=N.arr, atRisk=N.atRisk,
+        upMs=N.upMs, svcOver=N.svcOver, svcSoon=N.svcSoon;
   // compose (plain text, email-paste friendly)
   const WD=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const MO=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -6484,7 +6494,6 @@ function buildNightLetter(dateISO){
     x.openList.slice(0,10).forEach(o=>L.push(`     • ${o}`));
     if(x.openList.length>10) L.push(`     • …and ${x.openList.length-10} more`); });
   else L.push('  • No active builds in the bays.');
-  const park=jobs.filter(j=>isParking(j.bay)), held=jobs.filter(j=>isHeld(j.bay));
   if(park.length) L.push(`  • Parking Lot: ${park.length} unit${park.length===1?'':'s'}`);
   if(held.length) L.push(`  • Next Up / On Hold: ${held.length}`);
   L.push('');
@@ -6524,19 +6533,73 @@ function copyNight(){
   if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok,()=>fallbackCopy(txt,ok)); }
   else fallbackCopy(txt,ok);
 }
+// Polished print / PDF of the Daily Update (the 📋 Copy-text version stays plain for email paste).
 function printNight(){
-  const txt=document.getElementById('nightBody').textContent;
+  const dsel=(document.getElementById('nightDate')||{}).value||'';
+  const N=_nightData(dsel);
+  const WD=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MO=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const LD=parseISO(N.today);
+  const longDate=LD?`${WD[LD.getDay()]}, ${MO[LD.getMonth()]} ${LD.getDate()}, ${LD.getFullYear()}`:N.today;
+  const crewTxt=(who)=>who?` <span class="who">— ${esc(who)}</span>`:'';
+  const floorCards=N.onFloor.length?N.onFloor.map(x=>{
+    const j=x.j; const dt=(j.startISO||j.completionISO)?`<span class="dt">${fmtMD(j.startISO)}–${fmtMD(j.completionISO)}</span>`:'';
+    const lis=x.openList.slice(0,10).map(o=>{ const m=String(o).match(/^(.*?)(?: — ([^—]+))?$/); return `<li>${esc(m[1]||o)}${crewTxt(m[2]||'')}</li>`; }).join('')
+      +(x.openList.length>10?`<li class="more">…and ${x.openList.length-10} more</li>`:'');
+    return `<div class="job"><div class="jh">${esc(j.project)} <span class="jn">${esc(j.jobNum||'')}</span> <span class="bayt">${esc(x.bay)}</span> ${dt} <span class="oc">${x.openList.length} open</span></div>${x.openList.length?`<ul>${lis}</ul>`:''}</div>`;
+  }).join(''):'<div class="none">No active builds in the bays.</div>';
+  const compH=N.compRecent.length?`<ul class="done">${N.compRecent.slice(0,24).map(c=>`<li>✓ <b>${esc(c.project)}</b>${c.jobNum?' <span class="jn">'+esc(c.jobNum)+'</span>':''}: ${esc(c.t)}${crewTxt(c.who)} <span class="dt">closed ${esc(fmtMDY(c.cl))}</span></li>`).join('')}${N.compRecent.length>24?`<li class="more">…and ${N.compRecent.length-24} more</li>`:''}</ul>`:'<div class="none">Nothing logged closed in the last 7 days.</div>';
+  const crewChips=N.CREWS.map(c=>`<span class="chip">${esc(c.label)} <b>${N.crewCount[c.label]}</b></span>`).join(' ');
+  const backH=N.arr.length?`<ul>${N.arr.map(x=>`<li>${esc(x.job||'(trailer)')} — <b>${x.d<=0?'today':'in '+x.d+'d'}</b> <span class="dt">(${esc(fmtMDY(x.arrivingISO))})</span></li>`).join('')}</ul>`:'';
+  const msH=N.upMs.length?`<ul>${N.upMs.slice(0,6).map(m=>`<li><b>${esc(m.proj)}</b>: ${esc(m.name)} — ${esc(fmtMDY(m.dateISO))}</li>`).join('')}</ul>`:'<div class="none">No milestones due in the next 7 days.</div>';
+  const tiles=[
+    {n:N.onFloor.length,l:'BUILDS IN BAYS'},
+    {n:N.totalOpen,l:'OPEN TASKS'},
+    {n:N.compRecent.length,l:'DONE — 7 DAYS',cls:'ok'},
+    {n:N.atRisk.length,l:'PROJECTS AT RISK',cls:N.atRisk.length?'bad':''},
+    {n:N.arr.length,l:'BACK ≤ 14 DAYS',cls:N.arr.length?'warn':''},
+    {n:N.svcOver,l:'SERVICE OVERDUE',cls:N.svcOver?'bad':''}];
+  const tilesH=tiles.map(t=>`<div class="stat ${t.cls||''}"><div class="v">${t.n}</div><div class="l">${t.l}</div></div>`).join('');
+  const now=new Date(), stamp=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear()+' '+now.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  const css=`@page{size:letter portrait;margin:.5in}*{box-sizing:border-box}html,body{margin:0}`+
+    `body{font-family:'Segoe UI',Arial,sans-serif;color:#23272e;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}`+
+    `.bar{background:#23272e;color:#fff;padding:9px 16px;font-size:12px;display:flex;gap:14px;align-items:center}`+
+    `.bar button{background:#e04826;color:#fff;border:none;border-radius:7px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:13px}`+
+    `#sheet{width:7.5in;margin:0 auto;font-size:11.5px;padding:10px 0}`+
+    `.hd{border-bottom:3px solid #e04826;padding-bottom:7px;margin-bottom:10px}`+
+    `.hd h1{font-size:21px;margin:0;font-weight:800}.hd .mra{color:#e04826}.hd .sub{color:#666;font-size:12px;margin-top:2px}`+
+    `.strip{display:flex;gap:8px;margin:10px 0 4px}`+
+    `.stat{flex:1;border:1px solid #d8dce1;border-radius:8px;padding:7px 6px;text-align:center}`+
+    `.stat .v{font-size:19px;font-weight:800}.stat .l{font-size:8.5px;letter-spacing:.6px;color:#8a8f98;font-weight:700;margin-top:1px}`+
+    `.stat.ok .v{color:#15803d}.stat.bad .v{color:#b91c1c}.stat.warn .v{color:#b45309}`+
+    `h2{font-size:13px;font-weight:800;letter-spacing:.4px;border-bottom:2px solid #23272e;padding-bottom:3px;margin:14px 0 8px}`+
+    `.cols{column-count:2;column-gap:18px}`+
+    `.job{break-inside:avoid;border:1px solid #cfd3d8;border-radius:6px;margin:0 0 8px;overflow:hidden}`+
+    `.jh{font-size:1.02em;font-weight:800;background:#f0f2f5;padding:4px 8px;border-bottom:1px solid #d8dce1}`+
+    `.jh .jn{color:#777;font-weight:600}.jh .bayt{color:#e04826;font-weight:700;font-size:.85em}.jh .dt{color:#666;font-weight:600;font-size:.85em}`+
+    `.jh .oc{float:right;background:#e04826;color:#fff;border-radius:9px;padding:0 8px;font-size:.8em;line-height:1.7}`+
+    `ul{margin:4px 0 6px;padding-left:20px}li{margin-bottom:2.5px;line-height:1.35}`+
+    `.who{color:#e04826;font-weight:700}.dt{color:#888}.jn{color:#777}.more{color:#999;font-style:italic}`+
+    `ul.done li{list-style:none;margin-left:-16px}`+
+    `.chip{display:inline-block;border:1px solid #d8dce1;border-radius:14px;padding:2px 12px;margin:0 6px 6px 0;font-size:11px}.chip b{color:#e04826}`+
+    `.none{color:#999;font-style:italic}`+
+    `.foot{margin-top:14px;border-top:1px solid #d8dce1;padding-top:7px;color:#9aa0a8;font-size:9.5px;display:flex;justify-content:space-between}`+
+    `@media print{.bar{display:none}}`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA Daily Update — ${esc(longDate)}</title><style>${css}</style></head><body>`+
+    `<div class="bar"><button onclick="window.print()">\u{1F5A8} Print / Save as PDF</button><span>Letter · Portrait — use your browser's Save as PDF.</span></div>`+
+    `<div id="sheet"><div class="hd"><h1><span class="mra">MRA</span> Command Center — Daily Update</h1><div class="sub">${esc(longDate)}${N.D.generatedAt?' · data as of '+esc(fmtStamp(N.D.generatedAt)):''}</div></div>`+
+    `<div class="strip">${tilesH}</div>`+
+    `<h2>🔧 ON THE FLOOR</h2><div class="cols">${floorCards}</div>`+
+    `<div style="margin:2px 0 0;color:#555">\u{1F17F}\uFE0F Parking Lot: <b>${N.park.length}</b> unit${N.park.length===1?'':'s'} &nbsp;·&nbsp; \u{1F6EC} Next Up / On Hold: <b>${N.held.length}</b></div>`+
+    `<h2>✅ RECENTLY COMPLETED — LAST 7 DAYS (${N.compRecent.length})</h2>${compH}`+
+    `<h2>👥 OPEN TASKS BY CREW</h2><div>${crewChips}</div>`+
+    (N.arr.length?`<h2>↩️ COMING BACK TO MRA — NEXT 14 DAYS</h2>${backH}`:'')+
+    `<h2>📅 PROJECTS</h2><div style="margin-bottom:5px"><b>${N.atRisk.length}</b> at risk · <b>${N.upMs.length}</b> milestone${N.upMs.length===1?'':'s'} due in the next 7 days</div>${msH}`+
+    (N.svcOver||N.svcSoon?`<h2>🚛 FLEET</h2><div><b style="color:#b91c1c">${N.svcOver}</b> service overdue · <b style="color:#b45309">${N.svcSoon}</b> due soon</div>`:'')+
+    `<div class="foot"><span>Generated from the MRA Command Center</span><span>${esc(stamp)}</span></div>`+
+    `</div></body></html>`;
   const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
-  const css=`@page{size:letter portrait;margin:.6in}body{font-family:'Segoe UI',Arial,sans-serif;color:#23272e;margin:0}`+
-    `.bar{background:#23272e;color:#fff;padding:11px 18px;font-size:13px;display:flex;gap:14px;align-items:center}`+
-    `.bar button{background:#e04826;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer}`+
-    `.sheet{max-width:7.6in;margin:22px auto;padding:0 .2in}h1{font-size:20px;color:#23272e;border-bottom:3px solid #e04826;padding-bottom:8px}`+
-    `pre{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12.5px;line-height:1.55;white-space:pre-wrap}`+
-    `@media print{.bar{display:none}.sheet{margin:0}}`;
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MRA Command Center — Daily Update</title><style>${css}</style></head><body>`+
-    `<div class="bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><span>Use your browser's “Save as PDF”.</span></div>`+
-    `<div class="sheet"><h1>✉ MRA Command Center — Daily Update</h1><pre>${esc(txt)}</pre></div></body></html>`);
-  w.document.close();
+  w.document.open(); w.document.write(html); w.document.close();
 }
 let UP_DATA=null;
 function openUpload(){
