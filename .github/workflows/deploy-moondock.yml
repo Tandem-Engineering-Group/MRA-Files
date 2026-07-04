@@ -1,0 +1,27 @@
+name: Deploy MOONDOCK deal book
+
+# Uploads ONLY moondock/* to the $web static site. Deliberately scoped so it
+# can never touch the live dashboard files (MRA_Dashboard.html / data.js /
+# index.html) — same account + key the main deploy.yml already uses.
+on:
+  push:
+    branches: [claude/detroit-pool-party-portal-d32cv0]
+    paths:
+      - 'moondock/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload moondock/ to $web
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name '$web' --name moondock/index.html --file moondock/index.html \
+            --content-type 'text/html' --content-cache-control 'no-cache, must-revalidate' \
+            --overwrite --only-show-errors
+          echo "LIVE → https://mrashopdash.z13.web.core.windows.net/moondock/index.html"
