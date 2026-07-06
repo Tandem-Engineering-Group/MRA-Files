@@ -50,19 +50,36 @@ jobs:
             --name pipeline `
             --only-show-errors | Out-Null
 
-      - name: Download the workbook from the pipeline blob
+      # Two flows can kick this workflow ~1 min apart (the workbook shuttle at :00/:15/:30/:45 and the
+      # "MRA Lists to JSON" auto-kick just before it). If a run downloads the workbook exactly while the
+      # shuttle is REPLACING the blob, the file arrives truncated ("Central Directory corrupt"). So:
+      # verify the .xlsx opens as a complete zip, and retry after a pause if it does not.
+      - name: Download the workbook from the pipeline blob (verify + retry if caught mid-copy)
         shell: pwsh
         env:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
-          az storage blob download `
-            --account-name mrashopdash `
-            --account-key "$env:AZURE_STORAGE_KEY" `
-            --container-name pipeline `
-            --name MRA_Shop_Board.xlsx `
-            --file "$env:GITHUB_WORKSPACE\workbook.xlsx" `
-            --only-show-errors
-          if (-not (Test-Path "$env:GITHUB_WORKSPACE\workbook.xlsx")) { Write-Error "Workbook was not downloaded - is the shuttle flow running and the 'pipeline' container populated?"; exit 1 }
+          $dest = "$env:GITHUB_WORKSPACE\workbook.xlsx"
+          $ok = $false
+          for ($try = 1; $try -le 3; $try++) {
+            if (Test-Path $dest) { Remove-Item $dest -Force }
+            az storage blob download `
+              --account-name mrashopdash `
+              --account-key "$env:AZURE_STORAGE_KEY" `
+              --container-name pipeline `
+              --name MRA_Shop_Board.xlsx `
+              --file $dest `
+              --only-show-errors
+            if (Test-Path $dest) {
+              try {
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                $z = [System.IO.Compression.ZipFile]::OpenRead($dest); $z.Dispose()
+                $ok = $true; break
+              } catch { Write-Warning "Attempt ${try}: workbook zip is incomplete (shuttle likely mid-copy) - retrying in 25s" }
+            } else { Write-Warning "Attempt ${try}: download produced no file - retrying in 25s" }
+            Start-Sleep -Seconds 25
+          }
+          if (-not $ok) { Write-Error "Workbook could not be downloaded intact after 3 tries - is the shuttle flow running and the 'pipeline' container populated?"; exit 1 }
 
       - name: Run the export (builds + pushes data.js)
         shell: pwsh
