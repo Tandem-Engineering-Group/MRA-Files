@@ -3019,6 +3019,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"14.9", date:"2026-07-07", title:"🎨 Design board: ✓ Complete for managers", items:[
+    "When <b>Rich, Luc, Megan or Al</b> sign in on the Design board, every open project task shows a green <b>✓ Complete</b> next to ✓ Mark ready — it <b>closes the task on the project schedule immediately</b>, no PM-verify loop. Designers keep the ✓ Mark ready → PM sign-off flow, and a task already ⏳ awaiting sign-off can be completed on the spot by a manager too." ] },
   { rev:"14.8", date:"2026-07-07", title:"🎨 Design board: stay put on edits · ⇕ full-height lanes", items:[
     "Editing on the board (re-assign, notes, status) <b>no longer bounces you back to the top</b> — the page and every lane keep their scroll position through the edit.",
     "New <b>⇕ Full lanes</b> toggle: lanes grow to their content with <b>no scrollbars inside them</b> — you just scroll the page top to bottom. <b>⤢ Show all tasks</b> now switches this on too, so one click really does lay everything out." ] },
@@ -9833,7 +9835,7 @@ function dtbDelGen(id){ if(typeof ensureAuth==='function' && !ensureAuth('delete
   if(!confirm('Delete this added task? (It only exists on the Design board — the project files are untouched.)')) return;
   if(DTB_EDIT.gen===id) DTB_EDIT={}; dtbApply(t=>{ t.general=t.general.filter(g=>g.id!==id); }); if(typeof dtbSyncAuth==='function') dtbSyncAuth(); }
 // Sign-in control on the board (so Al/Megan/Rich can log in — needed to delete). Add/edit/notes/status/% stay open.
-function dtbAuthClick(){ if(CLOSE_PIN){ if(typeof signOut==='function') signOut(); } else { if(typeof ensureAuth==='function') ensureAuth('sign in'); } dtbSyncAuth(); }
+function dtbAuthClick(){ if(CLOSE_PIN){ if(typeof signOut==='function') signOut(); renderDesignTeam(); } else { if(typeof ensureAuth==='function') ensureAuth('sign in', ()=>{ dtbSyncAuth(); renderDesignTeam(); }); } dtbSyncAuth(); }
 function dtbSyncAuth(){ const b=document.getElementById('dtbAuthBtn'); if(!b) return;
   if(CLOSE_PIN){ b.textContent='👤 '+(CURRENT_USER||'Signed in')+' · Log out'; b.title='Signed in — click to log out'; b.classList.add('on'); }
   else { b.textContent='🔒 Sign in'; b.title='Sign in (needed to delete tasks)'; b.classList.remove('on'); } }
@@ -9860,6 +9862,20 @@ function dtbMarkReady(proj, handle){
     milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
     budget:(t.bud!=null?t.bud:''), comments:t.cm||'' };
   shopWrite(payload); t.st=PROJ_VERIFY_STATUS; t.done=false; oRecomputeProject(p); oApply();
+  renderDesignTeam();
+}
+// Managers who can COMPLETE a task directly from this board (designers still go ✓ Mark ready → PM verify).
+const DTB_COMPLETERS=['Rich Miller','Luc Giglio','Megan Fraser','Al Karloff'];
+function _dtbCanComplete(){ return !!(CLOSE_PIN && CURRENT_USER && DTB_COMPLETERS.some(n=>_verifyNameMatch(CURRENT_USER,n))); }
+function dtbComplete(proj, handle){
+  const retry=()=>dtbComplete(proj, handle);
+  if(typeof ensureAuth==='function' && !ensureAuth('complete a task', retry)) return;
+  if(!_dtbCanComplete()){ alert('Completing directly from this board is for Rich / Luc / Megan / Al.\nUse ✓ Mark ready instead — the PM signs off from the Projects tab.'); return; }
+  const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t){ alert("Couldn't find that task — try reloading."); return; }
+  if(!confirm('Mark "'+(t.t||'this task')+'" COMPLETED?\n\nThis closes it on the project schedule right now (no PM-verify step).')) return;
+  const d=new Date(), cd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+  shopWrite({action:'closeProjectTask', project:proj, id:t.id, _id:(t._id!=null?t._id:undefined), task:t.t, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});
+  t.done=true; t.st='Completed'; if(!t.finISO) t.finISO=localISO(Date.now()); oRecomputeProject(p); oApply();
   renderDesignTeam();
 }
 // Compose a status string from a base + a typed %, mirroring the editor (no auto-complete — completion stays via Mark ready).
@@ -9958,6 +9974,7 @@ function dtbTaskHtml(x){
     let mr='';
     if(x.pending) mr=`<span class="dtb-pending" title="Marked ready — the PM needs to verify &amp; close it on the Projects tab">⏳ awaiting PM sign-off</span>`;
     else if(!x.done) mr=`<button onclick="dtbMarkReady('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Mark this done and flag it for the PM to verify &amp; close — it is NOT completed until they sign off">✓ Mark ready</button>`;
+    if(!x.done && _dtbCanComplete()) mr=`<button onclick="dtbComplete('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Manager shortcut: close this task on the project schedule RIGHT NOW — no PM-verify step" style="border-color:rgba(34,197,94,.6);color:#4ade80">✓ Complete</button>`+mr;
     acts=mr+`<button onclick="dtbEditNote('${escJsAttr(x.key)}')">${x.note?'✎ note':'✎ add note'}</button>`
       +(x.done?'':`<button onclick="dtbEditTask('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Open the FULL task editor (name, dates, status, phase, %…) right here — saves to the project schedule (needs your code)">✎ task</button>`
         +`<button onclick="dtbAsgStart(0,'${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Re-assign this task to another designer (needs your code) — writes the new assignee back to the PROJECT schedule">👤→</button>`);
