@@ -2648,6 +2648,11 @@ function projDoneISO(p){ if(!p) return null; const D=window.MRA_DATA||{}; const 
     if(!jn || x.category==='leave') return false;
     return jn===nm || (nm.length>=4 && (jn.indexOf(nm)>=0 || nm.indexOf(jn)>=0)); });
   if(matches.length && matches.every(x=>(x.status||'').toLowerCase()==='shipped')){
+    // Trailer(s) shipped, but the PROJECT may still be live work (Cisco: trailer left at 12% done with
+    // 84 open tasks — must NOT archive). Only treat all-shipped as "done" when the schedule is nearly
+    // wrapped too: a handful of straggler tasks is fine, a real backlog keeps it on the active board.
+    const openN=Math.max(0,(p.taskCount||0)-(p.doneCount||0));
+    if(openN>5 && (p.pct||0)<80) return null;
     const ds=matches.map(x=>x.completionISO).filter(Boolean).sort();
     if(ds.length) return ds[ds.length-1];
   }
@@ -3022,6 +3027,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"15.3", date:"2026-07-07", title:"🐞 Fix: active projects no longer auto-archive when their trailer ships", items:[
+    "A project used to <b>auto-archive</b> (vanish from the Projects tab) once all its matching trailers shipped — even if the project itself was barely started (Cisco disappeared at 12% done with 84 open tasks; it was in <b>🗄 Show archived</b> the whole time, nothing lost). Now a shipped trailer only archives the project when the schedule is <b>nearly wrapped too</b> (≥80% done, or just a handful of straggler tasks). Real open work stays on the board." ] },
   { rev:"15.2", date:"2026-07-07", title:"⏸ Parked projects dull in Project Progress too", items:[
     "A ⏸ parked project's <b>Project Progress row now dims</b> (name, bar and %) the same way its Gantt row does — the ⏸ parked chip stays bright so you can see why." ] },
   { rev:"15.1", date:"2026-07-07", title:"🎨 Design board: ⇄ Bulk Edits on the board", items:[
