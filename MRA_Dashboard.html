@@ -898,7 +898,7 @@
   .modal-overlay.show{display:flex}
   /* Task editors must sit ABOVE the full-screen project-detail overlay (z 150) when opened from it */
   #projEditModal{z-index:200}
-  #projTaskModal{z-index:420}   /* above the project editor (200) AND the 🎨 Design board overlay (300) — the board can open this editor directly */
+  #projTaskModal, #bulkAssignModal{z-index:420}   /* above the project editor (200) AND the 🎨 Design board overlay (300) — the board can open these directly */
   #asgStdModal{z-index:210}   /* opened from the project editor — must sit ABOVE it */
   #signInModal{z-index:10010}  /* the passcode prompt can fire from ANY layer (editors z200-210, full-screen issues z10000) — it must always land on top */
   /* ⇄ Assign People bulk tool */
@@ -2608,6 +2608,7 @@
         <div class="dtb-hzn" id="dtbHzn"></div>
         <button class="gfs-theme" id="dtbNapkinBtn" onclick="dtbToggleNapkin()" title="Bar-napkin mode — the design crew's fun sketch view">🍸 Napkin</button>
         <button class="gfs-theme" id="dtbDoneBtn" onclick="dtbToggleDone()" title="Show completed tasks too">✓ Show done</button>
+        <button class="gfs-theme" onclick="openBulkAssign()" title="⇄ Bulk Edits — pick a project, check a batch of tasks, change assignee / phase / type / status across all of them at once (needs your code)">⇄ Bulk Edits</button>
         <button class="gfs-theme" onclick="printDesignBoard()" title="Print the whole board on one landscape page (for the team)">🖨 Print board</button>
         <button class="gfs-theme" onclick="renderDesignTeam()" title="Refresh from the latest project data">↻ Refresh</button>
         <button class="gfs-theme" id="dtbAuthBtn" onclick="dtbAuthClick()" title="Sign in (needed to delete tasks)">🔒 Sign in</button>
@@ -3019,6 +3020,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"15.1", date:"2026-07-07", title:"🎨 Design board: ⇄ Bulk Edits on the board", items:[
+    "The <b>⇄ Bulk Edits</b> tool (pick a project → check a batch of tasks → change assignee / phase / type / status across all of them) now opens <b>right from the Design board's header</b> — no more hopping to the Projects tab mid-cleanup. Same tool, same code sign-in." ] },
   { rev:"15.0", date:"2026-07-07", title:"🏭 New 'General' tile on the bay board", items:[
     "Jobs assigned to <b>bay “General”</b> (equipment-only work, nothing taking floor space) now get their own <b>General tile right under the Parking Lot</b> — before, they had no card anywhere on the floor. Works like the lot: date-sorted, starts collapsed, drag a job onto it to move it there, and its tasks feed the crew lists as usual. (The 🛠 General crew-task lane in the crew columns is unchanged — that's for one-off chores with no job.)" ] },
   { rev:"14.9", date:"2026-07-07", title:"🎨 Design board: ✓ Complete for managers", items:[
@@ -6384,7 +6387,7 @@ function baGroupOf(who){ const parts=String(who||'').split(/\s+\/\s+/).map(s=>s.
   const g=parts.find(p=>(typeof CREW_GROUPS!=='undefined')&&CREW_GROUPS.indexOf(crewCanon(p))>=0);
   return g?crewCanon(g):(parts[0]||''); }
 function openBulkAssign(){
-  if(!ensureAuth("bulk-edit tasks")) return;
+  if(!ensureAuth("bulk-edit tasks", openBulkAssign)) return;
   BA_SEL=new Set(); BA_PENDING={}; BA_FIELD='assignee';
   const projs=_baProjects();
   if(!projs.some(p=>p.name===BA_PROJ)) BA_PROJ=(projs[0]?projs[0].name:'');
