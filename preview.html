@@ -2989,6 +2989,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"14.1", date:"2026-07-07", title:"🔇 Cleaner saves on brand-new 🔧 tasks", items:[
+    "Editing, closing or deleting a <b>just-added task whose name has an emoji or special characters</b> (like the 🔧 #NNN Fleetio tasks) used to fire a doomed first save attempt that SharePoint rejected — the change still landed via a retry, but it racked up dozens of failed-run alerts a week (and a <b>delete</b> could genuinely be lost). The board now skips the doomed attempt entirely and writes by row-ID as soon as the row syncs — same instant look on screen, near-zero failed runs, deletes safe." ] },
   { rev:"14.0", date:"2026-07-06", title:"🐞 Fix: resolved Fleetio issues stay off the board", items:[
     "Resolving an issue from a bay card or the Open Issues detail could make it <b>reappear ~30 seconds later</b> (the background data poll overwrote the hide; Fleetio itself was fine). Resolves now hold on screen the same way task closes do — gone the moment you resolve, and they stay gone while the data catches up.",
     "Resolving an issue also now <b>instantly closes its 🔧 #NNN task copies</b> on the crew lists and bay tiles — the whole trace of it leaves the board in one shot." ] },
@@ -4659,6 +4661,7 @@ const _LF = {
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
 };
 function _odEsc(v){ return String(v).replace(/'/g,"''"); }   // OData single-quote escape
+function _odSafe(v){ const s=String(v==null?'':v); return /^[ -~]*$/.test(s) && !/[#&%+]/.test(s); }   // text a SharePoint $filter can actually take: printable ASCII minus URI breakers (emoji, – , # , & all get a BadRequest)
 // Resolve a row's SharePoint item id from the in-memory board (present once reads come from the Lists,
 // where Build-FromLists stamps _id). Lets update/delete match BY ID — robust vs names with & / # / emoji
 // that break OData text filters. Returns null pre-cutover (workbook data has no _id) → filter fallback.
@@ -4687,8 +4690,16 @@ function _listOps(p){
       return (col==='Id'||col==='ID') ? (col+' eq '+v) : (col+" eq '"+_odEsc(v)+"'"); }).join(' and ');
       // No item id yet → this row was just added and hasn't synced back, so the text-filter UPDATE is
       // unreliable. Queue the change to re-fire BY ID the moment the row lands (fixes "assign a brand-new task").
-      if(o.verb==='update' && (o.list==='ShopTasks'||o.list==='ProjectTasks') && r.body && Object.keys(r.body).length)
+      const canQueue=(o.list==='ShopTasks'||o.list==='ProjectTasks') && o.match.Task!=null;
+      if(o.verb==='update' && canQueue && r.body && Object.keys(r.body).length)
         pendRewrite(lf.list, o.match.Project, o.match.Task, r.body);
+      // 🔧-emoji / # / & / – in the matched text break SharePoint's $filter outright (BadRequest — this was
+      // ~all of the flow's failed runs). Sending the filter op is doomed, so when the change is covered by
+      // the by-id retry queue, don't send it at all — it lands by id the moment the row syncs.
+      if(canQueue && Object.keys(o.match).some(k=>{ const col=lf.cols[k]||k; return !(col==='Id'||col==='ID') && !_odSafe(o.match[k]); })){
+        if(o.verb==='delete') pendDelete(lf.list, o.match.Project, o.match.Task);
+        if(o.verb==='update'||o.verb==='delete') continue;
+      }
     }
     out.push(r);
   }
@@ -4862,6 +4873,12 @@ function pendRewrite(listName, project, task, body){
   const rec={list:listName, project:project||'', task:task, body:body, ts:Date.now()};
   if(i>=0) a[i]=rec; else a.push(rec); prwSave(a);
 }
+function pendDelete(listName, project, task){   // same queue, but the retry fires deleteById (a delete on a not-yet-synced 🔧 task used to be lost)
+  if(!listName||!task) return;
+  const a=prwLoad(); const i=a.findIndex(e=>e.list===listName && e.project===project && e.task===task);
+  const rec={list:listName, project:project||'', task:task, del:1, ts:Date.now()};
+  if(i>=0) a[i]=rec; else a.push(rec); prwSave(a);
+}
 function prwRetry(D){
   if(!CLOSE_PIN) return;                       // need a signed-in code to write; retry once signed in
   const a=prwLoad(); if(!a.length) return;
@@ -4872,7 +4889,7 @@ function prwRetry(D){
     if(e.list==='MRA Shop Tasks'){ (D.jobs||[]).forEach(j=>{ if(_id!=null||j.project!==e.project) return; const t=(j.tasks||[]).find(x=>x.t===e.task); if(t&&t._id!=null){ _id=t._id; tobj=t; } }); }
     else if(e.list==='MRA Project Tasks'){ (D.projects||[]).forEach(p=>{ if(_id!=null||p.name!==e.project) return; const t=(p.tasks||[]).find(x=>x.t===e.task); if(t&&t._id!=null){ _id=t._id; tobj=t; } }); }
     if(_id==null){ keep.push(e); continue; }   // row hasn't synced yet — keep waiting
-    _wq.push({op:{verb:'mergeById', list:e.list, id:_id, body:e.body}, pin:CLOSE_PIN, user:CURRENT_USER}); fired=true;
+    _wq.push({op: e.del ? {verb:'deleteById', list:e.list, id:_id} : {verb:'mergeById', list:e.list, id:_id, body:e.body}, pin:CLOSE_PIN, user:CURRENT_USER}); fired=true;
     if(tobj){ if(e.body.field_4!=null) tobj.who=e.body.field_4; if(e.body.field_9!=null) tobj.cm=e.body.field_9; if(e.body.Due!=null) tobj.due=e.body.Due; if(e.body.Files!=null){ try{ tobj.files=JSON.parse(e.body.Files); }catch(x){} } }   // reflect on-screen now
   }
   prwSave(keep);
