@@ -225,6 +225,13 @@
   .dtb-hzn button.active{background:var(--blue);color:#fff}
   .dtb-body{flex:1 1 auto;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:20px}
   .dtb-lanes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;align-items:start}
+  /* Only 1–2 lanes visible (🎯 focus / lane chips) → the visible lane(s) take the FULL width and
+     their cards tile into multiple columns instead of one skinny strip. */
+  .dtb-lanes.dtb-few{grid-template-columns:1fr}
+  .dtb-lanes.dtb-few.n2{grid-template-columns:1fr 1fr}
+  .dtb-lanes.dtb-few .dtb-lane{max-height:none}
+  .dtb-lanes.dtb-few .dtb-lane-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;align-items:start;overflow:visible}
+  .dtb-lanes.dtb-few .dtb-grp,.dtb-lanes.dtb-few .dtb-add,.dtb-lanes.dtb-few .dtb-showall,.dtb-lanes.dtb-few .dtb-empty{grid-column:1/-1}
   .dtb-lane{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 26px rgba(0,0,0,.22);border-top:4px solid var(--lane-c,#64748b);max-height:72vh}
   .dtb-lane-h{display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
   /* 📁 board filter bar (project picker · 🔍 find · lane chips) + per-lane project picker */
@@ -3009,6 +3016,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"14.6", date:"2026-07-07", title:"🎨 Design board: ⤢ Show all tasks (one click)", items:[
+    "Pick a project (say Medtronic) and hit <b>⤢ Show all tasks</b> — one click switches to the <b>All</b> window, turns off ⚠ Overdue-only, clears the per-lane pickers and <b>expands every lane past its 10-task cap</b>, so you see <b>every task for everyone</b> under your pick. The project pick and 🔍 find text stay put.",
+    "<b>Wide lanes:</b> when only <b>one or two lanes</b> are showing (🎯 focus or the lane chips), they now <b>stretch across the full screen</b> and the task cards <b>tile 3–5 across</b> instead of one skinny strip. Also: 🖨 Print board prints exactly what's on screen (hidden lanes, focus and filters carry through), and the per-lane 📁 picker shows on every lane." ] },
   { rev:"14.5", date:"2026-07-07", title:"🎨 Design board round 2 — drag, edit, focus, overdue", items:[
     "<b>Drag a task card onto another person's lane</b> to re-assign it (same code-gated write as 👤→ — project tasks update the project schedule).",
     "<b>✎ task</b> on any project-fed card opens the <b>FULL task editor</b> — name, dates, status, phase, %, comments — right over the board; saves straight to the project schedule.",
@@ -9691,6 +9701,17 @@ let DTB_FOCUS=''; try{ DTB_FOCUS=localStorage.getItem('mra_dtb_focus')||''; }cat
 function dtbFocus(name){ DTB_FOCUS=(DTB_FOCUS===name)?'':(name||''); try{ localStorage.setItem('mra_dtb_focus',DTB_FOCUS); }catch(e){} renderDesignTeam(); }
 let DTB_ODONLY=false; try{ DTB_ODONLY=localStorage.getItem('mra_dtb_odonly')==='1'; }catch(e){}
 function dtbToggleOd(){ DTB_ODONLY=!DTB_ODONLY; try{ localStorage.setItem('mra_dtb_odonly',DTB_ODONLY?'1':'0'); }catch(e){} renderDesignTeam(); }
+// ⤢ one click: OPEN EVERYTHING for the current pick — All window, overdue-only off, per-lane pickers
+// cleared, every lane expanded past its cap. The project pick + find text stay (that's the point:
+// "pick Medtronic → see every Medtronic task for everyone").
+function dtbShowEverything(){
+  DTB_HZN='all'; try{ localStorage.setItem('mra_design_hzn','all'); }catch(e){}
+  DTB_ODONLY=false; try{ localStorage.setItem('mra_dtb_odonly','0'); }catch(e){}
+  Object.keys(DTB_LANEPROJ).forEach(k=>delete DTB_LANEPROJ[k]); try{ localStorage.setItem('mra_dtb_laneproj','{}'); }catch(e){}
+  try{ Object.keys(dtbGather()).forEach(n=>DTB_EXPAND.add(n)); }catch(e){}
+  DESIGN_TEAM.concat([DESIGN_TEAM_LANE]).forEach(n=>DTB_EXPAND.add(n));
+  renderDesignTeam();
+}
 // A task's project label for filtering ('(added here)' = ad-hoc board tasks)
 function _dtbProjOf(x){ return x.general?'(added here)':(x.proj||''); }
 function _dtbFilt(x){
@@ -9961,6 +9982,7 @@ function renderDesignTeam(){
     +`<option value="">📁 All projects (${projOpts.length})</option>`
     +projOpts.map(pn=>`<option value="${escA(pn)}"${DTB_PROJ===pn?' selected':''}>${esc(pn)}</option>`).join('')+`</select>`
     +`<input type="text" id="dtbFind" value="${escA(DTB_FIND)}" placeholder="🔍 find task…" oninput="setDtbFind(this.value)" title="Filter every lane to tasks whose name / project / note contains this">`
+    +`<button class="dtb-lanechip" style="--c:#38bdf8" onclick="dtbShowEverything()" title="One click: open EVERYTHING for the current pick — switches to the All window, turns off Overdue-only, clears the per-lane pickers and expands every lane. Your project pick + find text stay.">⤢ Show all tasks</button>`
     +`<button class="dtb-lanechip${DTB_ODONLY?' active':''}" style="--c:#ef4444" onclick="dtbToggleOd()" title="Show ONLY overdue tasks in every lane (click again for everything)">⚠ Overdue only</button>`
     +((DTB_PROJ||DTB_FIND)?`<button class="dtb-lanechip" onclick="dtbClearFilters()" title="Clear the project + find filters">✕ clear</button>`:'')
     +(DTB_FOCUS?`<button class="dtb-lanechip active" style="--c:${DESIGN_COLORS[DTB_FOCUS]||'#64748b'}" onclick="dtbFocus('')" title="Focused on ${escA(DTB_FOCUS)} — click to show everyone again">🎯 ${esc(DTB_FOCUS)} ✕</button>`:'')
@@ -9969,7 +9991,8 @@ function renderDesignTeam(){
       return `<button class="dtb-lanechip${off?' off':''}" style="--c:${c}" onclick="dtbLaneToggle('${escJsAttr(nm)}')" title="${off?'Show':'Hide'} ${escA(nm)}'s lane">${off?'◌ ':'● '}${esc(nm)}</button>`; }).join('')
     +`</span></div>`;
   let totalShown=0;
-  const html=order.filter(nm=> DTB_FOCUS ? nm===DTB_FOCUS : !DTB_LANES_OFF.has(nm)).map(name=>{
+  const visNames=order.filter(nm=> DTB_FOCUS ? nm===DTB_FOCUS : !DTB_LANES_OFF.has(nm));
+  const html=visNames.map(name=>{
     const items=lanes[name]||[];
     const openN=items.filter(it=> it.general?!it.g.done:!projIsDone(it.t)).length;
     const odN=items.filter(it=>{ const dn=it.general?it.g.done:projIsDone(it.t); const d=it.general?(it.g.dueISO||''):(it.t.finISO||it.t.startISO||''); return d&&d<today&&!dn; }).length;
@@ -10012,7 +10035,7 @@ function renderDesignTeam(){
         </div>
       </div></div>`;
   }).join('');
-  document.getElementById('dtbBody').innerHTML=strip+`<div class="dtb-lanes">${html}</div>`+`<div class="dtb-charts">`+dtbCalHtml(today)+`</div>`+dtbChartsHtml(today);
+  document.getElementById('dtbBody').innerHTML=strip+`<div class="dtb-lanes${visNames.length<=2?(' dtb-few n'+visNames.length):''}">${html}</div>`+`<div class="dtb-charts">`+dtbCalHtml(today)+`</div>`+dtbChartsHtml(today);
   try{ dtbDrawGantt(today); }catch(e){}
   const ov2=document.getElementById('dtbOverlay'); if(ov2) ov2.classList.toggle('napkin', NAPKIN);
   const nb=document.getElementById('dtbNapkinBtn'); if(nb) nb.classList.toggle('active', NAPKIN);
