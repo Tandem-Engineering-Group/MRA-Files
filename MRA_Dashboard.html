@@ -250,6 +250,7 @@
   .dtb-task[draggable="true"]{cursor:grab}
   .dtb-task[draggable="true"]:active{cursor:grabbing}
   .dtb-lanefilter select{font-size:10.5px;max-width:130px;padding:3px 5px;border-radius:7px;border:1px solid var(--line);background:var(--panel2,rgba(255,255,255,.04));color:var(--txt)}
+  .dtb-task.asg-editing{outline:2px solid rgba(129,140,248,.55); outline-offset:1px}   /* 👤 re-assign in progress — highlight THE card being edited */
   .dtb-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:14px;flex:0 0 38px;box-shadow:0 3px 10px rgba(0,0,0,.3)}
   .dtb-nm{font-weight:800;font-size:15px;line-height:1.1}
   .dtb-count{font-size:11px;color:var(--muted);margin-top:2px}
@@ -3027,6 +3028,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"15.4", date:"2026-07-07", title:"🎨 Design board: re-assign happens ON the task card", items:[
+    "The 👤→ re-assign picker now opens <b>inside the task's own card</b> (with the card highlighted) instead of swapping it for a separate stripped-down box — so it's always obvious exactly which task you're moving." ] },
   { rev:"15.3", date:"2026-07-07", title:"🐞 Fix: active projects no longer auto-archive when their trailer ships", items:[
     "A project used to <b>auto-archive</b> (vanish from the Projects tab) once all its matching trailers shipped — even if the project itself was barely started (Cisco disappeared at 12% done with 84 open tasks; it was in <b>🗄 Show archived</b> the whole time, nothing lost). Now a shipped trailer only archives the project when the schedule is <b>nearly wrapped too</b> (≥80% done, or just a handful of straggler tasks). Real open work stays on the board." ] },
   { rev:"15.2", date:"2026-07-07", title:"⏸ Parked projects dull in Project Progress too", items:[
@@ -9963,11 +9966,12 @@ function dtbSetStatus(proj, handle, base){ const p=oProj(proj), t=p&&projTaskByA
 function dtbSetPct(proj, handle, v){ const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return; dtbWriteStatus(proj, handle, _dtbCompose(projBaseStatus(t.st)||'Not Started', v)); }
 function dtbTaskHtml(x){
   const _ak = x.general?('g:'+x.gid):('p:'+(x.proj||'')+'||'+(x.handle||''));
-  if(DTB_EDIT.asg===_ak){   // 👤 inline re-assign picker (same look as the note editor)
+  let asgHtml='', asgOn=(DTB_EDIT.asg===_ak);
+  if(asgOn){   // 👤 inline re-assign picker — rendered INSIDE the task's own card (like the note editor), so the context stays visible
     const opts=DESIGN_TEAM.concat([DESIGN_TEAM_LANE]);
-    return `<div class="dtb-task${x.general?' gen':''}"><div class="dtb-title">👤 Re-assign: ${esc(x.title)}</div><div class="dtb-note-edit">`
+    asgHtml=`<div class="dtb-note-edit"><div style="font-weight:700;font-size:11px;margin-bottom:3px">👤 Re-assign to…</div>`
       +`<select id="dtbasg-sel">${opts.map(o=>`<option>${esc(o)}</option>`).join('')}</select>`
-      +`<div class="dtb-tacts"><button onclick="dtbAsgSave()" title="Move this task to the selected person${x.general?'':' — writes the new assignee to the project schedule'}">💾 Move task</button><button onclick="dtbCancel()">Cancel</button></div></div></div>`;
+      +`<div class="dtb-tacts"><button onclick="dtbAsgSave()" title="Move this task to the selected person${x.general?'':' — writes the new assignee to the project schedule'}">💾 Move task</button><button onclick="dtbCancel()">Cancel</button></div></div>`;
   }
   if(x.general && DTB_EDIT.gen===x.gid){
     return `<div class="dtb-task gen"><div class="dtb-note-edit">`
@@ -10012,11 +10016,11 @@ function dtbTaskHtml(x){
   }
   if(x.pending) chips.push(`<span class="dtb-chip pend" title="Waiting on PM verification">⏳ pending verify</span>`);
   const drag=x.done?'':` draggable="true" ondragstart="dtbDragStart(event,${x.general?1:0},'${escJsAttr(x.general?x.gid:(x.proj||''))}','${escJsAttr(x.general?'':(x.handle||''))}')" title="Drag onto another person's lane to re-assign (needs your code)"`;
-  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}"${drag}>`
+  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}${asgOn?' asg-editing':''}"${drag}>`
     +`${x.general?'<span class="dtb-addpin" title="Added on this board (not from a project file)">📌</span>':''}`
     +`<div class="dtb-title">${x.ms?'◆ ':''}${esc(x.title)}</div>`
-    +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}${prog}`
-    +`<div class="dtb-tacts">${acts}</div></div>`;
+    +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}${prog}${asgHtml}`
+    +(asgOn?'':`<div class="dtb-tacts">${acts}</div>`)+`</div>`;
 }
 function renderDesignTeam(){
   const ov=document.getElementById('dtbOverlay'); if(!ov||!ov.classList.contains('show')) return;
