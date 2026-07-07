@@ -2989,6 +2989,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"14.0", date:"2026-07-06", title:"🐞 Fix: resolved Fleetio issues stay off the board", items:[
+    "Resolving an issue from a bay card or the Open Issues detail could make it <b>reappear ~30 seconds later</b> (the background data poll overwrote the hide; Fleetio itself was fine). Resolves now hold on screen the same way task closes do — gone the moment you resolve, and they stay gone while the data catches up.",
+    "Resolving an issue also now <b>instantly closes its 🔧 #NNN task copies</b> on the crew lists and bay tiles — the whole trace of it leaves the board in one shot." ] },
   { rev:"13.9", date:"2026-07-06", title:"👤 Crew picker — show just YOUR tasks", items:[
     "Open Tasks by Assignee has a <b>👤 Crew row</b> up top: tap <b>Sal</b> (or Sal + Electricians, any mix) and the panel shows <b>only those crews' columns</b>, grown to fill the width. Tap <b>All</b> to bring everyone back. <b>Remembered per device</b> — set Sal's iPad to Sal once and it stays that way.",
     "Works on wall/TV screens too: on a monitor in wall mode, open the <b>⚙ gear → 👤 Crews</b> and pick who that screen shows (e.g. Sal's back-shop monitor = just Sal, full width, big and readable — page rotation pauses while filtered). The front shop TV just stays on All." ] },
@@ -4317,13 +4320,15 @@ const FLEETIO_WRITE_URL = "https://default57714027b784449484126e3b00c9bf.2c.envi
 function _fioPost(payload){ try{ return fetch(FLEETIO_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(payload)}); }catch(e){ return null; } }
 const FIO_RES_KEY='mra_fio_resolved_v1', FIO_RES_TTL=6*3600*1000;
 function _fioResMap(){ try{ return JSON.parse(localStorage.getItem(FIO_RES_KEY)||'{}')||{}; }catch(e){ return {}; } }
-function fioApplyResolved(D){ // hide issues this device just resolved; self-prunes once the export catches up (or after TTL)
+function fioApplyResolved(D){ // hide issues this device just resolved; self-prunes ONLY once a NEWER export (a different generatedAt than when we resolved) no longer lists the issue — never on our own in-memory re-renders, where the issue is absent because WE removed it
   try{
     const m=_fioResMap(), nums=Object.keys(m); if(!nums.length) return;
-    const F=(D&&D.fleetio)||{}; if(!F.issues||!F.issues.length) return;
+    const F=(D&&D.fleetio)||{}; if(!F.issues) return;
+    const gen=(D&&D.generatedAt)||'';
     const now=Date.now(); let dirty=false;
-    nums.forEach(n=>{ const still=F.issues.some(i=>String(i.num)===String(n));
-      if(!still || now-m[n]>FIO_RES_TTL){ delete m[n]; dirty=true; } });
+    nums.forEach(n=>{ const e=(m[n]&&typeof m[n]==='object')?m[n]:{t:+m[n]||0,gen:''};
+      const still=F.issues.some(i=>String(i.num)===String(n));
+      if((!still && gen && e.gen && gen!==e.gen) || now-e.t>FIO_RES_TTL){ delete m[n]; dirty=true; } });
     D.fleetio.issues=F.issues.filter(i=>!(m[String(i.num)]));
     if(dirty) localStorage.setItem(FIO_RES_KEY,JSON.stringify(m));
   }catch(e){}
@@ -4335,9 +4340,13 @@ function fioResolveBtn(num){
   const note=(prompt('Resolve #'+num+' — '+(it.summary||'')+'\n\nResolution note (Fleetio requires one):','')||'').trim();
   if(!note) return;
   _fioPost({action:'fioResolve',op:'resolve',issueId:it.id,fBody:{note:note+' — '+(CURRENT_USER||'MRA board')+' via MRA dashboard'},pin:CLOSE_PIN||'',user:CURRENT_USER||''});
-  try{ const m=_fioResMap(); m[String(it.num)]=Date.now(); localStorage.setItem(FIO_RES_KEY,JSON.stringify(m)); }catch(e){}
+  try{ const m=_fioResMap(); m[String(it.num)]={t:Date.now(),gen:(window.MRA_DATA||{}).generatedAt||''}; localStorage.setItem(FIO_RES_KEY,JSON.stringify(m)); }catch(e){}
   const D=window.MRA_DATA||{}; if(D.fleetio&&D.fleetio.issues) D.fleetio.issues=D.fleetio.issues.filter(i=>String(i.num)!==String(it.num));
-  fioCloseDetail(); renderAll();
+  // Any queued shop-task copies of this issue ("🔧 #NNN …" on the crew lists / bay tiles) close along with it
+  try{ const re=new RegExp('🔧\\s*#'+String(it.num)+'(\\D|$)');
+    (D.jobs||[]).forEach(j=>{ let hit=false; (j.tasks||[]).forEach(t=>{ if(!t.done && re.test(t.t||'')){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); rememberClosed(j.project,t.t); hit=true; } }); if(hit) oRecompute(j); });
+  }catch(e){}
+  fioCloseDetail(); oApply();   // rides the same pending-edit hold as task closes, so the 30s data poll can't bring it back
   alert('✓ Sent — #'+num+' is resolving in Fleetio.\nIt\'s off the board on this screen now; everyone else catches up on the next data cycle.');
 }
 function fioCommentBtn(num){
@@ -4357,9 +4366,9 @@ function fioOfferResolve(taskText){ // shop-board ✓ close of a "🔧 #NNN …"
     const note=(prompt('Resolution note for Fleetio #'+it.num+' (required):','')||'').trim();
     if(!note){ alert('Fleetio needs a note, so #'+it.num+' was NOT resolved there.\nThe board task is still closed — you can resolve the issue later from the FLEETIO tab or the ✓ on its bay-card line.'); return; }
     _fioPost({action:'fioResolve',op:'resolve',issueId:it.id,fBody:{note:note+' — '+(CURRENT_USER||'MRA board')+' via MRA dashboard'},pin:CLOSE_PIN||'',user:CURRENT_USER||''});
-    try{ const mm=_fioResMap(); mm[String(it.num)]=Date.now(); localStorage.setItem(FIO_RES_KEY,JSON.stringify(mm)); }catch(e){}
+    try{ const mm=_fioResMap(); mm[String(it.num)]={t:Date.now(),gen:(window.MRA_DATA||{}).generatedAt||''}; localStorage.setItem(FIO_RES_KEY,JSON.stringify(mm)); }catch(e){}
     const D=window.MRA_DATA||{}; if(D.fleetio&&D.fleetio.issues) D.fleetio.issues=D.fleetio.issues.filter(i=>String(i.num)!==String(it.num));
-    renderAll();
+    oApply();   // pending-edit hold: the 30s data poll keeps the issue hidden until the export catches up
   }catch(e){}
 }
 // Click outside the wall settings popup (and not on its gear) closes it.
