@@ -116,6 +116,30 @@ jobs:
             Write-Warning "Lists override skipped ($($_.Exception.Message)) - leaving the workbook-built data.js live."
           }
 
+      # Daily backup: first run after midnight UTC snapshots the whole board state into the PRIVATE
+      # pipeline container under backups/YYYY-MM-DD/ - lists.json (SharePoint Lists truth), data.js
+      # (rendered board), design.json (design-board notes), and the workbook copy. Never fails the run.
+      - name: Daily backup snapshot (pipeline/backups/YYYY-MM-DD/)
+        if: always()
+        shell: pwsh
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          try {
+            $acct = @('--account-name','mrashopdash','--account-key',"$env:AZURE_STORAGE_KEY",'--only-show-errors')
+            $day = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
+            $probe = az storage blob exists @acct --container-name pipeline --name "backups/$day/lists.json" | ConvertFrom-Json
+            if ($probe.exists) { Write-Host "Backup for $day already taken - skipping."; exit 0 }
+            if (Test-Path lists.json) { az storage blob upload @acct --container-name pipeline --name "backups/$day/lists.json" --file lists.json --overwrite | Out-Null }
+            if (Test-Path data.js)    { az storage blob upload @acct --container-name pipeline --name "backups/$day/data.js" --file data.js --overwrite | Out-Null }
+            if (Test-Path "$env:GITHUB_WORKSPACE\workbook.xlsx") { az storage blob upload @acct --container-name pipeline --name "backups/$day/MRA_Shop_Board.xlsx" --file "$env:GITHUB_WORKSPACE\workbook.xlsx" --overwrite | Out-Null }
+            try {
+              az storage blob download @acct --container-name '$web' --name design.json --file design-backup.json | Out-Null
+              if (Test-Path design-backup.json) { az storage blob upload @acct --container-name pipeline --name "backups/$day/design.json" --file design-backup.json --overwrite | Out-Null }
+            } catch { Write-Host "(no design.json to back up)" }
+            Write-Host "Backup written: pipeline/backups/$day/ (lists.json, data.js, workbook, design.json)"
+          } catch { Write-Warning "Backup step skipped: $($_.Exception.Message)" }
+
       - name: Confirm the run finished OK
         if: always()
         shell: pwsh

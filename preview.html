@@ -183,6 +183,8 @@
   body.light .g-row.g-phaserow{background:rgba(0,0,0,.035)}
   .g-row.g-nonoff{background:rgba(245,197,66,.055)}   /* 🏷 non-official project — very muted amber wash across the whole row (the 🏷 tag stays too) */
   .g-row.g-parked{opacity:.55; filter:saturate(.5)}   /* ⏸ parked project — dimmed/greyed row: visibly frozen, not gone */
+  .prog-parked .pmbar, .prog-parked .lead, .prog-parked .meta, .prog-parked .right{opacity:.5; filter:saturate(.5)}   /* same dulling on the Project Progress rows — the ⏸ chip stays full strength */
+  .prog-parked .hchip{opacity:1; filter:none}
   body.light .g-row.g-nonoff{background:rgba(176,124,16,.08)}
   .g-lbl .gcaret{display:inline-block; width:13px; color:var(--blue); font-size:11px; user-select:none}
   .g-rowedit .g-gutter{cursor:pointer}
@@ -225,8 +227,29 @@
   .dtb-hzn button.active{background:var(--blue);color:#fff}
   .dtb-body{flex:1 1 auto;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:20px}
   .dtb-lanes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;align-items:start}
+  /* Only 1–2 lanes visible (🎯 focus / lane chips) → the visible lane(s) take the FULL width and
+     their cards tile into multiple columns instead of one skinny strip. */
+  .dtb-lanes.dtb-few{grid-template-columns:1fr}
+  .dtb-lanes.dtb-few.n2{grid-template-columns:1fr 1fr}
+  .dtb-lanes.dtb-few .dtb-lane{max-height:none}
+  .dtb-lanes.dtb-few .dtb-lane-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;align-items:start;overflow:visible}
+  .dtb-lanes.dtb-few .dtb-grp,.dtb-lanes.dtb-few .dtb-add,.dtb-lanes.dtb-few .dtb-showall,.dtb-lanes.dtb-few .dtb-empty{grid-column:1/-1}
+  /* ⇕ full-height lanes: no inner scrollbars — the PAGE scrolls */
+  .dtb-lanes.dtb-tall .dtb-lane{max-height:none}
+  .dtb-lanes.dtb-tall .dtb-lane-body{overflow:visible}
   .dtb-lane{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 26px rgba(0,0,0,.22);border-top:4px solid var(--lane-c,#64748b);max-height:72vh}
   .dtb-lane-h{display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+  /* 📁 board filter bar (project picker · 🔍 find · lane chips) + per-lane project picker */
+  .dtb-filterbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:11px}
+  .dtb-filterbar select,.dtb-filterbar input{font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2,rgba(255,255,255,.04));color:var(--txt)}
+  .dtb-filterbar input{min-width:150px}
+  .dtb-lanechips{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto}
+  .dtb-lanechip{font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--c,#64748b);background:transparent;color:var(--txt);cursor:pointer}
+  .dtb-lanechip.off{opacity:.42;border-style:dashed;text-decoration:line-through}
+  .dtb-lanechip.active{background:var(--c,#64748b);color:#fff;font-weight:700}
+  .dtb-task[draggable="true"]{cursor:grab}
+  .dtb-task[draggable="true"]:active{cursor:grabbing}
+  .dtb-lanefilter select{font-size:10.5px;max-width:130px;padding:3px 5px;border-radius:7px;border:1px solid var(--line);background:var(--panel2,rgba(255,255,255,.04));color:var(--txt)}
   .dtb-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:14px;flex:0 0 38px;box-shadow:0 3px 10px rgba(0,0,0,.3)}
   .dtb-nm{font-weight:800;font-size:15px;line-height:1.1}
   .dtb-count{font-size:11px;color:var(--muted);margin-top:2px}
@@ -876,7 +899,8 @@
     display:none; align-items:center; justify-content:center; padding:30px}
   .modal-overlay.show{display:flex}
   /* Task editors must sit ABOVE the full-screen project-detail overlay (z 150) when opened from it */
-  #projEditModal, #projTaskModal{z-index:200}
+  #projEditModal{z-index:200}
+  #projTaskModal, #bulkAssignModal{z-index:420}   /* above the project editor (200) AND the 🎨 Design board overlay (300) — the board can open these directly */
   #asgStdModal{z-index:210}   /* opened from the project editor — must sit ABOVE it */
   #signInModal{z-index:10010}  /* the passcode prompt can fire from ANY layer (editors z200-210, full-screen issues z10000) — it must always land on top */
   /* ⇄ Assign People bulk tool */
@@ -2586,6 +2610,7 @@
         <div class="dtb-hzn" id="dtbHzn"></div>
         <button class="gfs-theme" id="dtbNapkinBtn" onclick="dtbToggleNapkin()" title="Bar-napkin mode — the design crew's fun sketch view">🍸 Napkin</button>
         <button class="gfs-theme" id="dtbDoneBtn" onclick="dtbToggleDone()" title="Show completed tasks too">✓ Show done</button>
+        <button class="gfs-theme" onclick="openBulkAssign()" title="⇄ Bulk Edits — pick a project, check a batch of tasks, change assignee / phase / type / status across all of them at once (needs your code)">⇄ Bulk Edits</button>
         <button class="gfs-theme" onclick="printDesignBoard()" title="Print the whole board on one landscape page (for the team)">🖨 Print board</button>
         <button class="gfs-theme" onclick="renderDesignTeam()" title="Refresh from the latest project data">↻ Refresh</button>
         <button class="gfs-theme" id="dtbAuthBtn" onclick="dtbAuthClick()" title="Sign in (needed to delete tasks)">🔒 Sign in</button>
@@ -2623,6 +2648,11 @@ function projDoneISO(p){ if(!p) return null; const D=window.MRA_DATA||{}; const 
     if(!jn || x.category==='leave') return false;
     return jn===nm || (nm.length>=4 && (jn.indexOf(nm)>=0 || nm.indexOf(jn)>=0)); });
   if(matches.length && matches.every(x=>(x.status||'').toLowerCase()==='shipped')){
+    // Trailer(s) shipped, but the PROJECT may still be live work (Cisco: trailer left at 12% done with
+    // 84 open tasks — must NOT archive). Only treat all-shipped as "done" when the schedule is nearly
+    // wrapped too: a handful of straggler tasks is fine, a real backlog keeps it on the active board.
+    const openN=Math.max(0,(p.taskCount||0)-(p.doneCount||0));
+    if(openN>5 && (p.pct||0)<80) return null;
     const ds=matches.map(x=>x.completionISO).filter(Boolean).sort();
     if(ds.length) return ds[ds.length-1];
   }
@@ -2845,7 +2875,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
-    <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. Per-tile collapse state is remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. <span class="k">☰ Actions ▸ 🖨 Print…</span> opens the print picker: the <b>whole board</b>, or <b>any mix of crews</b> (tick Sal + Electricians, etc.) as one handout with a section per crew — grouped by trailer, with Fleetio descriptions, <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files.</p></div>
+    <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. Per-tile collapse state is remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. Below the lot sits a <b>General</b> tile for jobs assigned to bay “General” (equipment-only work with no floor space) — same behavior, and its tasks feed the crew lists like any active job. <span class="k">☰ Actions ▸ 🖨 Print…</span> opens the print picker: the <b>whole board</b>, or <b>any mix of crews</b> (tick Sal + Electricians, etc.) as one handout with a section per crew — grouped by trailer, with Fleetio descriptions, <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files.</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap · Electricians ⇄ Doug · Josh · Jeff</h4>
     <p>Live queues, one per crew. <b>Placement matters:</b> trailers in a <b>bay or the Parking Lot</b> feed these lists; a trailer waiting in <b>Next Up / On Hold / Off-Site</b> keeps its assigned tasks on its own card until it's moved out — then they appear here automatically. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date — <b>a shop TV defaults to Month</b> — and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; both remembered per device. An <b>⚠ N overdue</b> chip counts open tasks past their due date. Each task line has a <b>👤 quick-assign</b> chip — tap, pick a crew, done (no dialog). The <span class="k">➕ Add</span> menu here adds a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot. <b>👤 Crew picker:</b> the chip row up top (All · Sal · Wrap · Elec · Doug · Josh · Jeff) shows <b>only the selected crews' columns on this device</b> — tap more than one to combine (Sal + Electricians), tap <b>All</b> to bring everyone back; the visible columns grow to fill the width, and the choice is <b>remembered per device</b> (perfect for Sal's own iPad or his back-shop monitor — on a wall/TV screen set it from the <span class="k">⚙ gear ▸ 👤 Crews</span>, where it also pauses the page rotation). Fleetio descriptions under tasks clamp to <b>one line — tap to expand</b>. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
     <p><b>Sizing on the TV (admin 🎨 Design panel):</b> every crew tile on <i>both</i> pages — Sal · Wrap · Electricians and Doug · Josh · Jeff — can be sized independently (width + height) from the tile picker, same as the bays.</p></div>
@@ -2959,7 +2989,7 @@ const GENERAL_HELP = `
     <p>The <span class="k">ASSETS</span> and <span class="k">FLEETIO</span> tabs each show a <b>live map</b> of where the units are (GPS from Samsara). A small map sits at the top; hit <span class="k">⛶ Expand map</span> to pop it full-screen to pan/zoom and click a pin for that unit's details (type, location, last fix, open Fleetio items). Pins are colored by location: <b style="color:#e04826">orange = at the MRA facility</b>, <b style="color:#2f6fe0">blue = elsewhere in Michigan</b>, grey = out of state; a faded pin means the GPS fix is <b>stale</b> (no recent report). Units that pack together (e.g. the MRA yard) <b>cluster</b> into a number that spreads apart as you zoom in. Equipment is placed at the location of the unit(s) on its job.</p></div>
   <div class="hsec"><h4>㉔ 🎨 Design Team board (☰ Menu)</h4>
     <p>Open <span class="k">☰ Menu → 🎨 Design Team board</span> for a dedicated view of the design / CAD crew (<b>Steve K, Sarah, Mark, Brandon</b>). Each person gets a <b>lane</b> showing the tasks they're assigned across all projects — <b>pulled live from the Projects tab</b> (assign someone on a project task and it lands here automatically). A 5th <b>MRA Design</b> lane catches anything tagged to the team generally.</p>
-    <p>Use the <b>Today / Week / Month / All</b> buttons up top to set the window — tasks group into <b>Overdue · Today · This Week · This Month · Upcoming · No-date</b>. Each person's <b>tile scrolls on its own</b>, so a long list doesn't move the whole page. You can <b>tweak it here without ever touching the project files</b>: hit <span class="k">✎ add note</span> on any task to attach a design note, or type in the <b>+ task</b> box at the bottom of a lane to add an ad-hoc/general task (with an optional due date). These <b>save to a shared file, so every device sees them</b> (about 30 seconds to sync) — but they still <b>never change the workbook or the Projects tab</b>. <span class="k">✓ Show done</span> (highlights when on) reveals completed items. <b>📧 New:</b> when you add a task to someone's lane, that person automatically gets an <b>email</b> (task + due date + a link to the board) — as long as they have an email filled in on the <b>MRA Users</b> list.</p>
+    <p>Use the <b>Today / Week / Month / All</b> buttons up top to set the window — tasks group into <b>Overdue · Today · This Week · This Month · Upcoming · No-date</b>. Each person's <b>tile scrolls on its own</b>, so a long list doesn't move the whole page. You can <b>tweak it here without ever touching the project files</b>: hit <span class="k">✎ add note</span> on any task to attach a design note, or type in the <b>+ task</b> box at the bottom of a lane to add an ad-hoc/general task (with an optional due date). These <b>save to a shared file, so every device sees them</b> (about 30 seconds to sync) — but they still <b>never change the workbook or the Projects tab</b>. <span class="k">✓ Show done</span> (highlights when on) reveals completed items. <b>Filters (remembered per device):</b> the <span class="k">📁 project picker</span> narrows the whole board to one project (or <b>click any task's project chip</b>), the <span class="k">🔍 find box</span> filters every lane as you type, each lane has its <b>own little 📁 picker</b>, and the <b>lane chips</b> hide/show whole lanes (e.g. tuck MRA Design away). <b>👤→ Re-assign</b> (needs your code): pick the new person and 💾 Move — a project-fed task <b>writes the new assignee back to the project schedule</b>; an ad-hoc task just hops lanes — or simply <b>drag the card onto another lane</b>. <b>✎ task</b> opens the full task editor (dates, status, phase, %…) right over the board. <b>🎯 Focus</b> (click a name/avatar) shows only that person's lane; <b>⚠ Overdue only</b> filters every lane to overdue work. <b>📧 New:</b> when you add a task to someone's lane, that person automatically gets an <b>email</b> (task + due date + a link to the board) — as long as they have an email filled in on the <b>MRA Users</b> list.</p>
     <p><b>📊 Analytics at the bottom</b> show workload &amp; balance: <b>Workload balance</b> (open tasks per designer by urgency), <b>🥧 Share of load</b> (who holds what % of the work), <b>📈 Deadline load</b> (tasks due over the next 8 weeks), and <b>📅 Who's booked when</b> (a timeline bar per designer). All based on task counts pulled live from Projects.</p>
     <p>Each tile caps at <b>10 tasks</b> with a <span class="k">▾ Show all</span> button so the board stays tidy for a screenshot. The <span class="k">🖨</span> on a lane prints a <b>one-pager for that person</b>; <span class="k">🖨 Print board</span> (top) prints the <b>whole team on one landscape page</b> — everyone side by side, grouped by due date, with a share-of-load strip. And <span class="k">🍸 Napkin</span> mode flips the whole board (header included) into a fun bar-napkin look (cream cards, marker handwriting, MRA logo) — toggle back to clean anytime.</p></div>
 `;
@@ -2997,6 +3027,33 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"15.3", date:"2026-07-07", title:"🐞 Fix: active projects no longer auto-archive when their trailer ships", items:[
+    "A project used to <b>auto-archive</b> (vanish from the Projects tab) once all its matching trailers shipped — even if the project itself was barely started (Cisco disappeared at 12% done with 84 open tasks; it was in <b>🗄 Show archived</b> the whole time, nothing lost). Now a shipped trailer only archives the project when the schedule is <b>nearly wrapped too</b> (≥80% done, or just a handful of straggler tasks). Real open work stays on the board." ] },
+  { rev:"15.2", date:"2026-07-07", title:"⏸ Parked projects dull in Project Progress too", items:[
+    "A ⏸ parked project's <b>Project Progress row now dims</b> (name, bar and %) the same way its Gantt row does — the ⏸ parked chip stays bright so you can see why." ] },
+  { rev:"15.1", date:"2026-07-07", title:"🎨 Design board: ⇄ Bulk Edits on the board", items:[
+    "The <b>⇄ Bulk Edits</b> tool (pick a project → check a batch of tasks → change assignee / phase / type / status across all of them) now opens <b>right from the Design board's header</b> — no more hopping to the Projects tab mid-cleanup. Same tool, same code sign-in." ] },
+  { rev:"15.0", date:"2026-07-07", title:"🏭 New 'General' tile on the bay board", items:[
+    "Jobs assigned to <b>bay “General”</b> (equipment-only work, nothing taking floor space) now get their own <b>General tile right under the Parking Lot</b> — before, they had no card anywhere on the floor. Works like the lot: date-sorted, starts collapsed, drag a job onto it to move it there, and its tasks feed the crew lists as usual. (The 🛠 General crew-task lane in the crew columns is unchanged — that's for one-off chores with no job.)" ] },
+  { rev:"14.9", date:"2026-07-07", title:"🎨 Design board: ✓ Complete for managers", items:[
+    "When <b>Rich, Luc, Megan or Al</b> sign in on the Design board, every open project task shows a green <b>✓ Complete</b> next to ✓ Mark ready — it <b>closes the task on the project schedule immediately</b>, no PM-verify loop. Designers keep the ✓ Mark ready → PM sign-off flow, and a task already ⏳ awaiting sign-off can be completed on the spot by a manager too." ] },
+  { rev:"14.8", date:"2026-07-07", title:"🎨 Design board: stay put on edits · ⇕ full-height lanes", items:[
+    "Editing on the board (re-assign, notes, status) <b>no longer bounces you back to the top</b> — the page and every lane keep their scroll position through the edit.",
+    "New <b>⇕ Full lanes</b> toggle: lanes grow to their content with <b>no scrollbars inside them</b> — you just scroll the page top to bottom. <b>⤢ Show all tasks</b> now switches this on too, so one click really does lay everything out." ] },
+  { rev:"14.7", date:"2026-07-07", title:"🔗 Direct link to the Design board", items:[
+    "The dashboard link now takes a <b>?design=1</b> switch that opens the <b>🎨 Design Team board</b> directly — used in the new-task emails so the team lands on their board, not the shop floor. (Also fixed the broken link in those emails — it was missing its colon, so phones couldn't open it.)" ] },
+  { rev:"14.6", date:"2026-07-07", title:"🎨 Design board: ⤢ Show all tasks (one click)", items:[
+    "Pick a project (say Medtronic) and hit <b>⤢ Show all tasks</b> — one click switches to the <b>All</b> window, turns off ⚠ Overdue-only, clears the per-lane pickers and <b>expands every lane past its 10-task cap</b>, so you see <b>every task for everyone</b> under your pick. The project pick and 🔍 find text stay put.",
+    "<b>Wide lanes:</b> when only <b>one or two lanes</b> are showing (🎯 focus or the lane chips), they now <b>stretch across the full screen</b> and the task cards <b>tile 3–5 across</b> instead of one skinny strip. Also: 🖨 Print board prints exactly what's on screen (hidden lanes, focus and filters carry through), and the per-lane 📁 picker shows on every lane." ] },
+  { rev:"14.5", date:"2026-07-07", title:"🎨 Design board round 2 — drag, edit, focus, overdue", items:[
+    "<b>Drag a task card onto another person's lane</b> to re-assign it (same code-gated write as 👤→ — project tasks update the project schedule).",
+    "<b>✎ task</b> on any project-fed card opens the <b>FULL task editor</b> — name, dates, status, phase, %, comments — right over the board; saves straight to the project schedule.",
+    "<b>🎯 Focus mode</b>: click a person's name / avatar (or the 🎯 in their lane) and the board shows <b>only their lane</b>, full width — click again (or the 🎯 chip up top) to bring everyone back.",
+    "<b>⚠ Overdue only</b> toggle in the filter bar — every lane filters to just the overdue work. Stacks with the project picker and 🔍 find." ] },
+  { rev:"14.4", date:"2026-07-07", title:"🎨 Design board power-up — filters, lanes, re-assign", items:[
+    "<b>📁 Project picker</b> up top shows only one project's tasks across the whole board, a <b>🔍 find box</b> filters every lane as you type, and <b>clicking a task's project chip</b> filters to that project instantly (✕ clear brings everything back).",
+    "<b>Per-lane picker</b>: each person's tile gets its own little 📁 dropdown to show just one project in that lane. And the <b>lane chips</b> in the filter bar hide/show whole lanes — e.g. tuck the <b>MRA Design</b> lane away until you need it. All remembered per device.",
+    "<b>👤→ Re-assign from the board</b> (needs your code): hit 👤→ on any task, pick the new person, 💾 Move — project-fed tasks <b>write the new assignee straight back to the project schedule</b>, ad-hoc tasks just hop lanes. If the new-task email flow is wired for them, the new owner gets the email too." ] },
   { rev:"14.3", date:"2026-07-07", title:"⏸ Park a project · smarter verification panel", items:[
     "<b>⏸ Park</b> (in ✎ Edit Project Tasks) <b>freezes a project</b> — it stays on the Gantt but dimmed with a ⏸ tag, gets a <span class=\"hchip\">⏸ parked</span> chip in Project Progress and its own slice of the Portfolio Health donut, and <b>stops counting as At-Risk / Needs Attention</b> (frozen ≠ failing). Task statuses aren't touched, so un-parking restores it exactly. A <b>⏸ Hide parked</b> toggle on the Gantt toolbar tucks them away entirely. <i>(Needs the one-time 'Parked' column on the Project Tasks list — Rich has the steps.)</i>",
     "The <b>🟡 Awaiting verification</b> panel is now <b>collapsible</b> (▾ in its header, remembered per device), and once you sign in it shows <b>👤 Mine</b> — just the tasks where you're the PM — with a <b>picker</b> to flip to All or any one PM's queue." ] },
@@ -3834,7 +3891,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
   document.getElementById('ganttFS').classList.remove('show'); GFS=null; closeBarPop();
   const mm=document.getElementById('mapModal'); if(mm) mm.classList.remove('show');
   const sm=document.getElementById('searchModal'); if(sm) sm.classList.remove('show');
-  { const dov=document.getElementById('dtbOverlay'); if(dov&&dov.classList.contains('show')){ if(DTB_EDIT.note||DTB_EDIT.gen){ dtbCancel(); return; } dov.classList.remove('show'); } }   // 🎨 Design board: Esc cancels an edit first, else closes
+  { const dov=document.getElementById('dtbOverlay'); if(dov&&dov.classList.contains('show')){ if(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg){ dtbCancel(); return; } dov.classList.remove('show'); } }   // 🎨 Design board: Esc cancels an edit first, else closes
   if(typeof _toTopSync==='function') _toTopSync();
 } });
 // Press "/" to open global search (unless you're typing in a field)
@@ -6233,8 +6290,8 @@ function openProjTaskNew(){
   document.getElementById('projTaskModal').classList.add('show');
 }
 function editProjTaskBtn(el){ const id=el.dataset.id; if(!ensureAuth("edit a project task", ()=>openProjTaskEdit(id))) return; openProjTaskEdit(id); }
-function openProjTaskEdit(id){
-  const name=peCurrentProject(), p=oProj(name), t=projTaskByAnyId(p,id);   // id may be a real TaskID or an "s<_id>" handle (id-less rows)
+function openProjTaskEdit(id, projOverride){
+  const name=projOverride||peCurrentProject(), p=oProj(name), t=projTaskByAnyId(p,id);   // id may be a real TaskID or an "s<_id>" handle (id-less rows); projOverride lets the 🎨 Design board open this editor directly
   if(!t){ alert("Couldn't find that task — try reloading."); return; }
   window._ptProj=name; window._ptId=id; window._ptSpId=(t._id!=null?t._id:null);   // exact SharePoint row id → dup-safe writes
   { const mr=document.getElementById('ptMoveRow'), sel=document.getElementById('ptMoveDest');
@@ -6341,7 +6398,7 @@ function baGroupOf(who){ const parts=String(who||'').split(/\s+\/\s+/).map(s=>s.
   const g=parts.find(p=>(typeof CREW_GROUPS!=='undefined')&&CREW_GROUPS.indexOf(crewCanon(p))>=0);
   return g?crewCanon(g):(parts[0]||''); }
 function openBulkAssign(){
-  if(!ensureAuth("bulk-edit tasks")) return;
+  if(!ensureAuth("bulk-edit tasks", openBulkAssign)) return;
   BA_SEL=new Set(); BA_PENDING={}; BA_FIELD='assignee';
   const projs=_baProjects();
   if(!projs.some(p=>p.name===BA_PROJ)) BA_PROJ=(projs[0]?projs[0].name:'');
@@ -7737,8 +7794,14 @@ function renderFloor(D){
   // final column: Parking Lot on top, combined Next Up / On Hold below (scrolls)
   const parkCard=bayCard('Parking Lot', parkingJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true, sortByDate:true, defaultCollapsed:true});
   // Next Up / On Hold moved OFF the bay board — the 🛬 Pipeline panel below covers inbound + holding.
-  WALL_COLS.push({key:'Parking Lot', bays:['Parking Lot']});
-  bayHtml+=`<div class="baycol parkcol" data-col="Parking Lot">`+parkCard+`</div>`;
+  // 'General' tile UNDER the lot: jobs assigned to bay "General" (equipment-only / no floor space).
+  // These had NO card anywhere (not a physical bay, not held → not in the pipeline panel either).
+  // Excludes the 🛠 General crew-task lane, which lives in the crew columns and is a different thing.
+  const isGeneralBay=b=>/^\s*general\s*$/i.test(b||"");
+  const generalJobs=jobs.filter(j=>(j.status||"").toLowerCase()!=="shipped" && j.category!=="leave" && j.category!=="general" && isGeneralBay(j.bay));
+  const genCard=bayCard('General', generalJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true, sortByDate:true, defaultCollapsed:true});
+  WALL_COLS.push({key:'Parking Lot', bays:['Parking Lot','General']});
+  bayHtml+=`<div class="baycol parkcol" data-col="Parking Lot">`+parkCard+genCard+`</div>`;
   document.getElementById('bays').innerHTML=bayHtml;
   applyWallLayout();
   document.getElementById('bayCount').textContent=physBays.length+" bays";
@@ -8425,7 +8488,7 @@ function renderProjects(D){
     const tick=(h.expectedPct!=null && h.state!=='upcoming')
       ? `<div class="exp-tick" style="left:${h.expectedPct}%" title="should be ~${h.expectedPct}% complete by today"></div>` : '';
     const noChip = p.nonOfficial?`<span class="hchip nonoff" title="Non-official project — informal work, not a formal job">🏷 non-official</span>`:'';
-    return `<div class="row" style="cursor:pointer" onclick="openProjectEditor('${escJsAttr(p.name)}')" title="Click to add / edit this project's tasks"><div style="flex:1"><div class="lead">${esc(p.name)} <span class="ttool edit" style="display:inline-block">✎</span>${chip}${noChip}</div>`+
+    return `<div class="row${p.parked?' prog-parked':''}" style="cursor:pointer" onclick="openProjectEditor('${escJsAttr(p.name)}')" title="Click to add / edit this project's tasks"><div style="flex:1"><div class="lead">${esc(p.name)} <span class="ttool edit" style="display:inline-block">✎</span>${chip}${noChip}</div>`+
     `<div class="meta">${esc(p.pm||"—")}${p.finishISO?" · due "+fmtMDY(p.finishISO):""}${odTxt}</div>`+
     `<div class="pmbar" style="margin-top:5px;height:8px"><div class="seg" style="width:${p.pct}%;background:${p._color}"></div>${tick}</div>`+
     `</div><div class="right"><span class="badge grey">${p.pct}%</span></div></div>`;}).join("")||`<div class="empty">No active projects</div>`;
@@ -9651,7 +9714,48 @@ const DESIGN_COLORS = {'Steve K':'#6366f1','Sarah Williams':'#ec4899','Mark Must
 let DTB_HZN='week';                                  // day | week | month | all
 let DTB_DONE=false;                                  // show completed
 let DTB = {notes:{}, general:[]};                    // the local overlay (localStorage)
-let DTB_EDIT = {};                                   // {note:key} or {gen:id} while inline-editing
+let DTB_EDIT = {};                                   // {note:key} or {gen:id} or {asg:key} while inline-editing
+// Board filters (all remembered per device): a MAIN project picker, a per-LANE project picker,
+// lane show/hide chips (e.g. tuck the MRA Design lane away), and a 🔍 find box (session-only).
+let DTB_PROJ=''; try{ DTB_PROJ=localStorage.getItem('mra_dtb_proj')||''; }catch(e){}
+let DTB_FIND='';
+let DTB_LANEPROJ={}; try{ DTB_LANEPROJ=JSON.parse(localStorage.getItem('mra_dtb_laneproj')||'{}')||{}; }catch(e){}
+const DTB_LANES_OFF=new Set(); try{ (JSON.parse(localStorage.getItem('mra_dtb_lanesoff')||'[]')||[]).forEach(x=>DTB_LANES_OFF.add(x)); }catch(e){}
+function setDtbProj(v){ DTB_PROJ=v||''; try{ localStorage.setItem('mra_dtb_proj',DTB_PROJ); }catch(e){} renderDesignTeam(); }
+function setDtbLaneProj(lane,v){ if(v) DTB_LANEPROJ[lane]=v; else delete DTB_LANEPROJ[lane]; try{ localStorage.setItem('mra_dtb_laneproj',JSON.stringify(DTB_LANEPROJ)); }catch(e){} renderDesignTeam(); }
+function dtbLaneToggle(name){ if(DTB_LANES_OFF.has(name)) DTB_LANES_OFF.delete(name); else DTB_LANES_OFF.add(name);
+  try{ localStorage.setItem('mra_dtb_lanesoff', JSON.stringify([...DTB_LANES_OFF])); }catch(e){} renderDesignTeam(); }
+function setDtbFind(v){ DTB_FIND=String(v||'').toLowerCase(); clearTimeout(window._dtbFindT);
+  window._dtbFindT=setTimeout(()=>{ renderDesignTeam(); const f=document.getElementById('dtbFind');
+    if(f){ f.focus(); const L=f.value.length; try{ f.setSelectionRange(L,L); }catch(e){} } },350); }
+function dtbClearFilters(){ DTB_FIND=''; setDtbProj(''); }
+let DTB_FOCUS=''; try{ DTB_FOCUS=localStorage.getItem('mra_dtb_focus')||''; }catch(e){}
+function dtbFocus(name){ DTB_FOCUS=(DTB_FOCUS===name)?'':(name||''); try{ localStorage.setItem('mra_dtb_focus',DTB_FOCUS); }catch(e){} renderDesignTeam(); }
+let DTB_ODONLY=false; try{ DTB_ODONLY=localStorage.getItem('mra_dtb_odonly')==='1'; }catch(e){}
+function dtbToggleOd(){ DTB_ODONLY=!DTB_ODONLY; try{ localStorage.setItem('mra_dtb_odonly',DTB_ODONLY?'1':'0'); }catch(e){} renderDesignTeam(); }
+// ⤢ one click: OPEN EVERYTHING for the current pick — All window, overdue-only off, per-lane pickers
+// cleared, every lane expanded past its cap. The project pick + find text stay (that's the point:
+// "pick Medtronic → see every Medtronic task for everyone").
+function dtbShowEverything(){
+  DTB_HZN='all'; try{ localStorage.setItem('mra_design_hzn','all'); }catch(e){}
+  DTB_ODONLY=false; try{ localStorage.setItem('mra_dtb_odonly','0'); }catch(e){}
+  Object.keys(DTB_LANEPROJ).forEach(k=>delete DTB_LANEPROJ[k]); try{ localStorage.setItem('mra_dtb_laneproj','{}'); }catch(e){}
+  try{ Object.keys(dtbGather()).forEach(n=>DTB_EXPAND.add(n)); }catch(e){}
+  DESIGN_TEAM.concat([DESIGN_TEAM_LANE]).forEach(n=>DTB_EXPAND.add(n));
+  DTB_TALL=true; try{ localStorage.setItem('mra_dtb_tall','1'); }catch(e){}   // full-height lanes: ONE page scroll, no scrollbars inside lanes
+  renderDesignTeam();
+}
+// ⇕ full-height lanes: lanes grow to their content (no inner scrollbars) — you just scroll the page.
+let DTB_TALL=false; try{ DTB_TALL=localStorage.getItem('mra_dtb_tall')==='1'; }catch(e){}
+function dtbToggleTall(){ DTB_TALL=!DTB_TALL; try{ localStorage.setItem('mra_dtb_tall',DTB_TALL?'1':'0'); }catch(e){} renderDesignTeam(); }
+// A task's project label for filtering ('(added here)' = ad-hoc board tasks)
+function _dtbProjOf(x){ return x.general?'(added here)':(x.proj||''); }
+function _dtbFilt(x){
+  if(DTB_ODONLY && x.bucket.k!=='overdue') return false;
+  if(DTB_PROJ && _dtbProjOf(x)!==DTB_PROJ) return false;
+  if(DTB_FIND){ const s=(String(x.title||'')+' '+String(x.proj||'')+' '+String(x.note||'')).toLowerCase(); if(s.indexOf(DTB_FIND)<0) return false; }
+  return true;
+}
 let NAPKIN=false;                                    // 🍸 bar-napkin skin (the design crew's fun view)
 const DTB_CAP=10;                                    // tiles show up to 10 tasks, then "Show all"
 const DTB_EXPAND=new Set();                          // lane names expanded past the cap
@@ -9735,8 +9839,11 @@ function dtbDecorate(it, today){
   const t=it.t, key=dtbKey(it.proj,t), dateISO=t.finISO||t.startISO||'';
   return {general:false, key, handle:projTaskHandle(t), title:t.t||'(task)', dateISO, note:DTB.notes[key]||'', proj:it.proj, who:t.who, ms:projIsMs(t), done:projIsDone(t), pending:projIsPendingVerify(t), base:projBaseStatus(t.st), pct:(projTaskPct(t.st)||0), bucket:dtbBucket(dateISO,today)};
 }
+// Deep link: …/MRA_Dashboard.html?design=1 opens the 🎨 Design Team board directly — the link to use
+// in the new-task emails, so the team lands on THEIR board instead of the shop floor.
+if(/[?&#]design(=1|&|$)/.test(location.search+location.hash)){ setTimeout(()=>{ try{ openDesignTeam(); }catch(e){} }, 600); }
 function openDesignTeam(){ dtbLoadLocal(); document.getElementById('dtbOverlay').classList.add('show'); renderDesignTeam();
-  dtbFetchRemote().then(r=>{ if(r && Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); if(!(DTB_EDIT.note||DTB_EDIT.gen)) renderDesignTeam(); } }); }   // adopt the shared file (skip if we just wrote locally)
+  dtbFetchRemote().then(r=>{ if(r && Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); if(!(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)) renderDesignTeam(); } }); }   // adopt the shared file (skip if we just wrote locally)
 function closeDesignTeam(){ DTB_EDIT={}; document.getElementById('dtbOverlay').classList.remove('show'); }
 function setDtbHzn(h){ DTB_HZN=h; try{localStorage.setItem('mra_design_hzn',h);}catch(e){} renderDesignTeam(); }
 function dtbToggleDone(){ DTB_DONE=!DTB_DONE; renderDesignTeam(); }
@@ -9750,7 +9857,7 @@ function dtbDelGen(id){ if(typeof ensureAuth==='function' && !ensureAuth('delete
   if(!confirm('Delete this added task? (It only exists on the Design board — the project files are untouched.)')) return;
   if(DTB_EDIT.gen===id) DTB_EDIT={}; dtbApply(t=>{ t.general=t.general.filter(g=>g.id!==id); }); if(typeof dtbSyncAuth==='function') dtbSyncAuth(); }
 // Sign-in control on the board (so Al/Megan/Rich can log in — needed to delete). Add/edit/notes/status/% stay open.
-function dtbAuthClick(){ if(CLOSE_PIN){ if(typeof signOut==='function') signOut(); } else { if(typeof ensureAuth==='function') ensureAuth('sign in'); } dtbSyncAuth(); }
+function dtbAuthClick(){ if(CLOSE_PIN){ if(typeof signOut==='function') signOut(); renderDesignTeam(); } else { if(typeof ensureAuth==='function') ensureAuth('sign in', ()=>{ dtbSyncAuth(); renderDesignTeam(); }); } dtbSyncAuth(); }
 function dtbSyncAuth(){ const b=document.getElementById('dtbAuthBtn'); if(!b) return;
   if(CLOSE_PIN){ b.textContent='👤 '+(CURRENT_USER||'Signed in')+' · Log out'; b.title='Signed in — click to log out'; b.classList.add('on'); }
   else { b.textContent='🔒 Sign in'; b.title='Sign in (needed to delete tasks)'; b.classList.remove('on'); } }
@@ -9779,6 +9886,20 @@ function dtbMarkReady(proj, handle){
   shopWrite(payload); t.st=PROJ_VERIFY_STATUS; t.done=false; oRecomputeProject(p); oApply();
   renderDesignTeam();
 }
+// Managers who can COMPLETE a task directly from this board (designers still go ✓ Mark ready → PM verify).
+const DTB_COMPLETERS=['Rich Miller','Luc Giglio','Megan Fraser','Al Karloff'];
+function _dtbCanComplete(){ return !!(CLOSE_PIN && CURRENT_USER && DTB_COMPLETERS.some(n=>_verifyNameMatch(CURRENT_USER,n))); }
+function dtbComplete(proj, handle){
+  const retry=()=>dtbComplete(proj, handle);
+  if(typeof ensureAuth==='function' && !ensureAuth('complete a task', retry)) return;
+  if(!_dtbCanComplete()){ alert('Completing directly from this board is for Rich / Luc / Megan / Al.\nUse ✓ Mark ready instead — the PM signs off from the Projects tab.'); return; }
+  const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t){ alert("Couldn't find that task — try reloading."); return; }
+  if(!confirm('Mark "'+(t.t||'this task')+'" COMPLETED?\n\nThis closes it on the project schedule right now (no PM-verify step).')) return;
+  const d=new Date(), cd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+  shopWrite({action:'closeProjectTask', project:proj, id:t.id, _id:(t._id!=null?t._id:undefined), task:t.t, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});
+  t.done=true; t.st='Completed'; if(!t.finISO) t.finISO=localISO(Date.now()); oRecomputeProject(p); oApply();
+  renderDesignTeam();
+}
 // Compose a status string from a base + a typed %, mirroring the editor (no auto-complete — completion stays via Mark ready).
 function _dtbCompose(base, pct){ base=String(base||'Not Started'); pct=Math.max(0,Math.min(100,parseInt(pct,10)||0));
   if(base==='Not Started' && pct>0) base='In Progress';
@@ -9795,9 +9916,59 @@ function dtbWriteStatus(proj, handle, newStatus){
     budget:(t.bud!=null?t.bud:''), comments:t.cm||'' };
   shopWrite(payload); t.st=newStatus; t.done=/^completed$/i.test(newStatus); oRecomputeProject(p); oApply(); renderDesignTeam();
 }
+// 👤 Re-assign a task from the board (edit-gated by the normal code login). Project-fed tasks write
+// the new Assigned back to the PROJECT SCHEDULE (by _id); ad-hoc tasks just move lanes in design.json.
+function dtbAsgStart(general, a, b){
+  const retry=()=>dtbAsgStart(general, a, b);
+  if(typeof ensureAuth==='function' && !ensureAuth('re-assign a design task', retry)) return;
+  DTB_EDIT={asg:general?('g:'+a):('p:'+a+'||'+b), asgGeneral:!!general, asgProj:a, asgHandle:b, asgGid:a};
+  renderDesignTeam();
+}
+function dtbAsgSave(){
+  const sel=document.getElementById('dtbasg-sel'); const who=sel?sel.value:''; const E=DTB_EDIT; DTB_EDIT={};
+  if(!who){ renderDesignTeam(); return; }
+  dtbReassignTo(E.asgGeneral, E.asgGeneral?E.asgGid:E.asgProj, E.asgHandle, who);
+}
+// Core re-assign used by both the 👤→ picker and DRAG-a-card-onto-a-lane. Sign-in gated.
+function dtbReassignTo(general, a, b, who){
+  if(!who) return;
+  const retry=()=>dtbReassignTo(general, a, b, who);
+  if(typeof ensureAuth==='function' && !ensureAuth('re-assign a design task', retry)) return;
+  if(general){
+    let ttl='', due='';
+    dtbApply(t=>{ const g=t.general.find(x=>x.id===a); if(g && g.who!==who){ g.who=who; ttl=g.t||g.title||''; due=g.dueISO||''; } });
+    try{ if(ttl && typeof dtbNotifyNewTask==='function') dtbNotifyNewTask(who, ttl, due); }catch(e){}
+    renderDesignTeam(); return;
+  }
+  const p=oProj(a), t=p&&projTaskByAnyId(p,b); if(!t){ renderDesignTeam(); return; }
+  if((t.who||'')===who){ renderDesignTeam(); return; }
+  const payload={ action:'editProjectTask', project:a, pin:CLOSE_PIN, user:CURRENT_USER,
+    id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
+    assigned:who, status:t.st||'', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
+    milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
+    budget:(t.bud!=null?t.bud:''), comments:t.cm||'' };
+  shopWrite(payload); t.who=who; oRecomputeProject(p); oApply();
+  try{ if(typeof dtbNotifyNewTask==='function') dtbNotifyNewTask(who, t.t||'', t.finISO||''); }catch(e){}
+  renderDesignTeam();
+}
+function dtbDragStart(ev, general, a, b){ window._dtbDrag={g:!!general, a:a, b:b}; try{ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain','dtb'); }catch(e){} }
+function dtbDropTask(ev, lane){ if(ev) ev.preventDefault(); const d=window._dtbDrag; window._dtbDrag=null; if(!d) return; dtbReassignTo(d.g, d.a, d.b, lane); }
+// ✎ open the FULL project-task editor (dates, phase, status, %…) right over the board — writes to the project
+function dtbEditTask(proj, handle){
+  const retry=()=>dtbEditTask(proj, handle);
+  if(typeof ensureAuth==='function' && !ensureAuth('edit a project task', retry)) return;
+  openProjTaskEdit(handle, proj);
+}
 function dtbSetStatus(proj, handle, base){ const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return; dtbWriteStatus(proj, handle, _dtbCompose(base, projTaskPct(t.st)||0)); }
 function dtbSetPct(proj, handle, v){ const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return; dtbWriteStatus(proj, handle, _dtbCompose(projBaseStatus(t.st)||'Not Started', v)); }
 function dtbTaskHtml(x){
+  const _ak = x.general?('g:'+x.gid):('p:'+(x.proj||'')+'||'+(x.handle||''));
+  if(DTB_EDIT.asg===_ak){   // 👤 inline re-assign picker (same look as the note editor)
+    const opts=DESIGN_TEAM.concat([DESIGN_TEAM_LANE]);
+    return `<div class="dtb-task${x.general?' gen':''}"><div class="dtb-title">👤 Re-assign: ${esc(x.title)}</div><div class="dtb-note-edit">`
+      +`<select id="dtbasg-sel">${opts.map(o=>`<option>${esc(o)}</option>`).join('')}</select>`
+      +`<div class="dtb-tacts"><button onclick="dtbAsgSave()" title="Move this task to the selected person${x.general?'':' — writes the new assignee to the project schedule'}">💾 Move task</button><button onclick="dtbCancel()">Cancel</button></div></div></div>`;
+  }
   if(x.general && DTB_EDIT.gen===x.gid){
     return `<div class="dtb-task gen"><div class="dtb-note-edit">`
       +`<input type="text" id="dtbge-t" value="${escA(x.title)}" placeholder="Task">`
@@ -9807,7 +9978,7 @@ function dtbTaskHtml(x){
   }
   const odue=x.bucket.k==='overdue';
   const chips=[];
-  if(!x.general && x.proj) chips.push(`<span class="dtb-chip proj" title="From project ${escA(x.proj)}">${esc(x.proj)}</span>`);
+  if(!x.general && x.proj) chips.push(`<span class="dtb-chip proj" style="cursor:pointer" onclick="setDtbProj('${escJsAttr(x.proj)}')" title="From project ${escA(x.proj)} — click to show ONLY this project across the board (clear with the 📁 picker up top)">${esc(x.proj)}</span>`);
   if(x.general) chips.push(`<span class="dtb-chip add">added here</span>`);
   if(x.ms) chips.push(`<span class="dtb-chip ms">◆ milestone</span>`);
   chips.push(`<span class="dtb-chip date${odue?' od':''}">${x.dateISO?esc(fmtMDY(x.dateISO)):'no date'}</span>`);
@@ -9818,12 +9989,17 @@ function dtbTaskHtml(x){
   } else if(x.note){ noteHtml=`<div class="dtb-note">📝 ${esc(x.note)}</div>`; }
   let acts='', prog='';
   if(x.general){ acts=`<button onclick="dtbToggleGen('${escJsAttr(x.gid)}')">${x.done?'↩ reopen':'✓ done'}</button>`
-      +`<button onclick="dtbEditGen('${escJsAttr(x.gid)}')">✎ edit</button><button onclick="dtbDelGen('${escJsAttr(x.gid)}')">🗑</button>`; }
+      +`<button onclick="dtbEditGen('${escJsAttr(x.gid)}')">✎ edit</button>`
+      +(x.done?'':`<button onclick="dtbAsgStart(1,'${escJsAttr(x.gid)}')" title="Move this task to someone else's lane (needs your code)">👤→</button>`)
+      +`<button onclick="dtbDelGen('${escJsAttr(x.gid)}')">🗑</button>`; }
   else {   // project-fed task: "✓ Mark ready" → sends it to the PM to verify (doesn't complete it); ad-hoc above just self-closes
     let mr='';
     if(x.pending) mr=`<span class="dtb-pending" title="Marked ready — the PM needs to verify &amp; close it on the Projects tab">⏳ awaiting PM sign-off</span>`;
     else if(!x.done) mr=`<button onclick="dtbMarkReady('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Mark this done and flag it for the PM to verify &amp; close — it is NOT completed until they sign off">✓ Mark ready</button>`;
-    acts=mr+`<button onclick="dtbEditNote('${escJsAttr(x.key)}')">${x.note?'✎ note':'✎ add note'}</button>`;
+    if(!x.done && _dtbCanComplete()) mr=`<button onclick="dtbComplete('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Manager shortcut: close this task on the project schedule RIGHT NOW — no PM-verify step" style="border-color:rgba(34,197,94,.6);color:#4ade80">✓ Complete</button>`+mr;
+    acts=mr+`<button onclick="dtbEditNote('${escJsAttr(x.key)}')">${x.note?'✎ note':'✎ add note'}</button>`
+      +(x.done?'':`<button onclick="dtbEditTask('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Open the FULL task editor (name, dates, status, phase, %…) right here — saves to the project schedule (needs your code)">✎ task</button>`
+        +`<button onclick="dtbAsgStart(0,'${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Re-assign this task to another designer (needs your code) — writes the new assignee back to the PROJECT schedule">👤→</button>`);
     if(!x.done){   // team can set status + % right on the board (writes to the project schedule). Completion stays via "✓ Mark ready".
       const opts=['Not Started','In Progress','On Hold'];
       const cur=x.base||'Not Started', extra=(cur&&opts.indexOf(cur)<0)?`<option selected>${esc(cur)}</option>`:'';
@@ -9835,7 +10011,8 @@ function dtbTaskHtml(x){
     }
   }
   if(x.pending) chips.push(`<span class="dtb-chip pend" title="Waiting on PM verification">⏳ pending verify</span>`);
-  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}">`
+  const drag=x.done?'':` draggable="true" ondragstart="dtbDragStart(event,${x.general?1:0},'${escJsAttr(x.general?x.gid:(x.proj||''))}','${escJsAttr(x.general?'':(x.handle||''))}')" title="Drag onto another person's lane to re-assign (needs your code)"`;
+  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}"${drag}>`
     +`${x.general?'<span class="dtb-addpin" title="Added on this board (not from a project file)">📌</span>':''}`
     +`<div class="dtb-title">${x.ms?'◆ ':''}${esc(x.title)}</div>`
     +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}${prog}`
@@ -9850,30 +10027,60 @@ function renderDesignTeam(){
   const db=document.getElementById('dtbDoneBtn'); if(db){ db.classList.toggle('active',DTB_DONE); db.setAttribute('aria-pressed',DTB_DONE); db.textContent=DTB_DONE?'✓ Showing done':'✓ Show done'; }
   const lanes=dtbGather(), base=DESIGN_TEAM.concat([DESIGN_TEAM_LANE]), maxRank=DTB_MAXRANK[DTB_HZN]||2;
   const order=base.concat(Object.keys(lanes).filter(k=>base.indexOf(k)<0 && (lanes[k]||[]).length));   // keep any added tasks under other/old names visible
+  // 📁 main filter bar: project picker + 🔍 find + lane show/hide chips (all remembered per device)
+  const _projSet=new Set();
+  order.forEach(nm=>(lanes[nm]||[]).forEach(it=>{ const x=dtbDecorate(it,today); const pn=_dtbProjOf(x); if(pn) _projSet.add(pn); }));
+  const projOpts=[..._projSet].sort();
+  const strip=`<div class="dtb-filterbar">`
+    +`<select onchange="setDtbProj(this.value)" title="Show only ONE project's tasks across the whole board (All = everything)">`
+    +`<option value="">📁 All projects (${projOpts.length})</option>`
+    +projOpts.map(pn=>`<option value="${escA(pn)}"${DTB_PROJ===pn?' selected':''}>${esc(pn)}</option>`).join('')+`</select>`
+    +`<input type="text" id="dtbFind" value="${escA(DTB_FIND)}" placeholder="🔍 find task…" oninput="setDtbFind(this.value)" title="Filter every lane to tasks whose name / project / note contains this">`
+    +`<button class="dtb-lanechip" style="--c:#38bdf8" onclick="dtbShowEverything()" title="One click: open EVERYTHING for the current pick — switches to the All window, turns off Overdue-only, clears the per-lane pickers, expands every lane AND switches to full-height lanes (one page scroll). Your project pick + find text stay.">⤢ Show all tasks</button>`
+    +`<button class="dtb-lanechip${DTB_TALL?' active':''}" style="--c:#38bdf8" onclick="dtbToggleTall()" title="Full-height lanes: no scrollbars inside the lanes — every lane grows to its content and you just scroll the page. Click again for the compact scrolling lanes.">⇕ Full lanes</button>`
+    +`<button class="dtb-lanechip${DTB_ODONLY?' active':''}" style="--c:#ef4444" onclick="dtbToggleOd()" title="Show ONLY overdue tasks in every lane (click again for everything)">⚠ Overdue only</button>`
+    +((DTB_PROJ||DTB_FIND)?`<button class="dtb-lanechip" onclick="dtbClearFilters()" title="Clear the project + find filters">✕ clear</button>`:'')
+    +(DTB_FOCUS?`<button class="dtb-lanechip active" style="--c:${DESIGN_COLORS[DTB_FOCUS]||'#64748b'}" onclick="dtbFocus('')" title="Focused on ${escA(DTB_FOCUS)} — click to show everyone again">🎯 ${esc(DTB_FOCUS)} ✕</button>`:'')
+    +`<span class="dtb-lanechips" title="Click a name to hide / show that lane (remembered on this device)">`
+    +order.map(nm=>{ const off=DTB_LANES_OFF.has(nm); const c=DESIGN_COLORS[nm]||'#64748b';
+      return `<button class="dtb-lanechip${off?' off':''}" style="--c:${c}" onclick="dtbLaneToggle('${escJsAttr(nm)}')" title="${off?'Show':'Hide'} ${escA(nm)}'s lane">${off?'◌ ':'● '}${esc(nm)}</button>`; }).join('')
+    +`</span></div>`;
   let totalShown=0;
-  const html=order.map(name=>{
+  const visNames=order.filter(nm=> DTB_FOCUS ? nm===DTB_FOCUS : !DTB_LANES_OFF.has(nm));
+  const html=visNames.map(name=>{
     const items=lanes[name]||[];
     const openN=items.filter(it=> it.general?!it.g.done:!projIsDone(it.t)).length;
     const odN=items.filter(it=>{ const dn=it.general?it.g.done:projIsDone(it.t); const d=it.general?(it.g.dueISO||''):(it.t.finISO||it.t.startISO||''); return d&&d<today&&!dn; }).length;
-    const dec=items.map(it=>dtbDecorate(it,today))
+    const decAll=items.map(it=>dtbDecorate(it,today));
+    const laneP=DTB_LANEPROJ[name]||'';
+    const laneProjs=[...new Set(decAll.map(_dtbProjOf).filter(Boolean))].sort();
+    const _lfilt=x=>{ if(laneP && _dtbProjOf(x)!==laneP) return false; return _dtbFilt(x); };
+    const dec=decAll
       .filter(x=> DTB_DONE || !x.done)
       .filter(x=> x.bucket.rank===0 || x.bucket.rank===5 || x.bucket.rank<=maxRank)
+      .filter(_lfilt)
       .sort((a,b)=> a.bucket.rank-b.bucket.rank || (a.dateISO||'9999').localeCompare(b.dateISO||'9999') || a.title.localeCompare(b.title));
     totalShown+=dec.length;
     const expanded=DTB_EXPAND.has(name), shown=expanded?dec:dec.slice(0,DTB_CAP);
     let rows='', lastK=null;
     shown.forEach(x=>{ if(x.bucket.k!==lastK){ rows+=`<div class="dtb-grp${x.bucket.k==='overdue'?' od':''}">${DTB_GLAB[x.bucket.k]}</div>`; lastK=x.bucket.k; } rows+=dtbTaskHtml(x); });
     if(dec.length>DTB_CAP) rows+=`<button class="dtb-showall" onclick="dtbToggleExpand('${escJsAttr(name)}')">${expanded?'▴ Show fewer':('▾ Show all '+dec.length+' tasks')}</button>`;
-    const beyond=items.filter(it=>{ const x=dtbDecorate(it,today); return (DTB_DONE||!x.done) && !(x.bucket.rank===0||x.bucket.rank===5||x.bucket.rank<=maxRank); }).length;
-    if(!dec.length) rows=`<div class="dtb-empty">No tasks in this window${beyond?` — ${beyond} beyond it`:''}. Add one below 👇</div>`;
+    const beyond=decAll.filter(x=> (DTB_DONE||!x.done) && _lfilt(x) && !(x.bucket.rank===0||x.bucket.rank===5||x.bucket.rank<=maxRank)).length;
+    const filtered=!!(DTB_PROJ||DTB_FIND||laneP);
+    if(!dec.length) rows=`<div class="dtb-empty">No tasks ${filtered?'match the filter in this window':'in this window'}${beyond?` — ${beyond} beyond it`:''}.${filtered?'':' Add one below 👇'}</div>`;
     else if(beyond) rows+=`<div class="dtb-empty">+${beyond} more beyond ${DTB_HZN_LAB[DTB_HZN]==='All'?'view':('“'+DTB_HZN_LAB[DTB_HZN]+'”')}</div>`;
     const col=DESIGN_COLORS[name]||'#64748b', initials=name.split(/\s+/).map(s=>s[0]).join('').slice(0,2).toUpperCase(), sl=dtbSlug(name);
-    return `<div class="dtb-lane" style="--lane-c:${col}">
+    const lanePick=(laneProjs.length>0||laneP)   // always show it (even one-project lanes) so every lane looks the same
+      ? `<div class="dtb-lanefilter"><select onchange="setDtbLaneProj('${escJsAttr(name)}',this.value)" title="Show only one project's tasks in ${escA(name)}'s lane">`
+        +`<option value="">📁 all (${laneProjs.length})</option>`
+        +laneProjs.map(pn=>`<option value="${escA(pn)}"${laneP===pn?' selected':''}>${esc(pn)}</option>`).join('')+`</select></div>`
+      : '';
+    return `<div class="dtb-lane" style="--lane-c:${col}" ondragover="event.preventDefault()" ondrop="dtbDropTask(event,'${escJsAttr(name)}')">
       <div class="dtb-napkin-brand"><img src="logo.png" alt="MRA" onerror="this.style.display='none'"><span>MRA Design</span></div>
       <div class="dtb-lane-h">
-        <div class="dtb-av" style="background:${col}">${esc(initials)}</div>
-        <div><div class="dtb-nm">${esc(name)}</div><div class="dtb-count">${openN} open${odN?` · <span style="color:#ef4444">${odN} overdue</span>`:''}</div></div>
-        <div class="dtb-acts"><button onclick="printDesignPerson('${escJsAttr(name)}')" title="Print ${escA(name)}'s one-pager">🖨</button></div>
+        <div class="dtb-av" style="background:${col};cursor:pointer" onclick="dtbFocus('${escJsAttr(name)}')" title="🎯 Focus — show ONLY ${escA(name)}'s lane (click again to show everyone)">${esc(initials)}</div>
+        <div><div class="dtb-nm" style="cursor:pointer" onclick="dtbFocus('${escJsAttr(name)}')" title="🎯 Focus — show ONLY ${escA(name)}'s lane (click again to show everyone)">${esc(name)}</div><div class="dtb-count">${openN} open${odN?` · <span style="color:#ef4444">${odN} overdue</span>`:''}</div></div>
+        <div class="dtb-acts">${lanePick}<button onclick="dtbFocus('${escJsAttr(name)}')" title="🎯 Focus — show only this lane">${DTB_FOCUS===name?'🎯✕':'🎯'}</button><button onclick="printDesignPerson('${escJsAttr(name)}')" title="Print ${escA(name)}'s one-pager">🖨</button></div>
       </div>
       <div class="dtb-lane-body">${rows}
         <div class="dtb-add">
@@ -9883,7 +10090,12 @@ function renderDesignTeam(){
         </div>
       </div></div>`;
   }).join('');
-  document.getElementById('dtbBody').innerHTML=`<div class="dtb-lanes">${html}</div>`+`<div class="dtb-charts">`+dtbCalHtml(today)+`</div>`+dtbChartsHtml(today);
+  // Keep your place through re-renders: inline edits (👤→ / notes / status) used to bounce the page
+  // back to the top and reset every lane's scroll. Snapshot all scroll positions, restore after the swap.
+  const _b=document.getElementById('dtbBody');
+  const _sc=_b?{top:_b.scrollTop, lanes:[..._b.querySelectorAll('.dtb-lane-body')].map(el=>el.scrollTop)}:null;
+  document.getElementById('dtbBody').innerHTML=strip+`<div class="dtb-lanes${visNames.length<=2?(' dtb-few n'+visNames.length):''}${DTB_TALL?' dtb-tall':''}">${html}</div>`+`<div class="dtb-charts">`+dtbCalHtml(today)+`</div>`+dtbChartsHtml(today);
+  if(_b&&_sc){ _b.scrollTop=_sc.top; const lbs=_b.querySelectorAll('.dtb-lane-body'); _sc.lanes.forEach((v,i)=>{ if(lbs[i]) lbs[i].scrollTop=v; }); }
   try{ dtbDrawGantt(today); }catch(e){}
   const ov2=document.getElementById('dtbOverlay'); if(ov2) ov2.classList.toggle('napkin', NAPKIN);
   const nb=document.getElementById('dtbNapkinBtn'); if(nb) nb.classList.toggle('active', NAPKIN);
@@ -10048,12 +10260,14 @@ function printDesignBoard(){
   dtbLoadLocal();
   const today=dtbToday(), lanes=dtbGather(), maxRank=DTB_MAXRANK[DTB_HZN]||2;
   const base=DESIGN_TEAM.concat([DESIGN_TEAM_LANE]);
-  const order=base.concat(Object.keys(lanes).filter(k=>base.indexOf(k)<0 && (lanes[k]||[]).length));
+  const order=base.concat(Object.keys(lanes).filter(k=>base.indexOf(k)<0 && (lanes[k]||[]).length))
+    .filter(nm=> DTB_FOCUS ? nm===DTB_FOCUS : !DTB_LANES_OFF.has(nm));   // print = what's ON SCREEN: hidden lanes / 🎯 focus stay out
   let grandOpen=0;
   const cols=order.map(name=>{
     const items=lanes[name]||[];
     const dec=items.map(it=>dtbDecorate(it,today)).filter(x=>DTB_DONE||!x.done)
       .filter(x=>x.bucket.rank===0||x.bucket.rank===5||x.bucket.rank<=maxRank)
+      .filter(x=>{ const lp=DTB_LANEPROJ[name]||''; if(lp && _dtbProjOf(x)!==lp) return false; return _dtbFilt(x); })   // same project/find/overdue filters as the screen
       .sort((a,b)=>a.bucket.rank-b.bucket.rank||(a.dateISO||'9999').localeCompare(b.dateISO||'9999')||a.title.localeCompare(b.title));
     const openN=items.filter(it=> it.general?!it.g.done:!projIsDone(it.t)).length; grandOpen+=openN;
     const odN=items.filter(it=>{ const dn=it.general?it.g.done:projIsDone(it.t); const d=it.general?(it.g.dueISO||''):(it.t.finISO||it.t.startISO||''); return d&&d<today&&!dn; }).length;
@@ -10065,7 +10279,7 @@ function printDesignBoard(){
     const col=DESIGN_COLORS[name]||'#64748b', initials=name.split(/\s+/).map(s=>s[0]).join('').slice(0,2).toUpperCase();
     return `<div class="col"><div class="colh" style="background:${col}"><span class="av">${esc(initials)}</span><span class="cn">${esc(name)}</span><span class="cc">${openN} open${odN?' · '+odN+' overdue':''}</span></div><div class="colb">${body}</div></div>`;
   }).join('');
-  const S=dtbStats(today), grand=S.reduce((a,s)=>a+s.open,0)||1;
+  const S=dtbStats(today).filter(s=>order.indexOf(s.name)>=0), grand=S.reduce((a,s)=>a+s.open,0)||1;
   const share=S.filter(s=>s.open>0).map(s=>`<span style="flex:${s.open};background:${s.color}" title="${escA(s.name)} ${s.open} (${Math.round(s.open/grand*100)}%)"></span>`).join('')||'<span style="flex:1;background:#ccc"></span>';
   const shareLeg=S.map(s=>`<span class="lg"><span class="sw" style="background:${s.color}"></span>${esc(s.name)} ${s.open}</span>`).join('');
   const now=new Date(), stamp=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear()+" "+now.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
@@ -11396,8 +11610,8 @@ function renderAll(){
   eotmSetup();
   if(VIEW==='history') renderHistory();
   if(GFS) renderGanttFS();
-  { const ov=document.getElementById('dtbOverlay'); if(ov&&ov.classList.contains('show') && !(DTB_EDIT.note||DTB_EDIT.gen)){
-      if(dtbShared() && Date.now()-DTB_LASTWRITE>15000) dtbFetchRemote().then(r=>{ const o2=document.getElementById('dtbOverlay'); if(r&&o2&&o2.classList.contains('show')&&!(DTB_EDIT.note||DTB_EDIT.gen)&&Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); renderDesignTeam(); } });
+  { const ov=document.getElementById('dtbOverlay'); if(ov&&ov.classList.contains('show') && !(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)){
+      if(dtbShared() && Date.now()-DTB_LASTWRITE>15000) dtbFetchRemote().then(r=>{ const o2=document.getElementById('dtbOverlay'); if(r&&o2&&o2.classList.contains('show')&&!(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)&&Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); renderDesignTeam(); } });
       else renderDesignTeam(); } }   // keep the Design board live (pull shared file if sharing's on), but don't clobber an in-progress edit OR a just-saved add
   setView(VIEW);
   restoreWallScroll(_wsnap);
