@@ -3037,6 +3037,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"15.6", date:"2026-07-07", title:"🐞 Fix: task move/copy list no longer offers leave-calendar rows", items:[
+    "The ⇄ Move / copy to trailer dropdown listed the <b>APL/Holidays staff-leave entries</b> (about a dozen identical rows) and shipped trailers — moving a task onto a leave row made it <b>vanish from every view</b>. The list now shows only real destinations (active trailers + 🛠 General), sorted by name with the trailer name first — <i>“Washtenaw County — Parking Lot · J1543”</i>." ] },
   { rev:"15.5", date:"2026-07-07", title:"🏭 Bay Occupancy Gantt (Projects tab)", items:[
     "New <b>🏭 Bay Occupancy</b> panel right under the Project Schedules Gantt — <b>one row per bay, a bar per unit</b> (Jxxxx · name, arrival → departure, next ~10 weeks). See at a glance <b>when each bay frees up</b> and where bookings <b>overlap</b>. <span style=\"color:#4ade80\">Green</span> = in the bay now, <span style=\"color:#60a5fa\">blue</span> = scheduled, <span style=\"color:#ef4444\">red</span> = past its ship date and still there; <b>— open —</b> = the bay is free today. Click a bar's row to open that job's editor." ] },
   { rev:"15.4", date:"2026-07-07", title:"🎨 Design board: re-assign happens ON the task card", items:[
@@ -5128,8 +5130,11 @@ function openEditTask(proj, raw){
   document.getElementById('etComments').value=(t&&t.cm)||"";
   ATT_STAGE.et=(t&&t.files)?t.files.slice():[]; window._etFilesOrig=JSON.stringify(ATT_STAGE.et); attRender('et');
   { const sel=document.getElementById('etMoveDest'), mr=document.getElementById('etMoveRow');
-    if(sel&&mr){ const jobs=(D.jobs||[]).filter(x=>x.project&&x.project!==proj);
-      sel.innerHTML = jobs.length ? jobs.map(x=>`<option value="${escA(x.project)}">${esc(x.bay||x.project)}${x.jobNum?(' · '+esc(x.jobNum)):''}</option>`).join('') : '<option value="">(no other trailers)</option>';
+    if(sel&&mr){ const jobs=(D.jobs||[]).filter(x=>x.project && x.project!==proj
+        && x.category!=='leave'                                    // staff-leave calendar rows are NOT task destinations (a task moved there vanishes from every view)
+        && (x.status||'').toLowerCase()!=='shipped')               // nor trailers that already left
+      .sort((a,b)=>String(a.project||'').localeCompare(String(b.project||'')));
+      sel.innerHTML = jobs.length ? jobs.map(x=>`<option value="${escA(x.project)}">${esc(x.project)}${x.bay?(' — '+esc(x.bay)):''}${x.jobNum?(' · '+esc(x.jobNum)):''}</option>`).join('') : '<option value="">(no other trailers)</option>';
       mr.style.display = jobs.length ? 'flex' : 'none'; const mm=document.getElementById('etMoveMsg'); if(mm) mm.textContent=''; } }
   document.getElementById('etMsg').textContent=""; document.getElementById('etSubmit').disabled=false;
   document.getElementById('editTaskModal').classList.add('show');
