@@ -104,7 +104,9 @@ jobs:
               --container-name pipeline --name lists.json --file lists.json --only-show-errors
             if (-not (Test-Path lists.json)) { throw "lists.json not present in the pipeline container" }
             if (-not (Test-Path data.js))    { throw "data.js (workbook build) not present to use as fleet base" }
-            python build_from_lists.py --lists lists.json --base data.js --out data.js
+            $asof = az storage blob show --account-name mrashopdash --account-key "$env:AZURE_STORAGE_KEY" `
+              --container-name pipeline --name lists.json --query properties.lastModified -o tsv
+            python build_from_lists.py --lists lists.json --base data.js --out data.js --asof "$asof"
             az storage blob upload --account-name mrashopdash --account-key "$env:AZURE_STORAGE_KEY" `
               --container-name '$web' --name data.js --file data.js `
               --content-type 'application/javascript' --content-cache-control 'no-cache, must-revalidate' `

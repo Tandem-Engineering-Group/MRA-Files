@@ -2989,6 +2989,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"14.2", date:"2026-07-07", title:"🐞 Fix: edits no longer flicker back before syncing", items:[
+    "Ship a trailer (or move/close/edit anything) and it could <b>reappear a minute later, then vanish again</b> at the next data cycle. Cause: the data file regenerates every few minutes, but the board rows inside it are only as fresh as a <b>Lists snapshot taken up to 15 minutes earlier</b> — so a \"new\" file could still predate your edit, and the board wrongly trusted it. The data now carries a <b>snapshot timestamp</b>, and your screen holds your edits until the data is <b>provably built from after them</b>. One fix, every edit type, every screen." ] },
   { rev:"14.1", date:"2026-07-07", title:"🔇 Cleaner saves on brand-new 🔧 tasks", items:[
     "Editing, closing or deleting a <b>just-added task whose name has an emoji or special characters</b> (like the 🔧 #NNN Fleetio tasks) used to fire a doomed first save attempt that SharePoint rejected — the change still landed via a retry, but it racked up dozens of failed-run alerts a week (and a <b>delete</b> could genuinely be lost). The board now skips the doomed attempt entirely and writes by row-ID as soon as the row syncs — same instant look on screen, near-zero failed runs, deletes safe." ] },
   { rev:"14.0", date:"2026-07-06", title:"🐞 Fix: resolved Fleetio issues stay off the board", items:[
@@ -4826,8 +4828,19 @@ function qaLine(el,ev){ const proj=el.dataset.proj, raw=el.dataset.task;
   qaOpen(ev, w=>qaReassign(proj,raw,w)); }
 /* ---------- Instant on-screen update: reflect a save immediately, and stop the
    30s poll from reverting it until the workbook's data.js actually regenerates. ---------- */
-let EDIT_PENDING=false, EDIT_BASE_GEN=null;
-function markPending(){ const D=window.MRA_DATA; EDIT_BASE_GEN=(D&&D.generatedAt)||null; EDIT_PENDING=true; snapSave(); }
+let EDIT_PENDING=false, EDIT_BASE_GEN=null, EDIT_TS=0, EDIT_LISTS_BASE='';
+const EDIT_HOLD_MAX=45*60*1000;   // stale-lists hold safety cap: never freeze the board more than 45 min past an edit
+function markPending(){ const D=window.MRA_DATA; EDIT_BASE_GEN=(D&&D.generatedAt)||null; EDIT_TS=Date.now(); EDIT_LISTS_BASE=(D&&D.listsAsOf)||''; EDIT_PENDING=true; snapSave(); }
+// A new generatedAt does NOT mean our edit is in the data: the board rows are only as fresh as the
+// LISTS SNAPSHOT (listsAsOf) the export was built from, and an export can run off a snapshot taken
+// BEFORE the edit — releasing then made ships/moves/closes "revert" for one cycle. Only release when
+// the incoming data is provably built from a snapshot taken comfortably after the edit.
+function listsCaughtUp(incoming, editTs, listsBase){
+  if(!listsBase) return true;                               // edit was made before watermarking existed → old behavior
+  const la=(incoming&&incoming.listsAsOf)||'';
+  if(!la) return false;                                     // incoming carries no lists stamp (fail-safe build) → keep holding
+  return la>listsBase && Date.parse(la)>=(editTs||0)+20000; // strictly newer snapshot, taken ≥20s after the edit (in-flight-write guard)
+}
 function oApply(){ markPending(); if(window.MRA_DATA) renderAll(); }
 
 /* ---------- Pending adds: keep a just-added task on THIS device through a page
@@ -4853,7 +4866,7 @@ function pendDrop(kind, project, taskText){ const fn=pendFleetNum(taskText);
    the stash and trust the server. Safety TTL avoids a permanent ghost. ---------- */
 const SNAP_KEY='mra_edit_snapshot_v1', SNAP_TTL=12*3600*1000;   // 12h
 function snapLoad(){ try{ return JSON.parse(localStorage.getItem(SNAP_KEY)||'null'); }catch(e){ return null; } }
-function snapSave(){ try{ if(EDIT_BASE_GEN && window.MRA_DATA) localStorage.setItem(SNAP_KEY, JSON.stringify({baseGen:EDIT_BASE_GEN, savedAt:Date.now(), data:window.MRA_DATA})); }catch(e){} }
+function snapSave(){ try{ if(EDIT_BASE_GEN && window.MRA_DATA) localStorage.setItem(SNAP_KEY, JSON.stringify({baseGen:EDIT_BASE_GEN, editTs:EDIT_TS, listsBase:EDIT_LISTS_BASE, savedAt:Date.now(), data:window.MRA_DATA})); }catch(e){} }
 function snapClear(){ try{ localStorage.removeItem(SNAP_KEY); }catch(e){} }
 // #2 — remember a just-toggled non-official flag on THIS device so it shows instantly and
 // survives the 30s poll / a new export until data.js actually reflects it (mirrors pendAdd).
@@ -11351,24 +11364,31 @@ async function refresh(){
     const txt=await r.text();
     const incoming=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1));
     // After a HARD RELOAD (the in-memory edit flags are gone) restore THIS device's
-    // unsynced changes from the saved snapshot — but only while data.js is still the
-    // same gen they were layered on. A newer export means the server has caught up
-    // (or moved on), so we drop the snapshot and trust it.
+    // unsynced changes from the saved snapshot — while data.js is still the same gen
+    // they were layered on, OR while the incoming data was built from a LISTS snapshot
+    // older than the edit (listsAsOf watermark — a "newer" export can still predate the edit).
     if(!EDIT_PENDING){
       const snap=snapLoad();
-      if(snap && snap.baseGen && incoming.generatedAt && snap.baseGen===incoming.generatedAt
-         && (Date.now()-(snap.savedAt||0) < SNAP_TTL) && snap.data){
+      if(snap && snap.baseGen && incoming.generatedAt
+         && (Date.now()-(snap.savedAt||0) < SNAP_TTL) && snap.data
+         && (snap.baseGen===incoming.generatedAt
+             || (!listsCaughtUp(incoming, snap.editTs||snap.savedAt, snap.listsBase||'')
+                 && Date.now()-(snap.editTs||snap.savedAt||0) < EDIT_HOLD_MAX))){
         window.MRA_DATA=snap.data; EDIT_PENDING=true; EDIT_BASE_GEN=snap.baseGen;
+        EDIT_TS=snap.editTs||snap.savedAt||Date.now(); EDIT_LISTS_BASE=snap.listsBase||'';
         renderAll(); return true;
       }
     }
-    // If you just made an edit and the workbook's data.js hasn't regenerated yet
-    // (same generatedAt as when you edited), keep your instant changes on screen
-    // instead of reverting. Once the file catches up (generatedAt advances), apply it.
-    if(EDIT_PENDING && incoming.generatedAt && EDIT_BASE_GEN && incoming.generatedAt===EDIT_BASE_GEN){
-      return true;
+    // If you just made an edit, keep your instant changes on screen instead of reverting:
+    // (a) while data.js hasn't regenerated at all (same generatedAt), and
+    // (b) while regenerated data.js was built from a LISTS snapshot taken BEFORE the edit —
+    //     that "fresh" file doesn't contain the edit yet (ships/moves looked reverted for a cycle).
+    if(EDIT_PENDING && incoming.generatedAt){
+      if(EDIT_BASE_GEN && incoming.generatedAt===EDIT_BASE_GEN) return true;
+      if(!listsCaughtUp(incoming, EDIT_TS, EDIT_LISTS_BASE)
+         && Date.now()-(EDIT_TS||0) < EDIT_HOLD_MAX) return true;
     }
-    EDIT_PENDING=false; snapClear();   // export advanced -> trust the server, drop the stash
+    EDIT_PENDING=false; snapClear();   // the lists have caught up past the edit -> trust the server, drop the stash
     window.MRA_DATA=incoming;
     mergePending(incoming);   // re-apply any just-added tasks this device hasn't seen land yet
     renderAll();
