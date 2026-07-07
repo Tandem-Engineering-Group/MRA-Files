@@ -234,6 +234,9 @@
   .dtb-lanechips{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto}
   .dtb-lanechip{font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--c,#64748b);background:transparent;color:var(--txt);cursor:pointer}
   .dtb-lanechip.off{opacity:.42;border-style:dashed;text-decoration:line-through}
+  .dtb-lanechip.active{background:var(--c,#64748b);color:#fff;font-weight:700}
+  .dtb-task[draggable="true"]{cursor:grab}
+  .dtb-task[draggable="true"]:active{cursor:grabbing}
   .dtb-lanefilter select{font-size:10.5px;max-width:130px;padding:3px 5px;border-radius:7px;border:1px solid var(--line);background:var(--panel2,rgba(255,255,255,.04));color:var(--txt)}
   .dtb-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:14px;flex:0 0 38px;box-shadow:0 3px 10px rgba(0,0,0,.3)}
   .dtb-nm{font-weight:800;font-size:15px;line-height:1.1}
@@ -884,7 +887,8 @@
     display:none; align-items:center; justify-content:center; padding:30px}
   .modal-overlay.show{display:flex}
   /* Task editors must sit ABOVE the full-screen project-detail overlay (z 150) when opened from it */
-  #projEditModal, #projTaskModal{z-index:200}
+  #projEditModal{z-index:200}
+  #projTaskModal{z-index:420}   /* above the project editor (200) AND the 🎨 Design board overlay (300) — the board can open this editor directly */
   #asgStdModal{z-index:210}   /* opened from the project editor — must sit ABOVE it */
   #signInModal{z-index:10010}  /* the passcode prompt can fire from ANY layer (editors z200-210, full-screen issues z10000) — it must always land on top */
   /* ⇄ Assign People bulk tool */
@@ -2967,7 +2971,7 @@ const GENERAL_HELP = `
     <p>The <span class="k">ASSETS</span> and <span class="k">FLEETIO</span> tabs each show a <b>live map</b> of where the units are (GPS from Samsara). A small map sits at the top; hit <span class="k">⛶ Expand map</span> to pop it full-screen to pan/zoom and click a pin for that unit's details (type, location, last fix, open Fleetio items). Pins are colored by location: <b style="color:#e04826">orange = at the MRA facility</b>, <b style="color:#2f6fe0">blue = elsewhere in Michigan</b>, grey = out of state; a faded pin means the GPS fix is <b>stale</b> (no recent report). Units that pack together (e.g. the MRA yard) <b>cluster</b> into a number that spreads apart as you zoom in. Equipment is placed at the location of the unit(s) on its job.</p></div>
   <div class="hsec"><h4>㉔ 🎨 Design Team board (☰ Menu)</h4>
     <p>Open <span class="k">☰ Menu → 🎨 Design Team board</span> for a dedicated view of the design / CAD crew (<b>Steve K, Sarah, Mark, Brandon</b>). Each person gets a <b>lane</b> showing the tasks they're assigned across all projects — <b>pulled live from the Projects tab</b> (assign someone on a project task and it lands here automatically). A 5th <b>MRA Design</b> lane catches anything tagged to the team generally.</p>
-    <p>Use the <b>Today / Week / Month / All</b> buttons up top to set the window — tasks group into <b>Overdue · Today · This Week · This Month · Upcoming · No-date</b>. Each person's <b>tile scrolls on its own</b>, so a long list doesn't move the whole page. You can <b>tweak it here without ever touching the project files</b>: hit <span class="k">✎ add note</span> on any task to attach a design note, or type in the <b>+ task</b> box at the bottom of a lane to add an ad-hoc/general task (with an optional due date). These <b>save to a shared file, so every device sees them</b> (about 30 seconds to sync) — but they still <b>never change the workbook or the Projects tab</b>. <span class="k">✓ Show done</span> (highlights when on) reveals completed items. <b>Filters (remembered per device):</b> the <span class="k">📁 project picker</span> narrows the whole board to one project (or <b>click any task's project chip</b>), the <span class="k">🔍 find box</span> filters every lane as you type, each lane has its <b>own little 📁 picker</b>, and the <b>lane chips</b> hide/show whole lanes (e.g. tuck MRA Design away). <b>👤→ Re-assign</b> (needs your code): pick the new person and 💾 Move — a project-fed task <b>writes the new assignee back to the project schedule</b>; an ad-hoc task just hops lanes. <b>📧 New:</b> when you add a task to someone's lane, that person automatically gets an <b>email</b> (task + due date + a link to the board) — as long as they have an email filled in on the <b>MRA Users</b> list.</p>
+    <p>Use the <b>Today / Week / Month / All</b> buttons up top to set the window — tasks group into <b>Overdue · Today · This Week · This Month · Upcoming · No-date</b>. Each person's <b>tile scrolls on its own</b>, so a long list doesn't move the whole page. You can <b>tweak it here without ever touching the project files</b>: hit <span class="k">✎ add note</span> on any task to attach a design note, or type in the <b>+ task</b> box at the bottom of a lane to add an ad-hoc/general task (with an optional due date). These <b>save to a shared file, so every device sees them</b> (about 30 seconds to sync) — but they still <b>never change the workbook or the Projects tab</b>. <span class="k">✓ Show done</span> (highlights when on) reveals completed items. <b>Filters (remembered per device):</b> the <span class="k">📁 project picker</span> narrows the whole board to one project (or <b>click any task's project chip</b>), the <span class="k">🔍 find box</span> filters every lane as you type, each lane has its <b>own little 📁 picker</b>, and the <b>lane chips</b> hide/show whole lanes (e.g. tuck MRA Design away). <b>👤→ Re-assign</b> (needs your code): pick the new person and 💾 Move — a project-fed task <b>writes the new assignee back to the project schedule</b>; an ad-hoc task just hops lanes — or simply <b>drag the card onto another lane</b>. <b>✎ task</b> opens the full task editor (dates, status, phase, %…) right over the board. <b>🎯 Focus</b> (click a name/avatar) shows only that person's lane; <b>⚠ Overdue only</b> filters every lane to overdue work. <b>📧 New:</b> when you add a task to someone's lane, that person automatically gets an <b>email</b> (task + due date + a link to the board) — as long as they have an email filled in on the <b>MRA Users</b> list.</p>
     <p><b>📊 Analytics at the bottom</b> show workload &amp; balance: <b>Workload balance</b> (open tasks per designer by urgency), <b>🥧 Share of load</b> (who holds what % of the work), <b>📈 Deadline load</b> (tasks due over the next 8 weeks), and <b>📅 Who's booked when</b> (a timeline bar per designer). All based on task counts pulled live from Projects.</p>
     <p>Each tile caps at <b>10 tasks</b> with a <span class="k">▾ Show all</span> button so the board stays tidy for a screenshot. The <span class="k">🖨</span> on a lane prints a <b>one-pager for that person</b>; <span class="k">🖨 Print board</span> (top) prints the <b>whole team on one landscape page</b> — everyone side by side, grouped by due date, with a share-of-load strip. And <span class="k">🍸 Napkin</span> mode flips the whole board (header included) into a fun bar-napkin look (cream cards, marker handwriting, MRA logo) — toggle back to clean anytime.</p></div>
 `;
@@ -3005,6 +3009,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"14.5", date:"2026-07-07", title:"🎨 Design board round 2 — drag, edit, focus, overdue", items:[
+    "<b>Drag a task card onto another person's lane</b> to re-assign it (same code-gated write as 👤→ — project tasks update the project schedule).",
+    "<b>✎ task</b> on any project-fed card opens the <b>FULL task editor</b> — name, dates, status, phase, %, comments — right over the board; saves straight to the project schedule.",
+    "<b>🎯 Focus mode</b>: click a person's name / avatar (or the 🎯 in their lane) and the board shows <b>only their lane</b>, full width — click again (or the 🎯 chip up top) to bring everyone back.",
+    "<b>⚠ Overdue only</b> toggle in the filter bar — every lane filters to just the overdue work. Stacks with the project picker and 🔍 find." ] },
   { rev:"14.4", date:"2026-07-07", title:"🎨 Design board power-up — filters, lanes, re-assign", items:[
     "<b>📁 Project picker</b> up top shows only one project's tasks across the whole board, a <b>🔍 find box</b> filters every lane as you type, and <b>clicking a task's project chip</b> filters to that project instantly (✕ clear brings everything back).",
     "<b>Per-lane picker</b>: each person's tile gets its own little 📁 dropdown to show just one project in that lane. And the <b>lane chips</b> in the filter bar hide/show whole lanes — e.g. tuck the <b>MRA Design</b> lane away until you need it. All remembered per device.",
@@ -6245,8 +6254,8 @@ function openProjTaskNew(){
   document.getElementById('projTaskModal').classList.add('show');
 }
 function editProjTaskBtn(el){ const id=el.dataset.id; if(!ensureAuth("edit a project task", ()=>openProjTaskEdit(id))) return; openProjTaskEdit(id); }
-function openProjTaskEdit(id){
-  const name=peCurrentProject(), p=oProj(name), t=projTaskByAnyId(p,id);   // id may be a real TaskID or an "s<_id>" handle (id-less rows)
+function openProjTaskEdit(id, projOverride){
+  const name=projOverride||peCurrentProject(), p=oProj(name), t=projTaskByAnyId(p,id);   // id may be a real TaskID or an "s<_id>" handle (id-less rows); projOverride lets the 🎨 Design board open this editor directly
   if(!t){ alert("Couldn't find that task — try reloading."); return; }
   window._ptProj=name; window._ptId=id; window._ptSpId=(t._id!=null?t._id:null);   // exact SharePoint row id → dup-safe writes
   { const mr=document.getElementById('ptMoveRow'), sel=document.getElementById('ptMoveDest');
@@ -9678,9 +9687,14 @@ function setDtbFind(v){ DTB_FIND=String(v||'').toLowerCase(); clearTimeout(windo
   window._dtbFindT=setTimeout(()=>{ renderDesignTeam(); const f=document.getElementById('dtbFind');
     if(f){ f.focus(); const L=f.value.length; try{ f.setSelectionRange(L,L); }catch(e){} } },350); }
 function dtbClearFilters(){ DTB_FIND=''; setDtbProj(''); }
+let DTB_FOCUS=''; try{ DTB_FOCUS=localStorage.getItem('mra_dtb_focus')||''; }catch(e){}
+function dtbFocus(name){ DTB_FOCUS=(DTB_FOCUS===name)?'':(name||''); try{ localStorage.setItem('mra_dtb_focus',DTB_FOCUS); }catch(e){} renderDesignTeam(); }
+let DTB_ODONLY=false; try{ DTB_ODONLY=localStorage.getItem('mra_dtb_odonly')==='1'; }catch(e){}
+function dtbToggleOd(){ DTB_ODONLY=!DTB_ODONLY; try{ localStorage.setItem('mra_dtb_odonly',DTB_ODONLY?'1':'0'); }catch(e){} renderDesignTeam(); }
 // A task's project label for filtering ('(added here)' = ad-hoc board tasks)
 function _dtbProjOf(x){ return x.general?'(added here)':(x.proj||''); }
 function _dtbFilt(x){
+  if(DTB_ODONLY && x.bucket.k!=='overdue') return false;
   if(DTB_PROJ && _dtbProjOf(x)!==DTB_PROJ) return false;
   if(DTB_FIND){ const s=(String(x.title||'')+' '+String(x.proj||'')+' '+String(x.note||'')).toLowerCase(); if(s.indexOf(DTB_FIND)<0) return false; }
   return true;
@@ -9839,14 +9853,22 @@ function dtbAsgStart(general, a, b){
 function dtbAsgSave(){
   const sel=document.getElementById('dtbasg-sel'); const who=sel?sel.value:''; const E=DTB_EDIT; DTB_EDIT={};
   if(!who){ renderDesignTeam(); return; }
-  if(E.asgGeneral){
+  dtbReassignTo(E.asgGeneral, E.asgGeneral?E.asgGid:E.asgProj, E.asgHandle, who);
+}
+// Core re-assign used by both the 👤→ picker and DRAG-a-card-onto-a-lane. Sign-in gated.
+function dtbReassignTo(general, a, b, who){
+  if(!who) return;
+  const retry=()=>dtbReassignTo(general, a, b, who);
+  if(typeof ensureAuth==='function' && !ensureAuth('re-assign a design task', retry)) return;
+  if(general){
     let ttl='', due='';
-    dtbApply(t=>{ const g=t.general.find(x=>x.id===E.asgGid); if(g){ g.who=who; ttl=g.t||g.title||''; due=g.dueISO||''; } });
+    dtbApply(t=>{ const g=t.general.find(x=>x.id===a); if(g && g.who!==who){ g.who=who; ttl=g.t||g.title||''; due=g.dueISO||''; } });
     try{ if(ttl && typeof dtbNotifyNewTask==='function') dtbNotifyNewTask(who, ttl, due); }catch(e){}
     renderDesignTeam(); return;
   }
-  const p=oProj(E.asgProj), t=p&&projTaskByAnyId(p,E.asgHandle); if(!t){ renderDesignTeam(); return; }
-  const payload={ action:'editProjectTask', project:E.asgProj, pin:CLOSE_PIN, user:CURRENT_USER,
+  const p=oProj(a), t=p&&projTaskByAnyId(p,b); if(!t){ renderDesignTeam(); return; }
+  if((t.who||'')===who){ renderDesignTeam(); return; }
+  const payload={ action:'editProjectTask', project:a, pin:CLOSE_PIN, user:CURRENT_USER,
     id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
     assigned:who, status:t.st||'', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
     milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
@@ -9854,6 +9876,14 @@ function dtbAsgSave(){
   shopWrite(payload); t.who=who; oRecomputeProject(p); oApply();
   try{ if(typeof dtbNotifyNewTask==='function') dtbNotifyNewTask(who, t.t||'', t.finISO||''); }catch(e){}
   renderDesignTeam();
+}
+function dtbDragStart(ev, general, a, b){ window._dtbDrag={g:!!general, a:a, b:b}; try{ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain','dtb'); }catch(e){} }
+function dtbDropTask(ev, lane){ if(ev) ev.preventDefault(); const d=window._dtbDrag; window._dtbDrag=null; if(!d) return; dtbReassignTo(d.g, d.a, d.b, lane); }
+// ✎ open the FULL project-task editor (dates, phase, status, %…) right over the board — writes to the project
+function dtbEditTask(proj, handle){
+  const retry=()=>dtbEditTask(proj, handle);
+  if(typeof ensureAuth==='function' && !ensureAuth('edit a project task', retry)) return;
+  openProjTaskEdit(handle, proj);
 }
 function dtbSetStatus(proj, handle, base){ const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return; dtbWriteStatus(proj, handle, _dtbCompose(base, projTaskPct(t.st)||0)); }
 function dtbSetPct(proj, handle, v){ const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return; dtbWriteStatus(proj, handle, _dtbCompose(projBaseStatus(t.st)||'Not Started', v)); }
@@ -9893,7 +9923,8 @@ function dtbTaskHtml(x){
     if(x.pending) mr=`<span class="dtb-pending" title="Marked ready — the PM needs to verify &amp; close it on the Projects tab">⏳ awaiting PM sign-off</span>`;
     else if(!x.done) mr=`<button onclick="dtbMarkReady('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Mark this done and flag it for the PM to verify &amp; close — it is NOT completed until they sign off">✓ Mark ready</button>`;
     acts=mr+`<button onclick="dtbEditNote('${escJsAttr(x.key)}')">${x.note?'✎ note':'✎ add note'}</button>`
-      +(x.done?'':`<button onclick="dtbAsgStart(0,'${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Re-assign this task to another designer (needs your code) — writes the new assignee back to the PROJECT schedule">👤→</button>`);
+      +(x.done?'':`<button onclick="dtbEditTask('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Open the FULL task editor (name, dates, status, phase, %…) right here — saves to the project schedule (needs your code)">✎ task</button>`
+        +`<button onclick="dtbAsgStart(0,'${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="Re-assign this task to another designer (needs your code) — writes the new assignee back to the PROJECT schedule">👤→</button>`);
     if(!x.done){   // team can set status + % right on the board (writes to the project schedule). Completion stays via "✓ Mark ready".
       const opts=['Not Started','In Progress','On Hold'];
       const cur=x.base||'Not Started', extra=(cur&&opts.indexOf(cur)<0)?`<option selected>${esc(cur)}</option>`:'';
@@ -9905,7 +9936,8 @@ function dtbTaskHtml(x){
     }
   }
   if(x.pending) chips.push(`<span class="dtb-chip pend" title="Waiting on PM verification">⏳ pending verify</span>`);
-  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}">`
+  const drag=x.done?'':` draggable="true" ondragstart="dtbDragStart(event,${x.general?1:0},'${escJsAttr(x.general?x.gid:(x.proj||''))}','${escJsAttr(x.general?'':(x.handle||''))}')" title="Drag onto another person's lane to re-assign (needs your code)"`;
+  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}"${drag}>`
     +`${x.general?'<span class="dtb-addpin" title="Added on this board (not from a project file)">📌</span>':''}`
     +`<div class="dtb-title">${x.ms?'◆ ':''}${esc(x.title)}</div>`
     +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}${prog}`
@@ -9929,13 +9961,15 @@ function renderDesignTeam(){
     +`<option value="">📁 All projects (${projOpts.length})</option>`
     +projOpts.map(pn=>`<option value="${escA(pn)}"${DTB_PROJ===pn?' selected':''}>${esc(pn)}</option>`).join('')+`</select>`
     +`<input type="text" id="dtbFind" value="${escA(DTB_FIND)}" placeholder="🔍 find task…" oninput="setDtbFind(this.value)" title="Filter every lane to tasks whose name / project / note contains this">`
+    +`<button class="dtb-lanechip${DTB_ODONLY?' active':''}" style="--c:#ef4444" onclick="dtbToggleOd()" title="Show ONLY overdue tasks in every lane (click again for everything)">⚠ Overdue only</button>`
     +((DTB_PROJ||DTB_FIND)?`<button class="dtb-lanechip" onclick="dtbClearFilters()" title="Clear the project + find filters">✕ clear</button>`:'')
+    +(DTB_FOCUS?`<button class="dtb-lanechip active" style="--c:${DESIGN_COLORS[DTB_FOCUS]||'#64748b'}" onclick="dtbFocus('')" title="Focused on ${escA(DTB_FOCUS)} — click to show everyone again">🎯 ${esc(DTB_FOCUS)} ✕</button>`:'')
     +`<span class="dtb-lanechips" title="Click a name to hide / show that lane (remembered on this device)">`
     +order.map(nm=>{ const off=DTB_LANES_OFF.has(nm); const c=DESIGN_COLORS[nm]||'#64748b';
       return `<button class="dtb-lanechip${off?' off':''}" style="--c:${c}" onclick="dtbLaneToggle('${escJsAttr(nm)}')" title="${off?'Show':'Hide'} ${escA(nm)}'s lane">${off?'◌ ':'● '}${esc(nm)}</button>`; }).join('')
     +`</span></div>`;
   let totalShown=0;
-  const html=order.filter(nm=>!DTB_LANES_OFF.has(nm)).map(name=>{
+  const html=order.filter(nm=> DTB_FOCUS ? nm===DTB_FOCUS : !DTB_LANES_OFF.has(nm)).map(name=>{
     const items=lanes[name]||[];
     const openN=items.filter(it=> it.general?!it.g.done:!projIsDone(it.t)).length;
     const odN=items.filter(it=>{ const dn=it.general?it.g.done:projIsDone(it.t); const d=it.general?(it.g.dueISO||''):(it.t.finISO||it.t.startISO||''); return d&&d<today&&!dn; }).length;
@@ -9963,12 +9997,12 @@ function renderDesignTeam(){
         +`<option value="">📁 all (${laneProjs.length})</option>`
         +laneProjs.map(pn=>`<option value="${escA(pn)}"${laneP===pn?' selected':''}>${esc(pn)}</option>`).join('')+`</select></div>`
       : '';
-    return `<div class="dtb-lane" style="--lane-c:${col}">
+    return `<div class="dtb-lane" style="--lane-c:${col}" ondragover="event.preventDefault()" ondrop="dtbDropTask(event,'${escJsAttr(name)}')">
       <div class="dtb-napkin-brand"><img src="logo.png" alt="MRA" onerror="this.style.display='none'"><span>MRA Design</span></div>
       <div class="dtb-lane-h">
-        <div class="dtb-av" style="background:${col}">${esc(initials)}</div>
-        <div><div class="dtb-nm">${esc(name)}</div><div class="dtb-count">${openN} open${odN?` · <span style="color:#ef4444">${odN} overdue</span>`:''}</div></div>
-        <div class="dtb-acts">${lanePick}<button onclick="printDesignPerson('${escJsAttr(name)}')" title="Print ${escA(name)}'s one-pager">🖨</button></div>
+        <div class="dtb-av" style="background:${col};cursor:pointer" onclick="dtbFocus('${escJsAttr(name)}')" title="🎯 Focus — show ONLY ${escA(name)}'s lane (click again to show everyone)">${esc(initials)}</div>
+        <div><div class="dtb-nm" style="cursor:pointer" onclick="dtbFocus('${escJsAttr(name)}')" title="🎯 Focus — show ONLY ${escA(name)}'s lane (click again to show everyone)">${esc(name)}</div><div class="dtb-count">${openN} open${odN?` · <span style="color:#ef4444">${odN} overdue</span>`:''}</div></div>
+        <div class="dtb-acts">${lanePick}<button onclick="dtbFocus('${escJsAttr(name)}')" title="🎯 Focus — show only this lane">${DTB_FOCUS===name?'🎯✕':'🎯'}</button><button onclick="printDesignPerson('${escJsAttr(name)}')" title="Print ${escA(name)}'s one-pager">🖨</button></div>
       </div>
       <div class="dtb-lane-body">${rows}
         <div class="dtb-add">
