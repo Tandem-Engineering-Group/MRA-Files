@@ -542,6 +542,10 @@
   .asg{background:var(--panel); border:1px solid var(--line); border-radius:12px; display:flex; flex-direction:column; min-height:0}
   .asg-h{padding:9px 13px; font-weight:700; font-size:var(--ds-crew,15px); border-bottom:1px solid var(--line); display:flex; align-items:center; letter-spacing:.3px}
   .asg-h .count{margin-left:auto}
+  /* 🚫 out-today: lane badge + the strip above the crew columns (both show on the wall TV too) */
+  .asg-h .outbadge{margin-left:8px;font-size:10px;font-weight:700;background:rgba(239,68,68,.14);color:#fca5a5;border:1px solid rgba(239,68,68,.42);border-radius:999px;padding:2px 8px;letter-spacing:.2px;white-space:nowrap}
+  #outStrip{font-size:11.5px;color:var(--txt);font-weight:400;letter-spacing:0;text-transform:none;background:rgba(239,68,68,.09);border:1px solid rgba(239,68,68,.32);border-radius:8px;padding:4px 10px}
+  #outStrip .outwhy{color:var(--muted)}
   .asgbody{padding:10px; display:flex; flex-direction:column; gap:calc(10px*var(--ds-density,1)); overflow-y:auto}
   /* Sal's panel holds two task columns (used only in wall mode); normal view shows just the one. */
   .asg-split{display:flex; flex-direction:row; gap:10px; min-height:0; flex:1 1 auto}   /* Sal's two columns side by side */
@@ -1494,6 +1498,7 @@
             <button class="mi" id="btnAddTask" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
             <button class="mi" id="btnAddJob" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
             <button class="mi" id="btnBringBack" onclick="openBringBack();closeDrops()" title="Return a shipped/finished trailer to the floor for new maintenance — keeps its ship history (needs code)">🔄 Bring back trailer</button>
+            <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
             <button class="mi" id="btnPrint" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
             <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
             <div class="mi-div">View</div>
@@ -1558,6 +1563,7 @@
           <button data-w="Josh" onclick="toggleAsgWho('Josh')">Josh</button>
           <button data-w="Jeff" onclick="toggleAsgWho('Jeff')">Jeff</button>
         </span>
+        <span id="outStrip" style="flex-basis:100%;display:none"></span>
         <span id="asgPageInd" style="font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none;flex-basis:100%"></span>
       </h2>
       <div class="assignees" id="assigneesA">
@@ -2147,6 +2153,8 @@
           <div><label>Start date</label><input id="lvStart" type="date"></div>
           <div><label>End date</label><input id="lvEnd" type="date"></div>
         </div>
+        <div><label>Reason <span class="muted-note">(optional — shows on the board, e.g. “Called in”)</span></label>
+          <select id="lvReason"><option value=""></option><option>Called in</option><option>Off-site</option><option>Appointment</option><option>Vacation</option><option>Training</option><option>Other</option></select></div>
         <div id="lvMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="closeLeave()">Cancel</button>
@@ -2962,7 +2970,7 @@ const GENERAL_HELP = `
       <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule. <b>Assigned to</b> now has a <b>2nd dropdown</b> — pick two crews for a <b>team-effort</b> task and it shows in both their columns (leave blank for one).</li>
       <li><span class="k">✎ edit</span> on a job card — move bay, change start/finish dates, tweak notes; <b>🗑 Delete job</b> is in that form too. <b>Tip:</b> just <b>click any job # </b>(on a bay tile or a crew task card) to jump straight into that job's editor (asks for your code first).</li>
       <li>On each task line: <span class="k">✓ close</span>, <span class="k">✎</span> edit (text, assignee, status, milestone, comments), <span class="k">🗑</span> delete. Turn on <span class="k">Show closed</span> and closed tasks get <span class="k">↩</span> reopen + 🗑 delete.</li>
-      <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.)</li>
+      <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates + optional <b>reason</b>), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.) For a same-day call-in, <span class="k">☰ Actions ▸ 🚫 Out today…</span> pre-fills a one-day entry — the person's crew column gets a red <b>🚫 Out today</b> badge and a strip above the crew columns lists everyone out (even folks without their own column, like Sal's crew).</li>
       <li><b>📷 Attachments</b> — the ➕ Add and ✎ Edit task forms have <span class="k">📷 Photo · 📎 PDF / file · 🔗 Link</span> buttons. Snap a picture at check-in (photos shrink themselves before upload, so it's quick from a phone), attach a PDF, or paste a link (a SharePoint doc, a spec page…). Attachments show as <b>thumbnails right on the task line</b> — hover to zoom, click to open full size — and follow the task onto the crew sheets, the 🔗 custom dash links and the prints, exactly like the Fleetio photos do.</li>
     </ul>
     <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. <b>Everything you change</b> — adds, edits, completes, deletes, moves — now also sticks on <b>your</b> device even if you <b>hit refresh / reload the page</b> (handy on an iPad, which reloads tabs on its own). It holds your changes until the workbook's data.js catches up on the next ~15-min export, then quietly hands off to the real data — so nothing ever appears to vanish when you refresh.</div></div>
@@ -3050,6 +3058,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"16.0", date:"2026-07-07", title:"🚫 Out today — called in / off-site, on the board", items:[
+    "Somebody calls in? <b>☰ Actions ▸ 🚫 Out today…</b> — type the name, pick a reason (Called in / Off-site / Appointment…), save. Their crew column header gets a red <b>🚫 Out today</b> badge and a strip above the crew columns lists <b>everyone out</b> — including team members without their own column (Sal's crew: Jake, John, Brent, Kayla…). Shows on the wall TV too.",
+    "It's powered by <b>Staff on Leave</b> underneath — the entry lands there automatically (synced, with the reason and an OUT TODAY badge while it's active), so vacations and call-ins live in one list. The leave form also gained the optional <b>Reason</b> field." ] },
   { rev:"15.9", date:"2026-07-07", title:"⇄ Bulk Edits reads like the editor now", items:[
     "The task list in <b>⇄ Bulk Edits</b> is now <b>grouped by phase with the tasks indented underneath</b> (date-sorted inside each phase), just like ✎ Edit Project Tasks — and each <b>phase header has its own checkbox</b> that grabs or releases the whole phase in one click. A new <b>sort picker</b> flips the list to 📅 by date, 🔤 by name, or 👤 by assignee (remembered per device)." ] },
   { rev:"15.8", date:"2026-07-07", title:"📅 Bulk-bump dates in ⇄ Bulk Edits", items:[
@@ -5499,8 +5510,18 @@ function openLeave(){ if(!ensureAuth("add a leave entry")) return; _lvRow=null; 
   document.getElementById('lvTitle').textContent='➕ Add leave';
   const n=document.getElementById('lvName'); n.value=''; n.readOnly=false; n.style.opacity=''; n.title='';
   document.getElementById('lvStart').value=''; document.getElementById('lvEnd').value='';
+  { const r=document.getElementById('lvReason'); if(r) r.value=''; }
   document.getElementById('lvMsg').textContent=''; const b=document.getElementById('lvSubmit'); b.disabled=false; b.textContent='Add';
   document.getElementById('leaveModal').classList.add('show'); document.getElementById('lvName').focus(); }
+// 🚫 quick "somebody's out TODAY" — the leave modal pre-filled to a one-day entry with a reason.
+// Their crew column gets an "Out today" badge and they appear under Staff on Leave (same data, synced).
+function openOutToday(){ if(typeof ensureAuth==='function' && !ensureAuth('mark someone out today', openOutToday)) return;
+  openLeave(); if(!document.getElementById('leaveModal').classList.contains('show')) return;
+  const today=(window.MRA_DATA||{}).todayISO||localISO(Date.now());
+  document.getElementById('lvTitle').textContent='🚫 Out today';
+  document.getElementById('lvStart').value=today; document.getElementById('lvEnd').value=today;
+  { const r=document.getElementById('lvReason'); if(r) r.value='Called in'; }
+}
 function openLeaveEdit(row){ if(!ensureAuth("edit a leave entry")) return;
   const j=((window.MRA_DATA||{}).jobs||[]).find(x=>x.row===row); if(!j){ alert("Couldn't find that leave entry."); return; }
   _lvRow=row; window._lvJob=j;
@@ -5520,15 +5541,16 @@ function submitLeave(){
   const adding=!_lvRow; const btn=document.getElementById('lvSubmit'); btn.disabled=true; btn.textContent=adding?'Adding…':'Saving…';
   msg.style.color='var(--muted)'; msg.textContent='Sending…';
   let payload;
+  const reason=((document.getElementById('lvReason')||{}).value||'').trim();
   if(adding){ payload={ action:"addJob", project:name, bay:"APL/Holidays", status:"Leave",
-      start:start, completion:end||start, jobNum:"", client:"", pm:"", notes:"", pin:CLOSE_PIN, user:CURRENT_USER }; }
+      start:start, completion:end||start, jobNum:"", client:"", pm:"", notes:reason, pin:CLOSE_PIN, user:CURRENT_USER }; }
   else { const j=window._lvJob||{}; payload={ action:"editJob", row:_lvRow, project:j.project||name,
       bay:(j.bay||"APL/Holidays"), status:(j.status||"Leave"), start:start, completion:end||start, notes:(j.notesRaw||""), pin:CLOSE_PIN, user:CURRENT_USER }; }
   shopWrite(payload)
     .then(()=>{
       const D=window.MRA_DATA||{};
       if(adding){ if(D.jobs){ const nj={ row:900000+Math.floor(Math.random()*90000), bay:"APL/Holidays", project:name, status:"Leave",
-          startISO:start||null, completionISO:end||start||null, notesRaw:"", openTasks:[], openCount:0, doneCount:0, doneTasks:[], salOpen:0, tasks:[] };
+          startISO:start||null, completionISO:end||start||null, notesRaw:reason||"", openTasks:[], openCount:0, doneCount:0, doneTasks:[], salOpen:0, tasks:[] };
           oRecat(nj); D.jobs.push(nj); } }
       else { const j=oJobRow(_lvRow); if(j){ j.startISO=start||null; j.completionISO=end||start||null; oRecat(j); } }
       oApply();
@@ -7977,9 +7999,28 @@ function renderFloor(D){
   document.getElementById('leave').innerHTML=leaveSorted.map(j=>{
     const who=esc(j.project.replace(/\s*[–-]\s*APL.*$/i,""));
     const range=j.startISO?(fmtMD(j.startISO)+(j.completionISO&&j.completionISO!==j.startISO?"–"+fmtMD(j.completionISO):"")):"";
-    return `<div class="row"><div><div class="lead">${who}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit these leave dates">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
+    const activeNow=j.startISO && j.startISO<=today && ((j.completionISO||j.startISO)>=today);
+    const why=(j.notesRaw||'').trim();
+    return `<div class="row"><div><div class="lead">${who}${activeNow?' <span class="badge red">OUT TODAY</span>':''}${why?` <span class="badge grey">${esc(why)}</span>`:''}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit these leave dates">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
   }).join("")||`<div class="empty">No upcoming leave</div>`;
   document.getElementById('leaveCount').textContent=leaveSorted.length;
+
+  // 🚫 Out-today: leave entries ACTIVE today badge their crew's column header, and a strip up top
+  // lists everyone out (incl. team members without a lane, e.g. Sal's crew: Jake / John / Brent / Kayla).
+  const outNow=(D.jobs||[]).filter(j=>j.category==='leave' && j.startISO && j.startISO<=today && ((j.completionISO||j.startISO)>=today))
+    .map(j=>({name:String(j.project||'').replace(/\s*[–-]\s*APL.*$/i,'').trim(), reason:(j.notesRaw||'').trim()}));
+  { const st=document.getElementById('outStrip');
+    if(st){ st.style.display=outNow.length?'':'none';
+      st.innerHTML=outNow.length?('🚫 <b>Out today:</b> '+outNow.map(o=>esc(o.name)+(o.reason?(' <span class="outwhy">('+esc(o.reason)+')</span>'):'')).join(' · ')):''; } }
+  document.querySelectorAll('#assigneesA .asg[data-asg], #assigneesB .asg[data-asg]').forEach(l=>{
+    const lane=l.getAttribute('data-asg')||'';
+    const hit=outNow.find(o=>_verifyNameMatch(o.name,lane)||_verifyNameMatch(lane,o.name));
+    const h=l.querySelector('.asg-h'); if(!h) return;
+    let b=h.querySelector('.outbadge');
+    if(hit){ if(!b){ b=document.createElement('span'); b.className='outbadge'; const c=h.querySelector('.count'); h.insertBefore(b, c||null); }
+      b.textContent='🚫 Out today'+(hit.reason?(' · '+hit.reason):''); b.title=hit.name+(hit.reason?(' — '+hit.reason):'')+' — from Staff on Leave (edit or delete the entry there)'; }
+    else if(b) b.remove();
+  });
 
   renderSal(D);
   renderReturns(D);
