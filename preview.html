@@ -182,6 +182,7 @@
   .g-row.g-phaserow .g-lbl{font-weight:700; color:var(--txt); font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; opacity:.92}
   body.light .g-row.g-phaserow{background:rgba(0,0,0,.035)}
   .g-row.g-nonoff{background:rgba(245,197,66,.055)}   /* 🏷 non-official project — very muted amber wash across the whole row (the 🏷 tag stays too) */
+  .g-row.g-parked{opacity:.55; filter:saturate(.5)}   /* ⏸ parked project — dimmed/greyed row: visibly frozen, not gone */
   body.light .g-row.g-nonoff{background:rgba(176,124,16,.08)}
   .g-lbl .gcaret{display:inline-block; width:13px; color:var(--blue); font-size:11px; user-select:none}
   .g-rowedit .g-gutter{cursor:pointer}
@@ -909,6 +910,8 @@
   .vq-panel{border:1px solid rgba(245,158,11,.5); background:rgba(245,158,11,.07)}
   .vq-panel > h2{display:flex; align-items:center; flex-wrap:wrap; gap:8px}
   .vq-panel > h2 .vq-hint{font-size:11px; font-weight:400; color:var(--muted); margin-left:10px; text-transform:none; letter-spacing:0}
+  .vq-pick{font-size:11px; padding:3px 7px; border-radius:7px; border:1px solid var(--line); background:var(--panel); color:var(--txt); margin-left:auto}
+  .vq-pick + .vq-who, .vq-pick + .vq-signin{margin-left:8px}
   .vq-list{display:flex; flex-direction:column; gap:6px; margin-top:8px}
   .vq-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel2)}
   .vq-task{min-width:0; flex:1; cursor:pointer; border-radius:6px; padding:2px 4px; margin:-2px -4px}
@@ -1651,6 +1654,7 @@
             <span class="rangebtns" id="projHolPick" title="Which holidays to shade on the Gantt"></span>
             <button class="expandbtn mraHlBtn" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects — spot over-scheduling. Click to toggle.">🟧 MRA Shop load</button>
             <button id="nonoffToggle" class="expandbtn" onclick="toggleNonOff()" title="Hide / show 🏷 non-official projects (informal work) across this tab — Gantt, Progress, loads and KPIs">🏷 Hide non-official</button>
+            <button id="parkToggle" class="expandbtn" onclick="togglePark()" title="Hide / show ⏸ parked (frozen / on-hold) projects across this tab — Gantt, Progress, loads and KPIs">⏸ Hide parked</button>
             <button id="archToggle" class="expandbtn" onclick="toggleArchived()" title="Wrapped projects (shipped, or 100% done, more than 8 days ago) auto-archive off the active board. Click to show/hide them — they're always in 🔍 search too.">🗄 Show archived</button>
           </div>
         </details>
@@ -2212,6 +2216,7 @@
         <button class="btn-ghost" id="pePMBtn" onclick="setProjectPMBtn()" title="Set the Program Development lead for this project — applies to all its tasks and the matching floor job (no Excel)">👤 Set PM</button>
         <button class="btn-ghost" id="peJobBtn" onclick="setProjectJobNumBtn()" title="Set this project's Job # — shows as 'Jxxxx · Project Name' on the Gantt, the detailed view, and the task editors">🔖 Job #</button>
         <button class="btn-ghost" id="peNonOffBtn" onclick="toggleProjNonOfficial()" title="Flag this as a NON-OFFICIAL project — informal work on someone's plate (e.g. JFSD Trailer Weight). It still shows on the Gantt, Progress and PM Load, just tagged so everyone knows it isn't a formal job.">🏷 Non-official</button>
+        <button class="btn-ghost" id="peParkBtn" onclick="toggleProjParked()" title="⏸ PARK this project — freeze / put it on hold. It stays on the Gantt (dimmed, tagged ⏸) but stops counting as At-Risk and drops out of Needs Attention. Task statuses are untouched, so un-parking restores it exactly. There's a '⏸ Hide parked' toggle on the Gantt toolbar too.">⏸ Park</button>
         <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
         <button class="btn-ghost" onclick="peOpenDetail()" title="Open this project's full-screen Gantt (detailed view)">⛶ Gantt view</button>
         <button class="btn-ghost" onclick="deleteProjectBtn()" title="Delete this ENTIRE project — all its tasks + the matching floor job (can't be undone; re-upload the template to restore)" style="border-color:rgba(239,68,68,.5); color:#fca5a5">🗑 Delete project</button>
@@ -2634,6 +2639,9 @@ function applyProjView(){ const pv=document.getElementById('projectsView'); if(!
   document.querySelectorAll('#projViewPick button').forEach(b=>b.classList.toggle('on', b.getAttribute('data-v')===PROJ_VIEWMODE)); }
 // 🏷 hide/show non-official projects across the whole tab (KPIs, Gantt, Progress, loads — like Show archived)
 let HIDE_NONOFF=false; try{ HIDE_NONOFF=localStorage.getItem('mra_hide_nonoff')==='1'; }catch(e){}
+let HIDE_PARKED=false; try{ HIDE_PARKED=localStorage.getItem('mra_hide_parked')==='1'; }catch(e){}
+function togglePark(){ HIDE_PARKED=!HIDE_PARKED; try{ localStorage.setItem('mra_hide_parked',HIDE_PARKED?'1':'0'); }catch(e){}
+  if(window.MRA_DATA) renderProjects(window.MRA_DATA); }
 function toggleNonOff(){ HIDE_NONOFF=!HIDE_NONOFF; try{ localStorage.setItem('mra_hide_nonoff',HIDE_NONOFF?'1':'0'); }catch(e){}
   if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(typeof GFS!=='undefined'&&GFS&&typeof renderGanttFS==='function') renderGanttFS(); } }
 const PALETTE = ['#3b82f6','#22c55e','#f59e0b','#a78bfa','#2dd4bf','#ef4444',
@@ -2910,14 +2918,14 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. No login, nothing to edit by hand. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span> (the classic high-level view), <span class="k">+ Tasks</span> (milestones plus every parent task, no subtasks), or <span class="k">+ All tasks &amp; subtasks</span> (the full list with children indented). Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule — handy for a "what's left" handout.</p></div>
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
-    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text (stacks with the assignee filter); <span class="k">Type</span> is now a real <b>dropdown</b> (with an <b>➕ Other…</b> option to add a new type) and it <b>saves</b>; <span class="k">🏷 Non-official</span> flags a project as informal work (e.g. JFSD Trailer Weight) — it stays on the Gantt, Progress and PM Load, just tagged: a 🏷 on its name (including in this editor's project dropdown) and a <b>muted amber wash across its whole Gantt row</b> so it reads at a glance; <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt (which now has its own <span class="k">✓ Hide completed</span>); and a task <b>requires both a Start and a Finish date</b> (the Finish can't be before the Start; a single-date milestone is fine and gets mirrored). The editor header, the project picker and the detailed-view title now show the project's <b>Job #</b> — <b>“J1557 · Project Name”</b> — when it's linked to a trailer.</p></div>
+    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text (stacks with the assignee filter); <span class="k">Type</span> is now a real <b>dropdown</b> (with an <b>➕ Other…</b> option to add a new type) and it <b>saves</b>; <span class="k">🏷 Non-official</span> flags a project as informal work (e.g. JFSD Trailer Weight) — it stays on the Gantt, Progress and PM Load, just tagged: a 🏷 on its name (including in this editor's project dropdown) and a <b>muted amber wash across its whole Gantt row</b> so it reads at a glance; <span class="k">⏸ Park</span> <b>freezes a project</b> (on hold): it stays on the Gantt but <b>dimmed and tagged ⏸</b>, shows a <span class="k">⏸ parked</span> chip in Project Progress, and <b>stops counting as At-Risk / Needs Attention</b> — task statuses are untouched, so un-parking restores it exactly (a <span class="k">⏸ Hide parked</span> toggle on the Gantt toolbar tucks parked projects away entirely); <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt (which now has its own <span class="k">✓ Hide completed</span>); and a task <b>requires both a Start and a Finish date</b> (the Finish can't be before the Start; a single-date milestone is fine and gets mirrored). The editor header, the project picker and the detailed-view title now show the project's <b>Job #</b> — <b>“J1557 · Project Name”</b> — when it's linked to a trailer.</p></div>
   <div class="hsec"><h4>⑯ᵃ ⇄ Bulk Edits — change many tasks at once (PROJECTS tab)</h4>
     <p>Don't open tasks one at a time. Click <span class="k">⇄ Bulk Edits</span> on the PROJECTS toolbar to change <b>assignee</b>, <b>phase</b>, <b>type</b> or <b>status</b> across a batch of tasks:</p>
     <p><b>1.</b> Pick a <b>project</b> (or ★ All projects). <b>2.</b> Optionally narrow to a current assignee and/or 🔎 filter by text. <b>3.</b> <b>Check the tasks</b> (or <span class="k">Select all</span>). <b>4.</b> Pick the <b>field tab</b> at the bottom — 👤 Assignee · 📂 Phase · 🏷 Type · 📊 Status — set the value and hit <span class="k">Apply to checked</span> (you'll see the change staged in green). <b>5.</b> Stage more if you like (even different fields), then <span class="k">💾 Save</span>.</p>
     <p><b>Assignee</b> by default <b>keeps each task's group and adds the person</b> as the 2nd tier (so <i>MRA Design</i> becomes <i>MRA Design / Sarah Williams</i>) — what the Crew/Resource rollups and the Design board read; you can also switch the group outright or clear it. Code-protected; changes show instantly and settle in the lists within ~15 min.</p></div>
   <div class="hsec"><h4>⑯ᵛ ✅ Mark-ready → PM verifies (Design tasks)</h4>
     <p><b>Project-fed design tasks now get a sign-off step.</b> On the 🎨 Design board (open, no login), a project task shows a <span class="k">✓ Mark ready</span> button. When a designer clicks it, the task flips to <b>🟡 Pending verification</b> — a flag, <b>not</b> a completion.</p>
-    <p>On the <span class="k">PROJECTS</span> tab, a <b>🟡 Awaiting verification</b> panel lists those tasks (project · PM · who marked it). The task's <b>assigned PM</b> — or an <b>admin</b> — signs in with their code and clicks <span class="k">✓ Verify</span> to mark it truly Complete, or <span class="k">↩ Send back</span> to bounce it to In Progress. Everyone can see the flag, but only the PM/admin can act on it. <b>Tasks added directly on the Design board still just close themselves</b> (no sign-off — they never touch the project files).</p></div>
+    <p>On the <span class="k">PROJECTS</span> tab, a <b>🟡 Awaiting verification</b> panel lists those tasks (project · PM · who marked it). The task's <b>assigned PM</b> — or an <b>admin</b> — signs in with their code and clicks <span class="k">✓ Verify</span> to mark it truly Complete, or <span class="k">↩ Send back</span> to bounce it to In Progress. Everyone can see the flag, but only the PM/admin can act on it. The panel <b>collapses</b> with the ▾ in its header (remembered per device), and once you're signed in it defaults to <b>👤 Mine</b> — just the tasks where <i>you're</i> the PM — with a <b>picker</b> to flip to All or any one PM (handy for an admin approving on someone's behalf). <b>Tasks added directly on the Design board still just close themselves</b> (no sign-off — they never touch the project files).</p></div>
   <div class="hsec"><h4>⑯ᵇ 🖱️ Click a KPI hover to jump</h4>
     <p>Hover a top KPI tile to see its list — on <b>PROJECTS</b> (In progress / Upcoming / Completed / At risk / Milestones) and on the <b>FLOOR</b> job tiles, each item is now <b>clickable</b>: click a <b>project</b> to open its full‑screen detail view, or a <b>floor job</b> to switch to the Floor board and flash its card. Move the mouse onto the popover before clicking — it stays open so the links are live.</p></div>
   <div class="hsec"><h4>⑰ 🟧 MRA Shop load (Projects Gantt)</h4>
@@ -2989,6 +2997,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"14.3", date:"2026-07-07", title:"⏸ Park a project · smarter verification panel", items:[
+    "<b>⏸ Park</b> (in ✎ Edit Project Tasks) <b>freezes a project</b> — it stays on the Gantt but dimmed with a ⏸ tag, gets a <span class=\"hchip\">⏸ parked</span> chip in Project Progress and its own slice of the Portfolio Health donut, and <b>stops counting as At-Risk / Needs Attention</b> (frozen ≠ failing). Task statuses aren't touched, so un-parking restores it exactly. A <b>⏸ Hide parked</b> toggle on the Gantt toolbar tucks them away entirely. <i>(Needs the one-time 'Parked' column on the Project Tasks list — Rich has the steps.)</i>",
+    "The <b>🟡 Awaiting verification</b> panel is now <b>collapsible</b> (▾ in its header, remembered per device), and once you sign in it shows <b>👤 Mine</b> — just the tasks where you're the PM — with a <b>picker</b> to flip to All or any one PM's queue." ] },
   { rev:"14.2", date:"2026-07-07", title:"🐞 Fix: edits no longer flicker back before syncing", items:[
     "Ship a trailer (or move/close/edit anything) and it could <b>reappear a minute later, then vanish again</b> at the next data cycle. Cause: the data file regenerates every few minutes, but the board rows inside it are only as fresh as a <b>Lists snapshot taken up to 15 minutes earlier</b> — so a \"new\" file could still predate your edit, and the board wrongly trusted it. The data now carries a <b>snapshot timestamp</b>, and your screen holds your edits until the data is <b>provably built from after them</b>. One fix, every edit type, every screen." ] },
   { rev:"14.1", date:"2026-07-07", title:"🔇 Cleaner saves on brand-new 🔧 tasks", items:[
@@ -4630,6 +4641,7 @@ function _listOpsRaw(p){
     case 'closeProjectTask': return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'Completed'})];
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'setProjectNonOfficial': return taskOps('update','ProjectTasks',_projTaskRows(p.project),{NonOfficial:(p.value?'Yes':'')});   // #2: flag/unflag every task of the project
+    case 'setProjectParked':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{Parked:(p.value?'Yes':'')});        // ⏸ park/unpark: freeze the project (isolated single-column write — safe before the Parked column exists)
     case 'setTaskFiles':     return [O('update','ShopTasks',{Project:p.project,Task:p.task,__id:p._id},{Files:JSON.stringify(p.files||[])})];   // attachments (isolated single-column write — safe before the Files column exists)
     case 'setProjectJobNum':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{JobNum:(p.jobNum||'')});   // #6: stamp the project's Job # on every task (isolated)
     case 'importProject': {
@@ -4658,7 +4670,7 @@ function _listOpsRaw(p){
 const _LF = {
   Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
   ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9",Due:"Due",Files:"Files"} },   /* Files = UI-added multiline col (attachment JSON; isolated setTaskFiles op only). field_8 is a Number column (always 0.0) — NOT milestone; don't write it. "Due" = a Date column added 2026-06-30 (its own internal name, not field_N) — only written when a due date is set. */
-  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"TaskType",JobNum:"JobNum",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial"} },   /* 'Type' + 'NonOfficial' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
+  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"TaskType",JobNum:"JobNum",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial",Parked:"Parked"} },   /* 'Type' + 'NonOfficial' + 'Parked' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
 };
@@ -4874,6 +4886,10 @@ const PENDING_NONOFF_KEY='mra_pending_nonoff_v1';
 function pnoLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_NONOFF_KEY)||'{}'); }catch(e){ return {}; } }
 function pnoSave(o){ try{ localStorage.setItem(PENDING_NONOFF_KEY, JSON.stringify(o)); }catch(e){} }
 function pendNonOff(name,val){ const o=pnoLoad(); o[name]={val:!!val, ts:Date.now()}; pnoSave(o); }
+const PENDING_PARK_KEY='mra_pending_park_v1';   // ⏸ park flags: same optimistic-hold pattern as non-official
+function ppkLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_PARK_KEY)||'{}'); }catch(e){ return {}; } }
+function ppkSave(o){ try{ localStorage.setItem(PENDING_PARK_KEY, JSON.stringify(o)); }catch(e){} }
+function pendPark(name,val){ const o=ppkLoad(); o[name]={val:!!val, ts:Date.now()}; ppkSave(o); }
 // ---- Pending re-writes: an edit made to a row that has no item id yet (just added, not synced back).
 // The text-filter UPDATE can't reliably hit it, so we queue the change and re-fire it BY ID once the
 // row appears in a fresh export with its id. Self-prunes on success or after the 12h TTL.
@@ -4919,6 +4935,14 @@ function mergePending(D){
       if(!!p.nonOfficial === !!e.val){ delete no[nm]; ch=true; continue; }      // data.js caught up — prune
       p.nonOfficial=!!e.val; }                                                  // still pending — apply optimistic value
     if(ch) pnoSave(no); }
+  // Pending ⏸ park flags — identical hold for park/unpark toggles.
+  { const pk=ppkLoad(); let ch=false; const t=Date.now();
+    for(const nm in pk){ const e=pk[nm];
+      if(t-(e.ts||0) > PENDING_TTL){ delete pk[nm]; ch=true; continue; }
+      const p=(D.projects||[]).find(x=>x.name===nm); if(!p) continue;
+      if(!!p.parked === !!e.val){ delete pk[nm]; ch=true; continue; }
+      p.parked=!!e.val; }
+    if(ch) ppkSave(pk); }
   const a=pendLoad(); if(!a.length) return;
   const now=Date.now(), keep=[];
   for(const e of a){
@@ -5446,11 +5470,29 @@ function canVerify(projName){
 // Every task across all projects currently flagged "Pending Verification".
 function verifyPending(){ const out=[]; (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(projIsPendingVerify(t)) out.push({p, t}); })); return out; }
 // The 🟡 annunciation panel on the Projects tab — everyone sees it; ✓/↩ are enabled only for the PM/admin.
+// Collapsible (remembered per device) + a picker: signed-in folks default to MINE (tasks whose PM is them);
+// anyone can flip to All or a specific PM (Rich picks and chooses as admin).
+let VQ_COLL=false; try{ VQ_COLL=localStorage.getItem('mra_vq_coll')==='1'; }catch(e){}
+let VQ_PICK=''; try{ VQ_PICK=localStorage.getItem('mra_vq_pick')||''; }catch(e){}
+function vqToggleColl(){ VQ_COLL=!VQ_COLL; try{ localStorage.setItem('mra_vq_coll',VQ_COLL?'1':'0'); }catch(e){} renderVerifyQueue(); }
+function setVqPick(v){ VQ_PICK=v||''; try{ localStorage.setItem('mra_vq_pick',VQ_PICK); }catch(e){} renderVerifyQueue(); }
 function renderVerifyQueue(){
   const box=document.getElementById('verifyQueue'); if(!box) return;
-  const list=verifyPending();
-  if(!list.length){ box.style.display='none'; box.innerHTML=''; return; }
+  const all=verifyPending();
+  if(!all.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.style.display='';
+  const signedIn=!!(CLOSE_PIN&&CURRENT_USER);
+  const pick=VQ_PICK || (signedIn?'mine':'all');
+  const mineN=signedIn?all.filter(({p})=>_verifyNameMatch(CURRENT_USER,p.pm||'')).length:0;
+  const pmCounts={}; all.forEach(({p})=>{ const k=(p.pm||'—'); pmCounts[k]=(pmCounts[k]||0)+1; });
+  const list = pick==='all' ? all
+    : pick==='mine' ? (signedIn?all.filter(({p})=>_verifyNameMatch(CURRENT_USER,p.pm||'')):all)
+    : all.filter(({p})=>(p.pm||'—')===pick);
+  const pickSel=`<select class="vq-pick" onchange="setVqPick(this.value)" title="Whose tasks to show — Mine (you're the PM), everyone's, or one PM's">`
+    +(signedIn?`<option value="mine"${pick==='mine'?' selected':''}>👤 Mine (${mineN})</option>`:'')
+    +`<option value="all"${pick==='all'?' selected':''}>All (${all.length})</option>`
+    +Object.keys(pmCounts).sort().map(pm=>`<option value="${escA(pm)}"${pick===pm?' selected':''}>${esc(pm)} (${pmCounts[pm]})</option>`).join('')
+    +`</select>`;
   const rows=list.sort((a,b)=>String(a.p.name).localeCompare(String(b.p.name))).map(({p,t})=>{
     const mine=canVerify(p.name), h=projTaskHandle(t);
     const due=t.finISO||t.startISO; const od=due&&due<(window.MRA_DATA||{}).todayISO;
@@ -5465,8 +5507,12 @@ function renderVerifyQueue(){
   const signin = CLOSE_PIN
     ? `<span class="vq-who" title="Signed in">👤 ${esc(CURRENT_USER||'signed in')}</span>`
     : `<button class="vq-signin" onclick="vqSignIn()" title="Enter your code to verify tasks">🔒 Sign in to verify</button>`;
-  box.innerHTML=`<div class="panel vq-panel"><h2>🟡 Awaiting verification <span class="count">${list.length}</span>`
-    +`<span class="vq-hint">tasks the design team marked ready — the PM signs off to close</span>${signin}</h2><div class="vq-list">${rows}</div></div>`;
+  const caret=`<span class="pgdot" style="cursor:pointer;font-size:14px;margin-right:6px" onclick="vqToggleColl()" title="${VQ_COLL?'Expand':'Collapse'} this panel (remembered on this device)">${VQ_COLL?'▸':'▾'}</span>`;
+  const cnt = list.length===all.length ? String(all.length) : (list.length+' of '+all.length);
+  const body = VQ_COLL ? ''
+    : `<div class="vq-list">${rows || `<div class="empty" style="padding:10px 14px">None for this pick — ${all.length} waiting in total (use the picker to see them).</div>`}</div>`;
+  box.innerHTML=`<div class="panel vq-panel"><h2>${caret}🟡 Awaiting verification <span class="count">${cnt}</span>`
+    +`<span class="vq-hint">tasks the design team marked ready — the PM signs off to close</span>${VQ_COLL?'':pickSel}${signin}</h2>${body}`+`</div>`;
 }
 function vqSignIn(){ if(ensureAuth('verify tasks') && window.MRA_DATA) renderProjects(window.MRA_DATA); }
 function verifyTask(proj, handle){
@@ -5641,6 +5687,25 @@ function syncNonOffBtn(){ const b=document.getElementById('peNonOffBtn'); if(!b)
   const p=oProj(peCurrentProject()); const on=!!(p&&p.nonOfficial);
   b.textContent=on?'🏷 Non-official ✓':'🏷 Non-official';
   b.style.borderColor=on?'rgba(234,179,8,.7)':''; b.style.color=on?'#eab308':''; }
+// ⏸ Park / un-park the whole project — same pattern as Non-official (per-task 'Parked' column, isolated write).
+function toggleProjParked(){
+  const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('park / un-park a project')) return;
+  const p=oProj(name); const now=!!(p&&p.parked); const val=!now;
+  if(!confirm((val?'PARK':'UN-PARK')+' "'+name+'"?\n\n'+(val
+    ? 'Parked = frozen / on hold: it stays on the Gantt (dimmed, tagged ⏸) but stops counting as At-Risk and drops out of Needs Attention. Task statuses are untouched.'
+    : 'It goes back to normal — health, At-Risk and Needs Attention pick it up again exactly where it left off.'))) return;
+  if(p) p.parked=val;
+  pendPark(name, val);   // hold the flag on-screen through polls/exports until data.js reflects it
+  if(typeof shopWrite==='function') shopWrite({ action:'setProjectParked', project:name, value:(val?1:0), pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  renderProjTaskList(); syncParkBtn();
+  if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(typeof GFS!=='undefined'&&GFS&&typeof renderGanttFS==='function') renderGanttFS(); }
+}
+function syncParkBtn(){ const b=document.getElementById('peParkBtn'); if(!b) return;
+  const p=oProj(peCurrentProject()); const on=!!(p&&p.parked);
+  b.textContent=on?'⏸ Parked ✓':'⏸ Park';
+  b.style.borderColor=on?'rgba(129,140,248,.75)':''; b.style.color=on?'#a5b4fc':''; }
 // #6 — set an explicit Job # for the whole project (overrides the auto-match). Stamps every task's
 // JobNum column (isolated write — safe even before that column exists). Shows as "Jxxxx · Project".
 function setProjectJobNumBtn(){
@@ -5942,7 +6007,7 @@ function projStatusBadge(t){
 function renderProjTaskList(){
   const name=peCurrentProject(), p=oProj(name);
   const pmBtn=document.getElementById('pePMBtn'); if(pmBtn) pmBtn.textContent=(p&&p.pm)?('👤 PM: '+p.pm):'👤 Set PM';
-  syncNonOffBtn(); syncJobBtn();
+  syncNonOffBtn(); syncParkBtn(); syncJobBtn();
   const list=document.getElementById('peList'), cnt=document.getElementById('peCount');
   const tasks=(p&&p.tasks)||[];
   // assignee filter dropdown — populate from this project's people; self-reset if the picked one isn't here
@@ -6590,7 +6655,8 @@ function buildStatusReport(){
   // Use the SAME project set as the on-page board: drop archived/wrapped projects unless Show-archived is on.
   const _all=(D.projects||[]).slice();
   const _sr=(typeof SHOW_ARCHIVED!=='undefined' && SHOW_ARCHIVED) ? _all : _all.filter(p=>!projArchived(p));
-  const projects=(typeof HIDE_NONOFF!=='undefined' && HIDE_NONOFF) ? _sr.filter(p=>!p.nonOfficial) : _sr;
+  const _srn=(typeof HIDE_NONOFF!=='undefined' && HIDE_NONOFF) ? _sr.filter(p=>!p.nonOfficial) : _sr;
+  const projects=(typeof HIDE_PARKED!=='undefined' && HIDE_PARKED) ? _srn.filter(p=>!p.parked) : _srn;
   const active=projects.filter(p=>projStatus(p,today)!=='done')
     .map(p=>({p,h:projHealth(p,today)}))
     .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||'9999').localeCompare(b.p.finishISO||'9999')));
@@ -8095,6 +8161,7 @@ function projStatus(p, today){
 /* Schedule health: compare % complete against % of the timeline elapsed.
    late = past finish & not done · behind = >=15 pts under expected · else on track. */
 function projHealth(p, today){
+  if(p.parked) return {state:'parked'};   // ⏸ frozen/on hold — never counts as at-risk, drops out of Needs Attention
   if(p.pct>=100) return {state:'done'};
   if(p.startISO && p.startISO>today) return {state:'upcoming'};
   let exp=null;
@@ -8107,7 +8174,7 @@ function projHealth(p, today){
   if(behindBy!=null && behindBy>=15) return {state:'behind', expectedPct:exp, behindBy};
   return {state:'ontrack', expectedPct:exp, behindBy};
 }
-const HEALTH_RANK={late:0, behind:1, ontrack:2, upcoming:3, done:9};
+const HEALTH_RANK={late:0, behind:1, ontrack:2, upcoming:3, parked:4, done:9};
 function overdueByProject(D){
   const m={}; (D.teamTasks||[]).forEach(t=>{ if(t.dueISO && t.dueISO<D.todayISO) m[t.project]=(m[t.project]||0)+1; });
   return m;
@@ -8149,10 +8216,15 @@ function renderProjects(D){
   const archN=allProjects.filter(projArchived).length;
   const _preNO = SHOW_ARCHIVED ? allProjects : allProjects.filter(p=>!projArchived(p));   // auto-archive wrapped projects off the active board
   const _noN=_preNO.filter(p=>p.nonOfficial).length;
-  const projects = HIDE_NONOFF ? _preNO.filter(p=>!p.nonOfficial) : _preNO;   // 🏷 view filter (like Show archived)
+  const _postNO = HIDE_NONOFF ? _preNO.filter(p=>!p.nonOfficial) : _preNO;   // 🏷 view filter (like Show archived)
+  const _pkN=_postNO.filter(p=>p.parked).length;
+  const projects = HIDE_PARKED ? _postNO.filter(p=>!p.parked) : _postNO;    // ⏸ view filter
   { const nb=document.getElementById('nonoffToggle'); if(nb){ nb.classList.toggle('on',HIDE_NONOFF);
       nb.textContent = HIDE_NONOFF ? ('🏷 Show non-official'+(_noN?(' ('+_noN+')'):'')) : '🏷 Hide non-official';
       nb.style.display = _noN||HIDE_NONOFF ? '' : 'none'; } }
+  { const pb=document.getElementById('parkToggle'); if(pb){ pb.classList.toggle('on',HIDE_PARKED);
+      pb.textContent = HIDE_PARKED ? ('⏸ Show parked'+(_pkN?(' ('+_pkN+')'):'')) : '⏸ Hide parked';
+      pb.style.display = _pkN||HIDE_PARKED ? '' : 'none'; } }
   applyProjView();
   projects.forEach((p,i)=>p._color=PALETTE[i%PALETTE.length]);
   try{ dlFillProjects(); }catch(e){}   // keep the ⬇ Download a Project picker current
@@ -8224,10 +8296,10 @@ function renderProjects(D){
       const hasTasks=!!(p.tasks&&p.tasks.length);
       const expanded = hasTasks && (GANTT_LOD!=='proj' || GANTT_EXP.has(p.name) || !!PROJ_WHO);   // P1/P2/P3
       rows.push({
-        label:(p.nonOfficial?'🏷 ':'')+projLabel(p.name), sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
+        label:(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+projLabel(p.name), sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
         barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
-        cls:'clickable'+(p.nonOfficial?' g-nonoff':''), caret: hasTasks?`<span class="gcaret">${expanded?'▾':'▸'}</span>`:'',
+        cls:'clickable'+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''), caret: hasTasks?`<span class="gcaret">${expanded?'▾':'▸'}</span>`:'',
         gutterClick: hasTasks?`toggleGanttExp('${escJsAttr(p.name)}')`:`openProjectEditor('${escJsAttr(p.name)}')`,
         barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`
       });
@@ -8252,10 +8324,10 @@ function renderProjects(D){
     });
   } else {
     dated.forEach(p=>{ if(!barGeom(p.startISO,p.finishISO,win)) return;
-      rows.push({ label:(p.nonOfficial?'🏷 ':'')+projLabel(p.name), sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
+      rows.push({ label:(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+projLabel(p.name), sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
         barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
-        cls:'clickable'+(p.nonOfficial?' g-nonoff':''), onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
+        cls:'clickable'+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''), onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
         barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }); });
   }
   { const hp=document.getElementById('projHolPick'); if(hp) hp.innerHTML=holPickerHtml(); }   // US/CA holiday picker above the Projects Gantt
@@ -8344,7 +8416,8 @@ function renderProjects(D){
   const prog=projects.filter(p=>projStatus(p,today)!=="done"&&projMatch(p)).map(p=>({p,h:health.get(p)}))
     .sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state] || ((a.p.finishISO||"9999").localeCompare(b.p.finishISO||"9999")));
   document.getElementById('progress').innerHTML=prog.map(({p,h})=>{
-    const chip = h.state==='late'?`<span class="hchip late">⚠ past due</span>`
+    const chip = h.state==='parked'?`<span class="hchip" style="background:rgba(129,140,248,.16);color:#a5b4fc" title="Parked — frozen / on hold; not counted at-risk">⏸ parked</span>`
+              : h.state==='late'?`<span class="hchip late">⚠ past due</span>`
               : h.state==='behind'?`<span class="hchip behind">${h.behindBy!=null?h.behindBy+'% ':''}behind</span>`
               : (h.state==='ontrack' && h.expectedPct!=null)?`<span class="hchip ok">on track</span>`:'';
     const od=odMap[p.name]||0;
@@ -8361,12 +8434,12 @@ function renderProjects(D){
   // 🩺 Portfolio Health donut — proportion of every project by schedule-health state
   (function(){
     const el=document.getElementById('projHealthChart'); if(!el) return;
-    const hc={late:0,behind:0,ontrack:0,upcoming:0,done:0};
+    const hc={late:0,behind:0,ontrack:0,upcoming:0,parked:0,done:0};
     projects.forEach(p=>{ const st=(health.get(p)||{}).state||'ontrack'; hc[st]=(hc[st]||0)+1; });
     const htot=projects.length;
     if(!htot){ el.innerHTML=`<div class="empty">No projects yet</div>`; return; }
     const segs=[['late','var(--red)','Past due'],['behind','var(--amber)','Behind'],
-                ['ontrack','var(--green)','On track'],['upcoming','var(--blue)','Upcoming'],['done','var(--grey)','Done']];
+                ['ontrack','var(--green)','On track'],['upcoming','var(--blue)','Upcoming'],['parked','#818cf8','⏸ Parked'],['done','var(--grey)','Done']];
     let acc=0; const stops=[];
     segs.forEach(([k,c])=>{ const pct=hc[k]/htot*100; if(pct>0){ stops.push(`${c} ${acc}% ${acc+pct}%`); acc+=pct; } });
     if(!stops.length) stops.push('var(--grey) 0 100%');
@@ -11280,12 +11353,12 @@ function renderGanttFS(){
       const hasTasks=(p.tasks||[]).length>0, hasMs=(p.milestones||[]).length>0;
       const canExp=GANTT_TASKLEVEL?hasTasks:hasMs, exp=expandedProjects.has(p.name), done=projStatus(p,today)==='done';
       const key='p'+i; GFS_PKEY[key]=p.name; BARPOP[key]=projPop(p);
-      rows.push({label:(canExp?(exp?'▾ ':'▸ '):'   ')+(p.nonOfficial?'🏷 ':'')+projLabel(p.name),
+      rows.push({label:(canExp?(exp?'▾ ':'▸ '):'   ')+(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+projLabel(p.name),
         sub:(p.pm||'—')+' · '+p.taskCount+' tasks'+(hasMs?' · '+p.milestones.length+' gates':''),
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct, barLabel:'',
         milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name), done, popKey:key,
         barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`,
-        cls:(canExp?'clickable':'')+(p.nonOfficial?' g-nonoff':''), onclick:canExp?`toggleGfsProject('${key}')`:''});
+        cls:(canExp?'clickable':'')+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''), onclick:canExp?`toggleGfsProject('${key}')`:''});
       if(exp && GANTT_TASKLEVEL && hasTasks){
         // expanded → collapsible PHASE rows (rollup bar each); click a phase to drill to its tasks.
         // At LOD 2 (Tasks) phases default OPEN (every task shows); at LOD 1 (Phases) they default collapsed (rollup bars). Caret flips one.
