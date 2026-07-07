@@ -10177,12 +10177,14 @@ function printDesignBoard(){
   dtbLoadLocal();
   const today=dtbToday(), lanes=dtbGather(), maxRank=DTB_MAXRANK[DTB_HZN]||2;
   const base=DESIGN_TEAM.concat([DESIGN_TEAM_LANE]);
-  const order=base.concat(Object.keys(lanes).filter(k=>base.indexOf(k)<0 && (lanes[k]||[]).length));
+  const order=base.concat(Object.keys(lanes).filter(k=>base.indexOf(k)<0 && (lanes[k]||[]).length))
+    .filter(nm=> DTB_FOCUS ? nm===DTB_FOCUS : !DTB_LANES_OFF.has(nm));   // print = what's ON SCREEN: hidden lanes / 🎯 focus stay out
   let grandOpen=0;
   const cols=order.map(name=>{
     const items=lanes[name]||[];
     const dec=items.map(it=>dtbDecorate(it,today)).filter(x=>DTB_DONE||!x.done)
       .filter(x=>x.bucket.rank===0||x.bucket.rank===5||x.bucket.rank<=maxRank)
+      .filter(x=>{ const lp=DTB_LANEPROJ[name]||''; if(lp && _dtbProjOf(x)!==lp) return false; return _dtbFilt(x); })   // same project/find/overdue filters as the screen
       .sort((a,b)=>a.bucket.rank-b.bucket.rank||(a.dateISO||'9999').localeCompare(b.dateISO||'9999')||a.title.localeCompare(b.title));
     const openN=items.filter(it=> it.general?!it.g.done:!projIsDone(it.t)).length; grandOpen+=openN;
     const odN=items.filter(it=>{ const dn=it.general?it.g.done:projIsDone(it.t); const d=it.general?(it.g.dueISO||''):(it.t.finISO||it.t.startISO||''); return d&&d<today&&!dn; }).length;
@@ -10194,7 +10196,7 @@ function printDesignBoard(){
     const col=DESIGN_COLORS[name]||'#64748b', initials=name.split(/\s+/).map(s=>s[0]).join('').slice(0,2).toUpperCase();
     return `<div class="col"><div class="colh" style="background:${col}"><span class="av">${esc(initials)}</span><span class="cn">${esc(name)}</span><span class="cc">${openN} open${odN?' · '+odN+' overdue':''}</span></div><div class="colb">${body}</div></div>`;
   }).join('');
-  const S=dtbStats(today), grand=S.reduce((a,s)=>a+s.open,0)||1;
+  const S=dtbStats(today).filter(s=>order.indexOf(s.name)>=0), grand=S.reduce((a,s)=>a+s.open,0)||1;
   const share=S.filter(s=>s.open>0).map(s=>`<span style="flex:${s.open};background:${s.color}" title="${escA(s.name)} ${s.open} (${Math.round(s.open/grand*100)}%)"></span>`).join('')||'<span style="flex:1;background:#ccc"></span>';
   const shareLeg=S.map(s=>`<span class="lg"><span class="sw" style="background:${s.color}"></span>${esc(s.name)} ${s.open}</span>`).join('');
   const now=new Date(), stamp=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear()+" "+now.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
