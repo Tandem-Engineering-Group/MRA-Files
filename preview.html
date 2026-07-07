@@ -915,6 +915,10 @@
   .bamuted{color:var(--muted); font-size:12px}
   #baList{max-height:42vh; overflow:auto; margin:0 0 4px}
   .ba-row{display:flex; align-items:center; gap:10px; padding:7px 6px; border-bottom:1px solid rgba(255,255,255,.06); cursor:pointer}
+  .ba-row.ba-ind{padding-left:28px}   /* phase-grouped view: tasks indent under their phase header */
+  .ba-phase{display:flex; align-items:center; gap:8px; padding:8px 6px 5px; margin-top:6px; font-weight:700; font-size:10.5px;
+    text-transform:uppercase; letter-spacing:.4px; color:var(--txt); background:rgba(255,255,255,.03); border-bottom:1px solid var(--line); cursor:pointer}
+  .ba-phase .bamuted{text-transform:none; letter-spacing:0; font-weight:400}
   .ba-row:hover{background:rgba(255,255,255,.05)}
   body.light .ba-row:hover{background:rgba(0,0,0,.04)}
   .ba-row.chg{background:rgba(34,197,94,.12)}
@@ -2296,6 +2300,12 @@
       <div class="bactrls">
         <select id="baProj" onchange="baProjChange()" title="Which project's tasks to show"></select>
         <select id="baWho" onchange="baRender()" title="Narrow to tasks currently assigned to one group/person"></select>
+        <select id="baSort" onchange="baRender()" title="How to arrange the task list">
+          <option value="phase">📂 By phase (like the editor)</option>
+          <option value="date">📅 By date — soonest first</option>
+          <option value="name">🔤 By name A–Z</option>
+          <option value="who">👤 By assignee</option>
+        </select>
         <input id="baSearch" type="search" placeholder="🔎 filter task text…" oninput="baRender()">
         <label class="bachk" title="Include completed tasks too"><input type="checkbox" id="baShowDone" onchange="baRender()"> Show completed</label>
       </div>
@@ -2963,7 +2973,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
     <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text (stacks with the assignee filter); <span class="k">Type</span> is now a real <b>dropdown</b> (with an <b>➕ Other…</b> option to add a new type) and it <b>saves</b>; <span class="k">🏷 Non-official</span> flags a project as informal work (e.g. JFSD Trailer Weight) — it stays on the Gantt, Progress and PM Load, just tagged: a 🏷 on its name (including in this editor's project dropdown) and a <b>muted amber wash across its whole Gantt row</b> so it reads at a glance; <span class="k">⏸ Park</span> <b>freezes a project</b> (on hold): it stays on the Gantt but <b>dimmed and tagged ⏸</b>, shows a <span class="k">⏸ parked</span> chip in Project Progress, and <b>stops counting as At-Risk / Needs Attention</b> — task statuses are untouched, so un-parking restores it exactly (a <span class="k">⏸ Hide parked</span> toggle on the Gantt toolbar tucks parked projects away entirely); <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt (which now has its own <span class="k">✓ Hide completed</span>); and a task <b>requires both a Start and a Finish date</b> (the Finish can't be before the Start; a single-date milestone is fine and gets mirrored). The editor header, the project picker and the detailed-view title now show the project's <b>Job #</b> — <b>“J1557 · Project Name”</b> — when it's linked to a trailer.</p></div>
   <div class="hsec"><h4>⑯ᵃ ⇄ Bulk Edits — change many tasks at once (PROJECTS tab)</h4>
-    <p>Don't open tasks one at a time. Click <span class="k">⇄ Bulk Edits</span> on the PROJECTS toolbar to change <b>assignee</b>, <b>phase</b>, <b>type</b>, <b>status</b> — or <b>📅 bump Start &amp; Finish dates by ± N days</b> — across a batch of tasks:</p>
+    <p>Don't open tasks one at a time. Click <span class="k">⇄ Bulk Edits</span> on the PROJECTS toolbar to change <b>assignee</b>, <b>phase</b>, <b>type</b>, <b>status</b> — or <b>📅 bump Start &amp; Finish dates by ± N days</b> — across a batch of tasks (the list is <b>grouped by phase with indented tasks</b> like the editor — a phase header's checkbox grabs the whole phase — with a sort picker for date / name / assignee order):</p>
     <p><b>1.</b> Pick a <b>project</b> (or ★ All projects). <b>2.</b> Optionally narrow to a current assignee and/or 🔎 filter by text. <b>3.</b> <b>Check the tasks</b> (or <span class="k">Select all</span>). <b>4.</b> Pick the <b>field tab</b> at the bottom — 👤 Assignee · 📂 Phase · 🏷 Type · 📊 Status — set the value and hit <span class="k">Apply to checked</span> (you'll see the change staged in green). <b>5.</b> Stage more if you like (even different fields), then <span class="k">💾 Save</span>.</p>
     <p><b>Assignee</b> by default <b>keeps each task's group and adds the person</b> as the 2nd tier (so <i>MRA Design</i> becomes <i>MRA Design / Sarah Williams</i>) — what the Crew/Resource rollups and the Design board read; you can also switch the group outright or clear it. Code-protected; changes show instantly and settle in the lists within ~15 min.</p></div>
   <div class="hsec"><h4>⑯ᵛ ✅ Mark-ready → PM verifies (Design tasks)</h4>
@@ -3040,6 +3050,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"15.9", date:"2026-07-07", title:"⇄ Bulk Edits reads like the editor now", items:[
+    "The task list in <b>⇄ Bulk Edits</b> is now <b>grouped by phase with the tasks indented underneath</b> (date-sorted inside each phase), just like ✎ Edit Project Tasks — and each <b>phase header has its own checkbox</b> that grabs or releases the whole phase in one click. A new <b>sort picker</b> flips the list to 📅 by date, 🔤 by name, or 👤 by assignee (remembered per device)." ] },
   { rev:"15.8", date:"2026-07-07", title:"📅 Bulk-bump dates in ⇄ Bulk Edits", items:[
     "The <b>⇄ Bulk Edits</b> tool (Projects tab AND the Design board header) has a new <b>📅 Dates</b> tab: check as many tasks as you want, type a number of days (7 pushes a week later, -3 pulls earlier), <b>Apply</b>, review the staged old→new dates, then <b>💾 Save</b>. Start and Finish shift together (calendar days); undated tasks are skipped and told to you. Apply twice and the bumps stack before saving." ] },
   { rev:"15.7", date:"2026-07-07", title:"🖱 Drag shop tasks between crews & trailers", items:[
@@ -6472,7 +6484,8 @@ function submitProjTask(){
    more opening tasks one-by-one. Keeps each task's group and appends "/ Person"
    (or a chosen group). Reuses the SAME editProjectTask write path (one op per
    task) and re-sends every other field unchanged so nothing else is touched. */
-let BA_PROJ='', BA_WHO='', BA_FIELD='assignee', BA_SEL=new Set(), BA_PENDING={};   // BA_PENDING[key] = {assigned?,phase?,type?,status?}
+let BA_PROJ='', BA_WHO='', BA_FIELD='assignee', BA_SEL=new Set(), BA_PENDING={};   // BA_PENDING[key] = {assigned?,phase?,type?,status?,start?,finish?}
+let BA_SORT='phase'; try{ const _bs=localStorage.getItem('mra_ba_sort'); if(_bs) BA_SORT=_bs; }catch(e){}
 const BA_FIELD_COL={assignee:'assigned', phase:'phase', type:'type', status:'status'};
 function _baCur(t,field){ return field==='assignee'?(t.who||''):field==='phase'?(t.phase||''):field==='type'?(t.type||''):(t.st||''); }
 function _baKey(projName,t){ return projName+''+(t.t||''); }
@@ -6568,17 +6581,41 @@ function baRender(){
     return true;
   });
   const showProj=(BA_PROJ==='__ALL__');
-  const list=document.getElementById('baList');
-  if(!rows.length){ list.innerHTML='<div class="bamuted" style="padding:14px 6px">No tasks match. Try a different project, clear the filters, or turn on Show completed.</div>'; }
-  else list.innerHTML=rows.map(({p,t})=>{
+  { const ss=document.getElementById('baSort'); if(ss){ if(!ss.dataset.init){ ss.value=BA_SORT; ss.dataset.init='1'; }
+      else { BA_SORT=ss.value||'phase'; try{ localStorage.setItem('mra_ba_sort',BA_SORT); }catch(e){} } } }
+  const dateKey=({t})=>String(t.startISO||t.finISO||'9999-99');
+  const rowHtml=({p,t},ind)=>{
     const key=_baKey(p.name,t), sel=BA_SEL.has(key), ch=BA_PENDING[key];
     const whoHtml = ch ? _baChgHtml(t,ch) : esc((t.who||'').trim()||'—');
-    const meta=[ (showProj?esc(p.name):''), esc((t.phase||'').trim()), (t.st?esc(t.st):''), (t.finISO?esc(fmtMDY(t.finISO)):'') ].filter(Boolean).join(' · ');
-    return `<div class="ba-row${ch?' chg':''}" onclick="baToggleRow(event,'${escA(key)}')">`
+    const meta=[ (showProj&&BA_SORT!=='phase'?esc(p.name):''), (BA_SORT==='phase'?'':esc((t.phase||'').trim())), (t.st?esc(t.st):''), (t.finISO?esc(fmtMDY(t.finISO)):'') ].filter(Boolean).join(' · ');
+    return `<div class="ba-row${ch?' chg':''}${ind?' ba-ind':''}" onclick="baToggleRow(event,'${escA(key)}')">`
       +`<input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation(); baToggleRow(event,'${escA(key)}')">`
       +`<div class="ba-t"><div class="ba-tn">${/yes/i.test(t.ml||'')?'◆ ':''}${esc(t.t||'(task)')}</div><div class="ba-meta">${meta||'&nbsp;'}</div></div>`
       +`<div class="ba-who">${whoHtml}</div></div>`;
-  }).join('');
+  };
+  const list=document.getElementById('baList');
+  window._baPhaseKeys={};
+  if(!rows.length){ list.innerHTML='<div class="bamuted" style="padding:14px 6px">No tasks match. Try a different project, clear the filters, or turn on Show completed.</div>'; }
+  else if(BA_SORT==='phase'){
+    // Grouped like the project editor: phase headers (in first-appearance order) + indented, date-sorted tasks.
+    // The header checkbox grabs / releases the WHOLE phase in one click.
+    const order=[], by={};
+    rows.forEach(r=>{ const k=(showProj?r.p.name+' — ':'')+(((r.t.phase||'').trim())||'(no phase)');
+      if(!(k in by)){ by[k]=[]; order.push(k); } by[k].push(r); });
+    let h='';
+    order.forEach(k=>{ by[k].sort((a,b)=>dateKey(a).localeCompare(dateKey(b)));
+      const keys=by[k].map(({p,t})=>_baKey(p.name,t)); window._baPhaseKeys[k]=keys;
+      const selN=keys.filter(x=>BA_SEL.has(x)).length;
+      h+=`<div class="ba-phase" onclick="baTogglePhase('${escA(k)}')" title="Check / uncheck every task in this phase"><input type="checkbox" ${selN===keys.length&&keys.length?'checked':''} onclick="event.stopPropagation();baTogglePhase('${escA(k)}')"> 📂 ${esc(k)} <span class="bamuted">${selN?selN+' of ':''}${keys.length}</span></div>`;
+      h+=by[k].map(r=>rowHtml(r,true)).join(''); });
+    list.innerHTML=h;
+  } else {
+    const sorted=rows.slice();
+    if(BA_SORT==='date') sorted.sort((a,b)=>dateKey(a).localeCompare(dateKey(b)) || String(a.t.t||'').localeCompare(String(b.t.t||'')));
+    else if(BA_SORT==='name') sorted.sort((a,b)=>String(a.t.t||'').localeCompare(String(b.t.t||'')));
+    else if(BA_SORT==='who') sorted.sort((a,b)=>String(a.t.who||'~').localeCompare(String(b.t.who||'~')) || dateKey(a).localeCompare(dateKey(b)));
+    list.innerHTML=sorted.map(r=>rowHtml(r,false)).join('');
+  }
   const selN=rows.filter(({p,t})=>BA_SEL.has(_baKey(p.name,t))).length;
   document.getElementById('baCount').textContent=`${rows.length} task${rows.length===1?'':'s'} shown`;
   document.getElementById('baSelCount').textContent=selN?`${selN} selected`:'Select all';
@@ -6588,6 +6625,9 @@ function baRender(){
   const sv=document.getElementById('baSaveBtn'); sv.disabled=!nChg; sv.textContent=nChg?`💾 Save ${nChg} task${nChg===1?'':'s'}`:'💾 Save changes';
 }
 function baToggleRow(e,key){ if(e) e.stopPropagation(); if(BA_SEL.has(key)) BA_SEL.delete(key); else BA_SEL.add(key); baRender(); }
+function baTogglePhase(k){ const keys=(window._baPhaseKeys||{})[k]||[]; if(!keys.length) return;
+  const allOn=keys.every(x=>BA_SEL.has(x));
+  keys.forEach(x=>{ if(allOn) BA_SEL.delete(x); else BA_SEL.add(x); }); baRender(); }
 function baToggleAll(on){ (window._baRows||[]).forEach(({p,t})=>{ const k=_baKey(p.name,t); if(on) BA_SEL.add(k); else BA_SEL.delete(k); }); baRender(); }
 function baApply(){
   const sel=[...BA_SEL]; const msg=document.getElementById('baMsg');
