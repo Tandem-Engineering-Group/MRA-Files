@@ -1699,6 +1699,13 @@
       <div class="gantt-note" id="projGanttNote"></div>
     </div>
 
+    <!-- 🏭 Bay Occupancy — one row per bay, a bar per unit (arrival → departure): see when a bay frees up and where bookings overlap -->
+    <div class="panel" id="bayOccPanel">
+      <h2>🏭 Bay Occupancy <span class="count" id="bayOccCount"></span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">a bar per unit, arrival → departure · next 10 weeks · <span style="color:#ef4444">red = past its ship date, still in the bay</span> · — open — = bay free now</span></h2>
+      <div class="gantt" id="bayOccGantt"></div>
+    </div>
+
     <div class="grid">
       <div class="panel pv-a" id="pp-pmload">
         <h2>Program Development Load <span class="count" id="pmCount"></span></h2>
@@ -2887,6 +2894,8 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>④ᵈ 📊 Workload — open tasks</h4>
     <p>Under <b>Program Development Load</b>. Where that panel counts <i>projects</i>, this gauges <b>how much work is left</b>: comparative bars of <b>open tasks per PM</b> (left) and <b>per resource / crew</b> (right — MRA Shop, MRA Design, Wrap Team, Electricians, …), longest bar = most loaded. <b>Overdue tasks show in red</b> (with the overdue count in parentheses). It's a <i>fuzzy</i> gauge by open‑task count today; once tasks carry <b>Est. Hours</b> it can weight by real effort instead.</p>
     <p><b>Click any row</b> (including <b>Unassigned</b>) to see a <b>per-project breakdown</b> — how many open tasks that PM / crew has on each project, overdue in red. Click a project in that list to open its detailed Gantt.</p></div>
+  <div class="hsec"><h4>④ᵉ 🏭 Bay Occupancy (Projects tab)</h4>
+    <p>Right under the Project Schedules Gantt: <b>one row per bay, a bar per unit</b> in it — Jxxxx · name, spanning its <b>arrival → departure</b> over the next ~10 weeks. Instantly shows <b>when each bay frees up</b> and where bookings <b>overlap</b>. <span style="color:#4ade80">Green</span> = in the bay now, <span style="color:#60a5fa">blue</span> = scheduled, <span style="color:#ef4444">red</span> = past its planned ship date and still in the bay; <b>— open —</b> means the bay is free today. Click a unit's row to open its job editor.</p></div>
   <div class="hsec"><h4>⑤ 👥 Team Capacity (Projects tab)</h4>
     <p>Groups every open <b>Project Task</b> by the person it's <i>assigned</i> to, most-loaded first, with a due-date chip
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
@@ -3028,6 +3037,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"15.5", date:"2026-07-07", title:"🏭 Bay Occupancy Gantt (Projects tab)", items:[
+    "New <b>🏭 Bay Occupancy</b> panel right under the Project Schedules Gantt — <b>one row per bay, a bar per unit</b> (Jxxxx · name, arrival → departure, next ~10 weeks). See at a glance <b>when each bay frees up</b> and where bookings <b>overlap</b>. <span style=\"color:#4ade80\">Green</span> = in the bay now, <span style=\"color:#60a5fa\">blue</span> = scheduled, <span style=\"color:#ef4444\">red</span> = past its ship date and still there; <b>— open —</b> = the bay is free today. Click a bar's row to open that job's editor." ] },
   { rev:"15.4", date:"2026-07-07", title:"🎨 Design board: re-assign happens ON the task card", items:[
     "The 👤→ re-assign picker now opens <b>inside the task's own card</b> (with the card highlighted) instead of swapping it for a separate stripped-down box — so it's always obvious exactly which task you're moving." ] },
   { rev:"15.3", date:"2026-07-07", title:"🐞 Fix: active projects no longer auto-archive when their trailer ships", items:[
@@ -5526,6 +5537,42 @@ function canVerify(projName){
   if(!CLOSE_PIN || !CURRENT_USER) return false;            // must be signed in (existing code)
   if(VERIFY_ADMINS.includes(CURRENT_USER)) return true;    // admin (Rich) → any task
   const p=oProj(projName); return _verifyNameMatch(CURRENT_USER, (p&&p.pm)||'');   // else must be that project's PM
+}
+// 🏭 Bay Occupancy Gantt (Projects tab, Al's ask): one header row per PHYSICAL bay, a bar per unit in it
+// (arrival → departure) — shows when each bay frees up and where bookings overlap. Simple and clean:
+// label = "Jxxxx · Project", green = active, blue = scheduled/other, red = past its ship date and still there.
+function renderBayOcc(D){
+  const el=document.getElementById('bayOccGantt'); if(!el) return;
+  const today=D.todayISO||localISO(Date.now());
+  const isPark=b=>/^\s*parking\s*lot\s*$/i.test(b||''), isHeld=b=>/next\s*up|on\s*hold|off.?site/i.test(b||'');
+  const bays=(D.physicalBays||[]).filter(b=>!isPark(b)&&!isHeld(b));
+  // occupied Middle bays slot in after their Front, same as the floor board
+  MIDDLE_BAYS.forEach(mb=>{ if(bays.indexOf(mb)>=0) return;
+    const has=(D.jobs||[]).some(j=>j.bay===mb && (j.status||'').toLowerCase()!=='shipped' && j.category!=='leave');
+    if(!has) return;
+    const m=mb.match(/^Bay\s*(\d+)/i); const fi=bays.findIndex(b=>new RegExp('^Bay\\s*'+m[1]+'\\s*Front','i').test(b));
+    if(fi>=0) bays.splice(fi+1,0,mb); else bays.push(mb); });
+  const occ={}; bays.forEach(b=>occ[b]=[]);
+  (D.jobs||[]).forEach(j=>{
+    if((j.status||'').toLowerCase()==='shipped' || j.category==='leave') return;
+    if(occ[j.bay]) occ[j.bay].push(j); });
+  const rows=[]; let unitN=0;
+  bays.forEach(b=>{
+    rows.push({label:b, cls:'g-phaserow', noBar:true});
+    const list=(occ[b]||[]).filter(j=>j.startISO||j.completionISO)
+      .sort((a,x)=>String(a.startISO||a.completionISO||'').localeCompare(String(x.startISO||x.completionISO||'')));
+    if(!list.length){ rows.push({label:'— open —', cls:'g-subrow', noBar:true}); return; }
+    list.forEach(j=>{ unitN++;
+      const late=j.completionISO && j.completionISO<today;
+      const col=late?'#ef4444':((j.status||'').toLowerCase()==='active'?'#22c55e':'#60a5fa');
+      rows.push({label:(j.jobNum?j.jobNum+' · ':'')+(j.project||''), cls:'g-subrow clickable',
+        startISO:j.startISO||j.completionISO, endISO:j.completionISO||j.startISO, color:col, milestones:[],
+        onclick:`jobEdit(event,${JSON.stringify(j.row)})`});
+    });
+  });
+  const win=buildWindow(startOfWeek(todayMid()), 70);   // ~10 weeks out
+  renderGantt(el, rows, win, {dates:true, showDays:true});
+  const c=document.getElementById('bayOccCount'); if(c) c.textContent=unitN+' units';
 }
 // Every task across all projects currently flagged "Pending Verification".
 function verifyPending(){ const out=[]; (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(projIsPendingVerify(t)) out.push({p, t}); })); return out; }
@@ -8278,6 +8325,7 @@ function msListPop(title, list){
 function renderProjects(D){
   const today=D.todayISO;
   try{ renderVerifyQueue(); }catch(_){}   // 🟡 PM sign-off queue (design-board "mark ready" tasks)
+  try{ renderBayOcc(D); }catch(_){}       // 🏭 bay-occupancy Gantt (when does each bay free up)
   const allProjects=(D.projects||[]).slice();
   const archN=allProjects.filter(projArchived).length;
   const _preNO = SHOW_ARCHIVED ? allProjects : allProjects.filter(p=>!projArchived(p));   // auto-archive wrapped projects off the active board
