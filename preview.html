@@ -232,6 +232,9 @@
   .dtb-lanes.dtb-few .dtb-lane{max-height:none}
   .dtb-lanes.dtb-few .dtb-lane-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;align-items:start;overflow:visible}
   .dtb-lanes.dtb-few .dtb-grp,.dtb-lanes.dtb-few .dtb-add,.dtb-lanes.dtb-few .dtb-showall,.dtb-lanes.dtb-few .dtb-empty{grid-column:1/-1}
+  /* ⇕ full-height lanes: no inner scrollbars — the PAGE scrolls */
+  .dtb-lanes.dtb-tall .dtb-lane{max-height:none}
+  .dtb-lanes.dtb-tall .dtb-lane-body{overflow:visible}
   .dtb-lane{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 26px rgba(0,0,0,.22);border-top:4px solid var(--lane-c,#64748b);max-height:72vh}
   .dtb-lane-h{display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
   /* 📁 board filter bar (project picker · 🔍 find · lane chips) + per-lane project picker */
@@ -3016,6 +3019,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"14.8", date:"2026-07-07", title:"🎨 Design board: stay put on edits · ⇕ full-height lanes", items:[
+    "Editing on the board (re-assign, notes, status) <b>no longer bounces you back to the top</b> — the page and every lane keep their scroll position through the edit.",
+    "New <b>⇕ Full lanes</b> toggle: lanes grow to their content with <b>no scrollbars inside them</b> — you just scroll the page top to bottom. <b>⤢ Show all tasks</b> now switches this on too, so one click really does lay everything out." ] },
   { rev:"14.7", date:"2026-07-07", title:"🔗 Direct link to the Design board", items:[
     "The dashboard link now takes a <b>?design=1</b> switch that opens the <b>🎨 Design Team board</b> directly — used in the new-task emails so the team lands on their board, not the shop floor. (Also fixed the broken link in those emails — it was missing its colon, so phones couldn't open it.)" ] },
   { rev:"14.6", date:"2026-07-07", title:"🎨 Design board: ⤢ Show all tasks (one click)", items:[
@@ -9712,8 +9718,12 @@ function dtbShowEverything(){
   Object.keys(DTB_LANEPROJ).forEach(k=>delete DTB_LANEPROJ[k]); try{ localStorage.setItem('mra_dtb_laneproj','{}'); }catch(e){}
   try{ Object.keys(dtbGather()).forEach(n=>DTB_EXPAND.add(n)); }catch(e){}
   DESIGN_TEAM.concat([DESIGN_TEAM_LANE]).forEach(n=>DTB_EXPAND.add(n));
+  DTB_TALL=true; try{ localStorage.setItem('mra_dtb_tall','1'); }catch(e){}   // full-height lanes: ONE page scroll, no scrollbars inside lanes
   renderDesignTeam();
 }
+// ⇕ full-height lanes: lanes grow to their content (no inner scrollbars) — you just scroll the page.
+let DTB_TALL=false; try{ DTB_TALL=localStorage.getItem('mra_dtb_tall')==='1'; }catch(e){}
+function dtbToggleTall(){ DTB_TALL=!DTB_TALL; try{ localStorage.setItem('mra_dtb_tall',DTB_TALL?'1':'0'); }catch(e){} renderDesignTeam(); }
 // A task's project label for filtering ('(added here)' = ad-hoc board tasks)
 function _dtbProjOf(x){ return x.general?'(added here)':(x.proj||''); }
 function _dtbFilt(x){
@@ -9987,7 +9997,8 @@ function renderDesignTeam(){
     +`<option value="">📁 All projects (${projOpts.length})</option>`
     +projOpts.map(pn=>`<option value="${escA(pn)}"${DTB_PROJ===pn?' selected':''}>${esc(pn)}</option>`).join('')+`</select>`
     +`<input type="text" id="dtbFind" value="${escA(DTB_FIND)}" placeholder="🔍 find task…" oninput="setDtbFind(this.value)" title="Filter every lane to tasks whose name / project / note contains this">`
-    +`<button class="dtb-lanechip" style="--c:#38bdf8" onclick="dtbShowEverything()" title="One click: open EVERYTHING for the current pick — switches to the All window, turns off Overdue-only, clears the per-lane pickers and expands every lane. Your project pick + find text stay.">⤢ Show all tasks</button>`
+    +`<button class="dtb-lanechip" style="--c:#38bdf8" onclick="dtbShowEverything()" title="One click: open EVERYTHING for the current pick — switches to the All window, turns off Overdue-only, clears the per-lane pickers, expands every lane AND switches to full-height lanes (one page scroll). Your project pick + find text stay.">⤢ Show all tasks</button>`
+    +`<button class="dtb-lanechip${DTB_TALL?' active':''}" style="--c:#38bdf8" onclick="dtbToggleTall()" title="Full-height lanes: no scrollbars inside the lanes — every lane grows to its content and you just scroll the page. Click again for the compact scrolling lanes.">⇕ Full lanes</button>`
     +`<button class="dtb-lanechip${DTB_ODONLY?' active':''}" style="--c:#ef4444" onclick="dtbToggleOd()" title="Show ONLY overdue tasks in every lane (click again for everything)">⚠ Overdue only</button>`
     +((DTB_PROJ||DTB_FIND)?`<button class="dtb-lanechip" onclick="dtbClearFilters()" title="Clear the project + find filters">✕ clear</button>`:'')
     +(DTB_FOCUS?`<button class="dtb-lanechip active" style="--c:${DESIGN_COLORS[DTB_FOCUS]||'#64748b'}" onclick="dtbFocus('')" title="Focused on ${escA(DTB_FOCUS)} — click to show everyone again">🎯 ${esc(DTB_FOCUS)} ✕</button>`:'')
@@ -10040,7 +10051,12 @@ function renderDesignTeam(){
         </div>
       </div></div>`;
   }).join('');
-  document.getElementById('dtbBody').innerHTML=strip+`<div class="dtb-lanes${visNames.length<=2?(' dtb-few n'+visNames.length):''}">${html}</div>`+`<div class="dtb-charts">`+dtbCalHtml(today)+`</div>`+dtbChartsHtml(today);
+  // Keep your place through re-renders: inline edits (👤→ / notes / status) used to bounce the page
+  // back to the top and reset every lane's scroll. Snapshot all scroll positions, restore after the swap.
+  const _b=document.getElementById('dtbBody');
+  const _sc=_b?{top:_b.scrollTop, lanes:[..._b.querySelectorAll('.dtb-lane-body')].map(el=>el.scrollTop)}:null;
+  document.getElementById('dtbBody').innerHTML=strip+`<div class="dtb-lanes${visNames.length<=2?(' dtb-few n'+visNames.length):''}${DTB_TALL?' dtb-tall':''}">${html}</div>`+`<div class="dtb-charts">`+dtbCalHtml(today)+`</div>`+dtbChartsHtml(today);
+  if(_b&&_sc){ _b.scrollTop=_sc.top; const lbs=_b.querySelectorAll('.dtb-lane-body'); _sc.lanes.forEach((v,i)=>{ if(lbs[i]) lbs[i].scrollTop=v; }); }
   try{ dtbDrawGantt(today); }catch(e){}
   const ov2=document.getElementById('dtbOverlay'); if(ov2) ov2.classList.toggle('napkin', NAPKIN);
   const nb=document.getElementById('dtbNapkinBtn'); if(nb) nb.classList.toggle('active', NAPKIN);
