@@ -1,0 +1,37 @@
+name: Publish Healthcare Preview
+# One-off helper: uploads the MRA Healthcare Canada website preview
+# (from branch claude/mra-health-website-vwy8jr) to the public dashboard
+# storage under $web/healthpreview/. Does NOT touch the dashboard files.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout health preview branch
+        uses: actions/checkout@v4
+        with:
+          ref: claude/mra-health-website-vwy8jr
+
+      - name: Stage preview files
+        run: |
+          mkdir -p stage
+          cp health/index.html stage/index.html
+          cp health/site-spa.html stage/site-spa.html
+          cp health/research.html stage/research.html
+          ls -la stage
+
+      - name: Upload to $web/healthpreview
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          az storage blob upload-batch \
+            --account-name mrashopdash \
+            --account-key "$AZURE_STORAGE_KEY" \
+            --destination '$web' \
+            --destination-path healthpreview \
+            --source stage \
+            --content-cache-control "no-cache" \
+            --overwrite true
