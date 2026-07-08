@@ -3073,6 +3073,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"16.6", date:"2026-07-08", title:"🗓 Meeting view: how long each unit is HERE", items:[
+    "The Coming-back cards now show the unit's <b>full visit window and length</b> — <i>“7/13/26 – 7/26/26 <b>(14d)</b> · in 5d”</i> — and units already here show days remaining: <i>“HERE NOW → 7/26/26 · 9d left”</i>. Driven by the <b>Back to MRA Date</b> + <b>Leaving MRA Date</b> fields on the Fleetio issue — fill both and the math shows up; arrival-only issues just show the arrival like before." ] },
   { rev:"16.5", date:"2026-07-08", title:"📅 Bay cards: TRAILERS date-sorted + drag to re-order", items:[
     "The <b>trailers on every bay tile</b> now list <b>earliest start first</b> (16.4 sorted the tasks; this sorts the jobs — Bay 2 Front had 8/5 sitting above 6/22).",
     "And you can <b>hand-order them</b>: drag a trailer's ⠿ grip <b>onto another trailer's card</b> to slot it above (same bay re-orders; another bay moves it there AND positions it). The custom order saves for everyone. <i>(Needs a one-time 'JobOrd' Number column on the MRA Jobs list — Rich has the steps; until then it's pure date order.)</i>" ] },
@@ -8255,7 +8257,7 @@ function _mtgData(D){
     const state=(dn!=null&&dn>=0&&dn<=30)?'soon':((dn!=null&&dn<0&&!gone)?'here':null);
     if(!state) return;
     const k=r.asset||('#'+r.num);
-    if(!units[k]||state==='soon') units[k]=Object.assign(units[k]||{},{asset:k, jobNum:r.jobNum, state, dn, dateText:r.dateText, endText:r.endText});
+    if(!units[k]||state==='soon') units[k]=Object.assign(units[k]||{},{asset:k, jobNum:r.jobNum, state, dn, dateText:r.dateText, endText:r.endText, dateISO:r.dateISO, endISO:r.endISO});
   });
   const back=Object.values(units).map(u=>{
     u.issues=issues.filter(i=>(i.asset||'')===u.asset).map(i=>{ const c=cov[String(i.num)];
@@ -8281,8 +8283,10 @@ function renderMeeting(){
   const M=_mtgData(D);
   document.getElementById('mtgStamp').textContent=fmtMDY(M.today)+' · '+M.back.length+' returning/here · '+M.lot.length+' in the lot · '+M.dec.length+' decisions';
   document.getElementById('mtgBack').innerHTML = M.back.length ? M.back.map(u=>{
-    const when=u.state==='here'?`<span class="mtg-here">HERE NOW${u.endText?(' → '+esc(u.endText)):''}</span>`
-      :`<span class="mtg-due">${esc(u.dateText)}${u.dn===0?' · TODAY':' · '+u.dn+'d'}</span>`;
+    const stay=(u.dateISO&&u.endISO&&u.endISO>=u.dateISO)?(daysBetween(u.endISO,u.dateISO)+1):null;   // length of the visit, inclusive (needs the Leaving-MRA date on the Fleetio issue)
+    const when=u.state==='here'
+      ?`<span class="mtg-here">HERE NOW${u.endText?(' → '+esc(u.endText)+(u.endISO?(' · '+Math.max(0,daysBetween(u.endISO,M.today))+'d left'):'')):''}</span>`
+      :`<span class="mtg-due">${esc(u.dateText)}${u.endText?(' – '+esc(u.endText)):''}${stay?(' <b>('+stay+'d)</b>'):''}${u.dn===0?' · TODAY':' · in '+u.dn+'d'}</span>`;
     const lis=u.issues.slice(0,8).map(x=>`<li class="${(!x.covered&&!x.who)?'un':''}">#${esc(String(x.num))} ${esc(x.summ)} — <span class="who">${x.covered||x.who?esc(x.who||'—'):'⚠ unassigned'}</span></li>`).join('');
     return `<div class="mtg-card"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''}</div>${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
   }).join('') : `<div class="mtg-empty">Nothing marked coming back in the next 30 days.</div>`;
