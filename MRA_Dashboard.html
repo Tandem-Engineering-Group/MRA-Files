@@ -1066,6 +1066,12 @@
   #fleetioView .panel.pcollapsed > h2, #projectsView .panel.pcollapsed > h2, #floorView .panel.pcollapsed > h2{margin-bottom:0}
   #fleetioView .panel.pcollapsed > :not(h2), #projectsView .panel.pcollapsed > :not(h2), #floorView .panel.pcollapsed > :not(h2){display:none}
   /* 🗓 Maintenance-Meeting view — full-screen 3-column agenda (Coming back · Parking Lot · Decisions) */
+  .mtg-card{cursor:pointer}
+  .mtg-card:hover{background:rgba(245,200,30,.07)}
+  .mtg-card.mtg-sel{background:rgba(245,200,30,.14); outline:1px solid rgba(245,200,30,.5)}
+  .mtg-card li:hover{background:rgba(245,200,30,.16); border-radius:4px}
+  .mtg-gpswarn{margin-left:8px;font-size:10.5px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.42);border-radius:999px;padding:1px 8px;white-space:nowrap}
+  .mtg-gpsok{margin-left:8px;font-size:10.5px;font-weight:600;color:#86efac;white-space:nowrap}
   .mtg-overlay{position:fixed; inset:0; background:var(--bg); z-index:150; display:none; flex-direction:column; padding:14px 22px 20px; overflow:auto}
   .mtg-overlay.show{display:flex}
   .mtg-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; border-bottom:2px solid var(--brand); padding-bottom:9px; margin-bottom:13px}
@@ -3073,6 +3079,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"16.7", date:"2026-07-08", title:"🗓 Meeting view: full package — links, highlight, GPS truth-check", items:[
+    "Every issue on the Coming-back cards is now a <b>link straight into Fleetio</b> (same as everywhere else), and Parking-Lot tasks tied to a 🔧 issue get the ↗ too.",
+    "<b>Click any card to highlight it</b> and keep your place while you walk the meeting (click again to clear); rows also highlight on hover.",
+    "<b>⚠ GPS truth-check on “HERE NOW”:</b> that tag comes from the Fleetio date fields — now Samsara GPS double-checks it. A unit whose GPS says it's <b>not actually at MRA</b> gets a red <i>“⚠ GPS: Warren Penske Yard”</i> chip (= the issue's Back-to-MRA / Leaving dates are stale — fix the dates or resolve the issue), and confirmed units show a green <i>📍 GPS: at MRA</i>." ] },
   { rev:"16.6", date:"2026-07-08", title:"🗓 Meeting view: how long each unit is HERE", items:[
     "The Coming-back cards now show the unit's <b>full visit window and length</b> — <i>“7/13/26 – 7/26/26 <b>(14d)</b> · in 5d”</i> — and units already here show days remaining: <i>“HERE NOW → 7/26/26 · 9d left”</i>. Driven by the <b>Back to MRA Date</b> + <b>Leaving MRA Date</b> fields on the Fleetio issue — fill both and the math shows up; arrival-only issues just show the arrival like before." ] },
   { rev:"16.5", date:"2026-07-08", title:"📅 Bay cards: TRAILERS date-sorted + drag to re-order", items:[
@@ -8278,21 +8288,37 @@ function _mtgData(D){
   lot.forEach(l=>l.tasks.forEach(t=>{ if(t.who&&!t.due) dec.push({k:'due', kind:'due', proj:l.proj, raw:t.raw, txt:'Set due date - '+l.proj+': '+String(t.t).slice(0,50)}); }));
   return {today, back, lot, dec};
 }
+// Samsara GPS cross-check for a meeting card's unit (leading fleet # in the asset name):
+// {at:true} = GPS confirms it's at MRA · {at:false, where} = GPS says it's somewhere else.
+function _mtgGps(asset){ const D=window.MRA_DATA||{}; const locs=(D.fleetio&&D.fleetio.locations)||{};
+  const m=String(asset||'').trim().match(/^(\d{2,5})\b/); if(!m) return null;
+  const k=_normKey(m[1]); let loc=null;
+  for(const kk in locs){ if(_normKey(kk)===k){ loc=locs[kk]; break; } }
+  if(!loc) return null;
+  return {at:_isMraYard(loc), where:String(loc.yard||loc.place||'').trim()};
+}
+// Click a meeting card to highlight it and keep your place while you walk the list (click again to clear).
+function mtgSel(el){ document.querySelectorAll('.mtg-card.mtg-sel').forEach(c=>{ if(c!==el) c.classList.remove('mtg-sel'); }); el.classList.toggle('mtg-sel'); }
 function renderMeeting(){
   const D=window.MRA_DATA||{}; if(!(D.jobs&&D.jobs.length)) return;
   const M=_mtgData(D);
   document.getElementById('mtgStamp').textContent=fmtMDY(M.today)+' · '+M.back.length+' returning/here · '+M.lot.length+' in the lot · '+M.dec.length+' decisions';
   document.getElementById('mtgBack').innerHTML = M.back.length ? M.back.map(u=>{
     const stay=(u.dateISO&&u.endISO&&u.endISO>=u.dateISO)?(daysBetween(u.endISO,u.dateISO)+1):null;   // length of the visit, inclusive (needs the Leaving-MRA date on the Fleetio issue)
+    // GPS truth-check on HERE NOW: the state comes from the Fleetio DATE fields; Samsara says where it actually is.
+    const gps=(u.state==='here')?_mtgGps(u.asset):null;
+    const gpsChip=gps?(gps.at?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`
+      :` <span class="mtg-gpswarn" title="Samsara GPS says this unit is NOT at MRA right now — the Back-to-MRA / Leaving-MRA dates on its Fleetio issue are probably stale. Fix the dates or resolve the issue.">⚠ GPS: ${esc(gps.where||'not at MRA')}</span>`):'';
     const when=u.state==='here'
-      ?`<span class="mtg-here">HERE NOW${u.endText?(' → '+esc(u.endText)+(u.endISO?(' · '+Math.max(0,daysBetween(u.endISO,M.today))+'d left'):'')):''}</span>`
+      ?`<span class="mtg-here">HERE NOW${u.endText?(' → '+esc(u.endText)+(u.endISO?(' · '+Math.max(0,daysBetween(u.endISO,M.today))+'d left'):'')):''}</span>${gpsChip}`
       :`<span class="mtg-due">${esc(u.dateText)}${u.endText?(' – '+esc(u.endText)):''}${stay?(' <b>('+stay+'d)</b>'):''}${u.dn===0?' · TODAY':' · in '+u.dn+'d'}</span>`;
-    const lis=u.issues.slice(0,8).map(x=>`<li class="${(!x.covered&&!x.who)?'un':''}">#${esc(String(x.num))} ${esc(x.summ)} — <span class="who">${x.covered||x.who?esc(x.who||'—'):'⚠ unassigned'}</span></li>`).join('');
-    return `<div class="mtg-card"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''}</div>${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
+    const lis=u.issues.slice(0,8).map(x=>`<li class="${(!x.covered&&!x.who)?'un':''}">${fioTitle('issue',x.num,x.summ)} — <span class="who">${x.covered||x.who?esc(x.who||'—'):'⚠ unassigned'}</span></li>`).join('');
+    return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''}</div>${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
   }).join('') : `<div class="mtg-empty">Nothing marked coming back in the next 30 days.</div>`;
   document.getElementById('mtgLot').innerHTML = M.lot.length ? M.lot.map(l=>{
-    const lis=l.tasks.slice(0,10).map(t=>`<li class="${t.who?'':'un'}">${esc(String(t.t).slice(0,60))} — <span class="who">${t.who?esc(t.who):'⚠ unassigned'}</span>${t.due?` <span class="mtg-due">due ${esc(fmtMDY(t.due))}</span>`:''}</li>`).join('');
-    return `<div class="mtg-card"><div class="t">${esc(l.proj)}</div><div class="m">${l.jobNum?esc(l.jobNum)+' · ':''}${l.tasks.length} open task${l.tasks.length===1?'':'s'}</div>${lis?`<ul>${lis}</ul>`:'<div class="mtg-empty">no open tasks</div>'}${l.tasks.length>10?`<div class="m">+${l.tasks.length-10} more…</div>`:''}</div>`;
+    const lis=l.tasks.slice(0,10).map(t=>{ const fm=String(t.raw||'').match(/🔧\s*#(\d+)/); const fa=fm?fioArrow('issue',fm[1]):'';
+      return `<li class="${t.who?'':'un'}">${esc(String(t.t).slice(0,60))}${fa} — <span class="who">${t.who?esc(t.who):'⚠ unassigned'}</span>${t.due?` <span class="mtg-due">due ${esc(fmtMDY(t.due))}</span>`:''}</li>`; }).join('');
+    return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(l.proj)}</div><div class="m">${l.jobNum?esc(l.jobNum)+' · ':''}${l.tasks.length} open task${l.tasks.length===1?'':'s'}</div>${lis?`<ul>${lis}</ul>`:'<div class="mtg-empty">no open tasks</div>'}${l.tasks.length>10?`<div class="m">+${l.tasks.length-10} more…</div>`:''}</div>`;
   }).join('') : `<div class="mtg-empty">Nothing in the Parking Lot.</div>`;
   window._MTG_DEC=M.dec;
   document.getElementById('mtgDec').innerHTML = M.dec.length ? M.dec.slice(0,30).map((d,i)=>{
