@@ -248,8 +248,11 @@
   .dtb-lanechip.off{opacity:.42;border-style:dashed;text-decoration:line-through}
   .dtb-lanechip.active{background:var(--c,#64748b);color:#fff;font-weight:700}
   .dtb-task[draggable="true"]{cursor:grab}
+  .asgbody li[draggable="true"]{cursor:grab}
+  .asgbody li[draggable="true"]:active{cursor:grabbing}
   .dtb-task[draggable="true"]:active{cursor:grabbing}
   .dtb-lanefilter select{font-size:10.5px;max-width:130px;padding:3px 5px;border-radius:7px;border:1px solid var(--line);background:var(--panel2,rgba(255,255,255,.04));color:var(--txt)}
+  .dtb-task.asg-editing{outline:2px solid rgba(129,140,248,.55); outline-offset:1px}   /* 👤 re-assign in progress — highlight THE card being edited */
   .dtb-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:14px;flex:0 0 38px;box-shadow:0 3px 10px rgba(0,0,0,.3)}
   .dtb-nm{font-weight:800;font-size:15px;line-height:1.1}
   .dtb-count{font-size:11px;color:var(--muted);margin-top:2px}
@@ -539,6 +542,15 @@
   .asg{background:var(--panel); border:1px solid var(--line); border-radius:12px; display:flex; flex-direction:column; min-height:0}
   .asg-h{padding:9px 13px; font-weight:700; font-size:var(--ds-crew,15px); border-bottom:1px solid var(--line); display:flex; align-items:center; letter-spacing:.3px}
   .asg-h .count{margin-left:auto}
+  /* 🚫 out-today: lane badge + the strip above the crew columns (both show on the wall TV too) */
+  .asg-h .outbadge{margin-left:8px;font-size:10px;font-weight:700;background:rgba(239,68,68,.14);color:#fca5a5;border:1px solid rgba(239,68,68,.42);border-radius:999px;padding:2px 8px;letter-spacing:.2px;white-space:nowrap}
+  .asg.asg-out{border-color:rgba(239,68,68,.55); box-shadow:0 0 0 1px rgba(239,68,68,.25)}   /* whole crew card flags red when someone on it is out */
+  .asg.asg-out .asg-h{background:rgba(239,68,68,.08)}
+  /* 🔥 HOT tasks — urgent must-happen: amber edge + tint + gentle glow, pinned to the top of their list */
+  .taskline.hot, .asgbody li.hot{background:rgba(245,158,11,.12); border-left:3px solid #f59e0b; font-weight:600; border-radius:4px; padding-left:7px; animation:hotpulse 2.4s ease-in-out infinite}
+  @keyframes hotpulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}50%{box-shadow:0 0 9px 1px rgba(245,158,11,.35)}}
+  #outStrip{font-size:11.5px;color:var(--txt);font-weight:400;letter-spacing:0;text-transform:none;background:rgba(239,68,68,.09);border:1px solid rgba(239,68,68,.32);border-radius:8px;padding:4px 10px}
+  #outStrip .outwhy{color:var(--muted)}
   .asgbody{padding:10px; display:flex; flex-direction:column; gap:calc(10px*var(--ds-density,1)); overflow-y:auto}
   /* Sal's panel holds two task columns (used only in wall mode); normal view shows just the one. */
   .asg-split{display:flex; flex-direction:row; gap:10px; min-height:0; flex:1 1 auto}   /* Sal's two columns side by side */
@@ -912,6 +924,10 @@
   .bamuted{color:var(--muted); font-size:12px}
   #baList{max-height:42vh; overflow:auto; margin:0 0 4px}
   .ba-row{display:flex; align-items:center; gap:10px; padding:7px 6px; border-bottom:1px solid rgba(255,255,255,.06); cursor:pointer}
+  .ba-row.ba-ind{padding-left:28px}   /* phase-grouped view: tasks indent under their phase header */
+  .ba-phase{display:flex; align-items:center; gap:8px; padding:8px 6px 5px; margin-top:6px; font-weight:700; font-size:10.5px;
+    text-transform:uppercase; letter-spacing:.4px; color:var(--txt); background:rgba(255,255,255,.03); border-bottom:1px solid var(--line); cursor:pointer}
+  .ba-phase .bamuted{text-transform:none; letter-spacing:0; font-weight:400}
   .ba-row:hover{background:rgba(255,255,255,.05)}
   body.light .ba-row:hover{background:rgba(0,0,0,.04)}
   .ba-row.chg{background:rgba(34,197,94,.12)}
@@ -1414,6 +1430,7 @@
       <button class="mi" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
       <button class="mi" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
       <button class="mi" onclick="openBringBack();closeDrops()" title="Return a shipped/finished trailer to the floor for new maintenance (needs code)">🔄 Bring back trailer</button>
+      <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
       <button class="mi" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
       <button class="mi" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter">✉ Daily Letter</button>
       <div class="mi-div">View</div>
@@ -1480,6 +1497,11 @@
         <button class="expandbtn bayallbtn" style="margin-left:8px" onclick="collapseAllBays()" title="Hide every job's tasks across all bays (you still see the job names)">⊟ Collapse all</button>
         <button class="expandbtn bayallbtn" onclick="expandAllBays()" title="Show every job's tasks across all bays">⊞ Expand all</button>
         <button class="expandbtn bayallbtn" id="midBtn" style="margin-left:8px" onclick="toggleMiddle()" title="Show the Bay 3 / Bay 4 Middle tiles even when empty (they auto-hide when nothing is parked there)">Ⓜ Middle bays</button>
+        <select id="baySortSel" onchange="setBaySort(this.value)" title="Order each job's task list on the bay cards (🔥 hot tasks always pin to the top) — remembered on this device" style="margin-left:8px;font-size:11px;padding:3px 7px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt);letter-spacing:0;font-weight:400;text-transform:none">
+          <option value="due">📅 Due — soonest first</option>
+          <option value="added">🆕 Recently added</option>
+          <option value="list">📜 List order</option>
+        </select>
         <div class="linksmenu" style="margin-left:8px">
           <button class="expandbtn" onclick="toggleDrop(event,'bayPop')" title="Bay actions — edit, add, print">☰ Actions ▾</button>
           <div class="linksmenu-pop" id="bayPop">
@@ -1487,6 +1509,7 @@
             <button class="mi" id="btnAddTask" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
             <button class="mi" id="btnAddJob" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
             <button class="mi" id="btnBringBack" onclick="openBringBack();closeDrops()" title="Return a shipped/finished trailer to the floor for new maintenance — keeps its ship history (needs code)">🔄 Bring back trailer</button>
+            <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
             <button class="mi" id="btnPrint" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
             <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
             <div class="mi-div">View</div>
@@ -1514,7 +1537,7 @@
     <div class="panel" id="openTasksPanel">
       <h2 style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
         <span>🧰 Open Tasks by Assignee</span>
-        <span id="salDuePick" class="saldue-pick" style="margin:0" title="Show only tasks DUE within this window (by due date). 'All' shows everything.">
+        <span id="salDuePick" class="saldue-pick" style="margin:0" title="Trim tasks whose DUE DATE is beyond this window. Tasks with no due date always show. 'All' shows everything.">
           <span class="saldue-lbl">Due:</span>
           <button data-d="today" onclick="setSalDue('today')">Today</button>
           <button data-d="week" onclick="setSalDue('week')">Week</button>
@@ -1551,17 +1574,18 @@
           <button data-w="Josh" onclick="toggleAsgWho('Josh')">Josh</button>
           <button data-w="Jeff" onclick="toggleAsgWho('Jeff')">Jeff</button>
         </span>
+        <span id="outStrip" style="flex-basis:100%;display:none"></span>
         <span id="asgPageInd" style="font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none;flex-basis:100%"></span>
       </h2>
       <div class="assignees" id="assigneesA">
-        <div class="asg asgSalWrap" data-asg="Sal"><div class="asg-h">🔧 <a class="asgname" href="MRA_Dashboard.html?sheet=sal" target="_blank" rel="noopener" title="Open Sal's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Sal ↗</a> <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
-        <div class="asg" data-asg="Wrap Team"><div class="asg-h">🎨 <a class="asgname" href="MRA_Dashboard.html?sheet=wrap" target="_blank" rel="noopener" title="Open Wrap Team's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Wrap Team ↗</a> <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
-        <div class="asg" data-asg="Electricians"><div class="asg-h">⚡ <a class="asgname" href="MRA_Dashboard.html?sheet=elec" target="_blank" rel="noopener" title="Open Electricians's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Electricians ↗</a> <span class="count" id="cntElec"></span></div><div class="asgbody autoscroll" id="asgElec"></div></div>
+        <div class="asg asgSalWrap" data-asg="Sal" ondragover="ftDragOver(event)" ondrop="ftDropCrew(event,'Sal')"><div class="asg-h">🔧 <a class="asgname" href="MRA_Dashboard.html?sheet=sal" target="_blank" rel="noopener" title="Open Sal's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Sal ↗</a> <span class="count" id="cntSal"></span></div><div class="asg-split"><div class="asgbody autoscroll" id="asgSal"></div><div class="asgbody autoscroll asgSalB" id="asgSalB"></div></div></div>
+        <div class="asg" data-asg="Wrap Team" ondragover="ftDragOver(event)" ondrop="ftDropCrew(event,'Wrap Team')"><div class="asg-h">🎨 <a class="asgname" href="MRA_Dashboard.html?sheet=wrap" target="_blank" rel="noopener" title="Open Wrap Team's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Wrap Team ↗</a> <span class="count" id="cntWrap"></span></div><div class="asgbody autoscroll" id="asgWrap"></div></div>
+        <div class="asg" data-asg="Electricians" ondragover="ftDragOver(event)" ondrop="ftDropCrew(event,'Electricians')"><div class="asg-h">⚡ <a class="asgname" href="MRA_Dashboard.html?sheet=elec" target="_blank" rel="noopener" title="Open Electricians's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Electricians ↗</a> <span class="count" id="cntElec"></span></div><div class="asgbody autoscroll" id="asgElec"></div></div>
       </div>
       <div class="assignees asgpageB" id="assigneesB">
-        <div class="asg" data-asg="Doug"><div class="asg-h">🛠️ <a class="asgname" href="MRA_Dashboard.html?sheet=doug" target="_blank" rel="noopener" title="Open Doug's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Doug ↗</a> <span class="count" id="cntDoug"></span></div><div class="asgbody autoscroll" id="asgDoug"></div></div>
-        <div class="asg" data-asg="Josh"><div class="asg-h">🪚 <a class="asgname" href="MRA_Dashboard.html?sheet=josh" target="_blank" rel="noopener" title="Open Josh's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Josh ↗</a> <span class="count" id="cntJosh"></span></div><div class="asgbody autoscroll" id="asgJosh"></div></div>
-        <div class="asg" data-asg="Jeff"><div class="asg-h">🚛 <a class="asgname" href="MRA_Dashboard.html?sheet=jeff" target="_blank" rel="noopener" title="Open Jeff's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Jeff ↗</a> <span class="count" id="cntJeff"></span></div><div class="asgbody autoscroll" id="asgJeff"></div></div>
+        <div class="asg" data-asg="Doug" ondragover="ftDragOver(event)" ondrop="ftDropCrew(event,'Doug')"><div class="asg-h">🛠️ <a class="asgname" href="MRA_Dashboard.html?sheet=doug" target="_blank" rel="noopener" title="Open Doug's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Doug ↗</a> <span class="count" id="cntDoug"></span></div><div class="asgbody autoscroll" id="asgDoug"></div></div>
+        <div class="asg" data-asg="Josh" ondragover="ftDragOver(event)" ondrop="ftDropCrew(event,'Josh')"><div class="asg-h">🪚 <a class="asgname" href="MRA_Dashboard.html?sheet=josh" target="_blank" rel="noopener" title="Open Josh's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Josh ↗</a> <span class="count" id="cntJosh"></span></div><div class="asgbody autoscroll" id="asgJosh"></div></div>
+        <div class="asg" data-asg="Jeff" ondragover="ftDragOver(event)" ondrop="ftDropCrew(event,'Jeff')"><div class="asg-h">🚛 <a class="asgname" href="MRA_Dashboard.html?sheet=jeff" target="_blank" rel="noopener" title="Open Jeff's live task sheet — the same shareable link, with photos, due dates and auto-refresh">Jeff ↗</a> <span class="count" id="cntJeff"></span></div><div class="asgbody autoscroll" id="asgJeff"></div></div>
       </div>
     </div>
 
@@ -1696,6 +1720,13 @@
         <span style="color:var(--muted)">solid = % complete</span>
       </div>
       <div class="gantt-note" id="projGanttNote"></div>
+    </div>
+
+    <!-- 🏭 Bay Occupancy — one row per bay, a bar per unit (arrival → departure): see when a bay frees up and where bookings overlap -->
+    <div class="panel" id="bayOccPanel">
+      <h2>🏭 Bay Occupancy <span class="count" id="bayOccCount"></span>
+        <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">a bar per unit, arrival → departure · next 10 weeks · <span style="color:#ef4444">red = past its ship date, still in the bay</span> · — open — = bay free now</span></h2>
+      <div class="gantt" id="bayOccGantt"></div>
     </div>
 
     <div class="grid">
@@ -2049,6 +2080,7 @@
         <div>
           <label>Task</label>
           <textarea id="atTask" placeholder="What needs doing…"></textarea>
+          <label class="bachk" style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px"><input type="checkbox" id="atHot" style="width:auto;margin:0;flex:0 0 auto"> 🔥 <b>Hot</b> — urgent / must-happen: stands out in amber everywhere and pins to the top of the lists</label>
         </div>
         <div class="addrow2">
           <div><label>Assigned to <span style="color:var(--muted);font-weight:400;font-size:10.5px">(add a 2nd for a team effort)</span></label>
@@ -2133,6 +2165,10 @@
           <div><label>Start date</label><input id="lvStart" type="date"></div>
           <div><label>End date</label><input id="lvEnd" type="date"></div>
         </div>
+        <div><label>Reason <span class="muted-note">(optional — shows on the board, e.g. “Called in”)</span></label>
+          <select id="lvReason"><option value=""></option><option>Called in</option><option>Off-site</option><option>Appointment</option><option>Vacation</option><option>Training</option><option>Other</option></select></div>
+        <div><label>Show on crew card <span class="muted-note">(for team members without their own column — e.g. Kayla → Sal's card. People with a column match by name automatically.)</span></label>
+          <select id="lvLane"><option value="">— auto (match by name) —</option><option>Sal</option><option>Wrap Team</option><option>Electricians</option><option>Doug</option><option>Josh</option><option>Jeff</option></select></div>
         <div id="lvMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="closeLeave()">Cancel</button>
@@ -2187,7 +2223,8 @@
       <h3>✎ Edit task</h3>
       <div class="msub" id="etSub"></div>
       <div class="addform">
-        <div><label>Task</label><textarea id="etTask" style="min-height:60px"></textarea></div>
+        <div><label>Task</label><textarea id="etTask" style="min-height:60px"></textarea>
+          <label class="bachk" style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px"><input type="checkbox" id="etHot" style="width:auto;margin:0;flex:0 0 auto"> 🔥 <b>Hot</b> — urgent / must-happen: stands out in amber everywhere and pins to the top of the lists</label></div>
         <div class="addrow2">
           <div><label>Assigned to <span style="color:var(--muted);font-weight:400;font-size:10.5px">(add a 2nd for a team effort)</span></label>
             <div style="display:flex;gap:6px"><select id="etAssigned" style="flex:1"></select><select id="etAssigned2" style="flex:1"></select></div></div>
@@ -2286,6 +2323,12 @@
       <div class="bactrls">
         <select id="baProj" onchange="baProjChange()" title="Which project's tasks to show"></select>
         <select id="baWho" onchange="baRender()" title="Narrow to tasks currently assigned to one group/person"></select>
+        <select id="baSort" onchange="baRender()" title="How to arrange the task list">
+          <option value="phase">📂 By phase (like the editor)</option>
+          <option value="date">📅 By date — soonest first</option>
+          <option value="name">🔤 By name A–Z</option>
+          <option value="who">👤 By assignee</option>
+        </select>
         <input id="baSearch" type="search" placeholder="🔎 filter task text…" oninput="baRender()">
         <label class="bachk" title="Include completed tasks too"><input type="checkbox" id="baShowDone" onchange="baRender()"> Show completed</label>
       </div>
@@ -2300,6 +2343,7 @@
           <button data-f="phase" onclick="baSetField('phase')" title="Bulk-set the phase">📂 Phase</button>
           <button data-f="type" onclick="baSetField('type')" title="Bulk-set the type">🏷 Type</button>
           <button data-f="status" onclick="baSetField('status')" title="Bulk-set the status">📊 Status</button>
+          <button data-f="dates" onclick="baSetField('dates')" title="Bump every checked task's Start & Finish by ± N days (e.g. push a batch out a week)">📅 Dates</button>
         </div>
         <div class="baassign-row" id="baInputRow"></div>
         <datalist id="baPersonList"></datalist><datalist id="baPhaseList"></datalist><datalist id="baTypeList"></datalist>
@@ -2875,9 +2919,9 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
-    <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. Per-tile collapse state is remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. Below the lot sits a <b>General</b> tile for jobs assigned to bay “General” (equipment-only work with no floor space) — same behavior, and its tasks feed the crew lists like any active job. <span class="k">☰ Actions ▸ 🖨 Print…</span> opens the print picker: the <b>whole board</b>, or <b>any mix of crews</b> (tick Sal + Electricians, etc.) as one handout with a section per crew — grouped by trailer, with Fleetio descriptions, <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files.</p></div>
+    <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). Tasks list <b>due-soonest first</b> (undated last, 🔥 hot pinned on top) with their 📅 due dates shown — the <b>sort picker</b> in the Bay Status header switches to 🆕 Recently added or 📜 List order (remembered per device). The <b>trailers</b> on a tile list earliest-start first too — or <b>drag a trailer's ⠿ grip onto another trailer's card</b> to hand-order them (saved for everyone). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. Per-tile collapse state is remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. Below the lot sits a <b>General</b> tile for jobs assigned to bay “General” (equipment-only work with no floor space) — same behavior, and its tasks feed the crew lists like any active job. <span class="k">☰ Actions ▸ 🖨 Print…</span> opens the print picker: the <b>whole board</b>, or <b>any mix of crews</b> (tick Sal + Electricians, etc.) as one handout with a section per crew — grouped by trailer, with Fleetio descriptions, <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files.</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap · Electricians ⇄ Doug · Josh · Jeff</h4>
-    <p>Live queues, one per crew. <b>Placement matters:</b> trailers in a <b>bay or the Parking Lot</b> feed these lists; a trailer waiting in <b>Next Up / On Hold / Off-Site</b> keeps its assigned tasks on its own card until it's moved out — then they appear here automatically. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date — <b>a shop TV defaults to Month</b> — and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; both remembered per device. An <b>⚠ N overdue</b> chip counts open tasks past their due date. Each task line has a <b>👤 quick-assign</b> chip — tap, pick a crew, done (no dialog). The <span class="k">➕ Add</span> menu here adds a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot. <b>👤 Crew picker:</b> the chip row up top (All · Sal · Wrap · Elec · Doug · Josh · Jeff) shows <b>only the selected crews' columns on this device</b> — tap more than one to combine (Sal + Electricians), tap <b>All</b> to bring everyone back; the visible columns grow to fill the width, and the choice is <b>remembered per device</b> (perfect for Sal's own iPad or his back-shop monitor — on a wall/TV screen set it from the <span class="k">⚙ gear ▸ 👤 Crews</span>, where it also pauses the page rotation). Fleetio descriptions under tasks clamp to <b>one line — tap to expand</b>. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
+    <p>Live queues, one per crew. <b>Placement matters:</b> trailers in a <b>bay or the Parking Lot</b> feed these lists; a trailer waiting in <b>Next Up / On Hold / Off-Site</b> keeps its assigned tasks on its own card until it's moved out — then they appear here automatically. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date — <b>a shop TV defaults to Month</b> — and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; both remembered per device. An <b>⚠ N overdue</b> chip counts open tasks past their due date. Each task line has a <b>👤 quick-assign</b> chip — tap, pick a crew, done (no dialog) — or just <b>drag the task onto another crew's column</b> to re-assign it, or <b>onto a job card on the bay board</b> to move it to that trailer (mouse/desktop; touch uses the chip / ✎ ⇄ Move). The <span class="k">➕ Add</span> menu here adds a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot. <b>👤 Crew picker:</b> the chip row up top (All · Sal · Wrap · Elec · Doug · Josh · Jeff) shows <b>only the selected crews' columns on this device</b> — tap more than one to combine (Sal + Electricians), tap <b>All</b> to bring everyone back; the visible columns grow to fill the width, and the choice is <b>remembered per device</b> (perfect for Sal's own iPad or his back-shop monitor — on a wall/TV screen set it from the <span class="k">⚙ gear ▸ 👤 Crews</span>, where it also pauses the page rotation). Fleetio descriptions under tasks clamp to <b>one line — tap to expand</b>. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
     <p><b>Sizing on the TV (admin 🎨 Design panel):</b> every crew tile on <i>both</i> pages — Sal · Wrap · Electricians and Doug · Josh · Jeff — can be sized independently (width + height) from the tile picker, same as the bays.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
     <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show completed</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). The picker is <b>two-level</b>: a group (MRA Design, MRA Shop, Electricians, Wrap Team, Maintenance) <b>rolls up everyone</b> ("MRA Design — all") with each member indented under it ("› Steve K") — pick the group to see all of it, or a person to drill in. Members come from the workbook's <b>Sub-Resource</b> column (Assigned To = group, Sub-Resource = person); until that's filled, the board reads them from existing "Group / Person" assignments. Name variants are still merged (e.g. <b>MasterWraps → Wrap Team</b>, <b>Electrician → Electricians</b>). <span class="k">🖨 Print</span> lays the Gantt + full task list on one <b>11×17 (tabloid) landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
@@ -2886,6 +2930,8 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>④ᵈ 📊 Workload — open tasks</h4>
     <p>Under <b>Program Development Load</b>. Where that panel counts <i>projects</i>, this gauges <b>how much work is left</b>: comparative bars of <b>open tasks per PM</b> (left) and <b>per resource / crew</b> (right — MRA Shop, MRA Design, Wrap Team, Electricians, …), longest bar = most loaded. <b>Overdue tasks show in red</b> (with the overdue count in parentheses). It's a <i>fuzzy</i> gauge by open‑task count today; once tasks carry <b>Est. Hours</b> it can weight by real effort instead.</p>
     <p><b>Click any row</b> (including <b>Unassigned</b>) to see a <b>per-project breakdown</b> — how many open tasks that PM / crew has on each project, overdue in red. Click a project in that list to open its detailed Gantt.</p></div>
+  <div class="hsec"><h4>④ᵉ 🏭 Bay Occupancy (Projects tab)</h4>
+    <p>Right under the Project Schedules Gantt: <b>one row per bay, a bar per unit</b> in it — Jxxxx · name, spanning its <b>arrival → departure</b> over the next ~10 weeks. Instantly shows <b>when each bay frees up</b> and where bookings <b>overlap</b>. <span style="color:#4ade80">Green</span> = in the bay now, <span style="color:#60a5fa">blue</span> = scheduled, <span style="color:#ef4444">red</span> = past its planned ship date and still in the bay; <b>— open —</b> means the bay is free today. Click a unit's row to open its job editor.</p></div>
   <div class="hsec"><h4>⑤ 👥 Team Capacity (Projects tab)</h4>
     <p>Groups every open <b>Project Task</b> by the person it's <i>assigned</i> to, most-loaded first, with a due-date chip
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
@@ -2936,10 +2982,10 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑭ ➕ Add a task · ✎ Edit / move a job (from the board)</h4>
     <p>Turn on <span class="k">🔒 Edit mode</span> (your code) and the editing tools appear — all write straight back to the workbook (~15 min to show). While you're signed in, a green <span class="k">🔓 your-name · Log out</span> pill shows in the top bar — click it when you're done so the screen goes back to view-only (it also auto-logs-out after 5 min idle). Your <b>code is hidden (starred out)</b> as you type it into the sign-in pop-up:</p>
     <ul>
-      <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule. <b>Assigned to</b> now has a <b>2nd dropdown</b> — pick two crews for a <b>team-effort</b> task and it shows in both their columns (leave blank for one).</li>
+      <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule. Tick <span class="k">🔥 Hot</span> for urgent must-happen work — it shows amber + bold everywhere, <b>pinned to the top</b> of its list (*** or !!! in the text counts as hot too; un-tick in ✎ Edit to clear it). <b>Assigned to</b> now has a <b>2nd dropdown</b> — pick two crews for a <b>team-effort</b> task and it shows in both their columns (leave blank for one).</li>
       <li><span class="k">✎ edit</span> on a job card — move bay, change start/finish dates, tweak notes; <b>🗑 Delete job</b> is in that form too. <b>Tip:</b> just <b>click any job # </b>(on a bay tile or a crew task card) to jump straight into that job's editor (asks for your code first).</li>
       <li>On each task line: <span class="k">✓ close</span>, <span class="k">✎</span> edit (text, assignee, status, milestone, comments), <span class="k">🗑</span> delete. Turn on <span class="k">Show closed</span> and closed tasks get <span class="k">↩</span> reopen + 🗑 delete.</li>
-      <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.)</li>
+      <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates + optional <b>reason</b>), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.) For a same-day call-in, <span class="k">☰ Actions ▸ 🚫 Out today…</span> (top or floating menu) pre-fills a one-day entry — the person's <b>whole crew card highlights red</b> with a 🚫 badge naming who's out and why, and a strip above the crew columns lists everyone out. Team members without their own column (Sal's crew: Jake, John, Brent, Kayla…) — use the <b>“Show on crew card”</b> picker in the form to route them onto the right card (e.g. Kayla → Sal).</li>
       <li><b>📷 Attachments</b> — the ➕ Add and ✎ Edit task forms have <span class="k">📷 Photo · 📎 PDF / file · 🔗 Link</span> buttons. Snap a picture at check-in (photos shrink themselves before upload, so it's quick from a phone), attach a PDF, or paste a link (a SharePoint doc, a spec page…). Attachments show as <b>thumbnails right on the task line</b> — hover to zoom, click to open full size — and follow the task onto the crew sheets, the 🔗 custom dash links and the prints, exactly like the Fleetio photos do.</li>
     </ul>
     <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. <b>Everything you change</b> — adds, edits, completes, deletes, moves — now also sticks on <b>your</b> device even if you <b>hit refresh / reload the page</b> (handy on an iPad, which reloads tabs on its own). It holds your changes until the workbook's data.js catches up on the next ~15-min export, then quietly hands off to the real data — so nothing ever appears to vanish when you refresh.</div></div>
@@ -2950,7 +2996,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
     <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor below. In that detail view (with your code), <b>drag a task bar to reschedule</b> it — drag the <b>middle</b> to move it, the <b>left/right end</b> to change the start/finish; it shows the new dates as you drag and saves on drop. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown at the top filters the list to one person/crew (e.g. <i>Steve K</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent task with a <b>▾/▸</b> caret to collapse or expand them — make one right in the task form with the <span class="k">Subtask of</span> dropdown (pick a parent; the subtask takes that parent's phase). They indent on the project's detailed Gantt too. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b> (this task starts after another), and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the editor header). Code‑protected — writes back to the workbook, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything that's already complete (and any fully-finished phase) so you can scroll just what's left — it's remembered per device, and it also applies to the FLOOR (<span class="k">Show closed</span>), the Crew/Resource Schedule (<span class="k">Show completed</span>) and the Build Schedule (<span class="k">Hide completed items</span>).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the Program Development lead for the project — across all its tasks and the floor job (the button shows the current PM). <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text (stacks with the assignee filter); <span class="k">Type</span> is now a real <b>dropdown</b> (with an <b>➕ Other…</b> option to add a new type) and it <b>saves</b>; <span class="k">🏷 Non-official</span> flags a project as informal work (e.g. JFSD Trailer Weight) — it stays on the Gantt, Progress and PM Load, just tagged: a 🏷 on its name (including in this editor's project dropdown) and a <b>muted amber wash across its whole Gantt row</b> so it reads at a glance; <span class="k">⏸ Park</span> <b>freezes a project</b> (on hold): it stays on the Gantt but <b>dimmed and tagged ⏸</b>, shows a <span class="k">⏸ parked</span> chip in Project Progress, and <b>stops counting as At-Risk / Needs Attention</b> — task statuses are untouched, so un-parking restores it exactly (a <span class="k">⏸ Hide parked</span> toggle on the Gantt toolbar tucks parked projects away entirely); <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt (which now has its own <span class="k">✓ Hide completed</span>); and a task <b>requires both a Start and a Finish date</b> (the Finish can't be before the Start; a single-date milestone is fine and gets mirrored). The editor header, the project picker and the detailed-view title now show the project's <b>Job #</b> — <b>“J1557 · Project Name”</b> — when it's linked to a trailer.</p></div>
   <div class="hsec"><h4>⑯ᵃ ⇄ Bulk Edits — change many tasks at once (PROJECTS tab)</h4>
-    <p>Don't open tasks one at a time. Click <span class="k">⇄ Bulk Edits</span> on the PROJECTS toolbar to change <b>assignee</b>, <b>phase</b>, <b>type</b> or <b>status</b> across a batch of tasks:</p>
+    <p>Don't open tasks one at a time. Click <span class="k">⇄ Bulk Edits</span> on the PROJECTS toolbar to change <b>assignee</b>, <b>phase</b>, <b>type</b>, <b>status</b> — or <b>📅 bump Start &amp; Finish dates by ± N days</b> — across a batch of tasks (the list is <b>grouped by phase with indented tasks</b> like the editor — a phase header's checkbox grabs the whole phase — with a sort picker for date / name / assignee order):</p>
     <p><b>1.</b> Pick a <b>project</b> (or ★ All projects). <b>2.</b> Optionally narrow to a current assignee and/or 🔎 filter by text. <b>3.</b> <b>Check the tasks</b> (or <span class="k">Select all</span>). <b>4.</b> Pick the <b>field tab</b> at the bottom — 👤 Assignee · 📂 Phase · 🏷 Type · 📊 Status — set the value and hit <span class="k">Apply to checked</span> (you'll see the change staged in green). <b>5.</b> Stage more if you like (even different fields), then <span class="k">💾 Save</span>.</p>
     <p><b>Assignee</b> by default <b>keeps each task's group and adds the person</b> as the 2nd tier (so <i>MRA Design</i> becomes <i>MRA Design / Sarah Williams</i>) — what the Crew/Resource rollups and the Design board read; you can also switch the group outright or clear it. Code-protected; changes show instantly and settle in the lists within ~15 min.</p></div>
   <div class="hsec"><h4>⑯ᵛ ✅ Mark-ready → PM verifies (Design tasks)</h4>
@@ -3027,6 +3073,34 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"16.5", date:"2026-07-08", title:"📅 Bay cards: TRAILERS date-sorted + drag to re-order", items:[
+    "The <b>trailers on every bay tile</b> now list <b>earliest start first</b> (16.4 sorted the tasks; this sorts the jobs — Bay 2 Front had 8/5 sitting above 6/22).",
+    "And you can <b>hand-order them</b>: drag a trailer's ⠿ grip <b>onto another trailer's card</b> to slot it above (same bay re-orders; another bay moves it there AND positions it). The custom order saves for everyone. <i>(Needs a one-time 'JobOrd' Number column on the MRA Jobs list — Rich has the steps; until then it's pure date order.)</i>" ] },
+  { rev:"16.4", date:"2026-07-08", title:"📅 Bay cards: tasks sort by due date (+ picker)", items:[
+    "Tasks on the <b>bay cards</b> now default to <b>due-soonest first</b> within each crew group (undated last, 🔥 hot always pinned on top), and each task shows its <b>📅 due date</b> right on the line (red when past). A new <b>sort picker</b> in the Bay Status header flips to 🆕 Recently added or 📜 original List order — remembered per device, same choices as the crew columns below." ] },
+  { rev:"16.3", date:"2026-07-08", title:"🐞 Fix: undated tasks vanished on the wall TV", items:[
+    "The shop TV defaults its <b>Due:</b> window to Month, and tasks <b>without a due date</b> were being treated as outside every window — so crews whose work is mostly undated (Jeff's whole list) showed <b>empty on the wall</b> while desktops looked fine. Undated tasks now <b>always show</b>; the Due window only trims dated tasks due beyond it." ] },
+  { rev:"16.2", date:"2026-07-07", title:"🔥 Hot tasks — make the must-happen work stand out", items:[
+    "The ➕ Add and ✎ Edit task forms have a <b>🔥 Hot checkbox</b> — a hot task shows with an <b>amber edge, bold text and a gentle glow</b> on the bay tiles and the crew columns, and <b>pins to the top</b> of its list. The 🔥 rides in the task text, so it carries onto the crew sheets and prints too.",
+    "Old habits count: tasks written with <b>***</b> or <b>!!!</b> light up as hot automatically (your “***INSTALL ALUM WALLS***” is already glowing). Un-check 🔥 in ✎ Edit to calm one back down." ] },
+  { rev:"16.1", date:"2026-07-07", title:"🚫 Out today, complete: crew cards highlight + team-member picker", items:[
+    "The whole <b>crew card highlights red</b> when someone on it is out (not just a small chip), and the badge names <b>who and why</b> — “🚫 Kayla out · Appointment”.",
+    "The Out-today / leave form gained a <b>“Show on crew card” picker</b> — so team members without their own column (Sal's crew: Jake, John, Brent, Kayla…) land on the right card. People who have a column (Josh, Doug…) match by name automatically. The Staff on Leave list shows the reason and the → crew routing, and it's in <b>both</b> ☰ Actions menus (top + floating)." ] },
+  { rev:"16.0", date:"2026-07-07", title:"🚫 Out today — called in / off-site, on the board", items:[
+    "Somebody calls in? <b>☰ Actions ▸ 🚫 Out today…</b> — type the name, pick a reason (Called in / Off-site / Appointment…), save. Their crew column header gets a red <b>🚫 Out today</b> badge and a strip above the crew columns lists <b>everyone out</b> — including team members without their own column (Sal's crew: Jake, John, Brent, Kayla…). Shows on the wall TV too.",
+    "It's powered by <b>Staff on Leave</b> underneath — the entry lands there automatically (synced, with the reason and an OUT TODAY badge while it's active), so vacations and call-ins live in one list. The leave form also gained the optional <b>Reason</b> field." ] },
+  { rev:"15.9", date:"2026-07-07", title:"⇄ Bulk Edits reads like the editor now", items:[
+    "The task list in <b>⇄ Bulk Edits</b> is now <b>grouped by phase with the tasks indented underneath</b> (date-sorted inside each phase), just like ✎ Edit Project Tasks — and each <b>phase header has its own checkbox</b> that grabs or releases the whole phase in one click. A new <b>sort picker</b> flips the list to 📅 by date, 🔤 by name, or 👤 by assignee (remembered per device)." ] },
+  { rev:"15.8", date:"2026-07-07", title:"📅 Bulk-bump dates in ⇄ Bulk Edits", items:[
+    "The <b>⇄ Bulk Edits</b> tool (Projects tab AND the Design board header) has a new <b>📅 Dates</b> tab: check as many tasks as you want, type a number of days (7 pushes a week later, -3 pulls earlier), <b>Apply</b>, review the staged old→new dates, then <b>💾 Save</b>. Start and Finish shift together (calendar days); undated tasks are skipped and told to you. Apply twice and the bumps stack before saving." ] },
+  { rev:"15.7", date:"2026-07-07", title:"🖱 Drag shop tasks between crews & trailers", items:[
+    "In <b>Open Tasks by Assignee</b> you can now <b>drag a task onto another crew's column</b> to re-assign it (same write as the 👤 chip), or <b>drag it onto any job card on the bay board</b> to move it to that trailer (asks for your code + a confirm). Mouse/desktop only — on an iPad keep using the 👤 quick-assign chip and ✎ → ⇄ Move." ] },
+  { rev:"15.6", date:"2026-07-07", title:"🐞 Fix: task move/copy list no longer offers leave-calendar rows", items:[
+    "The ⇄ Move / copy to trailer dropdown listed the <b>APL/Holidays staff-leave entries</b> (about a dozen identical rows) and shipped trailers — moving a task onto a leave row made it <b>vanish from every view</b>. The list now shows only real destinations (active trailers + 🛠 General), sorted by name with the trailer name first — <i>“Washtenaw County — Parking Lot · J1543”</i>." ] },
+  { rev:"15.5", date:"2026-07-07", title:"🏭 Bay Occupancy Gantt (Projects tab)", items:[
+    "New <b>🏭 Bay Occupancy</b> panel right under the Project Schedules Gantt — <b>one row per bay, a bar per unit</b> (Jxxxx · name, arrival → departure, next ~10 weeks). See at a glance <b>when each bay frees up</b> and where bookings <b>overlap</b>. <span style=\"color:#4ade80\">Green</span> = in the bay now, <span style=\"color:#60a5fa\">blue</span> = scheduled, <span style=\"color:#ef4444\">red</span> = past its ship date and still there; <b>— open —</b> = the bay is free today. Click a bar's row to open that job's editor." ] },
+  { rev:"15.4", date:"2026-07-07", title:"🎨 Design board: re-assign happens ON the task card", items:[
+    "The 👤→ re-assign picker now opens <b>inside the task's own card</b> (with the card highlighted) instead of swapping it for a separate stripped-down box — so it's always obvious exactly which task you're moving." ] },
   { rev:"15.3", date:"2026-07-07", title:"🐞 Fix: active projects no longer auto-archive when their trailer ships", items:[
     "A project used to <b>auto-archive</b> (vanish from the Projects tab) once all its matching trailers shipped — even if the project itself was barely started (Cisco disappeared at 12% done with 84 open tasks; it was in <b>🗄 Show archived</b> the whole time, nothing lost). Now a shipped trailer only archives the project when the schedule is <b>nearly wrapped too</b> (≥80% done, or just a handful of straggler tasks). Real open work stays on the board." ] },
   { rev:"15.2", date:"2026-07-07", title:"⏸ Parked projects dull in Project Progress too", items:[
@@ -3953,6 +4027,11 @@ function collapseAllBays(){ setAllTasks(true); }
 function expandAllBays(){ setAllTasks(false); }
 /* ---- (C) Drag a trailer card from one bay to another — rides the existing editJob save ---- */
 let _jdragRow=null;
+// A job's sort key on the bay cards: its manual ORDER when set (drag-reorder writes the JobOrd column),
+// else its start date as YYYYMMDD — same numeric scale, so dragging only re-keys the moved job and
+// everything else stays in date order. (The project-task drag-reorder uses the identical trick.)
+function _jobSortKey(j){ if(j && j.ord!=null && j.ord!=='' && !isNaN(+j.ord)) return +j.ord;
+  const d=String((j&&(j.startISO||j.completionISO))||'').replace(/-/g,''); return d?+d:99999999; }
 function jobDragStart(e,row){ _jdragRow=row; try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain','job-'+row); }catch(_){} }
 function jobDragEnd(){ _jdragRow=null; document.querySelectorAll('.bay.dragover').forEach(b=>b.classList.remove('dragover')); }
 function jobDragOver(e){ if(_jdragRow==null) return; e.preventDefault(); try{ e.dataTransfer.dropEffect='move'; }catch(_){}
@@ -4699,6 +4778,7 @@ function _listOpsRaw(p){
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'setProjectNonOfficial': return taskOps('update','ProjectTasks',_projTaskRows(p.project),{NonOfficial:(p.value?'Yes':'')});   // #2: flag/unflag every task of the project
     case 'setProjectParked':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{Parked:(p.value?'Yes':'')});        // ⏸ park/unpark: freeze the project (isolated single-column write — safe before the Parked column exists)
+    case 'setJobOrd':        { const set={Ord:p.ord}; if(p.bay!=null) set.Bay=p.bay; return [O('update','Jobs',{Project:p.project,__id:p._id},set)]; }   // drag-reorder on a bay card (Ord = JobOrd Number column; no-ops until it exists)
     case 'setTaskFiles':     return [O('update','ShopTasks',{Project:p.project,Task:p.task,__id:p._id},{Files:JSON.stringify(p.files||[])})];   // attachments (isolated single-column write — safe before the Files column exists)
     case 'setProjectJobNum':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{JobNum:(p.jobNum||'')});   // #6: stamp the project's Job # on every task (isolated)
     case 'importProject': {
@@ -4725,7 +4805,7 @@ function _listOpsRaw(p){
    SharePoint maps each list's 1st column to Title and the rest to field_N; this is that map
    (verified against the live lists). ProjectTasks omits columns the restored list lacks. */
 const _LF = {
-  Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8"} },
+  Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8",Ord:"JobOrd"} },   /* JobOrd = UI-added Number column (drag-reorder on bay cards) */
   ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9",Due:"Due",Files:"Files"} },   /* Files = UI-added multiline col (attachment JSON; isolated setTaskFiles op only). field_8 is a Number column (always 0.0) — NOT milestone; don't write it. "Due" = a Date column added 2026-06-30 (its own internal name, not field_N) — only written when a due date is set. */
   ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"TaskType",JobNum:"JobNum",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial",Parked:"Parked"} },   /* 'Type' + 'NonOfficial' + 'Parked' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
@@ -4892,6 +4972,53 @@ function qaReassign(proj, raw, who){
   t.who=who; oRecompute(j); oApply();
 }
 function qaChip(proj, raw){ return `<span class="qa" data-proj="${escA(proj)}" data-task="${escA(raw)}" onclick="event.stopPropagation();qaLine(this,event)" title="Quick re-assign — tap, pick a crew, done">\u{1F464}</span>`; }
+/* ---------- Drag a shop task (crew columns): onto another crew's column = re-assign;
+   onto a job card on the bay board = move it to that trailer. Mouse only — on touch,
+   the 👤 quick-assign chip and ✎ ⇄ Move stay the path. ---------- */
+let _ftDrag=null;
+function ftDragStart(ev, proj, raw){ _ftDrag={proj:proj, raw:raw}; try{ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain','task'); }catch(e){} }
+function ftDragOver(ev){ if(!_ftDrag) return; ev.preventDefault(); try{ ev.dataTransfer.dropEffect='move'; }catch(e){} }
+function ftDropCrew(ev, who){ if(!_ftDrag) return; ev.preventDefault(); ev.stopPropagation(); const d=_ftDrag; _ftDrag=null;
+  const j=oJob(d.proj); const t=j&&(j.tasks||[]).find(x=>x.t===d.raw);
+  if(t && _whoParts(t.who).some(p=>p===who)) return;   // dropped back on its own crew — nothing to do
+  qaReassign(d.proj, d.raw, who); }
+// A job card takes TWO kinds of drops: a dragged TASK (move it to this trailer) and a dragged JOB
+// (slot it ABOVE this card — same bay reorders, different bay moves + positions it).
+function jobTileDragOver(ev){ if(window._ftDrag){ ftDragOver(ev); return; }
+  if(_jdragRow!=null){ ev.preventDefault(); try{ ev.dataTransfer.dropEffect='move'; }catch(_){} } }
+function jobTileDrop(ev, row){ if(window._ftDrag){ ftDropJob(ev, row); return; }
+  if(_jdragRow==null) return; ev.preventDefault(); ev.stopPropagation();
+  const src=_jdragRow; jobDragEnd();
+  jobReorderOnto(src, row); }
+function jobReorderOnto(srcRow, destRow){
+  if(srcRow===destRow) return;
+  const src=oJobRow(srcRow), dst=oJobRow(destRow); if(!src||!dst) return;
+  const retry=()=>jobReorderOnto(srcRow, destRow);
+  if(!ensureAuth('re-order trailers on a bay card', retry)) return;
+  const D=window.MRA_DATA||{};
+  const sibs=(D.jobs||[]).filter(j=>j.bay===dst.bay && (j.status||'').toLowerCase()!=='shipped' && j.category!=='leave' && j.row!==src.row)
+    .sort((a,b)=>_jobSortKey(a)-_jobSortKey(b));
+  const di=sibs.findIndex(j=>j.row===dst.row);
+  const dstK=_jobSortKey(dst), prevK=di>0?_jobSortKey(sibs[di-1]):(dstK-20000);
+  const newOrd=Math.round(((prevK+dstK)/2)*100)/100;   // key that slots ABOVE the card you dropped on
+  src.ord=newOrd;
+  const payload={action:'setJobOrd', project:src.project, _id:(src._id!=null?src._id:undefined), ord:newOrd, pin:CLOSE_PIN, user:CURRENT_USER};
+  if(src.bay!==dst.bay){ src.bay=dst.bay; payload.bay=dst.bay; if(typeof oRecat==='function') oRecat(src); }
+  shopWrite(payload);
+  oApply();
+}
+function ftDropJob(ev, row){ if(!_ftDrag) return; ev.preventDefault(); ev.stopPropagation(); const d=_ftDrag; _ftDrag=null;
+  const dj=oJobRow(row); if(!dj || dj.project===d.proj) return;
+  if(!ensureAuth('move a task to '+(dj.project||'another trailer'))) return;
+  if(!confirm('Move this task to '+(dj.project||'')+(dj.bay?(' ('+dj.bay+')'):'')+'?\n\n"'+String(d.raw).slice(0,90)+'"')) return;
+  const sj=oJob(d.proj), t=sj&&(sj.tasks||[]).find(x=>x.t===d.raw);
+  const who=(t&&t.who)||'', ml=(t&&t.ml)||'', cm=(t&&t.cm)||'';
+  shopWrite({ action:'addTask', project:dj.project, jobNum:dj.jobNum||'', bay:dj.bay||'', task:d.raw, assigned:who, milestone:ml, comments:cm, pin:CLOSE_PIN, user:CURRENT_USER }).then(()=>{
+    const tobj={ t:d.raw, who:who, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:ml, cm:cm };
+    if(!dj.tasks) dj.tasks=[]; dj.tasks.push(tobj); oRecompute(dj); pendAdd({kind:'jobTask', project:dj.project, obj:tobj});
+    return shopWrite({ action:'deleteTask', project:d.proj, task:d.raw, pin:CLOSE_PIN, user:CURRENT_USER });
+  }).then(()=>{ if(sj&&sj.tasks){ sj.tasks=sj.tasks.filter(x=>x.t!==d.raw); oRecompute(sj); } pendDrop('jobTask', d.proj, d.raw); oApply(); });
+}
 function qaLine(el,ev){ const proj=el.dataset.proj, raw=el.dataset.task;
   if(!ensureAuth('re-assign a task', ()=>qaOpen(null, w=>qaReassign(proj,raw,w)))) return;
   qaOpen(ev, w=>qaReassign(proj,raw,w)); }
@@ -5093,6 +5220,23 @@ function etMoveCopy(isMove){
 // Combine a primary + optional secondary shop-task assignee into "A / B" — the crew columns match
 // EITHER name, so a team-effort task shows in both people's lists (e.g. "Wrap Team / Beyer Electric").
 function _combineAssignees(a1,a2){ a1=(a1||'').trim(); a2=(a2||'').trim(); return (a2 && a2.toLowerCase()!==a1.toLowerCase()) ? (a1?(a1+' / '+a2):a2) : a1; }
+/* ---------- 🔥 HOT tasks: an urgent must-happen marker that rides IN the task text (a 🔥 prefix),
+   so it syncs, prints and shows everywhere with zero schema changes. Legacy habits *** and !!!
+   count as hot automatically, so existing "***DO THIS***"-style tasks light up too. ---------- */
+function isHotTask(s){ s=String(s||''); return /🔥/.test(s) || /^\s*\*\*\*/.test(s) || /!!!/.test(s); }
+function _applyHot(text, hot){ let s=String(text||'').trim();
+  if(hot){ return /🔥/.test(s) ? s : ('🔥 '+s); }
+  return s.replace(/\s*🔥\s*/g,' ').replace(/^\s*\*{3,}\s*/,'').replace(/!!!+/g,'').replace(/\s{2,}/g,' ').trim();
+}
+const _hotCmp=(a,b)=>(isHotTask(b.raw||b.disp||b.t)?1:0)-(isHotTask(a.raw||a.disp||a.t)?1:0);   // hot pins to the top (stable sort keeps the rest in order)
+// Task order on the BAY CARDS (per crew group within each job): due-soonest by default, picker for
+// recently-added / original list order. 🔥 hot always pins first. Remembered per device.
+let BAYT_SORT='due'; try{ const _bs=localStorage.getItem('mra_bay_sort'); if(_bs) BAYT_SORT=_bs; }catch(e){}
+function setBaySort(v){ BAYT_SORT=(v==='added'||v==='list')?v:'due'; try{ localStorage.setItem('mra_bay_sort',BAYT_SORT); }catch(e){} if(window.MRA_DATA) renderFloor(window.MRA_DATA); }
+function _bayTaskCmp(a,b){ const h=_hotCmp(a,b); if(h) return h;
+  if(BAYT_SORT==='added'){ const ao=a.op||'', bo=b.op||''; if(!ao&&!bo) return 0; if(!ao) return 1; if(!bo) return -1; return bo.localeCompare(ao); }
+  if(BAYT_SORT==='due'){ const ad=a.due||'', bd=b.due||''; if(!ad&&!bd) return 0; if(!ad) return 1; if(!bd) return -1; return ad.localeCompare(bd); }
+  return 0; }
 function openEditTask(proj, raw){
   const D=window.MRA_DATA||{};
   const j=(D.jobs||[]).find(x=>x.project===proj);
@@ -5100,6 +5244,7 @@ function openEditTask(proj, raw){
   window._etProj=proj; window._etOld=raw;
   document.getElementById('etSub').innerHTML=`<b>${esc(proj)}</b>${(j&&j.jobNum)?" · "+esc(j.jobNum):""} — edits the Shop Tasks row; board updates within ~15 min.`;
   document.getElementById('etTask').value=raw||"";
+  { const h=document.getElementById('etHot'); if(h) h.checked=isHotTask(raw); }
   const who=(t&&t.who)||"";
   // split an existing "A / B" into the two dropdowns (team-effort tasks)
   const parts=String(who).split(/\s+\/\s+/).map(s=>s.trim()).filter(Boolean);
@@ -5114,8 +5259,11 @@ function openEditTask(proj, raw){
   document.getElementById('etComments').value=(t&&t.cm)||"";
   ATT_STAGE.et=(t&&t.files)?t.files.slice():[]; window._etFilesOrig=JSON.stringify(ATT_STAGE.et); attRender('et');
   { const sel=document.getElementById('etMoveDest'), mr=document.getElementById('etMoveRow');
-    if(sel&&mr){ const jobs=(D.jobs||[]).filter(x=>x.project&&x.project!==proj);
-      sel.innerHTML = jobs.length ? jobs.map(x=>`<option value="${escA(x.project)}">${esc(x.bay||x.project)}${x.jobNum?(' · '+esc(x.jobNum)):''}</option>`).join('') : '<option value="">(no other trailers)</option>';
+    if(sel&&mr){ const jobs=(D.jobs||[]).filter(x=>x.project && x.project!==proj
+        && x.category!=='leave'                                    // staff-leave calendar rows are NOT task destinations (a task moved there vanishes from every view)
+        && (x.status||'').toLowerCase()!=='shipped')               // nor trailers that already left
+      .sort((a,b)=>String(a.project||'').localeCompare(String(b.project||'')));
+      sel.innerHTML = jobs.length ? jobs.map(x=>`<option value="${escA(x.project)}">${esc(x.project)}${x.bay?(' — '+esc(x.bay)):''}${x.jobNum?(' · '+esc(x.jobNum)):''}</option>`).join('') : '<option value="">(no other trailers)</option>';
       mr.style.display = jobs.length ? 'flex' : 'none'; const mm=document.getElementById('etMoveMsg'); if(mm) mm.textContent=''; } }
   document.getElementById('etMsg').textContent=""; document.getElementById('etSubmit').disabled=false;
   document.getElementById('editTaskModal').classList.add('show');
@@ -5123,7 +5271,7 @@ function openEditTask(proj, raw){
 function closeEditTask(e){ if(!e || e.target.id==='editTaskModal' || e.target.classList.contains('modal-close'))
   document.getElementById('editTaskModal').classList.remove('show'); }
 function submitEditTask(){
-  const task=document.getElementById('etTask').value.trim();
+  const task=_applyHot(document.getElementById('etTask').value.trim(), !!((document.getElementById('etHot')||{}).checked));
   const msg=document.getElementById('etMsg');
   if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
   const payload={ action:"editTask", project:window._etProj, taskOld:window._etOld, task:task,
@@ -5177,6 +5325,7 @@ function openAddTask(prefillProj){
   document.getElementById('atAssigned').innerHTML = ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
   document.getElementById('atAssigned2').innerHTML = `<option value="">— none —</option>`+ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");   // optional 2nd assignee (team effort)
   document.getElementById('atTask').value=""; document.getElementById('atComments').value="";
+  { const h=document.getElementById('atHot'); if(h) h.checked=false; }
   document.getElementById('atMsg').textContent=""; document.getElementById('atNewProj').value="";
   document.getElementById('atMilestone').value=""; document.getElementById('atSubmit').disabled=false;
   { const dd=document.getElementById('atDue'); if(dd) dd.value=""; } window._atDueAuto=true;
@@ -5214,6 +5363,7 @@ function submitAddTask(){
   // Fold it into the task text as a 📍 location tag so it shows + persists.
   let taskText=task; const _gbay=document.getElementById('atBay').value;
   if(proj===GENERAL_PROJ && _gbay && !/^general$/i.test(_gbay)) taskText="📍 "+_gbay+" · "+task;
+  if((document.getElementById('atHot')||{}).checked) taskText=_applyHot(taskText, true);
   const payload={ action:"addTask", project:proj, jobNum:document.getElementById('atJob').value.trim(),
     bay:document.getElementById('atBay').value, task:taskText, assigned:_combineAssignees(document.getElementById('atAssigned').value, document.getElementById('atAssigned2').value),
     milestone:document.getElementById('atMilestone').value, comments:document.getElementById('atComments').value.trim(),
@@ -5439,14 +5589,31 @@ function openLeave(){ if(!ensureAuth("add a leave entry")) return; _lvRow=null; 
   document.getElementById('lvTitle').textContent='➕ Add leave';
   const n=document.getElementById('lvName'); n.value=''; n.readOnly=false; n.style.opacity=''; n.title='';
   document.getElementById('lvStart').value=''; document.getElementById('lvEnd').value='';
+  { const r=document.getElementById('lvReason'); if(r) r.value=''; }
+  { const L=document.getElementById('lvLane'); if(L) L.value=''; } window._lvReasonOrig='';
   document.getElementById('lvMsg').textContent=''; const b=document.getElementById('lvSubmit'); b.disabled=false; b.textContent='Add';
   document.getElementById('leaveModal').classList.add('show'); document.getElementById('lvName').focus(); }
+// notesRaw convention on leave rows: "<reason> [lane:Sal]" — the lane token routes the highlight onto a crew card.
+function _lvParse(nr){ const s=String(nr||''); const m=s.match(/\[lane:([^\]]+)\]/i);
+  return {lane:m?m[1].trim():'', reason:s.replace(/\[lane:[^\]]+\]/ig,'').trim()}; }
+// 🚫 quick "somebody's out TODAY" — the leave modal pre-filled to a one-day entry with a reason.
+// Their crew column gets an "Out today" badge and they appear under Staff on Leave (same data, synced).
+function openOutToday(){ if(typeof ensureAuth==='function' && !ensureAuth('mark someone out today', openOutToday)) return;
+  openLeave(); if(!document.getElementById('leaveModal').classList.contains('show')) return;
+  const today=(window.MRA_DATA||{}).todayISO||localISO(Date.now());
+  document.getElementById('lvTitle').textContent='🚫 Out today';
+  document.getElementById('lvStart').value=today; document.getElementById('lvEnd').value=today;
+  { const r=document.getElementById('lvReason'); if(r) r.value='Called in'; }
+}
 function openLeaveEdit(row){ if(!ensureAuth("edit a leave entry")) return;
   const j=((window.MRA_DATA||{}).jobs||[]).find(x=>x.row===row); if(!j){ alert("Couldn't find that leave entry."); return; }
   _lvRow=row; window._lvJob=j;
   document.getElementById('lvTitle').textContent='✎ Edit leave';
   const n=document.getElementById('lvName'); n.value=(j.project||'').replace(/\s*[–-]\s*APL.*$/i,''); n.readOnly=true; n.style.opacity='.6'; n.title='To rename, delete this entry and add a new one';
   document.getElementById('lvStart').value=j.startISO||''; document.getElementById('lvEnd').value=j.completionISO||'';
+  { const pr=_lvParse(j.notesRaw||''); window._lvReasonOrig=pr.reason;
+    const r=document.getElementById('lvReason'); if(r) r.value=[...r.options].some(o=>o.value===pr.reason)?pr.reason:'';
+    const L=document.getElementById('lvLane'); if(L) L.value=[...L.options].some(o=>o.value===pr.lane)?pr.lane:''; }
   document.getElementById('lvMsg').textContent=''; const b=document.getElementById('lvSubmit'); b.disabled=false; b.textContent='Save';
   document.getElementById('leaveModal').classList.add('show'); }
 function closeLeave(e){ if(!e || e.target.id==='leaveModal' || e.target.classList.contains('modal-close'))
@@ -5460,17 +5627,21 @@ function submitLeave(){
   const adding=!_lvRow; const btn=document.getElementById('lvSubmit'); btn.disabled=true; btn.textContent=adding?'Adding…':'Saving…';
   msg.style.color='var(--muted)'; msg.textContent='Sending…';
   let payload;
+  const reasonSel=((document.getElementById('lvReason')||{}).value||'').trim();
+  const laneSel=((document.getElementById('lvLane')||{}).value||'').trim();
+  const reason=reasonSel||(!adding?(window._lvReasonOrig||''):'');   // editing with the select left blank keeps the original reason text
+  const notes=(reason+(laneSel?(' [lane:'+laneSel+']'):'')).trim();
   if(adding){ payload={ action:"addJob", project:name, bay:"APL/Holidays", status:"Leave",
-      start:start, completion:end||start, jobNum:"", client:"", pm:"", notes:"", pin:CLOSE_PIN, user:CURRENT_USER }; }
+      start:start, completion:end||start, jobNum:"", client:"", pm:"", notes:notes, pin:CLOSE_PIN, user:CURRENT_USER }; }
   else { const j=window._lvJob||{}; payload={ action:"editJob", row:_lvRow, project:j.project||name,
-      bay:(j.bay||"APL/Holidays"), status:(j.status||"Leave"), start:start, completion:end||start, notes:(j.notesRaw||""), pin:CLOSE_PIN, user:CURRENT_USER }; }
+      bay:(j.bay||"APL/Holidays"), status:(j.status||"Leave"), start:start, completion:end||start, notes:notes, pin:CLOSE_PIN, user:CURRENT_USER }; }
   shopWrite(payload)
     .then(()=>{
       const D=window.MRA_DATA||{};
       if(adding){ if(D.jobs){ const nj={ row:900000+Math.floor(Math.random()*90000), bay:"APL/Holidays", project:name, status:"Leave",
-          startISO:start||null, completionISO:end||start||null, notesRaw:"", openTasks:[], openCount:0, doneCount:0, doneTasks:[], salOpen:0, tasks:[] };
+          startISO:start||null, completionISO:end||start||null, notesRaw:notes||"", openTasks:[], openCount:0, doneCount:0, doneTasks:[], salOpen:0, tasks:[] };
           oRecat(nj); D.jobs.push(nj); } }
-      else { const j=oJobRow(_lvRow); if(j){ j.startISO=start||null; j.completionISO=end||start||null; oRecat(j); } }
+      else { const j=oJobRow(_lvRow); if(j){ j.startISO=start||null; j.completionISO=end||start||null; j.notesRaw=notes||""; oRecat(j); } }
       oApply();
       msg.style.color='var(--green)'; msg.textContent=adding?'✓ Leave added.':'✓ Saved.'; btn.textContent=adding?'Add':'Save';
       setTimeout(()=>document.getElementById('leaveModal').classList.remove('show'),1000); })
@@ -5523,6 +5694,42 @@ function canVerify(projName){
   if(!CLOSE_PIN || !CURRENT_USER) return false;            // must be signed in (existing code)
   if(VERIFY_ADMINS.includes(CURRENT_USER)) return true;    // admin (Rich) → any task
   const p=oProj(projName); return _verifyNameMatch(CURRENT_USER, (p&&p.pm)||'');   // else must be that project's PM
+}
+// 🏭 Bay Occupancy Gantt (Projects tab, Al's ask): one header row per PHYSICAL bay, a bar per unit in it
+// (arrival → departure) — shows when each bay frees up and where bookings overlap. Simple and clean:
+// label = "Jxxxx · Project", green = active, blue = scheduled/other, red = past its ship date and still there.
+function renderBayOcc(D){
+  const el=document.getElementById('bayOccGantt'); if(!el) return;
+  const today=D.todayISO||localISO(Date.now());
+  const isPark=b=>/^\s*parking\s*lot\s*$/i.test(b||''), isHeld=b=>/next\s*up|on\s*hold|off.?site/i.test(b||'');
+  const bays=(D.physicalBays||[]).filter(b=>!isPark(b)&&!isHeld(b));
+  // occupied Middle bays slot in after their Front, same as the floor board
+  MIDDLE_BAYS.forEach(mb=>{ if(bays.indexOf(mb)>=0) return;
+    const has=(D.jobs||[]).some(j=>j.bay===mb && (j.status||'').toLowerCase()!=='shipped' && j.category!=='leave');
+    if(!has) return;
+    const m=mb.match(/^Bay\s*(\d+)/i); const fi=bays.findIndex(b=>new RegExp('^Bay\\s*'+m[1]+'\\s*Front','i').test(b));
+    if(fi>=0) bays.splice(fi+1,0,mb); else bays.push(mb); });
+  const occ={}; bays.forEach(b=>occ[b]=[]);
+  (D.jobs||[]).forEach(j=>{
+    if((j.status||'').toLowerCase()==='shipped' || j.category==='leave') return;
+    if(occ[j.bay]) occ[j.bay].push(j); });
+  const rows=[]; let unitN=0;
+  bays.forEach(b=>{
+    rows.push({label:b, cls:'g-phaserow', noBar:true});
+    const list=(occ[b]||[]).filter(j=>j.startISO||j.completionISO)
+      .sort((a,x)=>String(a.startISO||a.completionISO||'').localeCompare(String(x.startISO||x.completionISO||'')));
+    if(!list.length){ rows.push({label:'— open —', cls:'g-subrow', noBar:true}); return; }
+    list.forEach(j=>{ unitN++;
+      const late=j.completionISO && j.completionISO<today;
+      const col=late?'#ef4444':((j.status||'').toLowerCase()==='active'?'#22c55e':'#60a5fa');
+      rows.push({label:(j.jobNum?j.jobNum+' · ':'')+(j.project||''), cls:'g-subrow clickable',
+        startISO:j.startISO||j.completionISO, endISO:j.completionISO||j.startISO, color:col, milestones:[],
+        onclick:`jobEdit(event,${JSON.stringify(j.row)})`});
+    });
+  });
+  const win=buildWindow(startOfWeek(todayMid()), 70);   // ~10 weeks out
+  renderGantt(el, rows, win, {dates:true, showDays:true});
+  const c=document.getElementById('bayOccCount'); if(c) c.textContent=unitN+' units';
 }
 // Every task across all projects currently flagged "Pending Verification".
 function verifyPending(){ const out=[]; (((window.MRA_DATA||{}).projects)||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(projIsPendingVerify(t)) out.push({p, t}); })); return out; }
@@ -6388,7 +6595,8 @@ function submitProjTask(){
    more opening tasks one-by-one. Keeps each task's group and appends "/ Person"
    (or a chosen group). Reuses the SAME editProjectTask write path (one op per
    task) and re-sends every other field unchanged so nothing else is touched. */
-let BA_PROJ='', BA_WHO='', BA_FIELD='assignee', BA_SEL=new Set(), BA_PENDING={};   // BA_PENDING[key] = {assigned?,phase?,type?,status?}
+let BA_PROJ='', BA_WHO='', BA_FIELD='assignee', BA_SEL=new Set(), BA_PENDING={};   // BA_PENDING[key] = {assigned?,phase?,type?,status?,start?,finish?}
+let BA_SORT='phase'; try{ const _bs=localStorage.getItem('mra_ba_sort'); if(_bs) BA_SORT=_bs; }catch(e){}
 const BA_FIELD_COL={assignee:'assigned', phase:'phase', type:'type', status:'status'};
 function _baCur(t,field){ return field==='assignee'?(t.who||''):field==='phase'?(t.phase||''):field==='type'?(t.type||''):(t.st||''); }
 function _baKey(projName,t){ return projName+''+(t.t||''); }
@@ -6439,6 +6647,10 @@ function baSetField(f){
     row.innerHTML='<span class="ba-flabel">Set type to</span><input id="baVal" list="baTypeList" autocomplete="off" placeholder="type" title="Type a value, or pick an existing one">'+applyBtn;
   } else if(f==='status'){
     row.innerHTML='<span class="ba-flabel">Set status to</span><select id="baVal">'+PROJ_STATUS_OPTIONS.map(s=>`<option value="${escA(s)}">${esc(s)}</option>`).join('')+'</select>'+applyBtn;
+  } else if(f==='dates'){
+    row.innerHTML='<span class="ba-flabel">Bump dates by</span>'
+      +'<input id="baVal" type="number" step="1" style="width:90px" placeholder="e.g. 7" title="How many days to shift Start AND Finish — positive pushes later, negative pulls earlier. Calendar days.">'
+      +'<span class="bamuted">days &nbsp;(negative = earlier · calendar days · undated tasks are skipped)</span>'+applyBtn;
   }
 }
 function closeBulkAssign(e){ if(e && e.target && e.target.id!=='bulkAssignModal' && !(e.target.classList&&e.target.classList.contains('modal-close'))) return;
@@ -6461,6 +6673,7 @@ function _baChgHtml(t, ch){
   if(ch.phase!=null) parts.push(`<span class="ba-new">📂 ${esc(ch.phase||'(none)')}</span>`);
   if(ch.type!=null) parts.push(`<span class="ba-new">🏷 ${esc(ch.type||'(none)')}</span>`);
   if(ch.status!=null) parts.push(`<span class="ba-new">📊 ${esc(ch.status)}</span>`);
+  if(ch.start!=null || ch.finish!=null) parts.push(`<span class="ba-new">📅 ${ch.start?esc(fmtMDY(ch.start)):'—'} → ${ch.finish?esc(fmtMDY(ch.finish)):'—'}</span>`);
   return parts.join(' · ');
 }
 function baRender(){
@@ -6479,17 +6692,41 @@ function baRender(){
     return true;
   });
   const showProj=(BA_PROJ==='__ALL__');
-  const list=document.getElementById('baList');
-  if(!rows.length){ list.innerHTML='<div class="bamuted" style="padding:14px 6px">No tasks match. Try a different project, clear the filters, or turn on Show completed.</div>'; }
-  else list.innerHTML=rows.map(({p,t})=>{
+  { const ss=document.getElementById('baSort'); if(ss){ if(!ss.dataset.init){ ss.value=BA_SORT; ss.dataset.init='1'; }
+      else { BA_SORT=ss.value||'phase'; try{ localStorage.setItem('mra_ba_sort',BA_SORT); }catch(e){} } } }
+  const dateKey=({t})=>String(t.startISO||t.finISO||'9999-99');
+  const rowHtml=({p,t},ind)=>{
     const key=_baKey(p.name,t), sel=BA_SEL.has(key), ch=BA_PENDING[key];
     const whoHtml = ch ? _baChgHtml(t,ch) : esc((t.who||'').trim()||'—');
-    const meta=[ (showProj?esc(p.name):''), esc((t.phase||'').trim()), (t.st?esc(t.st):''), (t.finISO?esc(fmtMDY(t.finISO)):'') ].filter(Boolean).join(' · ');
-    return `<div class="ba-row${ch?' chg':''}" onclick="baToggleRow(event,'${escA(key)}')">`
+    const meta=[ (showProj&&BA_SORT!=='phase'?esc(p.name):''), (BA_SORT==='phase'?'':esc((t.phase||'').trim())), (t.st?esc(t.st):''), (t.finISO?esc(fmtMDY(t.finISO)):'') ].filter(Boolean).join(' · ');
+    return `<div class="ba-row${ch?' chg':''}${ind?' ba-ind':''}" onclick="baToggleRow(event,'${escA(key)}')">`
       +`<input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation(); baToggleRow(event,'${escA(key)}')">`
       +`<div class="ba-t"><div class="ba-tn">${/yes/i.test(t.ml||'')?'◆ ':''}${esc(t.t||'(task)')}</div><div class="ba-meta">${meta||'&nbsp;'}</div></div>`
       +`<div class="ba-who">${whoHtml}</div></div>`;
-  }).join('');
+  };
+  const list=document.getElementById('baList');
+  window._baPhaseKeys={};
+  if(!rows.length){ list.innerHTML='<div class="bamuted" style="padding:14px 6px">No tasks match. Try a different project, clear the filters, or turn on Show completed.</div>'; }
+  else if(BA_SORT==='phase'){
+    // Grouped like the project editor: phase headers (in first-appearance order) + indented, date-sorted tasks.
+    // The header checkbox grabs / releases the WHOLE phase in one click.
+    const order=[], by={};
+    rows.forEach(r=>{ const k=(showProj?r.p.name+' — ':'')+(((r.t.phase||'').trim())||'(no phase)');
+      if(!(k in by)){ by[k]=[]; order.push(k); } by[k].push(r); });
+    let h='';
+    order.forEach(k=>{ by[k].sort((a,b)=>dateKey(a).localeCompare(dateKey(b)));
+      const keys=by[k].map(({p,t})=>_baKey(p.name,t)); window._baPhaseKeys[k]=keys;
+      const selN=keys.filter(x=>BA_SEL.has(x)).length;
+      h+=`<div class="ba-phase" onclick="baTogglePhase('${escA(k)}')" title="Check / uncheck every task in this phase"><input type="checkbox" ${selN===keys.length&&keys.length?'checked':''} onclick="event.stopPropagation();baTogglePhase('${escA(k)}')"> 📂 ${esc(k)} <span class="bamuted">${selN?selN+' of ':''}${keys.length}</span></div>`;
+      h+=by[k].map(r=>rowHtml(r,true)).join(''); });
+    list.innerHTML=h;
+  } else {
+    const sorted=rows.slice();
+    if(BA_SORT==='date') sorted.sort((a,b)=>dateKey(a).localeCompare(dateKey(b)) || String(a.t.t||'').localeCompare(String(b.t.t||'')));
+    else if(BA_SORT==='name') sorted.sort((a,b)=>String(a.t.t||'').localeCompare(String(b.t.t||'')));
+    else if(BA_SORT==='who') sorted.sort((a,b)=>String(a.t.who||'~').localeCompare(String(b.t.who||'~')) || dateKey(a).localeCompare(dateKey(b)));
+    list.innerHTML=sorted.map(r=>rowHtml(r,false)).join('');
+  }
   const selN=rows.filter(({p,t})=>BA_SEL.has(_baKey(p.name,t))).length;
   document.getElementById('baCount').textContent=`${rows.length} task${rows.length===1?'':'s'} shown`;
   document.getElementById('baSelCount').textContent=selN?`${selN} selected`:'Select all';
@@ -6499,11 +6736,32 @@ function baRender(){
   const sv=document.getElementById('baSaveBtn'); sv.disabled=!nChg; sv.textContent=nChg?`💾 Save ${nChg} task${nChg===1?'':'s'}`:'💾 Save changes';
 }
 function baToggleRow(e,key){ if(e) e.stopPropagation(); if(BA_SEL.has(key)) BA_SEL.delete(key); else BA_SEL.add(key); baRender(); }
+function baTogglePhase(k){ const keys=(window._baPhaseKeys||{})[k]||[]; if(!keys.length) return;
+  const allOn=keys.every(x=>BA_SEL.has(x));
+  keys.forEach(x=>{ if(allOn) BA_SEL.delete(x); else BA_SEL.add(x); }); baRender(); }
 function baToggleAll(on){ (window._baRows||[]).forEach(({p,t})=>{ const k=_baKey(p.name,t); if(on) BA_SEL.add(k); else BA_SEL.delete(k); }); baRender(); }
 function baApply(){
   const sel=[...BA_SEL]; const msg=document.getElementById('baMsg');
   if(!sel.length){ msg.style.color='var(--red)'; msg.textContent='Check at least one task first.'; return; }
   const field=BA_FIELD, colKey=BA_FIELD_COL[field];
+  if(field==='dates'){   // 📅 bump Start & Finish by ± N days on every checked task (stacks if applied twice)
+    const nD=parseInt(((document.getElementById('baVal')||{}).value||'').trim(),10);
+    if(!nD){ msg.style.color='var(--red)'; msg.textContent='Enter the number of days to bump — e.g. 7 (or -3 to pull earlier).'; return; }
+    const byKey={}; _baProjects().forEach(p=>(p.tasks||[]).forEach(t=>{ if(t.t) byKey[_baKey(p.name,t)]={p,t}; }));
+    const shift=iso=>{ if(!iso) return ''; const d=parseISO(iso); d.setDate(d.getDate()+nD); return localISO(d.getTime()); };
+    let n=0, skip=0;
+    sel.forEach(key=>{ const e=byKey[key]; if(!e) return; const {t}=e;
+      const base=BA_PENDING[key]||{};
+      const cs=(base.start!=null?base.start:(t.startISO||'')), cf=(base.finish!=null?base.finish:(t.finISO||''));
+      const ns=shift(cs), nf=shift(cf);
+      if(!ns && !nf){ skip++; return; }
+      BA_PENDING[key]=BA_PENDING[key]||{};
+      if(ns) BA_PENDING[key].start=ns; if(nf) BA_PENDING[key].finish=nf;
+      n++; });
+    BA_SEL=new Set(); baSetField('dates');
+    msg.style.color='var(--muted)'; msg.textContent=`Staged a ${nD>0?'+':''}${nD}-day bump on ${n} task${n===1?'':'s'}${skip?` (${skip} undated skipped)`:''} — review, then Save.`;
+    baRender(); return;
+  }
   let valFn;
   if(field==='assignee'){
     const grp=(document.getElementById('baGroup')||{}).value||'';
@@ -6539,10 +6797,11 @@ function baSave(){
       id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t,
       phase:(ch.phase!=null?ch.phase:(t.phase||'')), type:(ch.type!=null?ch.type:(t.type||'')),
       assigned:(ch.assigned!=null?ch.assigned:(t.who||'')), status:(ch.status!=null?ch.status:(t.st||'')),
-      start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'', milestone:t.ml||'',
+      start:(ch.start!=null?ch.start:(t.startISO||'')), finish:(ch.finish!=null?ch.finish:(t.finISO||'')), pred:t.pred||'', milestone:t.ml||'',
       parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''), budget:(t.bud!=null?t.bud:''), comments:t.cm||'' };
     shopWrite(payload);
     if(ch.assigned!=null) t.who=ch.assigned; if(ch.phase!=null) t.phase=ch.phase; if(ch.type!=null) t.type=ch.type;
+    if(ch.start!=null) t.startISO=ch.start; if(ch.finish!=null) t.finISO=ch.finish;
     if(ch.status!=null){ t.st=ch.status; t.done=/^completed$/i.test(ch.status); }
     oRecomputeProject(p); n++;
   });
@@ -7666,9 +7925,7 @@ function renderFloor(D){
   const rank=j=>{const s=(j.status||"").toLowerCase();
     return s==="active"?0:s==="scheduled"?1:s==="on hold"?2:s==="tbd"?3:4;};
   // Pure date order (start, then finish; undated jobs last) — used for the Parking Lot + Next Up/On Hold cards.
-  const byDateCmp=(a,b)=>{ const ax=a.startISO||a.completionISO||"", bx=b.startISO||b.completionISO||"";
-    if(ax&&bx) return ax.localeCompare(bx) || (a.project||"").localeCompare(b.project||"");
-    if(ax) return -1; if(bx) return 1; return (a.project||"").localeCompare(b.project||""); };
+  const byDateCmp=(a,b)=> _jobSortKey(a)-_jobSortKey(b) || (a.project||"").localeCompare(b.project||"");   // date order; manual drag-order (JobOrd) wins when set
 
   // one job tile (identical markup whether it lives in a bay or the held tile)
   const jobTile=(j,showBay,defColl)=>{const c=classify(j,today); if(defColl) DEFCOLL_ROWS.add(j.row);
@@ -7693,7 +7950,7 @@ function renderFloor(D){
     if(jOpen){
       if(!WALL && (j.openTasks||[]).length){
         const opens=(j.tasks&&j.tasks.length)
-          ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t),who:shopWho(t),files:t.files||null}))
+          ? j.tasks.filter(t=>!t.done).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t),who:shopWho(t),files:t.files||null,due:t.due||'',op:t.op||''}))
           : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk),who:shopWho({raw:tk})}));
         const grp={}, gkeys=[];
         opens.forEach(o=>{ const k=o.who||''; if(!(k in grp)){ grp[k]=[]; gkeys.push(k); } grp[k].push(o); });
@@ -7702,14 +7959,15 @@ function renderFloor(D){
         const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
         const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
           const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}`; };
+          const odue=o.due?` <span class="duedate${(o.due<today)?' od':''}">📅 ${esc(fmtMD(o.due))}</span>`:'';
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}${(!pend&&isHotTask(o.raw||o.disp))?" hot":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${odue}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}`; };
         let inner="";
         gkeys.forEach(k=>{
           if(!onlyUnassigned){
             const hdr = k===''?'— unassigned —':(crewEmoji(k)+' '+esc(k));
             inner+=`<div class="tgrp-h">${hdr}${k===''?'':` <span class="tgrp-n">${grp[k].length}</span>`}</div>`;
           }
-          inner+=grp[k].map(taskHtml).join("");
+          inner+=grp[k].slice().sort(_bayTaskCmp).map(taskHtml).join("");   // 🔥 hot first, then the picked bay-card sort (due / added / list)
         });
         tl+=`<div class="tasklist">`+inner+`</div>`;
       }
@@ -7732,12 +7990,12 @@ function renderFloor(D){
     // so a single job (e.g. WFCU in Bay 5 Front) can be shrunk on its own.
     const jcaret = (!WALL && (j.openCount>0 || fl.length))
       ? `<span class="job-collapse" onclick="toggleJob(${j.row})" title="Collapse / expand this job">${jOpen?'▾':'▸'}</span>` : '';
-    return `<div class="job${jc}" id="floorjob-${j.row}"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag to move this trailer to another bay (needs code)">⠿</span>`:''}</div>`+
+    return `<div class="job${jc}" id="floorjob-${j.row}" ondragover="jobTileDragOver(event)" ondrop="jobTileDrop(event,${typeof j.row==='number'?j.row:`'${escJsAttr(String(j.row))}'`})"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag onto a BAY to move this trailer there — or onto ANOTHER TRAILER'S card to slot it above (re-orders the list; needs code)">⠿</span>`:''}</div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
   const bayCard=(bay,rawList,opts={})=>{
-    const list=(rawList||[]).slice().sort(opts.sortByDate ? byDateCmp : (a,b)=>rank(a)-rank(b));
+    const list=(rawList||[]).slice().sort(byDateCmp);   // EVERY tile lists its jobs by date (earliest first; drag-order wins when set) — was status-rank on the work bays, which put 8/5 above 6/22
     let cls="s-open",stTxt="Open",stCls="open";
     if(opts.fixedSt){ [stTxt,stCls]=opts.fixedSt; cls="s-"+stCls; }
     else if(list.length){const c0=classify(list[0],today); cls="s-"+c0.state;
@@ -7807,6 +8065,7 @@ function renderFloor(D){
   document.getElementById('bayCount').textContent=physBays.length+" bays";
   const bc=document.getElementById('btnClosed'); if(bc){ bc.classList.toggle('on',SHOWCLOSED); bc.textContent=SHOWCLOSED?'✓ Closed shown':'Show closed'; }
   { const mb2=document.getElementById('midBtn'); if(mb2) mb2.classList.toggle('on',SHOW_MIDDLE); }
+  { const bs=document.getElementById('baySortSel'); if(bs) bs.value=BAYT_SORT; }
 
   // Flagged
   flagged.sort((a,b)=>{const av=a.c.overdue?0:(a.c.dueSoon?1:2),bv=b.c.overdue?0:(b.c.dueSoon?1:2);
@@ -7829,9 +8088,33 @@ function renderFloor(D){
   document.getElementById('leave').innerHTML=leaveSorted.map(j=>{
     const who=esc(j.project.replace(/\s*[–-]\s*APL.*$/i,""));
     const range=j.startISO?(fmtMD(j.startISO)+(j.completionISO&&j.completionISO!==j.startISO?"–"+fmtMD(j.completionISO):"")):"";
-    return `<div class="row"><div><div class="lead">${who}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit these leave dates">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
+    const activeNow=j.startISO && j.startISO<=today && ((j.completionISO||j.startISO)>=today);
+    const pr=_lvParse(j.notesRaw||'');
+    return `<div class="row"><div><div class="lead">${who}${activeNow?' <span class="badge red">OUT TODAY</span>':''}${pr.reason?` <span class="badge grey">${esc(pr.reason)}</span>`:''}${pr.lane?` <span class="badge grey" title="Highlighted on this crew's card up top">→ ${esc(pr.lane)}</span>`:''}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit these leave dates">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
   }).join("")||`<div class="empty">No upcoming leave</div>`;
   document.getElementById('leaveCount').textContent=leaveSorted.length;
+
+  // 🚫 Out-today: leave entries ACTIVE today badge their crew's column header, and a strip up top
+  // lists everyone out (incl. team members without a lane, e.g. Sal's crew: Jake / John / Brent / Kayla).
+  const outNow=(D.jobs||[]).filter(j=>j.category==='leave' && j.startISO && j.startISO<=today && ((j.completionISO||j.startISO)>=today))
+    .map(j=>{ const pr=_lvParse(j.notesRaw||''); return {name:String(j.project||'').replace(/\s*[–-]\s*APL.*$/i,'').trim(), reason:pr.reason, lane:pr.lane}; });
+  { const st=document.getElementById('outStrip');
+    if(st){ st.style.display=outNow.length?'':'none';
+      st.innerHTML=outNow.length?('🚫 <b>Out today:</b> '+outNow.map(o=>esc(o.name)+(o.reason?(' <span class="outwhy">('+esc(o.reason)+')</span>'):'')).join(' · ')):''; } }
+  document.querySelectorAll('#assigneesA .asg[data-asg], #assigneesB .asg[data-asg]').forEach(l=>{
+    const lane=l.getAttribute('data-asg')||'';
+    // whose absence lands on THIS card: the explicit "Show on crew card" pick wins, else match by name
+    const hits=outNow.filter(o=> (o.lane && o.lane===lane) || _verifyNameMatch(o.name,lane) || _verifyNameMatch(lane,o.name));
+    const h=l.querySelector('.asg-h');
+    l.classList.toggle('asg-out', !!hits.length);   // the whole crew card highlights, not just a chip
+    if(!h) return;
+    let b=h.querySelector('.outbadge');
+    if(hits.length){ if(!b){ b=document.createElement('span'); b.className='outbadge'; const c=h.querySelector('.count'); h.insertBefore(b, c||null); }
+      b.textContent='🚫 '+hits.map(o=>{ const self=_verifyNameMatch(o.name,lane)||_verifyNameMatch(lane,o.name);
+        return (self?'Out today':(o.name+' out'))+(o.reason?(' · '+o.reason):''); }).join('  ·  ');
+      b.title=hits.map(o=>o.name+(o.reason?(' — '+o.reason):'')).join(' · ')+' — from Staff on Leave (edit or delete the entry there)'; }
+    else if(b) b.remove();
+  });
 
   renderSal(D);
   renderReturns(D);
@@ -8072,7 +8355,8 @@ function renderSal(D){
   // A task passes the timeframe filter if its DUE date is on/before the window's ceiling (overdue counts).
   // 'all' shows everything; undated OPEN tasks are hidden in a windowed view (they have no due to be "coming up").
   const dueInWindow=(due)=>{ if(SAL_DUE==='all') return true; const n=_SAL_DUE_N[SAL_DUE]; if(n==null) return true;
-    if(!due) return false; const d=daysBetween(due,today); return d!=null && d<=n; };
+    if(!due) return true;   // UNDATED tasks always show — the window only trims DATED tasks due beyond it (undated used to vanish on the TV, which defaults to Month: Jeff's whole list disappeared in wall mode)
+    const d=daysBetween(due,today); return d!=null && d<=n; };
   const GROUPS=[
     {id:"asgSal",cnt:"cntSal",re:/\bsal\b/i,label:"Sal"},
     {id:"asgWrap",cnt:"cntWrap",re:/wrap|w2 graphic|\bw2\b/i,label:"Wrap Team"},
@@ -8124,12 +8408,15 @@ function renderSal(D){
   };
   const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
-    `<ol>${s.open.map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
+    `<ol>${s.open.slice().sort(_hotCmp).map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
       const oent = o.op?` <span class="opdate">· added ${esc(fmtMDY(o.op))}</span>`:'';
       const odOver = o.due && !o.closed && daysBetween(o.due,today)<0;
       const odue = o.due?` <span class="duedate${odOver?' od':''}">📅 due ${esc(fmtMDY(o.due))}</span>`:'';
       if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${oent}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
-      const pend=isPendingClosed(s.project,o.raw); return `<li${pend?' class="done"':''}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}</li>`;}).join("")}</ol></div>`;
+      const pend=isPendingClosed(s.project,o.raw);
+      const hot=!pend && isHotTask(o.raw||o.disp);
+      const drag=(!pend&&o.raw)?` draggable="true" ondragstart="ftDragStart(event,'${escJsAttr(s.project)}','${escJsAttr(o.raw)}')" title="Drag onto another crew's column to re-assign, or onto a job card up top to move it to that trailer (needs code)"`:'';
+      return `<li class="${pend?'done':''}${hot?' hot':''}"${drag}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}</li>`;}).join("")}</ol></div>`;
   // ⚠ overdue chip in the panel header — distinct open crew tasks whose due date has passed.
   { const chip=document.getElementById('salOverChip');
     if(chip){ let n=0;
@@ -8275,6 +8562,7 @@ function msListPop(title, list){
 function renderProjects(D){
   const today=D.todayISO;
   try{ renderVerifyQueue(); }catch(_){}   // 🟡 PM sign-off queue (design-board "mark ready" tasks)
+  try{ renderBayOcc(D); }catch(_){}       // 🏭 bay-occupancy Gantt (when does each bay free up)
   const allProjects=(D.projects||[]).slice();
   const archN=allProjects.filter(projArchived).length;
   const _preNO = SHOW_ARCHIVED ? allProjects : allProjects.filter(p=>!projArchived(p));   // auto-archive wrapped projects off the active board
@@ -9963,11 +10251,12 @@ function dtbSetStatus(proj, handle, base){ const p=oProj(proj), t=p&&projTaskByA
 function dtbSetPct(proj, handle, v){ const p=oProj(proj), t=p&&projTaskByAnyId(p,handle); if(!t) return; dtbWriteStatus(proj, handle, _dtbCompose(projBaseStatus(t.st)||'Not Started', v)); }
 function dtbTaskHtml(x){
   const _ak = x.general?('g:'+x.gid):('p:'+(x.proj||'')+'||'+(x.handle||''));
-  if(DTB_EDIT.asg===_ak){   // 👤 inline re-assign picker (same look as the note editor)
+  let asgHtml='', asgOn=(DTB_EDIT.asg===_ak);
+  if(asgOn){   // 👤 inline re-assign picker — rendered INSIDE the task's own card (like the note editor), so the context stays visible
     const opts=DESIGN_TEAM.concat([DESIGN_TEAM_LANE]);
-    return `<div class="dtb-task${x.general?' gen':''}"><div class="dtb-title">👤 Re-assign: ${esc(x.title)}</div><div class="dtb-note-edit">`
+    asgHtml=`<div class="dtb-note-edit"><div style="font-weight:700;font-size:11px;margin-bottom:3px">👤 Re-assign to…</div>`
       +`<select id="dtbasg-sel">${opts.map(o=>`<option>${esc(o)}</option>`).join('')}</select>`
-      +`<div class="dtb-tacts"><button onclick="dtbAsgSave()" title="Move this task to the selected person${x.general?'':' — writes the new assignee to the project schedule'}">💾 Move task</button><button onclick="dtbCancel()">Cancel</button></div></div></div>`;
+      +`<div class="dtb-tacts"><button onclick="dtbAsgSave()" title="Move this task to the selected person${x.general?'':' — writes the new assignee to the project schedule'}">💾 Move task</button><button onclick="dtbCancel()">Cancel</button></div></div>`;
   }
   if(x.general && DTB_EDIT.gen===x.gid){
     return `<div class="dtb-task gen"><div class="dtb-note-edit">`
@@ -10012,11 +10301,11 @@ function dtbTaskHtml(x){
   }
   if(x.pending) chips.push(`<span class="dtb-chip pend" title="Waiting on PM verification">⏳ pending verify</span>`);
   const drag=x.done?'':` draggable="true" ondragstart="dtbDragStart(event,${x.general?1:0},'${escJsAttr(x.general?x.gid:(x.proj||''))}','${escJsAttr(x.general?'':(x.handle||''))}')" title="Drag onto another person's lane to re-assign (needs your code)"`;
-  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}"${drag}>`
+  return `<div class="dtb-task${x.general?' gen':''}${x.done?' done':''}${x.pending?' pending':''}${odue?' odue':''}${asgOn?' asg-editing':''}"${drag}>`
     +`${x.general?'<span class="dtb-addpin" title="Added on this board (not from a project file)">📌</span>':''}`
     +`<div class="dtb-title">${x.ms?'◆ ':''}${esc(x.title)}</div>`
-    +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}${prog}`
-    +`<div class="dtb-tacts">${acts}</div></div>`;
+    +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}${prog}${asgHtml}`
+    +(asgOn?'':`<div class="dtb-tacts">${acts}</div>`)+`</div>`;
 }
 function renderDesignTeam(){
   const ov=document.getElementById('dtbOverlay'); if(!ov||!ov.classList.contains('show')) return;
