@@ -3079,6 +3079,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"16.8", date:"2026-07-08", title:"🖨 Gantt print options · edit screens stay put", items:[
+    "The detailed-Gantt print window grew a real <b>options bar</b>: <b>paper size</b> (11×17 / Letter / Legal / A3), <b>landscape / portrait</b>, and <b>fit</b> — one page, or <b>1 page tall × 2–4 pages wide</b> for a big readable wall copy (the pages tile left-to-right). The duplicate <b>Items list at the bottom is OFF by default</b> — a checkbox brings it back. Choices are remembered, and it no longer auto-fires the print dialog — set your options, then hit Print.",
+    "<b>Edit screens no longer vanish when you click or swipe off them.</b> Every popup (task, job, project editor, leave, bulk edits…) now closes ONLY via ✕ / Cancel / Save — no more losing half-typed work to a stray tap." ] },
   { rev:"16.7", date:"2026-07-08", title:"🗓 Meeting view: full package — links, highlight, GPS truth-check", items:[
     "Every issue on the Coming-back cards is now a <b>link straight into Fleetio</b> (same as everywhere else), and Parking-Lot tasks tied to a 🔧 issue get the ↗ too.",
     "<b>Click any card to highlight it</b> and keep your place while you walk the meeting (click again to clear); rows also highlight on hover.",
@@ -4438,6 +4441,13 @@ function closeMenu(){ closeDrops(); }
 document.addEventListener('click',e=>{ if(!(e.target.closest && e.target.closest('.linksmenu'))) closeDrops(); });
 // Toolbar dropdown menus (⚙ View / ⬇ Import-Export): clicking outside an open one closes it (clicks inside keep it open).
 document.addEventListener('click',e=>{ document.querySelectorAll('details.tbmenu[open]').forEach(d=>{ if(!d.contains(e.target)) d.removeAttribute('open'); }); });
+// EDIT SCREENS STAY PUT: clicking / swiping the dark backdrop must NOT close a modal (half-typed work
+// vanished). Swallow backdrop clicks in the capture phase so the overlays' own close handlers never see
+// them — every modal now closes ONLY via ✕ / Cancel / Save. (The sign-in popup stays tap-away — nothing
+// to lose there.) Applies to every current and future .modal-overlay in one place.
+document.addEventListener('click',e=>{ const t=e.target;
+  if(t && t.classList && t.classList.contains('modal-overlay') && t.id!=='signInModal'){ e.stopPropagation(); }
+}, true);
 // ⚠ Open Issues panel → true full screen (F1). Toggles a class so the LIVE list just blows up; Esc/contract exits.
 function toggleIssuesFS(btn){ const p=document.getElementById('fp-issues'); if(!p) return;
   const on=p.classList.toggle('fs-on');
@@ -11150,11 +11160,18 @@ function printGanttFS(){
   }).join('') || `<div class="pk-li">No dated items.</div>`;
   const title=esc(P.title||'MRA Schedule'), nbars=rows.filter(r=>!r.noBar).length;
   const now=new Date(), stamp=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
-  const css=`@page{size:17in 11in;margin:.35in}*{box-sizing:border-box}html,body{margin:0}`+
+  const css=`*{box-sizing:border-box}html,body{margin:0}`+
     `body{font-family:'Segoe UI',Arial,sans-serif;color:#23272e;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}`+
-    `.bar{background:#23272e;color:#fff;padding:9px 16px;font-size:13px;display:flex;gap:14px;align-items:center}`+
+    `.bar{background:#23272e;color:#fff;padding:9px 16px;font-size:12.5px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}`+
     `.bar button{background:#e04826;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-weight:700;cursor:pointer}`+
-    `#page{margin:0 auto}#sheet{width:16.3in;padding:2px 0;transform-origin:top left}`+
+    `.bar label{display:flex;gap:5px;align-items:center;white-space:nowrap}`+
+    `.bar select{border-radius:6px;border:none;padding:4px 6px;font-size:12px}`+
+    `.bar .hint{color:#9aa0a8;font-size:11px}`+
+    `#page{margin:0 auto}`+
+    `.slice{overflow:hidden;margin:0 auto;background:#fff}`+
+    `@media screen{.slice{box-shadow:0 2px 12px rgba(0,0,0,.25);margin:12px auto}}`+
+    `.win{padding:2px 0}`+
+    `body.noitems .pk-items{display:none}`+
     `.pk-h{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #e04826;padding-bottom:4px;margin-bottom:6px}`+
     `.pk-h h1{font-size:16px;margin:0;font-weight:800}.pk-h h1 .ac{color:#e04826}.pk-sub2{font-size:11px;color:#666}`+
     `.pk-gantt{margin-bottom:8px}`+
@@ -11176,17 +11193,47 @@ function printGanttFS(){
     `.pk-dot{width:7px;height:7px;border-radius:50%;flex:none}.pk-dot.done{background:#9aa0a8}.pk-dot.past{background:#dc2626}.pk-dot.upcoming{background:#3b82f6}.pk-dot.active{background:#f59e0b}`+
     `.pk-task{flex:1}.pk-meta{color:#8a8f98;white-space:nowrap}`+
     `@media print{.bar{display:none}}`;
-  const fitJS=`<scr`+`ipt>(function(){function fit(){var s=document.getElementById('sheet');if(!s)return;`+
-    `s.style.zoom='1';var ppi=s.getBoundingClientRect().width/16.3,availH=10.0*ppi,h=s.scrollHeight;`+
-    `if(h>availH)s.style.zoom=(availH/h).toFixed(4);}`+
-    `window.onload=function(){fit();setTimeout(function(){try{window.focus();window.print();}catch(e){}},350);};})();</scr`+`ipt>`;
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA — ${title}</title><style>${css}</style></head><body>`+
-    `<div class="bar"><button onclick="window.print()">\u{1F5A8} Print / Save as PDF</button><span>11×17 (Tabloid) · Landscape · auto-fits to one page. Pick 11×17 paper, or Save as PDF.</span></div>`+
-    `<div id="page"><div id="sheet">`+
-      `<div class="pk-h"><h1><span class="ac">MRA</span> ${title}</h1><div class="pk-sub2">${nbars} bar${nbars===1?'':'s'} · ${stamp}</div></div>`+
+  const inner=`<div class="pk-h"><h1><span class="ac">MRA</span> ${title}</h1><div class="pk-sub2">${nbars} bar${nbars===1?'':'s'} · ${stamp}</div></div>`+
       `<div class="pk-gantt">${axis}${barRows}</div>`+
-      `<div class="pk-hd2">Items</div><div class="pk-list">${li}</div>`+
-    `</div></div>`+fitJS+`</body></html>`;
+      `<div class="pk-items"><div class="pk-hd2">Items</div><div class="pk-list">${li}</div></div>`;
+  // Print controller: paper size · orientation · fit (1 page, or 1 tall × N wide via horizontal slicing)
+  // · optional task list. Prefs remembered. Slices are page-sized windows onto one wide layout, so the
+  // browser prints page 1..N left-to-right; height always auto-fits one page tall (CSS zoom).
+  const ctlJS=`<scr`+`ipt>window._INNER=${JSON.stringify(inner).replace(/<\/scr/gi,'<\\\\/scr')};
+(function(){
+  var PAPERS={letter:[11,8.5],legal:[14,8.5],tabloid:[17,11],a3:[16.53,11.69]}, M=0.35;
+  function $(id){return document.getElementById(id);}
+  function layout(){
+    var p=PAPERS[$('oPaper').value]||PAPERS.tabloid, port=($('oOrient').value==='p');
+    var W=port?Math.min(p[0],p[1]):Math.max(p[0],p[1]), H=port?Math.max(p[0],p[1]):Math.min(p[0],p[1]);
+    var N=parseInt($('oWide').value,10)||1;
+    document.getElementById('pg').textContent='@page{size:'+W+'in '+H+'in;margin:'+M+'in}';
+    document.body.classList.toggle('noitems', !$('oItems').checked);
+    var uw=W-2*M, uh=H-2*M-0.05;
+    var page=$('page'), html='';
+    for(var i=0;i<N;i++){ html+='<div class="slice" style="width:'+uw+'in'+(i<N-1?';page-break-after:always':'')+'"><div class="win" style="width:'+(N*uw)+'in">'+window._INNER+'</div></div>'; }
+    page.innerHTML=html;
+    var w0=page.querySelector('.win'); if(!w0) return;
+    var h=w0.scrollHeight;                       // CSS px at zoom 1 (96px = 1in)
+    var z=Math.min(1,(uh*96)/h);                 // shrink to one page tall (never upscale)
+    var wins=page.querySelectorAll('.win');
+    for(var j=0;j<wins.length;j++){ wins[j].style.zoom=z.toFixed(4);
+      wins[j].style.width=((N*uw)/z)+'in'; wins[j].style.marginLeft='-'+((j*uw)/z)+'in'; }
+    try{localStorage.setItem('mra_gfsprint',JSON.stringify({p:$('oPaper').value,o:$('oOrient').value,w:$('oWide').value,i:$('oItems').checked?1:0}));}catch(e){}
+  }
+  try{var s=JSON.parse(localStorage.getItem('mra_gfsprint')||'null');
+    if(s){ $('oPaper').value=s.p||'tabloid'; $('oOrient').value=s.o||'l'; $('oWide').value=s.w||'1'; $('oItems').checked=!!s.i; }}catch(e){}
+  ['oPaper','oOrient','oWide','oItems'].forEach(function(id){ $(id).onchange=layout; });
+  window.onload=layout;
+})();</scr`+`ipt>`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA — ${title}</title><style>${css}</style><style id="pg">@page{size:17in 11in;margin:.35in}</style></head><body class="noitems">`+
+    `<div class="bar"><button onclick="window.print()">\u{1F5A8} Print / Save as PDF</button>`+
+    `<label>Paper <select id="oPaper"><option value="tabloid" selected>11×17 Tabloid</option><option value="letter">Letter</option><option value="legal">Legal</option><option value="a3">A3</option></select></label>`+
+    `<label>Layout <select id="oOrient"><option value="l" selected>Landscape</option><option value="p">Portrait</option></select></label>`+
+    `<label>Fit <select id="oWide"><option value="1" selected>1 page</option><option value="2">1 tall × 2 wide</option><option value="3">1 tall × 3 wide</option><option value="4">1 tall × 4 wide</option></select></label>`+
+    `<label><input type="checkbox" id="oItems"> Task list</label>`+
+    `<span class="hint">Match the same paper size in the browser's print dialog (More settings ▸ Paper size · scale = Default).</span></div>`+
+    `<div id="page"></div>`+ctlJS+`</body></html>`;
   const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
