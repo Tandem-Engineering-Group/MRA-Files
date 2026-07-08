@@ -1532,7 +1532,7 @@
     <div class="panel" id="openTasksPanel">
       <h2 style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
         <span>🧰 Open Tasks by Assignee</span>
-        <span id="salDuePick" class="saldue-pick" style="margin:0" title="Show only tasks DUE within this window (by due date). 'All' shows everything.">
+        <span id="salDuePick" class="saldue-pick" style="margin:0" title="Trim tasks whose DUE DATE is beyond this window. Tasks with no due date always show. 'All' shows everything.">
           <span class="saldue-lbl">Due:</span>
           <button data-d="today" onclick="setSalDue('today')">Today</button>
           <button data-d="week" onclick="setSalDue('week')">Week</button>
@@ -3068,6 +3068,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"16.3", date:"2026-07-08", title:"🐞 Fix: undated tasks vanished on the wall TV", items:[
+    "The shop TV defaults its <b>Due:</b> window to Month, and tasks <b>without a due date</b> were being treated as outside every window — so crews whose work is mostly undated (Jeff's whole list) showed <b>empty on the wall</b> while desktops looked fine. Undated tasks now <b>always show</b>; the Due window only trims dated tasks due beyond it." ] },
   { rev:"16.2", date:"2026-07-07", title:"🔥 Hot tasks — make the must-happen work stand out", items:[
     "The ➕ Add and ✎ Edit task forms have a <b>🔥 Hot checkbox</b> — a hot task shows with an <b>amber edge, bold text and a gentle glow</b> on the bay tiles and the crew columns, and <b>pins to the top</b> of its list. The 🔥 rides in the task text, so it carries onto the crew sheets and prints too.",
     "Old habits count: tasks written with <b>***</b> or <b>!!!</b> light up as hot automatically (your “***INSTALL ALUM WALLS***” is already glowing). Un-check 🔥 in ✎ Edit to calm one back down." ] },
@@ -8304,7 +8306,8 @@ function renderSal(D){
   // A task passes the timeframe filter if its DUE date is on/before the window's ceiling (overdue counts).
   // 'all' shows everything; undated OPEN tasks are hidden in a windowed view (they have no due to be "coming up").
   const dueInWindow=(due)=>{ if(SAL_DUE==='all') return true; const n=_SAL_DUE_N[SAL_DUE]; if(n==null) return true;
-    if(!due) return false; const d=daysBetween(due,today); return d!=null && d<=n; };
+    if(!due) return true;   // UNDATED tasks always show — the window only trims DATED tasks due beyond it (undated used to vanish on the TV, which defaults to Month: Jeff's whole list disappeared in wall mode)
+    const d=daysBetween(due,today); return d!=null && d<=n; };
   const GROUPS=[
     {id:"asgSal",cnt:"cntSal",re:/\bsal\b/i,label:"Sal"},
     {id:"asgWrap",cnt:"cntWrap",re:/wrap|w2 graphic|\bw2\b/i,label:"Wrap Team"},
