@@ -3079,6 +3079,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"16.9", date:"2026-07-08", title:"🖨 Gantt print: Today toggle · ½″ margins · Names slider", items:[
+    "The Gantt print window gained a <b>Today line on/off</b> checkbox, moved to <b>½-inch margins</b>, and a <b>Names slider</b> — slide right and the <b>task names on the left grow bigger and wider</b> while the timeline compresses to make room (rows heighten to match; still auto-fits one page tall). All remembered with your other print choices." ] },
   { rev:"16.8", date:"2026-07-08", title:"🖨 Gantt print options · edit screens stay put", items:[
     "The detailed-Gantt print window grew a real <b>options bar</b>: <b>paper size</b> (11×17 / Letter / Legal / A3), <b>landscape / portrait</b>, and <b>fit</b> — one page, or <b>1 page tall × 2–4 pages wide</b> for a big readable wall copy (the pages tile left-to-right). The duplicate <b>Items list at the bottom is OFF by default</b> — a checkbox brings it back. Choices are remembered, and it no longer auto-fires the print dialog — set your options, then hit Print.",
     "<b>Edit screens no longer vanish when you click or swipe off them.</b> Every popup (task, job, project editor, leave, bulk edits…) now closes ONLY via ✕ / Cancel / Save — no more losing half-typed work to a stray tap." ] },
@@ -11172,21 +11174,22 @@ function printGanttFS(){
     `@media screen{.slice{box-shadow:0 2px 12px rgba(0,0,0,.25);margin:12px auto}}`+
     `.win{padding:2px 0}`+
     `body.noitems .pk-items{display:none}`+
+    `body.notoday .pk-today{display:none}`+
     `.pk-h{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #e04826;padding-bottom:4px;margin-bottom:6px}`+
     `.pk-h h1{font-size:16px;margin:0;font-weight:800}.pk-h h1 .ac{color:#e04826}.pk-sub2{font-size:11px;color:#666}`+
     `.pk-gantt{margin-bottom:8px}`+
-    `.pk-row{display:flex;align-items:stretch;height:15px;border-bottom:1px solid #f2f2f2}`+
+    `.pk-row{display:flex;align-items:stretch;height:var(--rh,15px);border-bottom:1px solid #f2f2f2}`+
     `.pk-row.pk-axis{height:13px;border-bottom:1px solid #cfd3d8}`+
-    `.pk-lbl{width:2.4in;flex:none;font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px;display:flex;align-items:center;gap:5px}`+
-    `.pk-sub{color:#9aa0a8;font-weight:400;font-size:8px}`+
+    `.pk-lbl{width:var(--lw,2.4in);flex:none;font-size:var(--lf,9px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px;display:flex;align-items:center;gap:5px}`+
+    `.pk-sub{color:#9aa0a8;font-weight:400;font-size:calc(var(--lf,9px) - 1px)}`+
     `.pk-trk{position:relative;flex:1;border-left:1px solid #ddd;overflow:hidden}`+
     `.pk-grid{position:absolute;top:0;bottom:0;border-left:1px dashed #eceef0}`+
     `.pk-hol{position:absolute;top:0;bottom:0;background:rgba(245,158,11,.16)}`+
     `.pk-today{position:absolute;top:0;bottom:0;border-left:1.5px solid #e04826}`+
     `.pk-tk{position:absolute;top:1px;font-size:8px;color:#888;padding-left:2px}`+
-    `.pk-bar{position:absolute;top:3px;height:9px;border-radius:2px;opacity:.88}`+
-    `.pk-ms{position:absolute;top:4px;width:7px;height:7px;margin-left:-3.5px;background:#f59e0b;transform:rotate(45deg);border:1px solid #b45309}`+
-    `.pk-bout{position:absolute;top:2px;font-size:7.5px;color:#666;white-space:nowrap;padding-left:3px}.pk-bout.r{padding-left:0;padding-right:3px;text-align:right}`+
+    `.pk-bar{position:absolute;top:calc((var(--rh,15px) - 9px)/2);height:9px;border-radius:2px;opacity:.88}`+
+    `.pk-ms{position:absolute;top:calc((var(--rh,15px) - 7px)/2);width:7px;height:7px;margin-left:-3.5px;background:#f59e0b;transform:rotate(45deg);border:1px solid #b45309}`+
+    `.pk-bout{position:absolute;top:calc((var(--rh,15px) - 11px)/2);font-size:calc(var(--lf,9px)*.85);color:#666;white-space:nowrap;padding-left:3px}.pk-bout.r{padding-left:0;padding-right:3px;text-align:right}`+
     `.pk-hd2{font-size:12px;font-weight:800;border-bottom:1px solid #cfd3d8;margin:8px 0 4px}`+
     `.pk-list{column-count:3;column-gap:22px;font-size:9px}`+
     `.pk-li{break-inside:avoid;display:flex;align-items:baseline;gap:5px;line-height:1.35;padding:1px 0}`+
@@ -11201,7 +11204,7 @@ function printGanttFS(){
   // browser prints page 1..N left-to-right; height always auto-fits one page tall (CSS zoom).
   const ctlJS=`<scr`+`ipt>window._INNER=${JSON.stringify(inner).replace(/<\/scr/gi,'<\\\\/scr')};
 (function(){
-  var PAPERS={letter:[11,8.5],legal:[14,8.5],tabloid:[17,11],a3:[16.53,11.69]}, M=0.35;
+  var PAPERS={letter:[11,8.5],legal:[14,8.5],tabloid:[17,11],a3:[16.53,11.69]}, M=0.5;
   function $(id){return document.getElementById(id);}
   function layout(){
     var p=PAPERS[$('oPaper').value]||PAPERS.tabloid, port=($('oOrient').value==='p');
@@ -11209,6 +11212,11 @@ function printGanttFS(){
     var N=parseInt($('oWide').value,10)||1;
     document.getElementById('pg').textContent='@page{size:'+W+'in '+H+'in;margin:'+M+'in}';
     document.body.classList.toggle('noitems', !$('oItems').checked);
+    document.body.classList.toggle('notoday', !$('oToday').checked);
+    var v=parseInt($('oLbl').value,10)||0;   // 0 = compact names · 100 = big names (timeline compresses to make room)
+    var lf=9+(v/100)*6, lw=2.2+(v/100)*2.6, rh=Math.round(lf*1.8);
+    var rt=document.documentElement.style;
+    rt.setProperty('--lf', lf.toFixed(1)+'px'); rt.setProperty('--lw', lw.toFixed(2)+'in'); rt.setProperty('--rh', rh+'px');
     var uw=W-2*M, uh=H-2*M-0.05;
     var page=$('page'), html='';
     for(var i=0;i<N;i++){ html+='<div class="slice" style="width:'+uw+'in'+(i<N-1?';page-break-after:always':'')+'"><div class="win" style="width:'+(N*uw)+'in">'+window._INNER+'</div></div>'; }
@@ -11219,20 +11227,24 @@ function printGanttFS(){
     var wins=page.querySelectorAll('.win');
     for(var j=0;j<wins.length;j++){ wins[j].style.zoom=z.toFixed(4);
       wins[j].style.width=((N*uw)/z)+'in'; wins[j].style.marginLeft='-'+((j*uw)/z)+'in'; }
-    try{localStorage.setItem('mra_gfsprint',JSON.stringify({p:$('oPaper').value,o:$('oOrient').value,w:$('oWide').value,i:$('oItems').checked?1:0}));}catch(e){}
+    try{localStorage.setItem('mra_gfsprint',JSON.stringify({p:$('oPaper').value,o:$('oOrient').value,w:$('oWide').value,i:$('oItems').checked?1:0,t:$('oToday').checked?1:0,l:v}));}catch(e){}
   }
   try{var s=JSON.parse(localStorage.getItem('mra_gfsprint')||'null');
-    if(s){ $('oPaper').value=s.p||'tabloid'; $('oOrient').value=s.o||'l'; $('oWide').value=s.w||'1'; $('oItems').checked=!!s.i; }}catch(e){}
-  ['oPaper','oOrient','oWide','oItems'].forEach(function(id){ $(id).onchange=layout; });
+    if(s){ $('oPaper').value=s.p||'tabloid'; $('oOrient').value=s.o||'l'; $('oWide').value=s.w||'1'; $('oItems').checked=!!s.i;
+      $('oToday').checked=(s.t==null)?true:!!s.t; $('oLbl').value=(s.l==null)?0:s.l; }}catch(e){}
+  ['oPaper','oOrient','oWide','oItems','oToday'].forEach(function(id){ $(id).onchange=layout; });
+  $('oLbl').oninput=layout;
   window.onload=layout;
 })();</scr`+`ipt>`;
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA — ${title}</title><style>${css}</style><style id="pg">@page{size:17in 11in;margin:.35in}</style></head><body class="noitems">`+
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>MRA — ${title}</title><style>${css}</style><style id="pg">@page{size:17in 11in;margin:.5in}</style></head><body class="noitems">`+
     `<div class="bar"><button onclick="window.print()">\u{1F5A8} Print / Save as PDF</button>`+
     `<label>Paper <select id="oPaper"><option value="tabloid" selected>11×17 Tabloid</option><option value="letter">Letter</option><option value="legal">Legal</option><option value="a3">A3</option></select></label>`+
     `<label>Layout <select id="oOrient"><option value="l" selected>Landscape</option><option value="p">Portrait</option></select></label>`+
     `<label>Fit <select id="oWide"><option value="1" selected>1 page</option><option value="2">1 tall × 2 wide</option><option value="3">1 tall × 3 wide</option><option value="4">1 tall × 4 wide</option></select></label>`+
     `<label><input type="checkbox" id="oItems"> Task list</label>`+
-    `<span class="hint">Match the same paper size in the browser's print dialog (More settings ▸ Paper size · scale = Default).</span></div>`+
+    `<label><input type="checkbox" id="oToday" checked> Today line</label>`+
+    `<label title="Slide right: bigger task names on the left, timeline compresses to make room (rows grow to match)">Names <input type="range" id="oLbl" min="0" max="100" value="0" style="width:110px"></label>`+
+    `<span class="hint">½″ margins · match the same paper size in the browser's print dialog (More settings ▸ Paper size · scale = Default).</span></div>`+
     `<div id="page"></div>`+ctlJS+`</body></html>`;
   const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
