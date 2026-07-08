@@ -242,9 +242,16 @@ def main():
         else:
             category = 'bay'
 
+        j_ord_raw = ff(it, 'JobOrd')   # UI-added Number column: manual drag-order on the bay cards (None until set)
+        try:
+            j_ord = float(j_ord_raw) if str(j_ord_raw).strip() not in ('', 'None') else None
+        except Exception:
+            j_ord = None
+
         rec = {
             'row': 'general' if is_general else (int(it.get('ID')) if str(it.get('ID','')).isdigit() else it.get('ID')),
             '_id': it.get('ID') or it.get('id'),
+            'ord': j_ord,
             'bay': bay, 'project': proj, 'client': client, 'jobNum': job,
             'status': status, 'pm': pm,
             'startISO': start_iso or None, 'completionISO': comp_iso or None,
