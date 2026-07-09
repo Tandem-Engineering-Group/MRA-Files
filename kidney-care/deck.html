@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deck Viewer — Independent Kidney Care</title>
+  <link rel="stylesheet" href="css/site.css" />
+</head>
+<body>
+
+<div class="viewer-wrap" id="viewerWrap">
+
+  <header class="viewer-header">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <a href="index.html" class="btn btn-outline" style="padding:6px 12px;font-size:12.5px;">← Back</a>
+      <span class="viewer-title" id="deckTitle">Loading…</span>
+    </div>
+
+    <div class="viewer-controls">
+      <button class="ctrl-btn" id="prevBtn" aria-label="Previous slide" disabled>&#8592;</button>
+      <span class="slide-counter" id="counter" aria-live="polite">— / —</span>
+      <button class="ctrl-btn" id="nextBtn" aria-label="Next slide" disabled>&#8594;</button>
+      <button class="ctrl-btn" id="fsBtn" aria-label="Toggle fullscreen" title="Fullscreen">&#x26F6;</button>
+    </div>
+
+    <div class="viewer-dl" id="dlLinks"></div>
+  </header>
+
+  <div class="viewer-main">
+    <div class="viewer-stage" id="stage" role="img" aria-label="Current slide">
+      <img id="slideImg" src="" alt="" />
+    </div>
+    <div class="filmstrip" id="filmstrip" aria-label="Slide thumbnails"></div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const deckNum = params.get('deck') === '2' ? 2 : 1;
+
+  const DECKS = {
+    1: {
+      title: 'The Independent Center — Deck 1 of 2',
+      dir: 'assets/deck1/',
+      total: 9,
+      pptx: 'assets/Deck1_Independent_JV.pptx',
+      pdf:  'assets/Deck1.pdf',
+    },
+    2: {
+      title: 'The Turnkey Chain JV — Deck 2 of 2',
+      dir: 'assets/deck2/',
+      total: 8,
+      pptx: 'assets/Deck2_Chain_JV.pptx',
+      pdf:  'assets/Deck2.pdf',
+    },
+  };
+
+  const deck = DECKS[deckNum];
+  let current = 0;
+
+  // DOM refs
+  const titleEl  = document.getElementById('deckTitle');
+  const counter  = document.getElementById('counter');
+  const slideImg = document.getElementById('slideImg');
+  const prevBtn  = document.getElementById('prevBtn');
+  const nextBtn  = document.getElementById('nextBtn');
+  const fsBtn    = document.getElementById('fsBtn');
+  const stage    = document.getElementById('stage');
+  const film     = document.getElementById('filmstrip');
+  const dlLinks  = document.getElementById('dlLinks');
+
+  titleEl.textContent = deck.title;
+  document.title = deck.title + ' — Independent Kidney Care';
+
+  // Download links
+  dlLinks.innerHTML = `
+    <a href="${deck.pptx}" download class="dl-link">PPTX</a>
+    <a href="${deck.pdf}"  download class="dl-link">PDF</a>`;
+
+  // Build filmstrip
+  function padNum(n) { return String(n).padStart(2, '0'); }
+  function slideSrc(idx) { return deck.dir + 'slide-' + padNum(idx + 1) + '.png'; }
+
+  for (let i = 0; i < deck.total; i++) {
+    const div = document.createElement('div');
+    div.className = 'film-thumb';
+    div.dataset.idx = i;
+    div.setAttribute('role', 'button');
+    div.setAttribute('tabindex', '0');
+    div.setAttribute('aria-label', 'Slide ' + (i + 1));
+    div.innerHTML = `<img src="${slideSrc(i)}" alt="Slide ${i+1}" loading="lazy" /><span class="film-num">${i+1}</span>`;
+    div.addEventListener('click', () => goTo(i));
+    div.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goTo(i); } });
+    film.appendChild(div);
+  }
+
+  function updateUI() {
+    counter.textContent = (current + 1) + ' / ' + deck.total;
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === deck.total - 1;
+    slideImg.src = slideSrc(current);
+    slideImg.alt = 'Slide ' + (current + 1) + ' of ' + deck.total;
+
+    film.querySelectorAll('.film-thumb').forEach((el, i) => {
+      el.classList.toggle('active', i === current);
+    });
+
+    // Scroll active thumb into view
+    const activeThumb = film.querySelector('.film-thumb.active');
+    if (activeThumb) {
+      activeThumb.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  function goTo(idx) {
+    current = Math.max(0, Math.min(deck.total - 1, idx));
+    updateUI();
+  }
+
+  prevBtn.addEventListener('click', () => goTo(current - 1));
+  nextBtn.addEventListener('click', () => goTo(current + 1));
+
+  // Keyboard navigation
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    goTo(current - 1);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown')  goTo(current + 1);
+    if (e.key === 'Home') goTo(0);
+    if (e.key === 'End')  goTo(deck.total - 1);
+    if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  });
+
+  // Fullscreen
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      stage.requestFullscreen && stage.requestFullscreen();
+    } else {
+      document.exitFullscreen && document.exitFullscreen();
+    }
+  }
+  fsBtn.addEventListener('click', toggleFullscreen);
+
+  // Touch / swipe
+  let touchStartX = 0;
+  stage.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 40) { dx < 0 ? goTo(current + 1) : goTo(current - 1); }
+  }, { passive: true });
+
+  // Enable buttons now
+  prevBtn.disabled = false;
+  nextBtn.disabled = false;
+  goTo(0);
+})();
+</script>
+</body>
+</html>

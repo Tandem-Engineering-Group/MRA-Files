@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Michigan Dialysis Underservice Model</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root{
+    --bg:#0c1620; --panel:#13212e; --panel2:#182a39; --line:#22384a;
+    --ink:#e7eef3; --mut:#8aa2b1; --dim:#5d7585;
+    --teal:#2fb3a8; --teal-d:#1f7d75;
+    --g0:#39b48b; --g1:#8cc05b; --g2:#e0a33c; --g3:#e07b39; --g4:#d7503a;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.45;font-size:14px}
+  .wrap{display:flex;flex-direction:column;min-height:100%}
+
+  header{padding:16px 20px 14px;border-bottom:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--teal)}
+  h1{margin:2px 0 0;font-size:21px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--mut);font-size:12.5px;margin-top:3px;max-width:62ch}
+  .toggle{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .toggle button{background:transparent;color:var(--mut);border:0;padding:8px 14px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+  .toggle button.on{background:var(--teal-d);color:#eafffb}
+
+  main{display:flex;flex:1;min-height:560px}
+  .rail{width:300px;flex:none;border-right:1px solid var(--line);padding:16px;overflow:auto;background:var(--panel)}
+  #map{flex:1;min-height:560px;background:#0a131b;z-index:0}
+
+  .group{margin-bottom:18px}
+  .group h2{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim);margin:0 0 10px;font-weight:600}
+  .ctrl{margin-bottom:14px}
+  .ctrl .lab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+  .ctrl .lab span:first-child{font-size:12.5px;color:var(--ink)}
+  .ctrl .val{font-family:var(--mono);font-size:13px;color:var(--teal);font-weight:600}
+  .ctrl .hint{font-size:11px;color:var(--dim);margin-top:3px}
+  input[type=range]{width:100%;accent-color:var(--teal);height:4px;margin:2px 0}
+
+  .legend .row{display:flex;align-items:center;gap:9px;margin-bottom:6px;font-size:12px;color:var(--mut)}
+  .dot{width:13px;height:13px;border-radius:50%;flex:none;border:1px solid rgba(255,255,255,.18)}
+
+  .note{font-size:11px;color:var(--dim);line-height:1.5;border-top:1px solid var(--line);padding-top:12px}
+  .note b{color:var(--mut);font-weight:600}
+
+  .summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+  .stat .n{font-family:var(--mono);font-size:18px;font-weight:650}
+  .stat .k{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+
+  .ledger{border-top:1px solid var(--line);background:var(--panel)}
+  .ledger-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 6px}
+  .ledger-head h2{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0;font-weight:600}
+  .ledger-head button{background:var(--panel2);color:var(--mut);border:1px solid var(--line);
+    border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:10.5px;cursor:pointer;letter-spacing:.06em}
+  .tbl{max-height:300px;overflow:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  thead th{position:sticky;top:0;background:var(--panel2);color:var(--dim);font-weight:600;
+    text-align:right;padding:7px 12px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+  thead th:first-child,tbody td:first-child{text-align:left}
+  tbody td{padding:7px 12px;text-align:right;border-bottom:1px solid #16252f;font-family:var(--mono)}
+  tbody td:first-child{font-family:var(--sans)}
+  tbody tr:hover{background:#16252f;cursor:pointer}
+  .pill{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .demo{color:var(--dim);font-size:11px}
+  .barwrap{width:64px;height:7px;background:#16252f;border-radius:4px;display:inline-block;overflow:hidden;vertical-align:middle}
+  .bar{height:100%;display:block}
+  input.fac{width:46px;background:#0e1c27;border:1px solid var(--line);color:var(--ink);
+    border-radius:5px;padding:3px 5px;font-family:var(--mono);font-size:12px;text-align:right}
+  input.fac:focus{outline:1px solid var(--teal);border-color:var(--teal)}
+  .gap-pos{color:var(--g4)} .gap-neg{color:var(--g0)}
+
+  @media(max-width:820px){
+    main{flex-direction:column}
+    .rail{width:100%;border-right:0;border-bottom:1px solid var(--line);max-height:none}
+    #map{min-height:420px;height:46vh}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Kidney care · access modeling</div>
+      <h1>Where Michigan dialysis demand outruns supply</h1>
+      <div class="sub">A planning model, not a clinic census. Demand is estimated from population and racial composition (Black Americans reach kidney failure ~4&times; as often). Supply is seeded by population and is fully editable — replace it with real counts from Medicare's dialysis-facility directory.</div>
+    </div>
+    <div class="toggle" id="viewToggle">
+      <button data-view="state" class="on">Michigan</button>
+      <button data-view="metro">Detroit metro</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="rail">
+      <div class="group">
+        <h2>Model assumptions</h2>
+        <div class="ctrl">
+          <div class="lab"><span>Base dialysis prevalence</span><span class="val" id="rateV">165</span></div>
+          <input type="range" id="rate" min="100" max="260" step="5" value="165">
+          <div class="hint">patients per 100,000 people (non-elevated baseline)</div>
+        </div>
+        <div class="ctrl">
+          <div class="lab"><span>Black-population risk multiplier</span><span class="val" id="multV">3.5&times;</span></div>
+          <input type="range" id="mult" min="1.5" max="5" step="0.1" value="3.5">
+          <div class="hint">applied to the Black share of each area's population</div>
+        </div>
+        <div class="ctrl">
+          <div class="lab"><span>Capacity per clinic</span><span class="val" id="capV">110</span></div>
+          <input type="range" id="cap" min="60" max="180" step="5" value="110">
+          <div class="hint">in-center patients one facility can carry</div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Modeled totals (listed areas)</h2>
+        <div class="summary">
+          <div class="stat"><div class="n" id="sDem">—</div><div class="k">Demand (patients)</div></div>
+          <div class="stat"><div class="n" id="sCap">—</div><div class="k">Capacity</div></div>
+          <div class="stat"><div class="n" id="sGap" style="color:var(--g4)">—</div><div class="k">Unmet demand</div></div>
+          <div class="stat"><div class="n" id="sN">—</div><div class="k">Areas underserved</div></div>
+        </div>
+      </div>
+
+      <div class="group legend">
+        <h2>Underserved index (demand ÷ capacity)</h2>
+        <div class="row"><span class="dot" style="background:var(--g0)"></span>&lt; 0.85 — surplus capacity</div>
+        <div class="row"><span class="dot" style="background:var(--g1)"></span>0.85–1.0 — balanced</div>
+        <div class="row"><span class="dot" style="background:var(--g2)"></span>1.0–1.3 — tight</div>
+        <div class="row"><span class="dot" style="background:var(--g3)"></span>1.3–1.7 — underserved</div>
+        <div class="row"><span class="dot" style="background:var(--g4)"></span>&gt; 1.7 — severely underserved</div>
+        <div class="row" style="margin-top:6px"><span class="dot" style="background:#3a4d5c;border-style:dashed"></span>circle size ∝ estimated demand</div>
+      </div>
+
+      <div class="note">
+        <b>How to read this.</b> Circles glow red where demographically-weighted demand exceeds the clinics modeled nearby — the classic equity gap, since high-Black-population areas carry far more kidney failure than supply distributed by headcount would cover.<br><br>
+        <b>What's real vs. modeled.</b> Population &amp; racial composition: U.S. Census (approx). Prevalence &amp; 4&times; disparity: USRDS / NKF. Clinic counts: <em>placeholders seeded by population</em> — edit them in the table below using Medicare's "Dialysis Facilities in the U.S." dataset for a true picture. Not a clinical siting recommendation.
+      </div>
+    </aside>
+
+    <div id="map"></div>
+  </main>
+
+  <section class="ledger">
+    <div class="ledger-head">
+      <h2>Area ledger — edit clinic counts to refine</h2>
+      <button id="resort">Re-sort by unmet demand</button>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr>
+          <th>Area</th><th>Pop.</th><th>% Black</th><th>Demand</th><th>Clinics</th><th>Capacity</th><th>Unmet</th><th>Index</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ---- Data: approximate Census population + Black share; coordinates exact ----
+// metro=true marks the Detroit metropolitan cluster.
+const AREAS = [
+  {name:"Detroit",          lat:42.3314, lng:-83.0458, pop:633000, black:0.77, metro:true},
+  {name:"Southfield",       lat:42.4734, lng:-83.2219, pop:76000,  black:0.70, metro:true},
+  {name:"Pontiac",          lat:42.6389, lng:-83.2910, pop:61000,  black:0.49, metro:true},
+  {name:"Inkster",          lat:42.2942, lng:-83.3102, pop:26000,  black:0.62, metro:true},
+  {name:"Eastpointe",       lat:42.4684, lng:-82.9555, pop:32000,  black:0.45, metro:true},
+  {name:"Warren",           lat:42.5145, lng:-83.0147, pop:139000, black:0.17, metro:true},
+  {name:"Westland",         lat:42.3242, lng:-83.4002, pop:85000,  black:0.30, metro:true},
+  {name:"Dearborn",         lat:42.3223, lng:-83.1763, pop:109000, black:0.04, metro:true},
+  {name:"Dearborn Heights", lat:42.3370, lng:-83.2733, pop:63000,  black:0.14, metro:true},
+  {name:"Livonia",          lat:42.3684, lng:-83.3527, pop:95000,  black:0.04, metro:true},
+  {name:"Sterling Heights", lat:42.5803, lng:-83.0302, pop:134000, black:0.06, metro:true},
+  {name:"Troy",             lat:42.6064, lng:-83.1498, pop:87000,  black:0.05, metro:true},
+  {name:"Farmington Hills", lat:42.4989, lng:-83.3677, pop:83000,  black:0.19, metro:true},
+  {name:"Rochester Hills",  lat:42.6584, lng:-83.1499, pop:76000,  black:0.05, metro:true},
+  {name:"Royal Oak",        lat:42.4895, lng:-83.1446, pop:58000,  black:0.03, metro:true},
+  {name:"Taylor",           lat:42.2409, lng:-83.2696, pop:63000,  black:0.17, metro:true},
+  {name:"Flint",            lat:43.0125, lng:-83.6875, pop:81000,  black:0.54, metro:false},
+  {name:"Saginaw",          lat:43.4195, lng:-83.9508, pop:44000,  black:0.45, metro:false},
+  {name:"Benton Harbor",    lat:42.1167, lng:-86.4542, pop:9000,   black:0.83, metro:false},
+  {name:"Muskegon",         lat:43.2342, lng:-86.2484, pop:38000,  black:0.33, metro:false},
+  {name:"Lansing",          lat:42.7325, lng:-84.5555, pop:112000, black:0.24, metro:false},
+  {name:"Grand Rapids",     lat:42.9634, lng:-85.6681, pop:198000, black:0.18, metro:false},
+  {name:"Wyoming",          lat:42.9134, lng:-85.7053, pop:76000,  black:0.12, metro:false},
+  {name:"Kalamazoo",        lat:42.2917, lng:-85.5872, pop:73000,  black:0.21, metro:false},
+  {name:"Battle Creek",     lat:42.3211, lng:-85.1797, pop:52000,  black:0.17, metro:false},
+  {name:"Jackson",          lat:42.2459, lng:-84.4013, pop:31000,  black:0.20, metro:false},
+  {name:"Ann Arbor",        lat:42.2808, lng:-83.7430, pop:123000, black:0.07, metro:false},
+  {name:"Traverse City",    lat:44.7631, lng:-85.6206, pop:15000,  black:0.02, metro:false},
+  {name:"Marquette (UP)",   lat:46.5436, lng:-87.3954, pop:20000,  black:0.03, metro:false},
+];
+// seed placeholder clinic counts by population (≈1 per 25k); min 1
+AREAS.forEach(a=>{ a.fac = Math.max(1, Math.round(a.pop/25000)); });
+
+const P = { rate:165, mult:3.5, cap:110 };
+
+function colorFor(ratio){
+  if(ratio<0.85) return getCss('--g0');
+  if(ratio<1.0)  return getCss('--g1');
+  if(ratio<1.3)  return getCss('--g2');
+  if(ratio<1.7)  return getCss('--g3');
+  return getCss('--g4');
+}
+function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function demandOf(a){
+  const eff = P.rate * (a.black*P.mult + (1-a.black)*1.0); // per 100k
+  return eff/100000 * a.pop;
+}
+function fmt(n){ return Math.round(n).toLocaleString(); }
+
+// ---- Map ----
+let map, markers={}, ledgerRefs={};
+function initMap(){
+  map = L.map('map',{zoomControl:true, attributionControl:true}).setView([44.6,-85.4],6);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:19
+  }).addTo(map);
+
+  AREAS.forEach(a=>{
+    const m = L.circleMarker([a.lat,a.lng],{radius:8,weight:1.2,color:'#0a131b',fillOpacity:0.82});
+    m.addTo(map);
+    m.on('click',()=>focusArea(a.name));
+    markers[a.name]=m;
+  });
+}
+
+function radiusFor(d){ return Math.max(6, Math.min(42, Math.sqrt(d)*0.72)); }
+
+function recompute(){
+  let tDem=0,tCap=0,tGap=0,nUnder=0;
+  AREAS.forEach(a=>{
+    const d=demandOf(a), cap=a.fac*P.cap, gap=d-cap, ratio= cap>0? d/cap : 99;
+    tDem+=d; tCap+=cap; if(gap>0){tGap+=gap; nUnder++;}
+    const col=colorFor(ratio);
+    const m=markers[a.name];
+    if(m){ m.setStyle({fillColor:col, color:'#0a131b'}); m.setRadius(radiusFor(d));
+      m.bindTooltip(`<b>${a.name}</b><br>demand ${fmt(d)} · capacity ${fmt(cap)}<br>index ${ratio>=99?'∞':ratio.toFixed(2)}`,{direction:'top',opacity:0.95}); }
+    const r=ledgerRefs[a.name];
+    if(r){
+      r.dem.textContent=fmt(d);
+      r.cap.textContent=fmt(cap);
+      r.gap.textContent=(gap>0?'+':'')+fmt(gap);
+      r.gap.className = gap>0?'gap-pos':'gap-neg';
+      r.idx.textContent= ratio>=99?'∞':ratio.toFixed(2);
+      r.pill.style.background=col;
+      const pct=Math.max(4,Math.min(100, ratio/2*100));
+      r.bar.style.width=pct+'%'; r.bar.style.background=col;
+    }
+  });
+  document.getElementById('sDem').textContent=fmt(tDem);
+  document.getElementById('sCap').textContent=fmt(tCap);
+  document.getElementById('sGap').textContent='+'+fmt(tGap);
+  document.getElementById('sN').textContent=nUnder+' / '+AREAS.length;
+}
+
+function buildLedger(){
+  const tb=document.getElementById('rows'); tb.innerHTML='';
+  AREAS.forEach(a=>{
+    const tr=document.createElement('tr');
+    const pill=`<span class="pill" data-pill></span>`;
+    tr.innerHTML=`<td>${pill}${a.name}</td>
+      <td>${fmt(a.pop)}</td>
+      <td class="demo">${Math.round(a.black*100)}%</td>
+      <td data-dem></td>
+      <td><input class="fac" type="number" min="0" step="1" value="${a.fac}"></td>
+      <td data-cap></td>
+      <td data-gap></td>
+      <td data-idx></td>
+      <td><span class="barwrap"><span class="bar" data-bar></span></span></td>`;
+    tb.appendChild(tr);
+    const inp=tr.querySelector('input.fac');
+    inp.addEventListener('input',()=>{ a.fac=Math.max(0, parseInt(inp.value||'0',10)); recompute(); });
+    tr.addEventListener('click',e=>{ if(e.target.tagName!=='INPUT') focusArea(a.name); });
+    ledgerRefs[a.name]={
+      pill:tr.querySelector('[data-pill]'), dem:tr.querySelector('[data-dem]'),
+      cap:tr.querySelector('[data-cap]'), gap:tr.querySelector('[data-gap]'),
+      idx:tr.querySelector('[data-idx]'), bar:tr.querySelector('[data-bar]')
+    };
+  });
+}
+
+function focusArea(name){
+  const a=AREAS.find(x=>x.name===name); if(!a) return;
+  map.setView([a.lat,a.lng], a.metro?12:11,{animate:true});
+  const m=markers[name]; if(m) m.openTooltip();
+}
+
+function setView(v){
+  document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+  if(v==='metro'){
+    const pts=AREAS.filter(a=>a.metro).map(a=>[a.lat,a.lng]);
+    map.fitBounds(pts,{padding:[40,40]});
+  } else {
+    map.setView([44.6,-85.4],6);
+  }
+}
+
+function resortLedger(){
+  AREAS.sort((x,y)=> (demandOf(y)-y.fac*P.cap) - (demandOf(x)-x.fac*P.cap));
+  buildLedger(); recompute();
+}
+
+// ---- wire up ----
+window.addEventListener('load',()=>{
+  if(typeof L==='undefined'){ document.getElementById('map').innerHTML=
+    '<div style="padding:24px;color:#8aa2b1">Map library failed to load — check your network connection.</div>'; return; }
+  initMap();
+  // initial sort by seeded unmet demand
+  AREAS.sort((x,y)=> (demandOf(y)-y.fac*P.cap) - (demandOf(x)-x.fac*P.cap));
+  buildLedger(); recompute();
+
+  const bind=(id,key,fmtFn)=>{ const el=document.getElementById(id);
+    el.addEventListener('input',()=>{ P[key]=parseFloat(el.value);
+      document.getElementById(id+'V').textContent=fmtFn(P[key]); recompute(); }); };
+  bind('rate','rate',v=>v);
+  bind('mult','mult',v=>v.toFixed(1)+'×');
+  bind('cap','cap',v=>v);
+
+  document.getElementById('viewToggle').addEventListener('click',e=>{
+    if(e.target.dataset.view) setView(e.target.dataset.view); });
+  document.getElementById('resort').addEventListener('click',resortLedger);
+});
+</script>
+</body>
+</html>
