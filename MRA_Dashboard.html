@@ -903,6 +903,11 @@
   .totop:hover{opacity:1; filter:brightness(1.08)}
   @media print{ .totop{display:none !important} }
   body.wall .totop{display:none !important}
+  #pendChip{position:fixed;left:14px;bottom:14px;z-index:9998;display:none;background:#2a2113;border:1px solid rgba(245,158,11,.6);
+    color:#fcd34d;font-size:12px;font-weight:700;border-radius:999px;padding:7px 13px;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.45)}
+  #pendChip:hover{background:#3a2d15}
+  @media print{ #pendChip{display:none !important} }
+  body.wall #pendChip{display:none !important}
   footer{margin-top:22px; text-align:center; color:var(--faint); font-size:11px; border-top:1px solid var(--line); padding-top:16px}
   .footlogo{height:80px; width:auto; display:block; margin:2px auto 12px}
   .hidden{display:none !important}
@@ -1451,6 +1456,9 @@
 
   <!-- Floating back-to-top button (shows after scrolling; hidden on the TV wall + in print) -->
   <button id="toTopBtn" class="totop" onclick="event.stopPropagation(); scrollToTop()" title="Back to top" aria-label="Back to top">↑</button>
+
+  <!-- ⏳ Edits waiting to sync (the per-device by-id retry queue) — tap to sign in & send now -->
+  <div id="pendChip" onclick="pendChipClick()"></div>
 
   <!-- Floating Actions menu (FLOOR only; shows after scrolling so you don't go all the way up) -->
   <div class="floatact linksmenu" id="floorActWrap">
@@ -3030,7 +3038,7 @@ const GENERAL_HELP = `
       <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates + optional <b>reason</b>), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.) For a same-day call-in, <span class="k">☰ Actions ▸ 🚫 Out today…</span> (top or floating menu) pre-fills a one-day entry — the person's <b>whole crew card highlights red</b> with a 🚫 badge naming who's out and why, and a strip above the crew columns lists everyone out. Team members without their own column (Sal's crew: Jake, John, Brent, Kayla…) — use the <b>“Show on crew card”</b> picker in the form to route them onto the right card (e.g. Kayla → Sal).</li>
       <li><b>📷 Attachments</b> — the ➕ Add and ✎ Edit task forms have <span class="k">📷 Photo · 📎 PDF / file · 🔗 Link</span> buttons. Snap a picture at check-in (photos shrink themselves before upload, so it's quick from a phone), attach a PDF, or paste a link (a SharePoint doc, a spec page…). Attachments show as <b>thumbnails right on the task line</b> — hover to zoom, click to open full size — and follow the task onto the crew sheets, the 🔗 custom dash links and the prints, exactly like the Fleetio photos do.</li>
     </ul>
-    <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. <b>Everything you change</b> — adds, edits, completes, deletes, moves — now also sticks on <b>your</b> device even if you <b>hit refresh / reload the page</b> (handy on an iPad, which reloads tabs on its own). It holds your changes until the workbook's data.js catches up on the next ~15-min export, then quietly hands off to the real data — so nothing ever appears to vanish when you refresh.</div></div>
+    <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. <b>Everything you change</b> — adds, edits, completes, deletes, moves — now also sticks on <b>your</b> device even if you <b>hit refresh / reload the page</b> (handy on an iPad, which reloads tabs on its own). It holds your changes until the workbook's data.js catches up on the next ~15-min export, then quietly hands off to the real data — so nothing ever appears to vanish when you refresh. One special case: an edit on a <b>brand-new row</b> (e.g. assigning a 🔧 task seconds after queueing it) waits on this device until the row syncs, then sends by row-id — if any are waiting, a <b>⏳ “N edits waiting to sync” chip</b> shows bottom-left (tap it to sign in &amp; send now); signing in also sends them automatically. When the chip is gone, everything's saved.</div></div>
   <div class="hsec"><h4>⑭ᵇ 🔄 Bring back a trailer (returns for maintenance)</h4>
     <p>When a trailer that already <b>shipped</b> comes back — a 3–6 month or annual maintenance return — it's hidden from the floor (Shipped jobs roll off on purpose), so adding a task to it won't make it reappear. Use <span class="k">☰ Actions ▸ 🔄 Bring back trailer</span>: pick it from the list of shipped/finished trailers (search by name, job # or client). It opens the job pre-set to <b>Active · Parking Lot · starting today</b>, with its <b>open tasks intact</b> — review and hit <b>Save</b>. The trailer's <b>previous ship date is logged</b> in the notes (<i>🚢 Shipped: 6/12/26 · 8/8/26 …</i>), so you build up a <b>visit history</b> — each ship/return stays on the record. (You can also bring one back from its <span class="k">✎ edit</span> screen — a <span class="k">🔄 Bring back</span> button appears on any shipped job, and the list of past ship dates shows right in the picker.)</p></div>
   <div class="hsec"><h4>⑮ 📄 Build a Hard-Date Schedule</h4>
@@ -3115,6 +3123,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"18.1", date:"2026-07-09", title:"⏳ Edits can't get stranded silently anymore", items:[
+    "Some edits (like assigning a brand-new 🔧 Fleetio task) are held on your device for a few seconds until the row syncs, then sent by row-id. If you got signed out (idle timeout) before that happened, they'd sit <b>invisible</b> — assigned on your screen, never saved. Two fixes:",
+    "<b>Signing in now sends the waiting edits immediately</b> — no waiting for the next refresh.",
+    "A <b>⏳ “N edits waiting to sync” chip</b> (bottom-left) shows whenever anything is queued on your device — tap it to sign in &amp; send on the spot. When the chip is gone, everything's saved." ] },
   { rev:"18.0", date:"2026-07-09", title:"🔎 Search closed tasks from the shop floor", items:[
     "<b>☰ Actions ▸ 🔎 Search closed / history</b> (both Actions menus, and a link at the bottom of the 🔍 box) opens a full-page search of the <b>whole board</b> — search by <b>job #, job name, task wording, client or person</b>, with time and status filters.",
     "New <b>✓ Closed tasks only</b> filter: every closed line shows its <b>closed date</b> and the crew it was assigned to — so “when did we do the floor boards on J1543?” is one search away.",
@@ -4701,6 +4713,10 @@ function siSubmit(){
   try{ if(window.MRA_DATA && typeof renderAll==='function') renderAll(); }catch(e){}
   try{ const fs=document.getElementById('ganttFS'); if(fs&&fs.classList.contains('show')&&typeof renderGanttFS==='function') renderGanttFS(); }catch(e){}
   try{ if(typeof dtbSyncAuth==='function') dtbSyncAuth(); }catch(e){}
+  // Flush any edits parked in the by-id retry queue THE MOMENT someone signs in — before this,
+  // edits made just before an idle sign-out (e.g. assigning brand-new 🔧 tasks) sat invisible
+  // until a refresh happened to land while signed in.
+  try{ if(window.MRA_DATA) prwRetry(window.MRA_DATA); updatePendChip(); }catch(e){}
   const r=_authRetry; _authRetry=null;
   if(r) setTimeout(()=>{ try{ r(); }catch(e){} },120);   // continue what they were doing
 }
@@ -4710,6 +4726,7 @@ function syncAuthUI(){ const p=document.getElementById('authPill'), n=document.g
   // Design panel handle is Rich-only
   const dh=document.getElementById('dsHandle'); if(dh) dh.style.display=(CLOSE_PIN && CURRENT_USER==='Rich Miller')?'flex':'none'; }
 function signOut(){ CLOSE_PIN=null; CURRENT_USER="";
+  try{ updatePendChip(); }catch(e){}   // chip flips to "tap to sign in & send" if edits are still queued
   document.body.classList.remove('closemode');
   document.body.classList.remove('dsopen');
   if(typeof syncEditModeBtns==='function') syncEditModeBtns(); else { const cb=document.getElementById('btnCloseMode'); if(cb){ cb.classList.remove('on'); cb.textContent='🔒 Edit mode'; } }
@@ -5177,12 +5194,31 @@ function pendRewrite(listName, project, task, body){
   const a=prwLoad(); const i=a.findIndex(e=>e.list===listName && e.project===project && e.task===task);
   const rec={list:listName, project:project||'', task:task, body:body, ts:Date.now()};
   if(i>=0) a[i]=rec; else a.push(rec); prwSave(a);
+  try{ updatePendChip(); }catch(e){}
 }
 function pendDelete(listName, project, task){   // same queue, but the retry fires deleteById (a delete on a not-yet-synced 🔧 task used to be lost)
   if(!listName||!task) return;
   const a=prwLoad(); const i=a.findIndex(e=>e.list===listName && e.project===project && e.task===task);
   const rec={list:listName, project:project||'', task:task, del:1, ts:Date.now()};
   if(i>=0) a[i]=rec; else a.push(rec); prwSave(a);
+  try{ updatePendChip(); }catch(e){}
+}
+/* ⏳ Waiting-to-sync chip — the by-id retry queue used to be INVISIBLE: edits parked in it (assigns
+   on brand-new 🔧 tasks, etc.) only send while this device is signed in, so an idle sign-out could
+   strand them with zero feedback ("I assigned all this and it's not showing"). The chip shows the
+   queue whenever it's non-empty; tap = sign in (if needed) + send right now. */
+function updatePendChip(){
+  const el=document.getElementById('pendChip'); if(!el) return;
+  let n=0; try{ n=prwLoad().length; }catch(e){}
+  if(!n || (typeof WALL!=='undefined' && WALL)){ el.style.display='none'; return; }
+  el.style.display='';
+  el.textContent=`⏳ ${n} edit${n===1?'':'s'} waiting to sync`+(CLOSE_PIN?'':' — tap to sign in & send');
+  el.title='These edits were saved on THIS device before their rows finished syncing, so they send by row-id on the next refresh while signed in. Tap to send them right now.';
+}
+function pendChipClick(){
+  if(!ensureAuth('send your waiting edits', pendChipClick)) return;
+  try{ prwRetry(window.MRA_DATA||{}); }catch(e){}
+  updatePendChip();
 }
 function prwRetry(D){
   if(!CLOSE_PIN) return;                       // need a signed-in code to write; retry once signed in
@@ -5199,6 +5235,7 @@ function prwRetry(D){
   }
   prwSave(keep);
   if(fired && typeof _wqDrain==='function') _wqDrain();
+  try{ updatePendChip(); }catch(e){}
 }
 function mergePending(D){
   if(!D) return;
