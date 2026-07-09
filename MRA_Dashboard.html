@@ -1033,6 +1033,8 @@
   #searchModal #globalSearch::placeholder{color:var(--faint)}
   #searchResults{max-height:64vh; overflow-y:auto; padding:6px 0}
   #searchResults .sr-hint{color:var(--faint); font-size:13px; padding:16px 18px; line-height:1.5}
+  #searchModal .sr-foot{padding:10px 18px;border-top:1px solid var(--line);color:var(--brand);font-size:12.5px;font-weight:600;cursor:pointer;user-select:none}
+  #searchModal .sr-foot:hover{background:rgba(224,72,38,.08)}
   #searchResults .sr-cat{font-size:10.5px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); font-weight:700; padding:9px 18px 4px}
   #searchResults .sr-cat span{color:var(--faint); font-weight:600; margin-left:5px}
   #searchResults .sr-row{padding:7px 18px; cursor:pointer; border-left:3px solid transparent}
@@ -1462,6 +1464,7 @@
       <button class="mi" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
       <button class="mi" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter">✉ Daily Letter</button>
       <div class="mi-div">View</div>
+      <button class="mi" onclick="setView('history');closeDrops()" title="Search EVERYTHING — incl. CLOSED tasks — by job #, job name, task wording or person; filter to ✓ Closed only with closed dates">🔎 Search closed / history</button>
       <button class="mi" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
       <button class="mi" id="btnTractor2" onclick="toggleTractor()" title="Show tractor Fleetio issues on the bay cards too">🚜 Show tractor issues</button>
     </div>
@@ -1541,6 +1544,7 @@
             <button class="mi" id="btnPrint" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
             <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
             <div class="mi-div">View</div>
+            <button class="mi" onclick="setView('history');closeDrops()" title="Search EVERYTHING — incl. CLOSED tasks — by job #, job name, task wording or person; filter to ✓ Closed only with closed dates">🔎 Search closed / history</button>
             <button class="mi" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
             <button class="mi" id="btnTractor" onclick="toggleTractor()" title="Show tractor Fleetio issues on the bay cards too (no code needed). Off = trailers only; they always show on the FLEETIO tab regardless.">🚜 Show tractor issues</button>
           </div>
@@ -1980,19 +1984,28 @@
     .histcard .tk .mk{position:absolute;left:2px;top:3px;font-size:11px}
     .histcard .tk.done{color:var(--muted)}
     .histcard .tk.done .tx{text-decoration:line-through}
+    .histcard .hwho{color:var(--blue);font-size:11px;font-weight:600;margin-left:6px}
+    .histcard .hcl{color:#86efac;font-size:11px;font-weight:600;margin-left:6px;white-space:nowrap}
     .histcard .more{font-size:11.5px;color:var(--brand);cursor:pointer;margin-top:5px;display:inline-block;user-select:none}
     .hist-empty{color:var(--muted);font-size:13px;padding:16px 2px}
     .hist-hint{color:var(--faint);font-size:12.5px;padding:18px 2px}
   </style>
   <div id="historyView" class="hidden">
     <div class="panel">
-      <h2>🔎 Shop History — search everything <span class="count" id="histCount"></span></h2>
+      <h2>🔎 Shop History — search everything, incl. closed tasks <span class="count" id="histCount"></span>
+        <button class="expandbtn" style="margin-left:auto" onclick="setView('floor')" title="Back to the shop floor">← Back to floor</button></h2>
       <div style="font-size:12px;color:var(--muted);margin:-2px 0 12px">
         Search any job, client, Job #, Program Development, bay, or task across the whole board — open <b>and</b> completed work.
         e.g. <span style="color:var(--fg)">“Sal ABB”</span> shows Sal’s tasks on ABB. Time filter is by the job’s dates.
+        Pick <b>✓ Closed tasks only</b> to hunt finished work — closed lines show their <b>closed date</b> and crew.
       </div>
       <div class="histbar">
         <input id="histSearch" type="search" placeholder="Search jobs, people, tasks…  (try: Sal, J1407, LED wall)" oninput="renderHistory()" />
+        <select id="histDone" onchange="renderHistory()">
+          <option value="">Open + closed tasks</option>
+          <option value="done">✓ Closed tasks only</option>
+          <option value="open">• Open tasks only</option>
+        </select>
         <select id="histTime" onchange="renderHistory()">
           <option value="any">Any time</option>
           <option value="tq">This quarter</option>
@@ -2056,6 +2069,7 @@
     <div class="searchbox">
       <input id="globalSearch" type="search" placeholder="Search everything — job #, project, unit #, client, person, task…" oninput="runGlobalSearch()" autocomplete="off">
       <div id="searchResults"></div>
+      <div class="sr-foot" onclick="closeSearch();setView('history')" title="The full history search — filter to ✓ Closed tasks only, with closed dates and crew on every line">🔎 Closed-task / history search →</div>
     </div>
   </div>
   <!-- Personal Design panel (only shows when Rich is signed in) -->
@@ -2943,7 +2957,7 @@ const GENERAL_HELP = `
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, Program Development load and team capacity. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
-    <span class="k">🔍 Search</span> (top bar, or press <b>/</b>) = find <b>anything</b> across the whole board — a job (open <b>or</b> completed), a project, a unit, an equipment job, a client, a person, or any task wording — and click a result to jump right to it. (This replaced the old History tab.)</p></div>
+    <span class="k">🔍 Search</span> (top bar, or press <b>/</b>) = find <b>anything</b> across the whole board — a job (open <b>or</b> completed), a project, a unit, an equipment job, a client, a person, or any task wording — and click a result to jump right to it. For <b>closed-task detective work</b>, use <span class="k">☰ Actions ▸ 🔎 Search closed / history</span> (or the link at the bottom of the 🔍 box): a full-page search you can filter to <b>✓ Closed tasks only</b> — every closed line shows its <b>closed date</b> and crew, searchable by job #, job name, task wording or person, with time + status filters.</p></div>
   <div class="hsec"><h4>② ✏️ Edit Schedule button</h4>
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
@@ -3101,6 +3115,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"18.0", date:"2026-07-09", title:"🔎 Search closed tasks from the shop floor", items:[
+    "<b>☰ Actions ▸ 🔎 Search closed / history</b> (both Actions menus, and a link at the bottom of the 🔍 box) opens a full-page search of the <b>whole board</b> — search by <b>job #, job name, task wording, client or person</b>, with time and status filters.",
+    "New <b>✓ Closed tasks only</b> filter: every closed line shows its <b>closed date</b> and the crew it was assigned to — so “when did we do the floor boards on J1543?” is one search away.",
+    "No code needed — it's read-only. ← Back to floor button up top." ] },
   { rev:"17.9", date:"2026-07-09", title:"🗓 Shipped? Bring it back from the meeting · 📡 no-GPS flag", items:[
     "A returning unit whose board job is <b>shipped</b> can now be brought back right from the meeting: the badge reads <b>🔄 On board (shipped) — bring back</b>, shipped job lines carry a <b>🔄 bring back</b>, and clicking either opens the job editor <b>pre-set as a return</b> (Active · Parking Lot · today, ship history logged) — adjust the bay, Save, re-assign away.",
     "A HERE-NOW unit with <b>no Samsara tracker</b> now says <b>📡 no GPS</b> instead of showing nothing — so you know the location simply can't be auto-checked (the HERE NOW comes from the Fleetio dates alone)." ] },
@@ -10832,35 +10850,44 @@ function renderHistory(){
   const stF=((document.getElementById('histStatus')||{}).value||'').toLowerCase();
   const cnt=document.getElementById('histCount');
 
-  const results=[];
+  const mode=((document.getElementById('histDone')||{}).value||'');   // '' = open+closed · 'done' = closed only · 'open' = open only
+  const results=[]; let taskTotal=0;
   jobs.forEach(j=>{
     if(stF && (j.status||'').toLowerCase()!==stF) return;
     if(!jobInRange(j,range)) return;
-    const open=(j.openTasks||[]), done=(j.doneTasks||[]);
+    // Structured tasks (closed date + crew) when the Lists provide them; plain-string fallback otherwise.
+    const struct=(j.tasks&&j.tasks.length)?j.tasks:null;
+    const mkWho=t=>String(t.who||(typeof shopWho==='function'?shopWho(t):'')||'').trim();
+    const open=struct?struct.filter(t=>!t.done).map(t=>({t:t.t,done:false,who:mkWho(t),cl:null}))
+                     :(j.openTasks||[]).map(t=>({t,done:false,who:'',cl:null}));
+    const done=struct?struct.filter(t=>t.done).map(t=>({t:t.t,done:true,who:mkWho(t),cl:t.cl||null}))
+                     :(j.doneTasks||[]).map(t=>({t,done:true,who:'',cl:null}));
+    const all=mode==='done'?done:(mode==='open'?open:open.concat(done));
+    if(mode && !all.length) return;   // closed-only / open-only: skip jobs with nothing in that bucket
     const hay=([j.project,j.client,j.jobNum,j.pm,j.bay,j.status].filter(Boolean).join(' ')
-               +' '+open.join(' ')+' '+done.join(' ')).toLowerCase();
+               +' '+all.map(x=>x.t+' '+x.who).join(' ')).toLowerCase();
     if(toks.length && !toks.every(t=>hay.indexOf(t)>=0)) return;
-    results.push({j,open,done});
+    taskTotal+=all.length;
+    results.push({j,all,openN:open.length,doneN:done.length});
   });
 
-  if(!toks.length && !stF && !range){
-    box.innerHTML=`<div class="hist-hint">Type to search — a job name, a person (e.g. <b>Sal</b>), a Job # (<b>J1407</b>), or any task wording. Add a time filter to scope by the job’s dates.</div>`;
+  if(!toks.length && !stF && !range && !mode){
+    box.innerHTML=`<div class="hist-hint">Type to search — a job name, a person (e.g. <b>Sal</b>), a Job # (<b>J1407</b>), or any task wording. Pick <b>✓ Closed tasks only</b> to hunt finished work (closed date + crew on every line). Add a time filter to scope by the job’s dates.</div>`;
     if(cnt) cnt.textContent=''; return;
   }
-  if(cnt) cnt.textContent=results.length+(results.length===1?' job':' jobs');
+  if(cnt) cnt.textContent=results.length+(results.length===1?' job':' jobs')+(mode==='done'?` · ${taskTotal} closed task${taskTotal===1?'':'s'}`:'');
   if(!results.length){
-    box.innerHTML=`<div class="hist-empty">No jobs match${q?` “${esc(q)}”`:''}${range?' in that time range':''}.</div>`; return;
+    box.innerHTML=`<div class="hist-empty">No ${mode==='done'?'closed tasks':'jobs'} match${q?` “${esc(q)}”`:''}${range?' in that time range':''}.</div>`; return;
   }
   results.sort((a,b)=>((b.j.completionISO||b.j.startISO||'')+'').localeCompare((a.j.completionISO||a.j.startISO||'')+''));
 
-  box.innerHTML=results.slice(0,80).map(({j,open,done},i)=>{
+  box.innerHTML=results.slice(0,80).map(({j,all,openN,doneN},i)=>{
     const key='h'+(j.row!=null?j.row:i);
-    const all=open.map(t=>({t,done:false})).concat(done.map(t=>({t,done:true})));
-    const matched=toks.length?all.filter(x=>toks.some(tk=>x.t.toLowerCase().indexOf(tk)>=0)):[];
+    const matched=toks.length?all.filter(x=>toks.some(tk=>(x.t+' '+x.who).toLowerCase().indexOf(tk)>=0)):[];
     const expanded=histExpanded.has(key);
     const show = expanded ? all : (matched.length?matched:all.slice(0,4));
     const dateTxt=(j.startISO||j.completionISO)?`${fmtMDY(j.startISO)} → ${fmtMDY(j.completionISO)}`:'no dates';
-    const rows=show.map(x=>`<div class="tk ${x.done?'done':''}"><span class="mk">${x.done?'✓':'•'}</span><span class="tx">${hlTokens(x.t.replace(/^\d+\.\s*/,''),toks)}</span></div>`).join('')
+    const rows=show.map(x=>`<div class="tk ${x.done?'done':''}"><span class="mk">${x.done?'✓':'•'}</span><span class="tx">${hlTokens(x.t.replace(/^\d+\.\s*/,''),toks)}</span>${x.who?` <span class="hwho">${hlTokens(x.who,toks)}</span>`:''}${x.cl?` <span class="hcl">✓ closed ${fmtMDY(x.cl)}</span>`:''}</div>`).join('')
       || `<div class="tk" style="color:var(--faint)">no task lines recorded</div>`;
     const more=(all.length>show.length || expanded)
       ? `<span class="more" onclick="histToggle('${key}')">${expanded?'▲ show less':'▾ show all '+all.length+' tasks'}</span>` : '';
@@ -10870,7 +10897,7 @@ function renderHistory(){
         ${j.jobNum?`<span class="jn">${hlTokens(j.jobNum,toks)}</span>`:''}
         <span class="stbadge" style="color:${stColor(j.status)};border-color:${stColor(j.status)}">${esc(j.status||'—')}</span>
         <span class="mt">${j.client?hlTokens(j.client,toks)+' · ':''}${j.pm?'Program Development '+hlTokens(j.pm,toks)+' · ':''}${j.bay?esc(j.bay)+' · ':''}${dateTxt}</span>
-        <span class="mt" style="margin-left:auto">${open.length} open · ${done.length} done</span>
+        <span class="mt" style="margin-left:auto">${openN} open · ${doneN} done</span>
       </div>
       ${rows}${more}
     </div>`;
@@ -11019,7 +11046,7 @@ function mapToUnit(f){ const el=document.getElementById('mapModal'); if(el) el.c
 
 function setView(v){
   if(v==='fleet'||v==='equipment') v='assets';   // FLEET + EQUIPMENT merged into the ASSETS tab
-  if(v==='history') v='floor';   // History retired — use the 🔍 global search instead
+  // 'history' has no tab of its own — it opens via ☰ Actions ▸ 🔎 Search closed / history (or the 🔍 modal's footer link)
   VIEW=v; try{localStorage.setItem('mra_view',v);}catch(e){}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
   document.getElementById('floorView').classList.toggle('hidden',v!=='floor');
