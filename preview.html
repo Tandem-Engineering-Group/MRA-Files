@@ -1120,6 +1120,21 @@
   .mtg-here{color:#86efac; font-weight:800; font-size:11px}
   .mtg-dec{border-left:4px solid var(--amber)}
   .mtg-empty{color:var(--muted); font-style:italic; font-size:12px}
+  /* 🚦 What's Next — Yard & Inbound (reuses the meeting-view card shell) */
+  .yn-legend{color:var(--muted); font-size:12px; margin:-4px 0 12px; max-width:900px}
+  .yn-n{color:var(--muted); font-weight:600; font-size:12px}
+  .yn-card .yn-loc{font-weight:700; font-size:10.5px; white-space:nowrap}
+  .yn-card.yn-here{border-left:4px solid #22c55e}
+  .yn-card.yn-hold{border-left:4px solid #f59e0b}
+  .yn-card.yn-in{border-left:4px solid #3b82f6}
+  .yn-here .yn-loc{color:#86efac}
+  .yn-hold .yn-loc{color:#fbbf24}
+  .yn-in .yn-loc{color:#93c5fd}
+  .yn-loc.yn-nogps{color:var(--muted)}
+  .yn-warn{color:#fca5a5; font-size:10.5px; font-weight:700; margin-top:3px}
+  .yn-arr{color:#93c5fd; font-weight:700}
+  .yn-due{color:var(--amber); font-weight:700; font-size:10.5px}
+  .yn-due.od{color:#fca5a5}
   /* 🛬 Pipeline — Inbound & Holding (runway / list / lanes) */
   body.wall #pipePanel{display:none}   /* the shop TV shows only workable (on-site) work — pipeline is a planning view */
   #pipePanel .saldue-pick{display:inline-flex}
@@ -1474,6 +1489,7 @@
       <button class="mi" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
       <button class="mi" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
       <button class="mi" onclick="openBringBack();closeDrops()" title="Return a shipped/finished trailer to the floor for new maintenance (needs code)">🔄 Bring back trailer</button>
+      <button class="mi" onclick="openYardNext();closeDrops()" title="Decision view: everything around the shop grouped by where it physically is (GPS) — here / holding yard / inbound">🚦 What's Next…</button>
       <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
       <button class="mi" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
       <button class="mi" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter">✉ Daily Letter</button>
@@ -1531,6 +1547,24 @@
     </div>
   </div>
 
+  <!-- ===================== 🚦 WHAT'S NEXT — YARD & INBOUND (full-screen, read-only) ===================== -->
+  <div class="mtg-overlay" id="ynOverlay">
+    <div class="mtg-head">
+      <h3>🚦 What to Work Next</h3>
+      <span class="sub" id="ynStamp"></span>
+      <span style="margin-left:auto; display:flex; gap:8px">
+        <button class="expandbtn" onclick="renderYardNext()" title="Re-check GPS + the board">↻ Refresh</button>
+        <button class="expandbtn mtg-x" onclick="closeYardNext()" title="Close (Esc)">✕ Close</button>
+      </span>
+    </div>
+    <div class="yn-legend">Everything in the lot + on the board + coming in, grouped by <b>where each trailer physically is right now</b> (Samsara GPS, board as fallback). This is a decision view only — the shop board, wall and meeting view are unchanged.</div>
+    <div class="mtg-cols">
+      <div class="mtg-col"><h4>🟢 Here at MRA <span class="yn-n" id="ynHereN"></span></h4><div id="ynHere"></div></div>
+      <div class="mtg-col"><h4>🟡 At a holding yard nearby <span class="yn-n" id="ynHoldN"></span></h4><div id="ynHold"></div></div>
+      <div class="mtg-col"><h4>🔵 Inbound / in transit <span class="yn-n" id="ynInboundN"></span></h4><div id="ynInbound"></div></div>
+    </div>
+  </div>
+
   <!-- ===================== FLOOR VIEW ===================== -->
   <div id="floorView">
     <div id="returnAlarm" class="retalarm" style="display:none" onclick="setView('fleetio');setTimeout(()=>{const p=document.getElementById('fp-returns'); if(p){ p.classList.remove('pcollapsed'); p.scrollIntoView({behavior:'smooth'}); }},80)" title="Units marked in Fleetio as coming back to MRA within 2 weeks (or here now) — tap for the full list"></div>
@@ -1547,6 +1581,7 @@
           <option value="added">🆕 Recently added</option>
           <option value="list">📜 List order</option>
         </select>
+        <button class="expandbtn bayallbtn" style="margin-left:8px" onclick="openYardNext()" title="A decision view for 'what do I work on next' — everything in the lot + on the board + coming in, grouped by where each trailer physically is (GPS): here at MRA, at a holding yard nearby, or inbound. Read-only; doesn't change the board.">🚦 What's Next</button>
         <div class="linksmenu" style="margin-left:8px">
           <button class="expandbtn" onclick="toggleDrop(event,'bayPop')" title="Bay actions — edit, add, print">☰ Actions ▾</button>
           <div class="linksmenu-pop" id="bayPop">
@@ -1554,6 +1589,7 @@
             <button class="mi" id="btnAddTask" onclick="openAddTask();closeDrops()" title="Add a new shop task (needs code)">➕ Add task</button>
             <button class="mi" id="btnAddJob" onclick="openAddJob();closeDrops()" title="Create a brand-new shop job (needs code)">➕ Add job</button>
             <button class="mi" id="btnBringBack" onclick="openBringBack();closeDrops()" title="Return a shipped/finished trailer to the floor for new maintenance — keeps its ship history (needs code)">🔄 Bring back trailer</button>
+            <button class="mi" onclick="openYardNext();closeDrops()" title="Decision view: everything around the shop grouped by where it physically is (GPS) — here / holding yard / inbound">🚦 What's Next…</button>
             <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
             <button class="mi" id="btnPrint" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
             <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
@@ -2976,6 +3012,8 @@ const GENERAL_HELP = `
     <p>Opens the source workbook in Excel. Edit the <b>Input</b> tab for shop-floor jobs, or the <b>Project Tasks</b> tab for projects — then save (see ⑧).</p></div>
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
     <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). Tasks list <b>due-soonest first</b> (undated last, 🔥 hot pinned on top) with their 📅 due dates shown — the <b>sort picker</b> in the Bay Status header switches to 🆕 Recently added or 📜 List order (remembered per device). The <b>trailers</b> on a tile list earliest-start first too — or <b>drag a trailer's ⠿ grip onto another trailer's card</b> to hand-order them (saved for everyone). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. <b>📦 Off Site / Parts tile:</b> for a unit that <b>isn't here</b> but the shop is building parts for (build &amp; ship) — set the job's Bay to <span class="k">Off Site / Parts</span> (✎ edit / ➕ Add job) or drag its card onto the tile, and it appears <b>under the General tile</b> (auto-hides when empty). Unlike On Hold / Off-Site, its tasks <b>DO feed the crew queues</b> — the parts work is real shop work. Per-tile collapse state is remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. Below the lot sits a <b>General</b> tile for jobs assigned to bay “General” (equipment-only work with no floor space) — same behavior, and its tasks feed the crew lists like any active job. <span class="k">☰ Actions ▸ 🖨 Print…</span> opens the print picker: the <b>whole board</b>, or <b>any mix of crews</b> (tick Sal + Electricians, etc.) as one handout with a section per crew — grouped by trailer, with Fleetio descriptions, <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files.</p></div>
+  <div class="hsec"><h4>③ᶜ 🚦 What to Work Next (yard &amp; inbound decision view)</h4>
+    <p>The <span class="k">🚦 What's Next</span> button (in the Bay Status header, and both <span class="k">☰ Actions</span> menus) opens a full-screen decision screen for "what do I pull in / work on next." It gathers <b>everything in the lot + on the board + coming in</b> and groups it by <b>where each trailer physically is right now</b> — using the live <b>Samsara GPS</b> (with the board as a fallback): <b>🟢 Here at MRA</b> (at an MRA yard or in a bay/the lot) · <b>🟡 At a holding yard nearby</b> (Penske, RV Storage, etc.) · <b>🔵 Inbound / in transit</b> (a Fleetio back-to-MRA date, or out on the road). Each card shows the trailer's <b>open tasks, dates, and its GPS location + last-seen</b>. If the board says a trailer's in the Parking Lot but GPS shows it's still at a holding yard, the card <b>flags the mismatch</b>. It's <b>read-only</b> — nothing here changes the shop board, the wall view, or the 🗓 meeting view; it's just a single place to size up the yard instead of bouncing between the Parking Lot tile and the Coming-Back list.</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap · Electricians ⇄ Doug · Josh · Jeff</h4>
     <p>Live queues, one per crew. <b>Placement matters:</b> trailers in a <b>bay or the Parking Lot</b> feed these lists; a trailer waiting in <b>Next Up / On Hold / Off-Site</b> keeps its assigned tasks on its own card until it's moved out — then they appear here automatically. A task lands in a crew's column based on the <span class="k">Assigned</span> boxes on ➕ Add / ✎ Edit task — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>, or <b>type ANY name</b> (the boxes suggest the crews plus every name already used; the 👤 quick-assign popover has a ✏️ type-a-name box too). Assign it to someone without a column (e.g. <i>Vendor</i>, or a typed name) and it still shows on the trailer's card and routes by any crew name in the task text — but only the six crews get their own column. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date — <b>a shop TV defaults to Month</b> — and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; both remembered per device. An <b>⚠ N overdue</b> chip counts open tasks past their due date. Each task line has a <b>👤 quick-assign</b> chip — tap, pick a crew, done (no dialog) — or just <b>drag the task onto another crew's column</b> to re-assign it, or <b>onto a job card on the bay board</b> to move it to that trailer (mouse/desktop; touch uses the chip / ✎ ⇄ Move). The <span class="k">➕ Add</span> menu here adds a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot. <b>👤 Crew picker:</b> the chip row up top (All · Sal · Wrap · Elec · Doug · Josh · Jeff) shows <b>only the selected crews' columns on this device</b> — tap more than one to combine (Sal + Electricians), tap <b>All</b> to bring everyone back; the visible columns grow to fill the width, and the choice is <b>remembered per device</b> (perfect for Sal's own iPad or his back-shop monitor — on a wall/TV screen set it from the <span class="k">⚙ gear ▸ 👤 Crews</span>, where it also pauses the page rotation). Fleetio descriptions under tasks clamp to <b>one line — tap to expand</b>. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
     <p><b>Sizing on the TV (admin 🎨 Design panel):</b> every crew tile on <i>both</i> pages — Sal · Wrap · Electricians and Doug · Josh · Jeff — can be sized independently (width + height) from the tile picker, same as the bays.</p></div>
@@ -3129,6 +3167,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"18.3", date:"2026-07-09", title:"🚦 What to Work Next — one screen for the yard", items:[
+    "New <b>🚦 What's Next</b> button (Bay Status header + both ☰ Actions menus) opens a full-screen decision view: everything <b>in the lot + on the board + coming in</b>, grouped by <b>where each trailer physically is right now</b> — 🟢 Here at MRA · 🟡 At a holding yard nearby (Penske / RV Storage…) · 🔵 Inbound / in transit.",
+    "Each card shows the trailer's <b>open tasks, dates, and its live GPS location + last-seen</b>, so you can decide what to pull in next without bouncing between the Parking Lot tile and the Coming-Back list.",
+    "It even <b>flags mismatches</b> — if the board says Parking Lot but GPS shows the unit's still at a holding yard, you'll see it. <b>Read-only:</b> the shop board, the wall view and the meeting view are completely unchanged." ] },
   { rev:"18.2", date:"2026-07-09", title:"✏️ Assign to ANY name — just type it", items:[
     "The <b>Assigned-to boxes</b> on ➕ Add task and ✎ Edit task now take <b>any typed name</b> — start typing and it suggests the crews plus <b>every name already used on a task</b> (type a new name once, it's suggested everywhere after). Two boxes = team effort, same as before.",
     "The 👤 quick-assign popover got a <b>✏️ “type a name…”</b> box at the bottom — type + Enter (or ➤) assigns to that name on the spot.",
@@ -8583,6 +8625,82 @@ function printMeeting(){
   const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+
+/* ===================== 🚦 WHAT'S NEXT — Yard & Inbound decision view =====================
+   A READ-ONLY decision screen for "what do I work on next": every non-shipped board job + inbound
+   Fleetio returns, grouped by where each trailer PHYSICALLY is — Samsara GPS geofence first, the
+   board bay as fallback. Does NOT touch the shop board, the wall, or the meeting view (its own overlay). */
+let YN_OPEN=false;
+function _ynLoc(name){ const D=window.MRA_DATA||{}; const locs=(D.fleetio&&D.fleetio.locations)||{};
+  const m=String(name||'').trim().match(/^(\d{2,5})\b/); if(!m) return null; const k=_normKey(m[1]);
+  for(const kk in locs){ if(_normKey(kk)===k) return locs[kk]; } return null; }
+function _ynAgo(atISO){ if(!atISO) return ''; const t=new Date(atISO).getTime(); if(!t||isNaN(t)) return '';
+  const ms=Date.now()-t; if(ms<0) return 'just now'; const h=ms/3600000;
+  if(h<1) return Math.max(1,Math.round(ms/60000))+'m ago'; if(h<48) return Math.round(h)+'h ago'; return Math.round(h/24)+'d ago'; }
+function _ynData(D){
+  const today=D.todayISO||localISO(Date.now());
+  const njn=s=>String(s||'').toUpperCase().replace(/[^0-9]/g,'');
+  const jobs=(D.jobs||[]).filter(j=>j.category!=='leave' && j.category!=='general' && (j.status||'').toLowerCase()!=='shipped');
+  const rets=(typeof fioReturns==='function')?fioReturns(D.fleetio,today):[];
+  const retByJob={}; rets.forEach(r=>{ const k=njn(r.jobNum); if(k && !retByJob[k]) retByJob[k]=r; });
+  const items=[];
+  jobs.forEach(j=>{ const openTasks=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done):(j.openTasks||[]).map(tk=>({t:tk,who:''}));
+    items.push({name:j.project,jobNum:j.jobNum,bay:j.bay||'',status:j.status||'',row:j.row,
+      startISO:j.startISO,endISO:j.completionISO,tasks:openTasks,openCount:j.openCount||openTasks.length,
+      loc:_ynLoc(j.project),ret:retByJob[njn(j.jobNum)]||null,onBoard:true}); });
+  const haveJob=new Set(jobs.map(j=>njn(j.jobNum)).filter(Boolean));
+  rets.forEach(r=>{ if(r.jobNum && haveJob.has(njn(r.jobNum))) return;   // inbound units not already on the board
+    items.push({name:r.asset||('Unit '+r.num),jobNum:r.jobNum,bay:'',status:'',row:null,
+      startISO:r.dateISO,endISO:r.endISO,tasks:[],openCount:0,loc:_ynLoc(r.asset),ret:r,onBoard:false}); });
+  const here=[],hold=[],inbound=[];
+  items.forEach(it=>{ const loc=it.loc,bay=it.bay;
+    const isBay=/^bay\s/i.test(bay), isLot=/^\s*parking\s*lot\s*$/i.test(bay), isParts=/parts/i.test(bay);
+    let state;
+    if(loc && (loc.yard||'').trim()){ state=_isMraYard(loc)?'here':'hold'; }     // GPS geofence wins
+    else if(loc && (loc.place||'').trim()){ state='inbound'; }                    // GPS says out on the road
+    else { state=(isBay||isLot||isParts)?'here':(it.ret?'inbound':'hold'); }       // no GPS → trust the board
+    it.state=state;
+    it.mismatch=(isLot||isBay)&&loc&&(loc.yard||'').trim()&&!_isMraYard(loc);        // board says here, GPS says a holding yard
+    (state==='here'?here:state==='hold'?hold:inbound).push(it); });
+  const byWork=(a,b)=>(b.openCount-a.openCount)||(((a.endISO||'9999')+'').localeCompare((b.endISO||'9999')+''));
+  here.sort(byWork); hold.sort(byWork);
+  inbound.sort((a,b)=>(((a.ret&&a.ret.dateISO)||a.startISO||'9999')+'').localeCompare(((b.ret&&b.ret.dateISO)||b.startISO||'9999')+''));
+  return {today,here,hold,inbound};
+}
+function _ynCard(it,today){
+  const cls=it.state==='here'?'yn-here':it.state==='hold'?'yn-hold':'yn-in';
+  const loc=it.loc; let chip;
+  if(loc && (loc.yard||'').trim()) chip=`<span class="yn-loc">📍 ${esc(loc.yard)}${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
+  else if(loc && (loc.place||'').trim()) chip=`<span class="yn-loc">🚚 ${esc(loc.place)}${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
+  else chip=`<span class="yn-loc yn-nogps">📡 no GPS</span>`;
+  const dr=(it.startISO||it.endISO)?`${fmtMD(it.startISO)}→${fmtMD(it.endISO)}`:'';
+  let arr='';
+  if(it.ret&&it.ret.dateISO){ const dn=daysBetween(it.ret.dateISO,today); arr=` <span class="yn-arr">→ arriving ${esc(it.ret.dateText||fmtMD(it.ret.dateISO))}${it.ret.dateISO>=today?(' (in '+Math.max(0,dn)+'d)'):''}</span>`; }
+  const tasks=(it.tasks||[]).slice(0,7).map(t=>{ const raw=(t&&t.t)||t||''; const who=((t&&t.who)||'').trim();
+    const due=(t&&t.due)?` <span class="yn-due${t.due<today?' od':''}">${t.due<today?'overdue ':'due '}${esc(fmtMD(t.due))}</span>`:'';
+    return `<li>${esc(cleanTask(raw,false))}${who?` — <span class="who">${esc(who)}</span>`:''}${due}</li>`; }).join('');
+  const more=(it.tasks||[]).length>7?`<div class="m">+${it.tasks.length-7} more…</div>`:'';
+  const meta=[it.jobNum?esc(it.jobNum):'', it.bay?esc(it.bay):(it.onBoard?'':'not on the board'), dr,
+    it.openCount?(it.openCount+' open task'+(it.openCount===1?'':'s')):'no open tasks'].filter(Boolean).join(' · ');
+  return `<div class="mtg-card yn-card ${cls}"><div class="t">${esc(it.name)} ${chip}</div>`+
+    `<div class="m">${meta}${arr}</div>`+
+    (it.mismatch?`<div class="yn-warn">⚠ board says ${esc(it.bay)}, but GPS shows it at ${esc(it.loc.yard)}</div>`:'')+
+    (tasks?`<ul>${tasks}</ul>`:'')+more+`</div>`;
+}
+function renderYardNext(){
+  const D=window.MRA_DATA||{}; if(!(D.jobs&&D.jobs.length)) return;
+  const Y=_ynData(D);
+  const st=document.getElementById('ynStamp'); if(st) st.textContent=fmtMDY(Y.today)+' · '+Y.here.length+' here · '+Y.hold.length+' at holding yards · '+Y.inbound.length+' inbound';
+  const fill=(id,list,empty)=>{ const el=document.getElementById(id); if(!el) return; el.innerHTML=list.length?list.map(it=>_ynCard(it,Y.today)).join(''):`<div class="mtg-empty">${empty}</div>`; };
+  fill('ynHere',Y.here,'Nothing showing at MRA right now.');
+  fill('ynHold',Y.hold,'Nothing at a holding yard.');
+  fill('ynInbound',Y.inbound,'Nothing inbound.');
+  const setN=(id,n)=>{ const e=document.getElementById(id); if(e) e.textContent=n?('('+n+')'):''; };
+  setN('ynHereN',Y.here.length); setN('ynHoldN',Y.hold.length); setN('ynInboundN',Y.inbound.length);
+}
+function openYardNext(){ YN_OPEN=true; renderYardNext(); document.getElementById('ynOverlay').classList.add('show'); }
+function closeYardNext(){ YN_OPEN=false; document.getElementById('ynOverlay').classList.remove('show'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&YN_OPEN) closeYardNext(); });
 
 // 🔔 FLOOR return alarm — units marked in Fleetio as coming back within 14 days (amber, pulsing)
 // or already here inside their date window (green). Hidden entirely when nothing qualifies.
