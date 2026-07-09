@@ -1168,6 +1168,9 @@
   #qaPop.show{display:flex}
   #qaPop button{background:var(--panel); border:1px solid var(--line); color:var(--txt); border-radius:7px; padding:6px 10px; font-size:12px; text-align:left; cursor:pointer}
   #qaPop button:hover{border-color:var(--blue)}
+  #qaPop .qao{display:flex; gap:5px; border-top:1px dashed var(--line); padding-top:6px; margin-top:1px}
+  #qaPop .qao input{flex:1; min-width:0; background:var(--panel); border:1px solid var(--line); color:var(--txt); border-radius:7px; padding:6px 8px; font-size:12px}
+  #qaPop .qao button{flex:0 0 auto; text-align:center}
   #qaPop .qah{font-size:10.5px; color:var(--muted); padding:0 2px}
   /* FLOOR return alarm — pulses when a unit is due back at MRA within 2 weeks */
   .retalarm{display:flex; align-items:center; gap:12px; flex-wrap:wrap; cursor:pointer; margin:0 0 12px;
@@ -1459,6 +1462,9 @@
 
   <!-- ⏳ Edits waiting to sync (the per-device by-id retry queue) — tap to sign in & send now -->
   <div id="pendChip" onclick="pendChipClick()"></div>
+
+  <!-- Shared assignee suggestions (crews + every name already on a task) for the Assigned-to write-in boxes -->
+  <datalist id="asgNames"></datalist>
 
   <!-- Floating Actions menu (FLOOR only; shows after scrolling so you don't go all the way up) -->
   <div class="floatact linksmenu" id="floorActWrap">
@@ -2133,8 +2139,8 @@
           <label class="bachk" style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px"><input type="checkbox" id="atHot" style="width:auto;margin:0;flex:0 0 auto"> 🔥 <b>Hot</b> — urgent / must-happen: stands out in amber everywhere and pins to the top of the lists</label>
         </div>
         <div class="addrow2">
-          <div><label>Assigned to <span style="color:var(--muted);font-weight:400;font-size:10.5px">(add a 2nd for a team effort)</span></label>
-            <div style="display:flex;gap:6px"><select id="atAssigned" style="flex:1"></select><select id="atAssigned2" style="flex:1"></select></div></div>
+          <div><label>Assigned to <span style="color:var(--muted);font-weight:400;font-size:10.5px">(pick a crew or type ANY name · 2nd box = team effort)</span></label>
+            <div style="display:flex;gap:6px"><input id="atAssigned" list="asgNames" placeholder="crew or name…" autocomplete="off" style="flex:1"><input id="atAssigned2" list="asgNames" placeholder="+ 2nd (optional)" autocomplete="off" style="flex:1"></div></div>
           <div><label>Due date (optional) <span style="color:var(--muted);font-weight:400;font-size:10px">(prefills with the trailer departure date)</span></label><input id="atDue" type="date" onchange="window._atDueAuto=false"></div>
         </div>
         <div class="addrow2">
@@ -2276,8 +2282,8 @@
         <div><label>Task</label><textarea id="etTask" style="min-height:60px"></textarea>
           <label class="bachk" style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px"><input type="checkbox" id="etHot" style="width:auto;margin:0;flex:0 0 auto"> 🔥 <b>Hot</b> — urgent / must-happen: stands out in amber everywhere and pins to the top of the lists</label></div>
         <div class="addrow2">
-          <div><label>Assigned to <span style="color:var(--muted);font-weight:400;font-size:10.5px">(add a 2nd for a team effort)</span></label>
-            <div style="display:flex;gap:6px"><select id="etAssigned" style="flex:1"></select><select id="etAssigned2" style="flex:1"></select></div></div>
+          <div><label>Assigned to <span style="color:var(--muted);font-weight:400;font-size:10.5px">(pick a crew or type ANY name · 2nd box = team effort)</span></label>
+            <div style="display:flex;gap:6px"><input id="etAssigned" list="asgNames" placeholder="crew or name…" autocomplete="off" style="flex:1"><input id="etAssigned2" list="asgNames" placeholder="+ 2nd (optional)" autocomplete="off" style="flex:1"></div></div>
           <div><label>Status</label><select id="etStatus"><option>Open</option><option>In Progress</option><option>Done</option><option>N/A</option></select></div>
         </div>
         <div class="addrow2">
@@ -2971,7 +2977,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
     <p>Each tile shows the job's name, client / Program Development, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). Tasks list <b>due-soonest first</b> (undated last, 🔥 hot pinned on top) with their 📅 due dates shown — the <b>sort picker</b> in the Bay Status header switches to 🆕 Recently added or 📜 List order (remembered per device). The <b>trailers</b> on a tile list earliest-start first too — or <b>drag a trailer's ⠿ grip onto another trailer's card</b> to hand-order them (saved for everyone). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. <b>📦 Off Site / Parts tile:</b> for a unit that <b>isn't here</b> but the shop is building parts for (build &amp; ship) — set the job's Bay to <span class="k">Off Site / Parts</span> (✎ edit / ➕ Add job) or drag its card onto the tile, and it appears <b>under the General tile</b> (auto-hides when empty). Unlike On Hold / Off-Site, its tasks <b>DO feed the crew queues</b> — the parts work is real shop work. Per-tile collapse state is remembered on this device. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. Below the lot sits a <b>General</b> tile for jobs assigned to bay “General” (equipment-only work with no floor space) — same behavior, and its tasks feed the crew lists like any active job. <span class="k">☰ Actions ▸ 🖨 Print…</span> opens the print picker: the <b>whole board</b>, or <b>any mix of crews</b> (tick Sal + Electricians, etc.) as one handout with a section per crew — grouped by trailer, with Fleetio descriptions, <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files.</p></div>
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap · Electricians ⇄ Doug · Josh · Jeff</h4>
-    <p>Live queues, one per crew. <b>Placement matters:</b> trailers in a <b>bay or the Parking Lot</b> feed these lists; a trailer waiting in <b>Next Up / On Hold / Off-Site</b> keeps its assigned tasks on its own card until it's moved out — then they appear here automatically. A task lands in a crew's column based on the <span class="k">Assigned</span> dropdown on the <b>Shop Tasks</b> tab — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>. Assign it to someone without a column (e.g. <i>Vendor</i>) and it still routes by reading the crew name in the task text. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date — <b>a shop TV defaults to Month</b> — and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; both remembered per device. An <b>⚠ N overdue</b> chip counts open tasks past their due date. Each task line has a <b>👤 quick-assign</b> chip — tap, pick a crew, done (no dialog) — or just <b>drag the task onto another crew's column</b> to re-assign it, or <b>onto a job card on the bay board</b> to move it to that trailer (mouse/desktop; touch uses the chip / ✎ ⇄ Move). The <span class="k">➕ Add</span> menu here adds a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot. <b>👤 Crew picker:</b> the chip row up top (All · Sal · Wrap · Elec · Doug · Josh · Jeff) shows <b>only the selected crews' columns on this device</b> — tap more than one to combine (Sal + Electricians), tap <b>All</b> to bring everyone back; the visible columns grow to fill the width, and the choice is <b>remembered per device</b> (perfect for Sal's own iPad or his back-shop monitor — on a wall/TV screen set it from the <span class="k">⚙ gear ▸ 👤 Crews</span>, where it also pauses the page rotation). Fleetio descriptions under tasks clamp to <b>one line — tap to expand</b>. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
+    <p>Live queues, one per crew. <b>Placement matters:</b> trailers in a <b>bay or the Parking Lot</b> feed these lists; a trailer waiting in <b>Next Up / On Hold / Off-Site</b> keeps its assigned tasks on its own card until it's moved out — then they appear here automatically. A task lands in a crew's column based on the <span class="k">Assigned</span> boxes on ➕ Add / ✎ Edit task — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>, or <b>type ANY name</b> (the boxes suggest the crews plus every name already used; the 👤 quick-assign popover has a ✏️ type-a-name box too). Assign it to someone without a column (e.g. <i>Vendor</i>, or a typed name) and it still shows on the trailer's card and routes by any crew name in the task text — but only the six crews get their own column. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date — <b>a shop TV defaults to Month</b> — and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; both remembered per device. An <b>⚠ N overdue</b> chip counts open tasks past their due date. Each task line has a <b>👤 quick-assign</b> chip — tap, pick a crew, done (no dialog) — or just <b>drag the task onto another crew's column</b> to re-assign it, or <b>onto a job card on the bay board</b> to move it to that trailer (mouse/desktop; touch uses the chip / ✎ ⇄ Move). The <span class="k">➕ Add</span> menu here adds a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot. <b>👤 Crew picker:</b> the chip row up top (All · Sal · Wrap · Elec · Doug · Josh · Jeff) shows <b>only the selected crews' columns on this device</b> — tap more than one to combine (Sal + Electricians), tap <b>All</b> to bring everyone back; the visible columns grow to fill the width, and the choice is <b>remembered per device</b> (perfect for Sal's own iPad or his back-shop monitor — on a wall/TV screen set it from the <span class="k">⚙ gear ▸ 👤 Crews</span>, where it also pauses the page rotation). Fleetio descriptions under tasks clamp to <b>one line — tap to expand</b>. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
     <p><b>Sizing on the TV (admin 🎨 Design panel):</b> every crew tile on <i>both</i> pages — Sal · Wrap · Electricians and Doug · Josh · Jeff — can be sized independently (width + height) from the tile picker, same as the bays.</p></div>
   <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
     <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show completed</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). The picker is <b>two-level</b>: a group (MRA Design, MRA Shop, Electricians, Wrap Team, Maintenance) <b>rolls up everyone</b> ("MRA Design — all") with each member indented under it ("› Steve K") — pick the group to see all of it, or a person to drill in. Members come from the workbook's <b>Sub-Resource</b> column (Assigned To = group, Sub-Resource = person); until that's filled, the board reads them from existing "Group / Person" assignments. Name variants are still merged (e.g. <b>MasterWraps → Wrap Team</b>, <b>Electrician → Electricians</b>). <span class="k">🖨 Print</span> lays the Gantt + full task list on one <b>11×17 (tabloid) landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
@@ -3123,6 +3129,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"18.2", date:"2026-07-09", title:"✏️ Assign to ANY name — just type it", items:[
+    "The <b>Assigned-to boxes</b> on ➕ Add task and ✎ Edit task now take <b>any typed name</b> — start typing and it suggests the crews plus <b>every name already used on a task</b> (type a new name once, it's suggested everywhere after). Two boxes = team effort, same as before.",
+    "The 👤 quick-assign popover got a <b>✏️ “type a name…”</b> box at the bottom — type + Enter (or ➤) assigns to that name on the spot.",
+    "Note: a brand-new name shows on the task, the bay card and the job groups; the crew <b>columns/prints</b> stay the six crews (a new name doesn't get its own column)." ] },
   { rev:"18.1", date:"2026-07-09", title:"⏳ Edits can't get stranded silently anymore", items:[
     "Some edits (like assigning a brand-new 🔧 Fleetio task) are held on your device for a few seconds until the row syncs, then sent by row-id. If you got signed out (idle timeout) before that happened, they'd sit <b>invisible</b> — assigned on your screen, never saved. Two fixes:",
     "<b>Signing in now sends the waiting edits immediately</b> — no waiting for the next refresh.",
@@ -5058,12 +5068,14 @@ async function uploadAttachment(file,kind){
 let QA_CB=null;
 function qaOpen(ev, cb){
   QA_CB=cb;
+  try{ fillAsgNames(); }catch(e){}   // keep the type-a-name suggestions fresh
   let p=document.getElementById('qaPop');
   if(!p){ p=document.createElement('div'); p.id='qaPop'; document.body.appendChild(p);
     document.addEventListener('click',e=>{ const q=document.getElementById('qaPop');
       if(q&&q.classList.contains('show')&&!e.target.closest('#qaPop')&&!e.target.closest('.qa')) q.classList.remove('show'); }); }
   p.innerHTML='<div class="qah">Assign to…</div>'+ASSIGNEE_OPTIONS.map(a=>`<button onclick="qaPick('${escJsAttr(a)}')">${esc(a)}</button>`).join('')
-    +'<button onclick="qaPick(\'\')" style="color:var(--muted)">— none —</button>';
+    +'<button onclick="qaPick(\'\')" style="color:var(--muted)">— none —</button>'
+    +'<div class="qao"><input id="qaOther" list="asgNames" placeholder="✏️ or type a name…" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();qaGoOther();}" onclick="event.stopPropagation()"><button onclick="event.stopPropagation();qaGoOther()" title="Assign to the typed name">➤</button></div>';
   const x=ev&&ev.clientX?Math.min(ev.clientX, innerWidth-200):innerWidth/2-90;
   const y=ev&&ev.clientY?Math.min(ev.clientY+8, innerHeight-320):120;
   p.style.left=Math.max(8,x)+'px'; p.style.top=Math.max(8,y)+'px';
@@ -5071,6 +5083,7 @@ function qaOpen(ev, cb){
 }
 function qaPick(who){ const p=document.getElementById('qaPop'); if(p) p.classList.remove('show');
   const cb=QA_CB; QA_CB=null; if(cb) cb(who); }
+function qaGoOther(){ const i=document.getElementById('qaOther'); const v=(i&&i.value||'').trim(); if(!v) return; qaPick(v); }
 // Re-assign an existing shop task in place (keeps text/status/notes/due — only the crew changes).
 function qaReassign(proj, raw, who){
   if(!ensureAuth('re-assign a task', ()=>qaReassign(proj,raw,who))) return;
@@ -5375,13 +5388,12 @@ function openEditTask(proj, raw){
   document.getElementById('etTask').value=raw||"";
   { const h=document.getElementById('etHot'); if(h) h.checked=isHotTask(raw); }
   const who=(t&&t.who)||"";
-  // split an existing "A / B" into the two dropdowns (team-effort tasks)
+  // split an existing "A / B" into the two boxes (team-effort tasks) — boxes take any typed name
   const parts=String(who).split(/\s+\/\s+/).map(s=>s.trim()).filter(Boolean);
   const w1=parts[0]||"", w2=parts.slice(1).join(' / ');
-  const optsFor=v=>{ let o=ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
-    if(v && !ASSIGNEE_OPTIONS.some(a=>a.toLowerCase()===v.toLowerCase())) o+=`<option>${esc(v)}</option>`; return `<option value="">— none —</option>`+o; };
-  { const s=document.getElementById('etAssigned'); s.innerHTML=optsFor(w1); s.value=w1; }
-  { const s=document.getElementById('etAssigned2'); s.innerHTML=optsFor(w2); s.value=w2; }
+  fillAsgNames();
+  document.getElementById('etAssigned').value=w1;
+  document.getElementById('etAssigned2').value=w2;
   document.getElementById('etStatus').value=(t&&t.st)||"Open";
   document.getElementById('etMilestone').value=(t&&/yes/i.test(t.ml||""))?"Yes":"";
   { const dd=document.getElementById('etDue'); if(dd) dd.value=(t&&t.due)?String(t.due).slice(0,10):""; }
@@ -5429,6 +5441,17 @@ function submitEditTask(){
 const SHOP_WRITE_URL = CLOSE_FLOW_URL;   // Add + Edit/Move reuse the existing close flow (its script now handles all 3 actions)
 const BAY_OPTIONS = ['General','Bay 2 Front','Bay 2 Back / Loading Dock','Bay 3 Front','Bay 3 Middle','Bay 3 Back','Bay 4 Front','Bay 4 Middle','Bay 4 Back','Bay 5 Front','Bay 5 Back','Parking Lot','Off Site / Parts','On Hold','Next Up'];
 const ASSIGNEE_OPTIONS = ['Sal','Wrap Team','Electricians','Doug','Josh','Jeff','Vendor'];
+// Fill the shared #asgNames datalist: the crews first, then every distinct name already on a
+// shop task (auto-learns — type a new name once and it suggests everywhere after that).
+function fillAsgNames(){
+  const dl=document.getElementById('asgNames'); if(!dl) return;
+  const seen=new Set(ASSIGNEE_OPTIONS.map(a=>a.toLowerCase())), extra=new Set();
+  (((window.MRA_DATA||{}).jobs)||[]).forEach(j=>(j.tasks||[]).forEach(t=>
+    String(t.who||'').split(/\s+\/\s+/).forEach(p=>{ const s=p.trim();
+      if(s && !seen.has(s.toLowerCase())){ seen.add(s.toLowerCase()); extra.add(s); } })));
+  dl.innerHTML=ASSIGNEE_OPTIONS.concat([...extra].sort((a,b)=>a.localeCompare(b)))
+    .map(o=>`<option value="${escA(o)}">`).join('');
+}
 // Approved ("canonical") assignee names for standardization — floor crew + the project
 // orgs/people Rich confirmed. Anything in use that isn't here (and isn't a known group
 // target) gets flagged for a look. Editable as the roster evolves.
@@ -5451,8 +5474,9 @@ function openAddTask(prefillProj){
   window._atJobByProj=jobByProj; window._atBayByProj=bayByProj; window._atFinByProj=finByProj;
   document.getElementById('atProject').innerHTML = projs.map(p=>`<option value="${escA(p)}">${esc(p)}</option>`).join("")+`<option value="__new__">➕ New project…</option>`;
   document.getElementById('atBay').innerHTML = BAY_OPTIONS.map(b=>`<option>${esc(b)}</option>`).join("");
-  document.getElementById('atAssigned').innerHTML = ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");
-  document.getElementById('atAssigned2').innerHTML = `<option value="">— none —</option>`+ASSIGNEE_OPTIONS.map(a=>`<option>${esc(a)}</option>`).join("");   // optional 2nd assignee (team effort)
+  fillAsgNames();   // crews + every name already on a task — the boxes also take ANY typed name
+  document.getElementById('atAssigned').value=ASSIGNEE_OPTIONS[0]||'';
+  document.getElementById('atAssigned2').value='';
   document.getElementById('atTask').value=""; document.getElementById('atComments').value="";
   { const h=document.getElementById('atHot'); if(h) h.checked=false; }
   document.getElementById('atMsg').textContent=""; document.getElementById('atNewProj').value="";
