@@ -488,6 +488,7 @@
   .job .pj .jname{font-weight:800; font-size:calc(var(--ds-cardtitle,13px) + 1.5px); color:#fff; letter-spacing:.2px;
     border-bottom:2px solid rgba(224,72,38,.65); padding-bottom:1px}
   .job .pj .jname:hover{border-bottom-color:#e04826}
+  .job .pj .jname .jnum-t{color:var(--brand); font-weight:800; font-size:.9em; letter-spacing:.3px}
   body.light .job .pj .jname{color:#111}
   .jname:hover{text-decoration:underline; color:var(--brand)}
   .job .mt{color:var(--muted); font-size:11.5px; margin-top:2px; line-height:1.35}
@@ -1123,15 +1124,19 @@
   /* 🚦 What's Next — Yard & Inbound (reuses the meeting-view card shell) */
   .yn-legend{color:var(--muted); font-size:12px; margin:-4px 0 12px; max-width:900px}
   .yn-n{color:var(--muted); font-weight:600; font-size:12px}
-  .yn-card .yn-loc{font-weight:700; font-size:10.5px; white-space:nowrap}
   .yn-card.yn-here{border-left:4px solid #22c55e}
   .yn-card.yn-hold{border-left:4px solid #f59e0b}
   .yn-card.yn-in{border-left:4px solid #3b82f6}
-  .yn-here .yn-loc{color:#86efac}
-  .yn-hold .yn-loc{color:#fbbf24}
-  .yn-in .yn-loc{color:#93c5fd}
-  .yn-loc.yn-nogps{color:var(--muted)}
-  .yn-warn{color:#fca5a5; font-size:10.5px; font-weight:700; margin-top:3px}
+  .yn-card .t .yn-jn{color:var(--brand); font-weight:800; font-size:.92em}
+  /* location is the WHOLE POINT of this view — make it a big, obvious pill on its own line */
+  .yn-locrow{margin:5px 0 3px}
+  .yn-card .yn-loc{display:inline-block; font-weight:800; font-size:14px; padding:3px 11px; border-radius:999px; white-space:nowrap}
+  .yn-here .yn-loc{background:rgba(34,197,94,.18); color:#86efac}
+  .yn-hold .yn-loc{background:rgba(245,158,11,.18); color:#fbbf24}
+  .yn-in .yn-loc{background:rgba(59,130,246,.18); color:#93c5fd}
+  .yn-loc.yn-nogps{background:rgba(148,163,184,.16); color:var(--muted)}
+  .yn-seen{color:var(--muted); font-size:11px; margin-left:7px; font-weight:600}
+  .yn-warn{color:#fca5a5; font-size:11px; font-weight:700; margin-top:3px}
   .yn-arr{color:#93c5fd; font-weight:700}
   .yn-due{color:var(--amber); font-weight:700; font-size:10.5px}
   .yn-due.od{color:#fca5a5}
@@ -3167,6 +3172,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"18.4", date:"2026-07-09", title:"🚦 Location shown BIG · job # in the titles", items:[
+    "🚦 What's Next now shows the <b>location as a big colored pill</b> on every card — and for a trailer on the floor the <b>bay IS the location</b> (🅿️ Parking Lot, 🔧 Bay 3…), since that's where the crew's working it. GPS confirms MRA yards, names the holding yard, or shows the city when it's out on the road (with how long ago it was seen).",
+    "Fixed trailers whose name has <b>no fleet number</b> (e.g. “Dolce EggStreamer”): the view now finds their GPS through the job # → fleet roster, and never buries the location in tiny text again.",
+    "<b>Job # now shows right in the title</b> — on the shop-board bay cards and the 🚦 What's Next cards — next to the name (e.g. Dolce EggStreamer · J1535)." ] },
   { rev:"18.3", date:"2026-07-09", title:"🚦 What to Work Next — one screen for the yard", items:[
     "New <b>🚦 What's Next</b> button (Bay Status header + both ☰ Actions menus) opens a full-screen decision view: everything <b>in the lot + on the board + coming in</b>, grouped by <b>where each trailer physically is right now</b> — 🟢 Here at MRA · 🟡 At a holding yard nearby (Penske / RV Storage…) · 🔵 Inbound / in transit.",
     "Each card shows the trailer's <b>open tasks, dates, and its live GPS location + last-seen</b>, so you can decide what to pull in next without bouncing between the Parking Lot tile and the Coming-Back list.",
@@ -8185,7 +8194,7 @@ function renderFloor(D){
     // so a single job (e.g. WFCU in Bay 5 Front) can be shrunk on its own.
     const jcaret = (!WALL && (j.openCount>0 || fl.length))
       ? `<span class="job-collapse" onclick="toggleJob(${j.row})" title="Collapse / expand this job">${jOpen?'▾':'▸'}</span>` : '';
-    return `<div class="job${jc}" id="floorjob-${j.row}" ondragover="jobTileDragOver(event)" ondrop="jobTileDrop(event,${typeof j.row==='number'?j.row:`'${escJsAttr(String(j.row))}'`})"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag onto a BAY to move this trailer there — or onto ANOTHER TRAILER'S card to slot it above (re-orders the list; needs code)">⠿</span>`:''}</div>`+
+    return `<div class="job${jc}" id="floorjob-${j.row}" ondragover="jobTileDragOver(event)" ondrop="jobTileDrop(event,${typeof j.row==='number'?j.row:`'${escJsAttr(String(j.row))}'`})"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}${j.jobNum?` <span class="jnum-t">${esc(j.jobNum)}</span>`:''}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag onto a BAY to move this trailer there — or onto ANOTHER TRAILER'S card to slot it above (re-orders the list; needs code)">⠿</span>`:''}</div>`+
       `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div><div class="pills">${pills}</div>${tl}</div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
@@ -8631,9 +8640,28 @@ function printMeeting(){
    Fleetio returns, grouped by where each trailer PHYSICALLY is — Samsara GPS geofence first, the
    board bay as fallback. Does NOT touch the shop board, the wall, or the meeting view (its own overlay). */
 let YN_OPEN=false;
-function _ynLoc(name){ const D=window.MRA_DATA||{}; const locs=(D.fleetio&&D.fleetio.locations)||{};
-  const m=String(name||'').trim().match(/^(\d{2,5})\b/); if(!m) return null; const k=_normKey(m[1]);
-  for(const kk in locs){ if(_normKey(kk)===k) return locs[kk]; } return null; }
+// Find a trailer's GPS record. Board job names often have NO fleet number (e.g. "Dolce EggStreamer"),
+// so: (1) try a leading fleet# in the name, else (2) map via the job# to the fleet roster, preferring the
+// unit whose NAME shares a word with the board name (a J# can cover 2 units — the van AND the trailer).
+function _ynLoc(name, jobNum){
+  const D=window.MRA_DATA||{}; const locs=(D.fleetio&&D.fleetio.locations)||{};
+  const byKey=k=>{ for(const kk in locs){ if(_normKey(kk)===k) return locs[kk]; } return null; };
+  const m=String(name||'').trim().match(/^(\d{2,5})\b/);
+  if(m){ const l=byKey(_normKey(m[1])); if(l) return l; }
+  const jn=String(jobNum||'').toUpperCase().replace(/[^0-9]/g,'');
+  if(jn){ const fleet=(D.fleetio&&D.fleetio.fleet)||[];
+    const digits=s=>String(s||'').toUpperCase().replace(/[^0-9]/g,'');
+    const cands=fleet.filter(f=>digits(f.tour).includes(jn) || digits(f.nm).includes(jn));
+    const words=String(name||'').toUpperCase().split(/\s+/).filter(w=>w.length>=4);
+    let best=null,bestScore=-1;
+    cands.forEach(f=>{ const fn=String(f.nm||'').toUpperCase(); let s=0;
+      words.forEach(w=>{ if(fn.includes(w)) s+=2; });
+      if(byKey(_normKey(f.f))) s+=1;                       // prefer a unit that actually has a GPS fix
+      if(s>bestScore){ bestScore=s; best=f; } });
+    if(best){ const l=byKey(_normKey(best.f)); if(l) return l; }
+  }
+  return null;
+}
 function _ynAgo(atISO){ if(!atISO) return ''; const t=new Date(atISO).getTime(); if(!t||isNaN(t)) return '';
   const ms=Date.now()-t; if(ms<0) return 'just now'; const h=ms/3600000;
   if(h<1) return Math.max(1,Math.round(ms/60000))+'m ago'; if(h<48) return Math.round(h)+'h ago'; return Math.round(h/24)+'d ago'; }
@@ -8647,20 +8675,25 @@ function _ynData(D){
   jobs.forEach(j=>{ const openTasks=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done):(j.openTasks||[]).map(tk=>({t:tk,who:''}));
     items.push({name:j.project,jobNum:j.jobNum,bay:j.bay||'',status:j.status||'',row:j.row,
       startISO:j.startISO,endISO:j.completionISO,tasks:openTasks,openCount:j.openCount||openTasks.length,
-      loc:_ynLoc(j.project),ret:retByJob[njn(j.jobNum)]||null,onBoard:true}); });
+      loc:_ynLoc(j.project,j.jobNum),ret:retByJob[njn(j.jobNum)]||null,onBoard:true}); });
   const haveJob=new Set(jobs.map(j=>njn(j.jobNum)).filter(Boolean));
   rets.forEach(r=>{ if(r.jobNum && haveJob.has(njn(r.jobNum))) return;   // inbound units not already on the board
     items.push({name:r.asset||('Unit '+r.num),jobNum:r.jobNum,bay:'',status:'',row:null,
-      startISO:r.dateISO,endISO:r.endISO,tasks:[],openCount:0,loc:_ynLoc(r.asset),ret:r,onBoard:false}); });
+      startISO:r.dateISO,endISO:r.endISO,tasks:[],openCount:0,loc:_ynLoc(r.asset,r.jobNum),ret:r,onBoard:false}); });
   const here=[],hold=[],inbound=[];
   items.forEach(it=>{ const loc=it.loc,bay=it.bay;
     const isBay=/^bay\s/i.test(bay), isLot=/^\s*parking\s*lot\s*$/i.test(bay), isParts=/parts/i.test(bay);
+    const onHere = it.onBoard && (isBay||isLot||isParts);                             // in a bay / the lot / parts = physically HERE (Rich's own placement)
+    const held   = it.onBoard && /next\s*up|on\s*hold|off.?site/i.test(bay) && !isParts;
     let state;
-    if(loc && (loc.yard||'').trim()){ state=_isMraYard(loc)?'here':'hold'; }     // GPS geofence wins
-    else if(loc && (loc.place||'').trim()){ state='inbound'; }                    // GPS says out on the road
-    else { state=(isBay||isLot||isParts)?'here':(it.ret?'inbound':'hold'); }       // no GPS → trust the board
+    if(onHere){ state='here'; }                                                       // the board wins for on-floor trailers — don't let a fuzzy GPS "place" bump it off "here"
+    else if(loc && (loc.yard||'').trim()){ state=_isMraYard(loc)?'here':'hold'; }     // off-board: GPS geofence decides
+    else if(loc && (loc.place||'').trim()){ state='inbound'; }                        // GPS says out on the road
+    else if(it.ret){ state='inbound'; }                                               // has a back-to-MRA date
+    else if(held){ state='hold'; }
+    else { state='inbound'; }
     it.state=state;
-    it.mismatch=(isLot||isBay)&&loc&&(loc.yard||'').trim()&&!_isMraYard(loc);        // board says here, GPS says a holding yard
+    it.mismatch = onHere && loc && (loc.yard||'').trim() && !_isMraYard(loc);          // board says here, GPS says a holding yard
     (state==='here'?here:state==='hold'?hold:inbound).push(it); });
   const byWork=(a,b)=>(b.openCount-a.openCount)||(((a.endISO||'9999')+'').localeCompare((b.endISO||'9999')+''));
   here.sort(byWork); hold.sort(byWork);
@@ -8669,10 +8702,20 @@ function _ynData(D){
 }
 function _ynCard(it,today){
   const cls=it.state==='here'?'yn-here':it.state==='hold'?'yn-hold':'yn-in';
-  const loc=it.loc; let chip;
-  if(loc && (loc.yard||'').trim()) chip=`<span class="yn-loc">📍 ${esc(loc.yard)}${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
-  else if(loc && (loc.place||'').trim()) chip=`<span class="yn-loc">🚚 ${esc(loc.place)}${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
-  else chip=`<span class="yn-loc yn-nogps">📡 no GPS</span>`;
+  const loc=it.loc, bay=it.bay||'';
+  const isBay=/^bay\s/i.test(bay), isLot=/^\s*parking\s*lot\s*$/i.test(bay), isParts=/parts/i.test(bay);
+  // The BIG location line — for a trailer on the floor the BAY is the location (that's where the crew's
+  // working it); GPS is used for MRA-yard confirmation, holding yards and units out on the road.
+  let where, seen='';
+  if(loc && loc.atISO) seen=`<span class="yn-seen">GPS ${esc(_ynAgo(loc.atISO))}</span>`;
+  if(loc && _isMraYard(loc)) where=`📍 ${esc(loc.yard)}`;
+  else if(it.state==='here' && (isBay||isLot||isParts)) where=`${isLot?'🅿️ Parking Lot':(isParts?'📦 '+esc(bay):'🔧 '+esc(bay))}`;
+  else if(loc && (loc.yard||'').trim()) where=`📍 ${esc(loc.yard)}`;
+  else if(loc && (loc.place||'').trim()) where=`🚚 ${esc(loc.place)}`;
+  else if(bay) where=`⏸ ${esc(bay)}`;
+  else { where=`📡 location unknown`; }
+  const nogps=(where.indexOf('location unknown')>=0)?' yn-nogps':'';
+  const chip=`<div class="yn-locrow"><span class="yn-loc${nogps}">${where}</span>${seen}</div>`;
   const dr=(it.startISO||it.endISO)?`${fmtMD(it.startISO)}→${fmtMD(it.endISO)}`:'';
   let arr='';
   if(it.ret&&it.ret.dateISO){ const dn=daysBetween(it.ret.dateISO,today); arr=` <span class="yn-arr">→ arriving ${esc(it.ret.dateText||fmtMD(it.ret.dateISO))}${it.ret.dateISO>=today?(' (in '+Math.max(0,dn)+'d)'):''}</span>`; }
@@ -8680,9 +8723,10 @@ function _ynCard(it,today){
     const due=(t&&t.due)?` <span class="yn-due${t.due<today?' od':''}">${t.due<today?'overdue ':'due '}${esc(fmtMD(t.due))}</span>`:'';
     return `<li>${esc(cleanTask(raw,false))}${who?` — <span class="who">${esc(who)}</span>`:''}${due}</li>`; }).join('');
   const more=(it.tasks||[]).length>7?`<div class="m">+${it.tasks.length-7} more…</div>`:'';
-  const meta=[it.jobNum?esc(it.jobNum):'', it.bay?esc(it.bay):(it.onBoard?'':'not on the board'), dr,
-    it.openCount?(it.openCount+' open task'+(it.openCount===1?'':'s')):'no open tasks'].filter(Boolean).join(' · ');
-  return `<div class="mtg-card yn-card ${cls}"><div class="t">${esc(it.name)} ${chip}</div>`+
+  const meta=[dr, it.openCount?(it.openCount+' open task'+(it.openCount===1?'':'s')):'no open tasks'].filter(Boolean).join(' · ');
+  const title=`${esc(it.name)}${it.jobNum?` <span class="yn-jn">${esc(it.jobNum)}</span>`:''}`;
+  return `<div class="mtg-card yn-card ${cls}"><div class="t">${title}</div>`+
+    chip+
     `<div class="m">${meta}${arr}</div>`+
     (it.mismatch?`<div class="yn-warn">⚠ board says ${esc(it.bay)}, but GPS shows it at ${esc(it.loc.yard)}</div>`:'')+
     (tasks?`<ul>${tasks}</ul>`:'')+more+`</div>`;
