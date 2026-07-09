@@ -484,6 +484,11 @@
   .job.done{opacity:.5} .job.done .pj{text-decoration:line-through}
   .job .pj{font-weight:600; font-size:var(--ds-cardtitle,13px); line-height:1.25}
   .jname{cursor:pointer}
+  /* Job titles on the bay cards POP: bigger, brighter, MRA-orange underline — they anchor the card visually */
+  .job .pj .jname{font-weight:800; font-size:calc(var(--ds-cardtitle,13px) + 1.5px); color:#fff; letter-spacing:.2px;
+    border-bottom:2px solid rgba(224,72,38,.65); padding-bottom:1px}
+  .job .pj .jname:hover{border-bottom-color:#e04826}
+  body.light .job .pj .jname{color:#111}
   .jname:hover{text-decoration:underline; color:var(--brand)}
   .job .mt{color:var(--muted); font-size:11.5px; margin-top:2px; line-height:1.35}
   .job .pills{margin-top:5px; display:flex; flex-wrap:wrap; gap:5px}
@@ -1072,6 +1077,8 @@
   .mtg-card li:hover{background:rgba(245,200,30,.16); border-radius:4px}
   .mtg-gpswarn{margin-left:8px;font-size:10.5px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.42);border-radius:999px;padding:1px 8px;white-space:nowrap}
   .mtg-gpsok{margin-left:8px;font-size:10.5px;font-weight:600;color:#86efac;white-space:nowrap}
+  .mtg-asg{margin-left:8px;font-size:10px;font-weight:700;background:transparent;color:#93c5fd;border:1px solid rgba(59,130,246,.5);border-radius:999px;padding:2px 9px;cursor:pointer;white-space:nowrap}
+  .mtg-asg:hover{background:rgba(59,130,246,.15)}
   .mtg-overlay{position:fixed; inset:0; background:var(--bg); z-index:150; display:none; flex-direction:column; padding:14px 22px 20px; overflow:auto}
   .mtg-overlay.show{display:flex}
   .mtg-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; border-bottom:2px solid var(--brand); padding-bottom:9px; margin-bottom:13px}
@@ -3079,6 +3086,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"17.3", date:"2026-07-09", title:"🗓 Assign units to the board from the meeting · job names pop", items:[
+    "Every Coming-back card in the 🗓 Meeting view has a <b>🏭 Assign to board</b> button — a unit with a matching floor job jumps straight into that <b>job's editor</b> (set the bay, or hit 🔄 Bring back if it shipped); a unit with no job opens <b>➕ Add job pre-filled</b> from the return: name, J#, arrival → leaving dates, Parking Lot.",
+    "<b>Job titles on the bay cards now pop</b> — bigger, brighter, with an MRA-orange underline — so “SWC FL1 (1545) – Maintenance” reads at a glance instead of blending into the task lines." ] },
   { rev:"17.2", date:"2026-07-08", title:"🚫 Out-today: the reason is private now", items:[
     "The board no longer shows <b>why</b> someone is out — crew-card badges, the out-today strip and the Staff on Leave list just say they're out. The reason is still saved on the entry: open its <b>✎ edit</b> to see or change it." ] },
   { rev:"17.1", date:"2026-07-08", title:"🖨 Gantt print: real structure on paper", items:[
@@ -8322,7 +8332,8 @@ function renderMeeting(){
   const D=window.MRA_DATA||{}; if(!(D.jobs&&D.jobs.length)) return;
   const M=_mtgData(D);
   document.getElementById('mtgStamp').textContent=fmtMDY(M.today)+' · '+M.back.length+' returning/here · '+M.lot.length+' in the lot · '+M.dec.length+' decisions';
-  document.getElementById('mtgBack').innerHTML = M.back.length ? M.back.map(u=>{
+  window._MTG_BACK=M.back;
+  document.getElementById('mtgBack').innerHTML = M.back.length ? M.back.map((u,i2)=>{
     const stay=(u.dateISO&&u.endISO&&u.endISO>=u.dateISO)?(daysBetween(u.endISO,u.dateISO)+1):null;   // length of the visit, inclusive (needs the Leaving-MRA date on the Fleetio issue)
     // GPS truth-check on HERE NOW: the state comes from the Fleetio DATE fields; Samsara says where it actually is.
     const gps=(u.state==='here')?_mtgGps(u.asset):null;
@@ -8332,7 +8343,7 @@ function renderMeeting(){
       ?`<span class="mtg-here">HERE NOW${u.endText?(' → '+esc(u.endText)+(u.endISO?(' · '+Math.max(0,daysBetween(u.endISO,M.today))+'d left'):'')):''}</span>${gpsChip}`
       :`<span class="mtg-due">${esc(u.dateText)}${u.endText?(' – '+esc(u.endText)):''}${stay?(' <b>('+stay+'d)</b>'):''}${u.dn===0?' · TODAY':' · in '+u.dn+'d'}</span>`;
     const lis=u.issues.slice(0,8).map(x=>`<li class="${(!x.covered&&!x.who)?'un':''}">${fioTitle('issue',x.num,x.summ)} — <span class="who">${x.covered||x.who?esc(x.who||'—'):'⚠ unassigned'}</span></li>`).join('');
-    return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''}</div>${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
+    return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''} <button class="mtg-asg" onclick="event.stopPropagation();mtgAssignBoard(${i2})" title="Put this unit on the shop board: opens its job editor (set the bay / bring it back), or a pre-filled ➕ Add job if it has none — needs your code">🏭 Assign to board</button></div>${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
   }).join('') : `<div class="mtg-empty">Nothing marked coming back in the next 30 days.</div>`;
   document.getElementById('mtgLot').innerHTML = M.lot.length ? M.lot.map(l=>{
     const lis=l.tasks.slice(0,10).map(t=>{ const fm=String(t.raw||'').match(/🔧\s*#(\d+)/); const fa=fm?fioArrow('issue',fm[1]):'';
@@ -8355,6 +8366,25 @@ function mtgDecClick(ev,i){ if(ev&&ev.stopPropagation) ev.stopPropagation(); con
 }
 function openMeeting(){ MTG_OPEN=true; renderMeeting(); document.getElementById('mtgOverlay').classList.add('show'); }
 function closeMeeting(){ MTG_OPEN=false; document.getElementById('mtgOverlay').classList.remove('show'); }
+// 🏭 Assign a coming-back unit to the shop board, right from the meeting: existing job → its editor
+// (shipped ones show the 🔄 Bring back button there); no job yet → ➕ Add job pre-filled from the return.
+function mtgAssignBoard(i){
+  const u=(window._MTG_BACK||[])[i]; if(!u) return;
+  if(!ensureAuth('assign a unit to the shop board', ()=>mtgAssignBoard(i))) return;
+  const D=window.MRA_DATA||{}; const nj=s=>String(s||'').toUpperCase().replace(/[^0-9]/g,'');
+  const bj=(D.jobs||[]).find(j=>j.category!=='leave' && nj(j.jobNum) && nj(j.jobNum)===nj(u.jobNum));
+  closeMeeting(); setView('floor');
+  if(bj){ openEditJob(bj.row); return; }
+  openAddJob();
+  if(!document.getElementById('addJobModal').classList.contains('show')) return;
+  try{
+    document.getElementById('ajProject').value=String(u.asset||'').split(/\s+/).slice(0,4).join(' ');
+    document.getElementById('ajJob').value=u.jobNum||'';
+    if(u.dateISO) document.getElementById('ajStart').value=u.dateISO;
+    if(u.endISO)  document.getElementById('ajComp').value=u.endISO;
+    const b=document.getElementById('ajBay'); if(b&&[...b.options].some(o=>/^parking lot$/i.test(o.value))) b.value='Parking Lot';
+  }catch(e){}
+}
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&MTG_OPEN) closeMeeting(); });
 function printMeeting(){
   const D=window.MRA_DATA||{}; const M=_mtgData(D);
