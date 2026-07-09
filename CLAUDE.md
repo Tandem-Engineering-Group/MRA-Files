@@ -297,6 +297,77 @@ Rich wants a two-step complete for **project-fed** design tasks (NOT the ad-hoc/
 
 Treat help + rev as PART OF the feature, not an afterthought.
 
+## Shipped 2026-07-09 — Meeting view · Off-Site/Parts tile · closed-task search · stranded-edit fix · write-in assignees
+
+*(The complete rev-by-rev history is the `CHANGELOG` array in `MRA_Dashboard.html` — the footer badge + "What's new"
+modal read it, so it's authoritative. Revs between the last CLAUDE.md log (4.90, 2026-06-22) and rev 17.2 shipped via
+that CHANGELOG. This logs the 2026-07-09 session's features + the gotchas worth NOT repeating.)*
+
+### 🗓 Maintenance-Meeting view — "Assign to board" became a live board cross-check (rev 17.4–17.9)
+- Every **Coming-back** card cross-checks the shop board by J# at render time (`_mtgJobMatches(u)` — numeric-row,
+  non-leave jobs matched on digits-only J#). The button now tells the truth:
+  - **already on the board → green `✓ On board · <bay(s)>`** — the badge carries EVERY live bay, deduped, shipped jobs
+    excluded (`mjBays`/`mjLive`); click → that job's editor.
+  - **split into several jobs** (e.g. 6154 Kentucky J1524 = Maintenance + Pedestal; Ford J1541) → badge lists all bays
+    AND **every job is spelled out on the card** (`.mtg-onbl`/`.mtg-onbj`): name — bay · status · dates · open-task count.
+    Click a line → `mtgOpenJob(row)`; the badge opens `_mtgJobPick` (picker + ➕ New job for this unit).
+  - **not on the board → `🏭 Assign to board`** → `_mtgNewJob(i)` (pre-filled ➕ Add job: name, J#, arrival→leaving, Parking Lot).
+- **rev 17.9:** a returning unit whose board job is **shipped** shows **🔄 bring back** on the badge/line/picker entry →
+  routes through the existing `bringBackTo(row)` (editor pre-set Active · Parking Lot · today, ship history logged) so it
+  can be re-assigned. Also: a HERE-NOW unit with **no Samsara tracker** shows a muted **📡 no GPS** chip (`.mtg-gpsno`)
+  instead of nothing — Samsara only tracks ~135 units; client-owned trailers (e.g. **6042 Mott**) have no tracker, so
+  don't imply a location can be verified when it can't.
+- ‼️ **RICH LESSON (he was blunt, twice):** he scans the **BADGE**, not the lines under it. "· N jobs" counts were
+  useless — the badge must carry the actual **locations**, and every job must be **spelled out in full** (name/bay/
+  status/dates/tasks) with **no click required**. On this view, never hide load-bearing info behind a click.
+
+### 📦 'Off Site / Parts' tile (rev 17.6) — build-and-ship work for units that AREN'T on site
+- New bay value **`Off Site / Parts`** in `BAY_OPTIONS`. Jobs there get their own tile UNDER the General tile
+  (auto-hides when empty).
+- KEY: **`bayIsParts(b)`** (`/parts/i`) is an EXCEPTION to `bayIsHeld()` — so unlike On Hold / Off-Site, a Parts job's
+  tasks **DO feed the crew queues** (the parts work is real shop work even though the unit's away). `isHeldBay` now
+  delegates to `bayIsHeld` (one source of truth).
+- Use for the JFSD-type case Rich raised: "we're building parts for it and shipping" — unit not here, work still tracked + queued.
+
+### 🔎 Closed-task search from the shop floor (rev 18.0)
+- Un-retired the Shop History view — now **menu-only** (no tab): **☰ Actions ▸ 🔎 Search closed / history** in BOTH
+  Actions menus (top-bar `#bayPop` + floating `#floorActPop`), plus a footer link in the 🔍 global-search modal.
+- `renderHistory()` gained an **Open/Closed-only** task filter (`#histDone`), reads the STRUCTURED task data (`j.tasks`)
+  so closed lines show **closed date (`t.cl`) + crew (`t.who`)**, counts closed tasks in the header, and has a
+  ← Back to floor button. Search by job #, job name, task wording, client, or person. Read-only (no code needed).
+
+### ⏳ STRANDED-EDIT FIX (rev 18.1) — ‼️ ROOT CAUSE of "I assigned it and it's not showing / won't print"
+- **The bug (Siemens DBX J110):** Rich assigned 6 brand-new 🔧 Fleetio tasks, they didn't show, he ran "MRA Lists to
+  JSON" 4× — still blank. Cause: assigning a task whose row hasn't synced back yet queues the edit in the **by-id retry
+  queue** (`pendRewrite`/`prwRetry`, localStorage `mra_prw`). Those tasks are named `🔧 #NNN …` → the emoji/`#` **can't
+  be text-matched** in a SharePoint OData `$filter` (`_odSafe` blocks it), so the ONLY path is **by item-id**, which
+  fires on the next refresh **while signed in**. An **idle sign-out** before that → the edits sat INVISIBLE on his
+  device, never sent. Running Lists→JSON can't help — the writes never left the browser.
+- **Fixes:** (1) `siSubmit()` calls `prwRetry()` immediately on sign-in — flush the queue the moment you authenticate.
+  (2) A floating **⏳ "N edits waiting to sync" chip** (`#pendChip`, bottom-left; `updatePendChip()` fired from
+  pendRewrite/pendDelete/prwRetry/signOut) shows whenever the queue is non-empty — tap = sign in & send now. Chip gone
+  = saved. Hidden on wall/print. (Verified live: the 6 DBX tasks landed — Doug/Vendor/Sal/Sal+Wrap/Sal/Sal.)
+- ‼️ **PRINT IS WYSIWYG:** the crew print (`buildCrewSheetHtml`) builds from the SAME in-memory `MRA_DATA`. If an edit
+  isn't SAVED (only optimistic-local, or stranded in the queue) it won't print. "Run Lists→JSON to make it print" is a
+  misconception — that flow pushes the board OUT to everyone else; it does NOT pull your own unsaved edits in. Saved = prints.
+
+### ✏️ Write-in assignee names (rev 18.2)
+- Add-task / Edit-task **Assigned-to** were `<select>` → now free-text `<input list="asgNames">` (shared `#asgNames`
+  datalist at body level). `fillAsgNames()` fills it with the 6 crews + every distinct name already on any task
+  (auto-learns; refreshed on modal/popover open). Two boxes = team effort (joined " / " via `_combineAssignees`).
+- The 👤 quick-assign popover (`qaOpen`) gained a ✏️ type-a-name row (`#qaOther`; Enter or ➤ → `qaGoOther`).
+- ⚠️ A typed name shows on the task/card/groups but does NOT get its own crew **column** or **print section** — only the
+  six `PRINT_CREWS`/`ASSIGNEE_OPTIONS` crews do. (Told Rich; offered to promote a name to a real column later if wanted.)
+
+### Housekeeping
+- Also this session: modals no longer close on backdrop click (global capture-phase guard), Gantt print overhaul,
+  hot-task 🔥 highlighting, out-today (reason kept private), bay-card date sort + drag reorder, meeting stay-length +
+  Fleetio links + GPS truth-check — all in the CHANGELOG.
+- Branch/deploy flow unchanged: dev+deploy on `claude/zealous-fermi-6n5pil`; every HTML change validated (`node --check`
+  on each inline `<script>` wrapped in a function), `preview.html` kept as a copy, deploy via `deploy.yml` `mode=live`,
+  verified live by polling the footer `rev:"…"`. NOTE: deploys occasionally sit in GitHub's runner queue and get
+  cancelled after ~15 min — just re-fire the workflow; it's not a code fault.
+
 ## Pending / requested (not yet built — remind Rich)
 
 - **⏳ GANTT FULL-SCREEN DETAIL VIEW — make it MATCH the inline Projects Gantt (Rich 2026-06-25, "you missed it,
