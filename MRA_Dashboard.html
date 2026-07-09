@@ -3079,6 +3079,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"17.2", date:"2026-07-08", title:"🚫 Out-today: the reason is private now", items:[
+    "The board no longer shows <b>why</b> someone is out — crew-card badges, the out-today strip and the Staff on Leave list just say they're out. The reason is still saved on the entry: open its <b>✎ edit</b> to see or change it." ] },
   { rev:"17.1", date:"2026-07-08", title:"🖨 Gantt print: real structure on paper", items:[
     "The printed left column finally matches the screen: <b>full task names wrap to two lines</b> instead of chopping off, <b>phase headers print as grey section bands</b>, tasks <b>indent under their phase</b> (subtasks deeper), and the on-screen ▾ carets are stripped. Bars and dates center themselves on taller rows automatically." ] },
   { rev:"17.0", date:"2026-07-08", title:"🖨 Gantt print: two sliders that actually stick + Flow mode", items:[
@@ -8118,8 +8120,8 @@ function renderFloor(D){
     const who=esc(j.project.replace(/\s*[–-]\s*APL.*$/i,""));
     const range=j.startISO?(fmtMD(j.startISO)+(j.completionISO&&j.completionISO!==j.startISO?"–"+fmtMD(j.completionISO):"")):"";
     const activeNow=j.startISO && j.startISO<=today && ((j.completionISO||j.startISO)>=today);
-    const pr=_lvParse(j.notesRaw||'');
-    return `<div class="row"><div><div class="lead">${who}${activeNow?' <span class="badge red">OUT TODAY</span>':''}${pr.reason?` <span class="badge grey">${esc(pr.reason)}</span>`:''}${pr.lane?` <span class="badge grey" title="Highlighted on this crew's card up top">→ ${esc(pr.lane)}</span>`:''}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit these leave dates">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
+    const pr=_lvParse(j.notesRaw||'');   // reason stays PRIVATE — visible only when you open ✎ edit
+    return `<div class="row"><div><div class="lead">${who}${activeNow?' <span class="badge red">OUT TODAY</span>':''}${pr.lane?` <span class="badge grey" title="Highlighted on this crew's card up top">→ ${esc(pr.lane)}</span>`:''}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit this entry — dates, reason, crew card">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
   }).join("")||`<div class="empty">No upcoming leave</div>`;
   document.getElementById('leaveCount').textContent=leaveSorted.length;
 
@@ -8127,9 +8129,9 @@ function renderFloor(D){
   // lists everyone out (incl. team members without a lane, e.g. Sal's crew: Jake / John / Brent / Kayla).
   const outNow=(D.jobs||[]).filter(j=>j.category==='leave' && j.startISO && j.startISO<=today && ((j.completionISO||j.startISO)>=today))
     .map(j=>{ const pr=_lvParse(j.notesRaw||''); return {name:String(j.project||'').replace(/\s*[–-]\s*APL.*$/i,'').trim(), reason:pr.reason, lane:pr.lane}; });
-  { const st=document.getElementById('outStrip');
+  { const st=document.getElementById('outStrip');   // names only — the WHY stays private in the leave entry (✎ to see it)
     if(st){ st.style.display=outNow.length?'':'none';
-      st.innerHTML=outNow.length?('🚫 <b>Out today:</b> '+outNow.map(o=>esc(o.name)+(o.reason?(' <span class="outwhy">('+esc(o.reason)+')</span>'):'')).join(' · ')):''; } }
+      st.innerHTML=outNow.length?('🚫 <b>Out today:</b> '+outNow.map(o=>esc(o.name)).join(' · ')):''; } }
   document.querySelectorAll('#assigneesA .asg[data-asg], #assigneesB .asg[data-asg]').forEach(l=>{
     const lane=l.getAttribute('data-asg')||'';
     // whose absence lands on THIS card: the explicit "Show on crew card" pick wins, else match by name
@@ -8140,8 +8142,8 @@ function renderFloor(D){
     let b=h.querySelector('.outbadge');
     if(hits.length){ if(!b){ b=document.createElement('span'); b.className='outbadge'; const c=h.querySelector('.count'); h.insertBefore(b, c||null); }
       b.textContent='🚫 '+hits.map(o=>{ const self=_verifyNameMatch(o.name,lane)||_verifyNameMatch(lane,o.name);
-        return (self?'Out today':(o.name+' out'))+(o.reason?(' · '+o.reason):''); }).join('  ·  ');
-      b.title=hits.map(o=>o.name+(o.reason?(' — '+o.reason):'')).join(' · ')+' — from Staff on Leave (edit or delete the entry there)'; }
+        return self?'Out today':(o.name+' out'); }).join('  ·  ');   // no reason on the board — it stays private in the leave entry
+      b.title=hits.map(o=>o.name).join(' · ')+' — out today; details are on the Staff on Leave entry (✎)'; }
     else if(b) b.remove();
   });
 
