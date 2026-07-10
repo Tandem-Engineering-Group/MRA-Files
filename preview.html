@@ -1202,6 +1202,14 @@
   #qaPop .qao{display:flex; gap:5px; border-top:1px dashed var(--line); padding-top:6px; margin-top:1px}
   #qaPop .qao input{flex:1; min-width:0; background:var(--panel); border:1px solid var(--line); color:var(--txt); border-radius:7px; padding:6px 8px; font-size:12px}
   #qaPop .qao button{flex:0 0 auto; text-align:center}
+  #unasModal .unas-job{border-top:1px solid var(--line);padding:7px 0}
+  #unasModal .unas-job:first-child{border-top:0}
+  #unasModal .unas-jh{font-weight:700;font-size:13px}
+  #unasModal .unas-jn{color:var(--brand);font-weight:700;font-size:12px}
+  #unasModal .unas-bay{color:var(--muted);font-size:11.5px;font-weight:600}
+  #unasModal .unas-t{font-size:12.5px;line-height:1.5;padding:2px 0 2px 4px;display:flex;align-items:center;gap:7px}
+  #unasModal .unas-tx{flex:1}
+  #unasModal .unas-due{color:var(--amber);font-size:11px;font-weight:700;white-space:nowrap}#unasModal .unas-due.od{color:#fca5a5}
   #qaPop .qah{font-size:10.5px; color:var(--muted); padding:0 2px}
   /* FLOOR return alarm — pulses when a unit is due back at MRA within 2 weeks */
   .retalarm{display:flex; align-items:center; gap:12px; flex-wrap:wrap; cursor:pointer; margin:0 0 12px;
@@ -1510,6 +1518,7 @@
       <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
       <button class="mi" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
       <button class="mi" onclick="openPrintPick();closeDrops()" title="Generate a maintenance work order per job for a crew (Sal, Doug…) — photos enlarged, signature line — ready to print">🧾 Work Orders…</button>
+      <button class="mi" onclick="openUnassigned()" title="Find every open task that has no crew assigned - and assign them right there">⚠ Find unassigned tasks</button>
       <button class="mi" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter">✉ Daily Letter</button>
       <div class="mi-div">View</div>
       <button class="mi" onclick="setView('history');closeDrops()" title="Search EVERYTHING — incl. CLOSED tasks — by job #, job name, task wording or person; filter to ✓ Closed only with closed dates">🔎 Search closed / history</button>
@@ -1599,6 +1608,7 @@
           <option value="added">🆕 Recently added</option>
           <option value="list">📜 List order</option>
         </select>
+        <button class="expandbtn" id="unasChip" style="display:none;margin-left:8px;border-color:rgba(210,153,34,.55);color:var(--amber)" onclick="openUnassigned()" title="Every open task with no crew assigned — tap to see them all and assign right there">⚠ <span id="unasN">0</span> unassigned</button>
         <button class="expandbtn bayallbtn" style="margin-left:8px" onclick="openYardNext()" title="A decision view for 'what do I work on next' — everything in the lot + on the board + coming in, grouped by where each trailer physically is (GPS): here at MRA, at a holding yard nearby, or inbound. Read-only; doesn't change the board.">🚦 What's Next</button>
         <div class="linksmenu" style="margin-left:8px">
           <button class="expandbtn" onclick="toggleDrop(event,'bayPop')" title="Bay actions — edit, add, print">☰ Actions ▾</button>
@@ -1611,6 +1621,7 @@
             <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
             <button class="mi" id="btnPrint" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
             <button class="mi" onclick="openPrintPick();closeDrops()" title="Generate a maintenance work order per job for a crew (Sal, Doug…) — photos enlarged, signature line — ready to print">🧾 Work Orders…</button>
+      <button class="mi" onclick="openUnassigned()" title="Find every open task that has no crew assigned - and assign them right there">⚠ Find unassigned tasks</button>
             <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
             <div class="mi-div">View</div>
             <button class="mi" onclick="setView('history');closeDrops()" title="Search EVERYTHING — incl. CLOSED tasks — by job #, job name, task wording or person; filter to ✓ Closed only with closed dates">🔎 Search closed / history</button>
@@ -2582,6 +2593,14 @@
   </div>
 
   <!-- ===================== PRINT PICKER (whole board or any mix of crews) ===================== -->
+  <div class="modal-overlay" id="unasModal" onclick="closeUnas(event)">
+    <div class="modal" style="max-width:580px">
+      <button class="modal-close" onclick="closeUnas()" title="Close">×</button>
+      <h3>⚠ Unassigned tasks <span class="count" id="unasCount"></span></h3>
+      <div class="msub">Every open task with <b>no crew</b>, grouped by job. Tap the 👤 to assign one right here — it drops off the list once it has a crew.</div>
+      <div id="unasList" style="max-height:62vh;overflow:auto;margin-top:6px"></div>
+    </div>
+  </div>
   <div class="modal-overlay" id="printPickModal" onclick="ppClose(event)">
     <div class="modal" style="max-width:400px">
       <button class="modal-close" onclick="ppClose()" title="Close">×</button>
@@ -3190,6 +3209,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"18.12", date:"2026-07-10", title:"🚜 Tractor issues default-on + ⚠ find unassigned", items:[
+    "<b>🚜 Show tractor issues is now ON by default</b> on every screen (it used to be off) — flip it off per device from ☰ Actions if you don’t want it.",
+    "<b>Doug’s work orders now include the open TRACTOR Fleetio issues</b> for each job (flagged 🚜 TRACTOR, with photos), not just his assigned tasks.",
+    "New <b>⚠ unassigned finder</b>: a ⚠ N unassigned chip in the Bay Status header (and ☰ Actions ▸ Find unassigned tasks) opens every open task with no crew, grouped by job — tap 👤 to assign it right there; it drops off once it has a crew." ] },
   { rev:"18.11", date:"2026-07-10", title:"🧾 Work Orders: bigger photos + page numbers", items:[
     "Photos are large again (up to full width) — a work order can run to a 2nd page, which stays professional: the <b>full header repeats</b> and every page is numbered <b>Page X of Y</b> at the bottom, plus the job/crew/date footer." ] },
   { rev:"18.10", date:"2026-07-10", title:"🧾 Work Orders: notes box + clean multi-page", items:[
@@ -4182,7 +4205,7 @@ document.addEventListener('click',e=>{ const p=document.getElementById('barPop')
 const expandedJobs=new Set(), expandedBays=new Set(), collapsedJobs=new Set();
 const DEFCOLL_ROWS=new Set();   // jobs in default-COLLAPSED lanes (Parking Lot / Next Up) — rebuilt each render; they open via expandedJobs (opt-in), like wall view
 let SHOWCLOSED=false, SHOWSALCLOSED=false;
-let SHOW_TRACTOR=false; try{ SHOW_TRACTOR=localStorage.getItem('mra_show_tractor')==='1'; }catch(e){}   // bring tractor issues onto the FLOOR bay cards (off by default; they always show on FLEETIO)
+let SHOW_TRACTOR=true; try{ const _t=localStorage.getItem('mra_show_tractor'); if(_t!==null) SHOW_TRACTOR=(_t==='1'); }catch(e){}   // bring tractor issues onto the FLOOR bay cards (off by default; they always show on FLEETIO)
 // Normal view: tiles show their tasks by DEFAULT (collapsedJobs tracks the ones you've hidden).
 // Wall/TV view: tiles are count-only and the Fleetio pill expands on demand (expandedJobs).
 function toggleJob(row){
@@ -10431,19 +10454,23 @@ function buildWorkOrders(sel, opts){
   const KNOWN=/\bsal\b|wrap|w2 graphic|\bw2\b|electr|beyer/i;
   const basisFor=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN.test(who))?who:(who?(who+" "+txt):txt); };
   const fdet={}, fdocs={}; ((D.fleetio&&D.fleetio.issues)||[]).forEach(i=>{ if(i&&i.num!=null){ fdet[String(i.num)]=String(i.detail||""); fdocs[String(i.num)]=i.docs||[]; } });
+  const allIss=(D.fleetio&&D.fleetio.issues)||[]; const jk=v=>String(v||"").replace(/[^0-9]/g,"");
   const fmt=iso=>{ if(!iso) return ""; const p=String(iso).split("-"); return (+p[1])+"/"+(+p[2])+"/"+p[0]; };
   const todayISO=D.todayISO||localISO(Date.now());
   const now=new Date(), woDate=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
   const order=(D.physicalBays||[]).slice(); const oIdx=b=>{const i=order.indexOf(b); return i<0?99:i;};
   const pages=[]; let woCount=0;
   sel.forEach(cr=>{
+    const isMaint=/\bdoug\b|maintenance/i.test(cr.label);
     const cjobs=jobs.map(j=>{
       const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||"",files:t.files||null})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:"",files:null}));
       const open=tl.filter(t=>cr.re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
       open.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
-      return {j, open};
-    }).filter(x=>x.open.length).sort((a,b)=>oIdx(a.j.bay)-oIdx(b.j.bay)||String(a.j.project||'').localeCompare(String(b.j.project||'')));
-    cjobs.forEach(({j,open})=>{
+      let fio=[];
+      if(isMaint){ const k=jk(j.jobNum); const tn={}; open.forEach(o=>{const m=String(o.raw||'').match(/#(\d+)/); if(m) tn[m[1]]=1;}); fio=allIss.filter(it=>k && jk(it.jobNum)===k && /tractor/i.test(it.asset||'') && !tn[String(it.num)]); }
+      return {j, open, fio};
+    }).filter(x=>x.open.length||(x.fio&&x.fio.length)).sort((a,b)=>oIdx(a.j.bay)-oIdx(b.j.bay)||String(a.j.project||'').localeCompare(String(b.j.project||'')));
+    cjobs.forEach(({j,open,fio})=>{
       woCount++;
       const rows=open.map(o=>{
         const m=String(o.raw||'').match(/#(\d+)/), num=m?m[1]:null;
@@ -10455,7 +10482,7 @@ function buildWorkOrders(sel, opts){
         const desc=[d,note].filter(Boolean).join(' — ');
         const dueS=o.due?` <span class="wdue${o.due<todayISO?' od':''}">${o.due<todayISO?'OVERDUE ':'due '}${fmt(o.due)}</span>`:'';
         return `<tr><td class="wck">☐</td><td class="wiss">${num?('#'+num):''}</td><td class="wdesc"><div class="wd1">${esc(o.disp)}${dueS}</div>${desc?`<div class="wd2">${esc(desc.slice(0,320))}</div>`:''}${imgs?`<div class="wimgs">${imgs}</div>`:''}${files?`<div class="wfiles">${files}</div>`:''}</td></tr>`;
-      }).join('');
+      }).join('') + (fio||[]).map(it=>{ const num=String(it.num); const dd=String(it.detail||'').replace(/\s+/g,' ').trim(); const _dc=(fdocs[num]||[]).filter((x,ix,ar)=>ar.findIndex(y=>y.url===x.url)===ix); const im=_dc.filter(x=>/^image\//i.test(x.mime||'')).map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener"><img class="wimg" src="${escA(x.url)}" alt="photo"></a>`).join(''); const fl=_dc.filter(x=>!/^image\//i.test(x.mime||'')).map(x=>`<a class="wfile" href="${escA(x.url)}" target="_blank" rel="noopener">\u{1F4CE} ${esc((x.n||'attachment').slice(0,50))}</a>`).join(' '); return `<tr class="wo-keep"><td class="wck">\u2610</td><td class="wiss">#${esc(num)} \ud83d\ude9c</td><td class="wdesc"><div class="wd1">${esc(it.summary||('Issue '+num))} <span class="wtr">TRACTOR</span>${it.asset?` <span class="wasset">${esc(it.asset)}</span>`:''}</div>${dd?`<div class="wd2">${esc(dd.slice(0,320))}</div>`:''}${im?`<div class="wimgs">${im}</div>`:''}${fl?`<div class="wfiles">${fl}</div>`:''}</td></tr>`; }).join('');
       const headCell=`<div class="wo-top"><img class="wo-logo" src="${MRA_LOGO}" alt="MRA"><div class="wo-ttl">MAINTENANCE WORK ORDER</div><div class="wo-crew"><div class="wl">CREW</div><div class="wv">${esc(cr.label)}</div></div></div>`
         +`<div class="wo-meta"><div><span class="k">BAY</span><span class="v">${esc(j.bay)||'&mdash;'}</span></div><div><span class="k">JOB #</span><span class="v">${esc(j.jobNum)||'&mdash;'}</span></div><div><span class="k">ASSET #</span><span class="v">${esc(j.project)||'&mdash;'}</span></div><div><span class="k">WORK ORDER DATE</span><span class="v">${woDate}</span></div><div><span class="k">EXPECTED COMPLETION</span><span class="v">${j.completionISO?fmt(j.completionISO):' '}</span></div><div><span class="k">ACTUAL COMPLETION</span><span class="v"> </span></div></div>`
         +((j.client||j.pm)?`<div class="wo-sub">${j.client?esc(j.client):''}${j.pm?((j.client?' &middot; ':'')+'PM '+esc(j.pm)):''}</div>`:'');
@@ -10466,7 +10493,7 @@ function buildWorkOrders(sel, opts){
     });
   });
   if(!woCount){ if(!opts.silent) alert('No open work found for the selected crew(s).'); return null; }
-  const css=`@page{size:letter portrait;margin:.5in .5in .72in}@page{@bottom-right{content:"Page " counter(page) " of " counter(pages);font-family:'Segoe UI',Arial;font-size:9px;color:#8a8f98}}*{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#eceef1;-webkit-print-color-adjust:exact;print-color-adjust:exact}.printbar{background:#23272e;color:#fff;padding:9px 16px;font-size:12px;display:flex;gap:14px;align-items:center}.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-weight:700;cursor:pointer}.printbar .tip{color:#aeb6c2}.wo{background:#fff;max-width:7.5in;margin:16px auto;padding:.4in .5in;box-shadow:0 2px 16px rgba(0,0,0,.15);break-after:page}.wo:last-child{break-after:auto}.wo-tbl{width:100%;border-collapse:collapse}.wo-tbl thead{display:table-header-group}.wo-tbl tfoot{display:table-footer-group}.wo-tbl tbody tr{break-inside:avoid}.wo-headcell{padding:0 0 10px;border:0;border-bottom:3px solid #e04826}.wo-top{display:flex;align-items:center;gap:16px}.wo-logo{height:48px}.wo-ttl{flex:1;font-size:21px;font-weight:900;letter-spacing:1px;color:#23272e}.wo-crew{text-align:right}.wo-crew .wl{font-size:9px;letter-spacing:1px;color:#8a8f98;font-weight:700}.wo-crew .wv{font-size:17px;font-weight:900;color:#e04826}.wo-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px 18px;margin-top:10px}.wo-meta .k{display:block;font-size:8.5px;letter-spacing:.6px;color:#8a8f98;font-weight:700}.wo-meta .v{display:block;font-size:12.5px;font-weight:700;border-bottom:1px solid #cfd3d8;padding-bottom:2px;min-height:18px}.wo-sub{font-size:11px;color:#555;margin-top:6px}.wo-collab th{background:#23272e;color:#fff;font-size:9.5px;letter-spacing:.5px;text-align:left;padding:5px 8px}.wo-tbl tbody td{border:1px solid #d7dadf;padding:7px 8px;vertical-align:top}.wo-keep td{border:0;padding:8px 0 0}.wck{width:26px;text-align:center;font-size:15px;color:#888}.wiss{width:64px;font-weight:800;color:#e04826;font-size:12px}.wdesc .wd1{font-size:12.5px;font-weight:600;line-height:1.3}.wdesc .wd2{font-size:10.5px;color:#555;margin-top:3px;line-height:1.35}.wdue{font-size:10px;font-weight:800;color:#b45309}.wdue.od{color:#b91c1c}.wimgs{margin-top:6px;display:flex;flex-wrap:wrap;gap:8px}.wimg{max-height:320px;max-width:100%;border:1px solid #ccc;border-radius:5px;margin:2px 6px 2px 0}.wfiles{margin-top:5px}.wfile{font-size:10.5px;color:#1a56db;margin-right:10px}.wo-notes{border:1px solid #cfd3d8;border-radius:6px}.wo-notes .nh{background:#f5f6f8;font-size:9px;letter-spacing:.6px;font-weight:700;color:#8a8f98;padding:5px 10px;border-bottom:1px solid #cfd3d8}.wo-notes .nlines{height:104px;background:repeating-linear-gradient(#fff,#fff 33px,#e3e6ea 33px,#e3e6ea 34px)}.wo-sign{display:flex;gap:40px;margin-top:8px}.wo-sign .sg{flex:1}.wo-sign .dt{max-width:210px}.wo-sign .ln{border-bottom:1.5px solid #23272e;height:26px}.wo-sign .lb{font-size:9px;letter-spacing:1px;color:#8a8f98;font-weight:700;margin-top:3px}.wo-foot{font-size:9px;color:#8a8f98;border-top:1px solid #d7dadf;padding:4px 8px;letter-spacing:.3px}@media print{.printbar{display:none}body{background:#fff}.wo{box-shadow:none;margin:0;max-width:none;padding:0}}`;
+  const css=`@page{size:letter portrait;margin:.5in .5in .72in}@page{@bottom-right{content:"Page " counter(page) " of " counter(pages);font-family:'Segoe UI',Arial;font-size:9px;color:#8a8f98}}*{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#eceef1;-webkit-print-color-adjust:exact;print-color-adjust:exact}.printbar{background:#23272e;color:#fff;padding:9px 16px;font-size:12px;display:flex;gap:14px;align-items:center}.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-weight:700;cursor:pointer}.printbar .tip{color:#aeb6c2}.wo{background:#fff;max-width:7.5in;margin:16px auto;padding:.4in .5in;box-shadow:0 2px 16px rgba(0,0,0,.15);break-after:page}.wo:last-child{break-after:auto}.wo-tbl{width:100%;border-collapse:collapse}.wo-tbl thead{display:table-header-group}.wo-tbl tfoot{display:table-footer-group}.wo-tbl tbody tr{break-inside:avoid}.wo-headcell{padding:0 0 10px;border:0;border-bottom:3px solid #e04826}.wo-top{display:flex;align-items:center;gap:16px}.wo-logo{height:48px}.wo-ttl{flex:1;font-size:21px;font-weight:900;letter-spacing:1px;color:#23272e}.wo-crew{text-align:right}.wo-crew .wl{font-size:9px;letter-spacing:1px;color:#8a8f98;font-weight:700}.wo-crew .wv{font-size:17px;font-weight:900;color:#e04826}.wo-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px 18px;margin-top:10px}.wo-meta .k{display:block;font-size:8.5px;letter-spacing:.6px;color:#8a8f98;font-weight:700}.wo-meta .v{display:block;font-size:12.5px;font-weight:700;border-bottom:1px solid #cfd3d8;padding-bottom:2px;min-height:18px}.wo-sub{font-size:11px;color:#555;margin-top:6px}.wo-collab th{background:#23272e;color:#fff;font-size:9.5px;letter-spacing:.5px;text-align:left;padding:5px 8px}.wo-tbl tbody td{border:1px solid #d7dadf;padding:7px 8px;vertical-align:top}.wo-keep td{border:0;padding:8px 0 0}.wck{width:26px;text-align:center;font-size:15px;color:#888}.wiss{width:64px;font-weight:800;color:#e04826;font-size:12px}.wdesc .wd1{font-size:12.5px;font-weight:600;line-height:1.3}.wdesc .wd2{font-size:10.5px;color:#555;margin-top:3px;line-height:1.35}.wdue{font-size:10px;font-weight:800;color:#b45309}.wdue.od{color:#b91c1c}.wimgs{margin-top:6px;display:flex;flex-wrap:wrap;gap:8px}.wimg{max-height:320px;max-width:100%;border:1px solid #ccc;border-radius:5px;margin:2px 6px 2px 0}.wfiles{margin-top:5px}.wfile{font-size:10.5px;color:#1a56db;margin-right:10px}.wo-notes{border:1px solid #cfd3d8;border-radius:6px}.wo-notes .nh{background:#f5f6f8;font-size:9px;letter-spacing:.6px;font-weight:700;color:#8a8f98;padding:5px 10px;border-bottom:1px solid #cfd3d8}.wo-notes .nlines{height:104px;background:repeating-linear-gradient(#fff,#fff 33px,#e3e6ea 33px,#e3e6ea 34px)}.wo-sign{display:flex;gap:40px;margin-top:8px}.wo-sign .sg{flex:1}.wo-sign .dt{max-width:210px}.wo-sign .ln{border-bottom:1.5px solid #23272e;height:26px}.wo-sign .lb{font-size:9px;letter-spacing:1px;color:#8a8f98;font-weight:700;margin-top:3px}.wo-foot{font-size:9px;color:#8a8f98;border-top:1px solid #d7dadf;padding:4px 8px;letter-spacing:.3px}.wtr{display:inline-block;font-size:8.5px;font-weight:800;background:#e04826;color:#fff;padding:1px 7px;border-radius:20px;margin-left:6px;vertical-align:middle}.wasset{font-size:10px;color:#8a8f98;font-weight:600;margin-left:6px}@media print{.printbar{display:none}body{background:#fff}.wo{box-shadow:none;margin:0;max-width:none;padding:0}}`;
   const bar=`<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span class="tip">${woCount} work order${woCount===1?'':'s'} · one per job. Letter portrait.</span></div>`;
   const auto=opts.autoPrint?`<scr`+`ipt>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},500)}</scr`+`ipt>`:'';
   return `<!doctype html><html><head><meta charset="utf-8"><title>MRA Work Orders — ${esc(sel.map(s=>s.label).join(', '))} — ${woDate}</title><style>${css}</style></head><body>${bar}${pages.join('')}${auto}</body></html>`;
@@ -12554,6 +12581,33 @@ function renderGanttFS(){
   }
 }
 
+/* ---------- ⚠ Find unassigned tasks quickly ---------- */
+let UNAS_OPEN=false;
+function unassignedTasks(){
+  const D=window.MRA_DATA||{}; const out=[];
+  (D.jobs||[]).forEach(j=>{ if(j.category==='leave') return; if((j.status||'').toLowerCase()==='shipped') return;
+    (j.tasks||[]).forEach(t=>{ if(t.done) return; if((shopWho(t)||'').trim()) return;
+      out.push({proj:j.project, jobNum:j.jobNum||'', bay:j.bay||'', raw:t.t, disp:cleanTask(t.t,false), due:t.due||''}); }); });
+  out.sort((a,b)=> String(a.due||'9999').localeCompare(String(b.due||'9999')) || String(a.proj).localeCompare(String(b.proj)) );
+  return out;
+}
+function updateUnasChip(){ const c=document.getElementById('unasChip'); if(!c) return; const n=unassignedTasks().length;
+  const nn=document.getElementById('unasN'); if(nn) nn.textContent=n; c.style.display=n?'':'none'; }
+function openUnassigned(){ if(typeof closeDrops==='function') closeDrops(); UNAS_OPEN=true; renderUnas(); const m=document.getElementById('unasModal'); if(m) m.classList.add('show'); }
+function closeUnas(e){ if(!e || e.target.id==='unasModal' || (e.target.classList&&e.target.classList.contains('modal-close'))){ UNAS_OPEN=false; const m=document.getElementById('unasModal'); if(m) m.classList.remove('show'); } }
+function renderUnas(){
+  const box=document.getElementById('unasList'); if(!box) return;
+  const list=unassignedTasks(); const today=(window.MRA_DATA&&window.MRA_DATA.todayISO)||'';
+  { const c=document.getElementById('unasCount'); if(c) c.textContent=list.length; }
+  if(!list.length){ box.innerHTML='<div style="color:var(--muted);font-style:italic;padding:18px 4px">🎉 Nothing unassigned — every open task has a crew.</div>'; return; }
+  const byJob={}, order=[];
+  list.forEach(t=>{ const k=t.proj+'|'+t.jobNum; if(!(k in byJob)){ byJob[k]=[]; order.push(k); } byJob[k].push(t); });
+  box.innerHTML=order.map(k=>{ const arr=byJob[k], j0=arr[0];
+    return `<div class="unas-job"><div class="unas-jh">${esc(j0.proj)}${j0.jobNum?` <span class="unas-jn">${esc(j0.jobNum)}</span>`:''}${j0.bay?` <span class="unas-bay">${esc(j0.bay)}</span>`:''}</div>`
+      + arr.map(t=>`<div class="unas-t">${qaChip(t.proj,t.raw)}<span class="unas-tx">${esc(t.disp)}</span>${t.due?` <span class="unas-due${(today&&t.due<today)?' od':''}">📅 ${esc(fmtMD(t.due))}</span>`:''}</div>`).join('')
+      + `</div>`;
+  }).join('');
+}
 function renderAll(){
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
@@ -12561,6 +12615,7 @@ function renderAll(){
   const _wsnap=snapWallScroll();
   renderFloor(D); renderCrewSched(D); renderProjects(D); renderFleetio(D); renderFleet();
   eotmSetup();
+  try{ updateUnasChip(); if(UNAS_OPEN) renderUnas(); }catch(_){}   // ⚠ unassigned-task finder chip + live list
   if(VIEW==='history') renderHistory();
   if(GFS) renderGanttFS();
   { const ov=document.getElementById('dtbOverlay'); if(ov&&ov.classList.contains('show') && !(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)){
