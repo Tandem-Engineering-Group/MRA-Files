@@ -1145,6 +1145,8 @@
   .yn-htools .ttool{cursor:pointer; margin-left:5px; font-size:13px; opacity:.85}
   .yn-htools .ttool:hover{opacity:1}
   .yn-card .tasklist{margin-top:6px}
+  .yn-fio{margin-top:3px; font-size:12px; font-weight:700; color:#93c5fd}
+  .mtg-fio{margin-top:2px; font-size:11.5px; font-weight:700; color:#93c5fd}
   .yn-due{color:var(--amber); font-weight:700; font-size:10.5px}
   .yn-due.od{color:#fca5a5}
   /* 🛬 Pipeline — Inbound & Holding (runway / list / lanes) */
@@ -3179,6 +3181,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"18.6", date:"2026-07-10", title:"🗓 Fleetio back→leaving dates on the cards · de-duped inbound", items:[
+    "Both the 🗓 Meeting view and 🚦 What's Next now show a clearly-labeled <b>🗓 Fleetio MRA: 6/7/26 → 7/8/26</b> line — the unit's Back-to-MRA → Leaving-MRA dates straight off the Fleetio issue.",
+    "Fixed <b>duplicate inbound cards</b> — a unit with several open Fleetio issues was showing up multiple times (e.g. “129 Thruway … J1383” ×3); it's now one card per unit, soonest arrival kept. Different units on the same tour/J# still show separately." ] },
   { rev:"18.5", date:"2026-07-09", title:"🚦 What's Next matches the board — same location + same edit controls, in sync", items:[
     "<b>Location now matches the shop board exactly.</b> A trailer in a bay shows <b>🔧 Bay 4 Front</b>; in the lot shows <b>🅿️ Parking Lot</b> — the bay is the location, GPS only confirms it (✓ GPS at MRA) or flags a mismatch underneath. (Before, a GPS yard name was wrongly overriding the bay — that's fixed.)",
     "<b>Every card is now fully actionable, same as the shop board:</b> tasks grouped by crew (who it's assigned to), each with <b>✓ close · ✎ edit · 🗑 · 👤 re-assign</b>, due dates and 🔥 hot — plus <b>✎ edit job</b> and <b>➕ add task</b> on the trailer. Turn on 🔒 Edit mode to use them, exactly like the board.",
@@ -8546,7 +8551,9 @@ function renderMeeting(){
       ? `<div class="mtg-onbl">${mj.map(j=>{ const shp=/^shipped$/i.test(String(j.status||''));
           return `<span class="mtg-onbj" onclick="event.stopPropagation();${shp?`mtgBringBack(${j.row})`:`mtgOpenJob(${j.row})`}" title="${shp?'Bring this shipped job back — the editor opens pre-set to Active · Parking Lot · today, review + Save':'Open this job&#39;s editor'} — needs your code">▸ <b>${esc(j.project||'(no name)')}</b> — ${esc(j.bay||'no bay set')}${j.status?' · '+esc(j.status):''} · ${fmtMD(j.startISO)}→${fmtMD(j.completionISO)}${j.openCount?(' · '+j.openCount+' open task'+(j.openCount===1?'':'s')):''}${shp?' <span class="mtg-bb">🔄 bring back</span>':''}</span>`; }).join('')}</div>`
       : '';
-    return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''} ${asgBtn}</div>${onbList}${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
+    const fr=_fioRange({dateISO:u.dateISO,endISO:u.endISO,dateText:u.dateText,endText:u.endText});
+    const frLine = fr ? `<div class="mtg-fio" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(fr)}</div>` : '';
+    return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''} ${asgBtn}</div>${frLine}${onbList}${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
   }).join('') : `<div class="mtg-empty">Nothing marked coming back in the next 30 days.</div>`;
   document.getElementById('mtgLot').innerHTML = M.lot.length ? M.lot.map(l=>{
     const lis=l.tasks.slice(0,10).map(t=>{ const fm=String(t.raw||'').match(/🔧\s*#(\d+)/); const fa=fm?fioArrow('issue',fm[1]):'';
@@ -8676,6 +8683,12 @@ function _ynLoc(name, jobNum){
 function _ynAgo(atISO){ if(!atISO) return ''; const t=new Date(atISO).getTime(); if(!t||isNaN(t)) return '';
   const ms=Date.now()-t; if(ms<0) return 'just now'; const h=ms/3600000;
   if(h<1) return Math.max(1,Math.round(ms/60000))+'m ago'; if(h<48) return Math.round(h)+'h ago'; return Math.round(h/24)+'d ago'; }
+function _mdyy(iso){ const d=parseISO(iso); if(!d) return ''; return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(-2); }
+// The Fleetio Back-to-MRA → Leaving-MRA range on a return record (from the issue's date fields), e.g. "6/7/26 → 7/8/26".
+function _fioRange(ret){ if(!ret) return '';
+  const a=ret.dateISO?_mdyy(ret.dateISO):(ret.dateText||'');
+  const b=ret.endISO?_mdyy(ret.endISO):(ret.endText||'');
+  if(!a&&!b) return ''; return b?(a+' → '+b):a; }
 function _ynData(D){
   const today=D.todayISO||localISO(Date.now());
   const njn=s=>String(s||'').toUpperCase().replace(/[^0-9]/g,'');
@@ -8688,7 +8701,11 @@ function _ynData(D){
       startISO:j.startISO,endISO:j.completionISO,tasks:openTasks,openCount:j.openCount||openTasks.length,
       loc:_ynLoc(j.project,j.jobNum),ret:retByJob[njn(j.jobNum)]||null,onBoard:true}); });
   const haveJob=new Set(jobs.map(j=>njn(j.jobNum)).filter(Boolean));
-  rets.forEach(r=>{ if(r.jobNum && haveJob.has(njn(r.jobNum))) return;   // inbound units not already on the board
+  // De-dupe inbound units by fleet# (a unit with several open Fleetio issues yields several return rows;
+  // rets is sorted soonest-first, so the first one per unit wins). Different units on the same tour/J# stay separate.
+  const seenU=new Set();
+  rets.forEach(r=>{ if(r.jobNum && haveJob.has(njn(r.jobNum))) return;   // already shown as a board job
+    const uk=_normKey(r.asset)||('#'+r.num); if(seenU.has(uk)) return; seenU.add(uk);
     items.push({name:r.asset||('Unit '+r.num),jobNum:r.jobNum,bay:'',status:'',row:null,
       startISO:r.dateISO,endISO:r.endISO,tasks:[],openCount:0,loc:_ynLoc(r.asset,r.jobNum),ret:r,onBoard:false}); });
   const here=[],hold=[],inbound=[];
@@ -8732,9 +8749,11 @@ function _ynCard(it,today){
     if(loc && loc.atISO) sub=`<span class="yn-seen">GPS ${esc(_ynAgo(loc.atISO))}</span>`;
   }
   const chip=`<div class="yn-locrow"><span class="yn-loc${nogps}">${where}</span>${sub}</div>`;
-  const dr=(it.startISO||it.endISO)?`${fmtMD(it.startISO)}→${fmtMD(it.endISO)}`:'';
-  let arr='';
-  if(it.ret&&it.ret.dateISO){ const dn=daysBetween(it.ret.dateISO,today); arr=` <span class="yn-arr">→ arriving ${esc(it.ret.dateText||fmtMD(it.ret.dateISO))}${it.ret.dateISO>=today?(' (in '+Math.max(0,dn)+'d)'):''}</span>`; }
+  // Job's shop-schedule dates only make sense for a board job; an inbound-only unit's dates ARE the Fleetio range (shown labeled below).
+  const dr=(it.onBoard && (it.startISO||it.endISO))?`${fmtMD(it.startISO)}→${fmtMD(it.endISO)}`:'';
+  // Labeled Fleetio Back-to-MRA → Leaving-MRA range (both screens show this), with an "arriving in Nd" when it's still to come.
+  const fr=_fioRange(it.ret);
+  const arr = fr ? `<div class="yn-fio" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(fr)}${(it.ret.dateISO&&it.ret.dateISO>=today)?` <span class="yn-arr">· arriving in ${Math.max(0,daysBetween(it.ret.dateISO,today))}d</span>`:''}</div>` : '';
   // Tasks render with the SAME controls as the shop board (✓ close · ✎ edit · 🗑 · 👤 re-assign),
   // grouped by crew (= who it's assigned to), so an edit here writes back and every screen updates.
   const tl=_ynTasksHtml(it,today);
@@ -8749,7 +8768,8 @@ function _ynCard(it,today){
     : `${esc(it.name)}${jn}`;
   return `<div class="mtg-card yn-card ${cls}"><div class="t">${title}</div>`+
     chip+
-    `<div class="m">${meta}${arr}</div>`+
+    `<div class="m">${meta}</div>`+
+    arr+
     tl+`</div>`;
 }
 // Task list for a What's Next card — identical controls + crew grouping to the bay board (reuses the
