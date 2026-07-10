@@ -1509,6 +1509,7 @@
       <button class="mi" onclick="openYardNext();closeDrops()" title="Decision view: everything around the shop grouped by where it physically is (GPS) — here / holding yard / inbound">🚦 What's Next…</button>
       <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
       <button class="mi" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
+      <button class="mi" onclick="openPrintPick();closeDrops()" title="Generate a maintenance work order per job for a crew (Sal, Doug…) — photos enlarged, signature line — ready to print">🧾 Work Orders…</button>
       <button class="mi" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter">✉ Daily Letter</button>
       <div class="mi-div">View</div>
       <button class="mi" onclick="setView('history');closeDrops()" title="Search EVERYTHING — incl. CLOSED tasks — by job #, job name, task wording or person; filter to ✓ Closed only with closed dates">🔎 Search closed / history</button>
@@ -1609,6 +1610,7 @@
             <button class="mi" onclick="openYardNext();closeDrops()" title="Decision view: everything around the shop grouped by where it physically is (GPS) — here / holding yard / inbound">🚦 What's Next…</button>
             <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
             <button class="mi" id="btnPrint" onclick="openPrintPick();closeDrops()" title="Print the whole board, or pick any mix of crews (Sal, Electricians, Wrap…) to print their open tasks">🖨 Print…</button>
+            <button class="mi" onclick="openPrintPick();closeDrops()" title="Generate a maintenance work order per job for a crew (Sal, Doug…) — photos enlarged, signature line — ready to print">🧾 Work Orders…</button>
             <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
             <div class="mi-div">View</div>
             <button class="mi" onclick="setView('history');closeDrops()" title="Search EVERYTHING — incl. CLOSED tasks — by job #, job name, task wording or person; filter to ✓ Closed only with closed dates">🔎 Search closed / history</button>
@@ -2583,17 +2585,19 @@
   <div class="modal-overlay" id="printPickModal" onclick="ppClose(event)">
     <div class="modal" style="max-width:400px">
       <button class="modal-close" onclick="ppClose()" title="Close">×</button>
-      <h3>🖨 Print</h3>
-      <div class="msub">The whole board — or tick any mix of crews for a task handout.</div>
+      <h3>🖨 Print / 🧾 Work Orders</h3>
+      <div class="msub">The whole board, a crew task sheet, or a <b>maintenance work order per job</b> — tick one or more crews below.</div>
       <div class="addform">
         <button class="btn-ghost" onclick="ppClose();printBoard()" style="text-align:left" title="The classic one-page board print — bays + open tasks">📋 Whole board (bays + open tasks)</button>
         <div style="border-top:1px solid var(--line); padding-top:9px">
-          <label style="font-size:11px;color:var(--muted)">Crew task sheets — pick one or several:</label>
+          <label style="font-size:11px;color:var(--muted)">Pick crew(s) — for a task sheet or their work orders:</label>
           <div id="ppCrews" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px"></div>
+          <div style="font-size:10.5px;color:var(--faint);margin-top:6px">🧾 <b>Work Orders</b> = one printable work order <b>per job</b> for the ticked crew(s), with the job's photos &amp; docs enlarged and a signature line (Doug with 5 jobs → 5 work orders).</div>
         </div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="ppClose()">Cancel</button>
           <button class="btn-ghost" id="ppShareBtn" onclick="ppShare()" title="Copies a personal LIVE link for the ticked crews — they can bookmark it forever: always shows their current tasks with photos (hover to zoom, click to open) and auto-refreshes every 5 minutes while open. No login needed.">🔗 Custom dash link</button>
+          <button class="btn-ghost" onclick="woPrint()" title="Generate a maintenance work order for each of the ticked crew's jobs — one per job, photos enlarged, ready to print/sign">🧾 Work Orders</button>
           <button class="btn-primary" onclick="ppPrint()">🖨 Print selected</button>
         </div>
       </div>
@@ -3038,6 +3042,8 @@ const GENERAL_HELP = `
     <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show completed</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). The picker is <b>two-level</b>: a group (MRA Design, MRA Shop, Electricians, Wrap Team, Maintenance) <b>rolls up everyone</b> ("MRA Design — all") with each member indented under it ("› Steve K") — pick the group to see all of it, or a person to drill in. Members come from the workbook's <b>Sub-Resource</b> column (Assigned To = group, Sub-Resource = person); until that's filled, the board reads them from existing "Group / Person" assignments. Name variants are still merged (e.g. <b>MasterWraps → Wrap Team</b>, <b>Electrician → Electricians</b>). <span class="k">🖨 Print</span> lays the Gantt + full task list on one <b>11×17 (tabloid) landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
   <div class="hsec"><h4>④ᶜ ✉ Daily Shop Letter</h4>
     <p>In the FLOOR <span class="k">☰ Actions</span> menu, <span class="k">✉ Daily Letter</span> writes a clean end-of-day shop update — each bay's job with its <b>open task lines</b>, a <b>Recently Completed (last 7 days)</b> list, open tasks per crew, trailers coming back to MRA in the next 14 days, projects at-risk + milestones due this week, and fleet service flags. Pick a <b>date</b>, then <b>📋 Copy text</b> to paste it into an email or <b>🖨 Print / PDF</b>. No login needed.</p></div>
+  <div class="hsec"><h4>④ᶜ² 🧾 Maintenance Work Orders</h4>
+    <p><span class="k">☰ Actions ▸ 🧾 Work Orders…</span> (or the 🖨 Print picker). Tick a crew — <b>Sal, Doug, Electricians…</b> — and it generates a <b>maintenance work order for each of that crew's jobs</b>, one per page: the classic form with <b>BAY · JOB # · ASSET #</b>, work-order / expected / actual completion dates, the crew's open tasks as numbered <b>ISSUE / DESCRIPTION</b> lines (Fleetio # shown as the issue number, due dates flagged), the job's <b>photos &amp; documents enlarged</b>, and a <b>signature / date</b> line. So Doug with 5 jobs prints 5 work orders. Tick several crews to batch. <b>🖨 Print / Save PDF</b> from the top bar. A crew's set also opens directly at <span class="k">…?wo=doug</span> — that's the link the daily 7:15 AM maintenance email uses.</p></div>
   <div class="hsec"><h4>④ᵈ 📊 Workload — open tasks</h4>
     <p>Under <b>Program Development Load</b>. Where that panel counts <i>projects</i>, this gauges <b>how much work is left</b>: comparative bars of <b>open tasks per PM</b> (left) and <b>per resource / crew</b> (right — MRA Shop, MRA Design, Wrap Team, Electricians, …), longest bar = most loaded. <b>Overdue tasks show in red</b> (with the overdue count in parentheses). It's a <i>fuzzy</i> gauge by open‑task count today; once tasks carry <b>Est. Hours</b> it can weight by real effort instead.</p>
     <p><b>Click any row</b> (including <b>Unassigned</b>) to see a <b>per-project breakdown</b> — how many open tasks that PM / crew has on each project, overdue in red. Click a project in that list to open its detailed Gantt.</p></div>
@@ -3184,6 +3190,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"18.9", date:"2026-07-10", title:"🧾 Maintenance Work Orders", items:[
+    "New <b>🧾 Work Orders</b> (☰ Actions ▸ Work Orders…, or the 🖨 Print picker): tick a crew (Sal, Doug…) and it makes a printable <b>maintenance work order for each of their jobs</b> — Doug with 5 jobs → 5 work orders. Matches the paper form: BAY · JOB # · ASSET # · work-order/expected/actual dates, the crew's tasks as numbered <b>ISSUE / DESCRIPTION</b> lines (with due dates &amp; Fleetio #s), the job's <b>photos &amp; docs enlarged</b>, and a signature line.",
+    "Tick several crews to batch them. Prints one work order per page (Letter, portrait).",
+    "A crew's work orders also open directly at <b>…/MRA_Dashboard.html?wo=doug</b> — used for a daily emailed link (see the maintenance email setup)." ] },
   { rev:"18.8", date:"2026-07-10", title:"📚 Project Library — our schedules, off Smartsheets", items:[
     "New <b>☰ Menu → 📚 Project Library</b>: every project schedule (exported out of Smartsheets) in one searchable place. Search by <b>project, client, job #, PM, or any task</b> (“flooring”, “wall install”) — matching tasks surface under the projects that have them.",
     "Each project shows its <b>stats + phases</b>; <b>Open original schedule</b> jumps to the full task-level file. Templates/samples are tagged and can be hidden.",
@@ -10402,6 +10412,81 @@ function printCrewTasks(label, re){
   const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+/* ---------- 🧾 Maintenance Work Orders ----------
+   One printable work order PER JOB for each picked crew (Doug 5 jobs → 5 work orders), matching the
+   paper form: MAINTENANCE WORK ORDER · BAY / JOB# / ASSET# / dates · numbered ISSUE/DESCRIPTION rows
+   (the crew's open tasks, Fleetio #s as ISSUE #) with the job's photos & docs ENLARGED · signature line.
+   Also driven by ?wo=<crew> so a scheduled email can link straight to a crew's work orders. */
+function buildWorkOrders(sel, opts){
+  opts=opts||{};
+  const D=window.MRA_DATA||{};
+  if(!(D.jobs&&D.jobs.length)){ if(!opts.silent) alert("The board isn't loaded yet — try again in a moment."); return null; }
+  const live=j=>j.category!=="leave" && !["shipped","on hold"].includes((j.status||"").toLowerCase()) && !bayIsHeld(j.bay);
+  const jobs=(D.jobs||[]).filter(live);
+  const KNOWN=/\bsal\b|wrap|w2 graphic|\bw2\b|electr|beyer/i;
+  const basisFor=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN.test(who))?who:(who?(who+" "+txt):txt); };
+  const fdet={}, fdocs={}; ((D.fleetio&&D.fleetio.issues)||[]).forEach(i=>{ if(i&&i.num!=null){ fdet[String(i.num)]=String(i.detail||""); fdocs[String(i.num)]=i.docs||[]; } });
+  const fmt=iso=>{ if(!iso) return ""; const p=String(iso).split("-"); return (+p[1])+"/"+(+p[2])+"/"+p[0]; };
+  const todayISO=D.todayISO||localISO(Date.now());
+  const now=new Date(), woDate=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
+  const order=(D.physicalBays||[]).slice(); const oIdx=b=>{const i=order.indexOf(b); return i<0?99:i;};
+  const pages=[]; let woCount=0;
+  sel.forEach(cr=>{
+    const cjobs=jobs.map(j=>{
+      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||"",files:t.files||null})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:"",files:null}));
+      const open=tl.filter(t=>cr.re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
+      open.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
+      return {j, open};
+    }).filter(x=>x.open.length).sort((a,b)=>oIdx(a.j.bay)-oIdx(b.j.bay)||String(a.j.project||'').localeCompare(String(b.j.project||'')));
+    cjobs.forEach(({j,open})=>{
+      woCount++;
+      const rows=open.map(o=>{
+        const m=String(o.raw||'').match(/#(\d+)/), num=m?m[1]:null;
+        const d=(num&&fdet[num])?String(fdet[num]).replace(/\s+/g,' ').trim():'';
+        const note=(o.cm&&!/^Fleetio issue #/i.test(o.cm))?String(o.cm).trim():'';
+        const _docs=[...(o.files||[]), ...((num&&fdocs[num])||[])].filter((x,ix,ar)=>ar.findIndex(y=>y.url===x.url)===ix);
+        const imgs=_docs.filter(x=>/^image\//i.test(x.mime||'')).map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener"><img class="wimg" src="${escA(x.url)}" alt="${escA(x.n||'photo')}"></a>`).join('');
+        const files=_docs.filter(x=>!/^image\//i.test(x.mime||'')).map(x=>`<a class="wfile" href="${escA(x.url)}" target="_blank" rel="noopener">\u{1F4CE} ${esc((x.n||'attachment').slice(0,50))}</a>`).join(' ');
+        const desc=[d,note].filter(Boolean).join(' — ');
+        const dueS=o.due?` <span class="wdue${o.due<todayISO?' od':''}">${o.due<todayISO?'OVERDUE ':'due '}${fmt(o.due)}</span>`:'';
+        return `<tr><td class="wck">☐</td><td class="wiss">${num?('#'+num):''}</td><td class="wdesc"><div class="wd1">${esc(o.disp)}${dueS}</div>${desc?`<div class="wd2">${esc(desc.slice(0,320))}</div>`:''}${imgs?`<div class="wimgs">${imgs}</div>`:''}${files?`<div class="wfiles">${files}</div>`:''}</td></tr>`;
+      }).join('');
+      pages.push(`<section class="wo"><div class="wo-top"><img class="wo-logo" src="${MRA_LOGO}" alt="MRA"><div class="wo-ttl">MAINTENANCE<br>WORK ORDER</div><div class="wo-crew"><div class="wl">CREW</div><div class="wv">${esc(cr.label)}</div></div></div>`
+        +`<div class="wo-meta"><div><span class="k">BAY</span><span class="v">${esc(j.bay||'—')}</span></div><div><span class="k">JOB #</span><span class="v">${esc(j.jobNum||'—')}</span></div><div><span class="k">ASSET #</span><span class="v">${esc(j.project||'—')}</span></div><div><span class="k">WORK ORDER DATE</span><span class="v">${woDate}</span></div><div><span class="k">EXPECTED COMPLETION</span><span class="v">${j.completionISO?fmt(j.completionISO):' '}</span></div><div><span class="k">ACTUAL COMPLETION</span><span class="v"> </span></div></div>`
+        +((j.client||j.pm)?`<div class="wo-sub">${j.client?esc(j.client):''}${j.pm?((j.client?' · ':'')+'PM '+esc(j.pm)):''}</div>`:'')
+        +`<table class="wo-tbl"><thead><tr><th class="wck"></th><th class="wiss">ISSUE #</th><th class="wdesc">DESCRIPTION</th></tr></thead><tbody>${rows}</tbody></table>`
+        +`<div class="wo-sign"><div class="sg"><div class="ln"></div><div class="lb">SIGNATURE</div></div><div class="sg dt"><div class="ln"></div><div class="lb">DATE</div></div></div></section>`);
+    });
+  });
+  if(!woCount){ if(!opts.silent) alert('No open work found for the selected crew(s).'); return null; }
+  const css=`@page{size:letter portrait;margin:.5in}*{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#eceef1;-webkit-print-color-adjust:exact;print-color-adjust:exact}`
+    +`.printbar{background:#23272e;color:#fff;padding:9px 16px;font-size:12px;display:flex;gap:14px;align-items:center}.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-weight:700;cursor:pointer}.printbar .tip{color:#aeb6c2}`
+    +`.wo{background:#fff;max-width:7.5in;margin:16px auto;padding:.4in .5in;box-shadow:0 2px 16px rgba(0,0,0,.15);break-after:page}.wo:last-child{break-after:auto}`
+    +`.wo-top{display:flex;align-items:center;gap:16px;border-bottom:3px solid #e04826;padding-bottom:10px}.wo-logo{height:50px}.wo-ttl{flex:1;font-size:22px;font-weight:900;letter-spacing:1px;line-height:1.05;color:#23272e}`
+    +`.wo-crew{text-align:right}.wo-crew .wl{font-size:9px;letter-spacing:1px;color:#8a8f98;font-weight:700}.wo-crew .wv{font-size:18px;font-weight:900;color:#e04826}`
+    +`.wo-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 18px;margin:12px 0 6px}.wo-meta .k{display:block;font-size:8.5px;letter-spacing:.6px;color:#8a8f98;font-weight:700}.wo-meta .v{display:block;font-size:13px;font-weight:700;border-bottom:1px solid #cfd3d8;padding-bottom:2px;min-height:19px}`
+    +`.wo-sub{font-size:11px;color:#555;margin-bottom:8px}`
+    +`.wo-tbl{width:100%;border-collapse:collapse;margin-top:6px}.wo-tbl th{background:#23272e;color:#fff;font-size:9.5px;letter-spacing:.5px;text-align:left;padding:5px 8px}.wo-tbl td{border:1px solid #d7dadf;padding:8px;vertical-align:top}`
+    +`.wck{width:26px;text-align:center;font-size:16px;color:#888}.wiss{width:66px;font-weight:800;color:#e04826;font-size:12px}`
+    +`.wdesc .wd1{font-size:13px;font-weight:600;line-height:1.3}.wdesc .wd2{font-size:10.5px;color:#555;margin-top:3px;line-height:1.35}.wdue{font-size:10px;font-weight:800;color:#b45309}.wdue.od{color:#b91c1c}`
+    +`.wimgs{margin-top:7px;display:flex;flex-wrap:wrap;gap:8px}.wimg{max-height:240px;max-width:100%;border:1px solid #ccc;border-radius:5px}.wfiles{margin-top:5px}.wfile{font-size:10.5px;color:#1a56db;margin-right:10px}`
+    +`.wo-sign{display:flex;gap:40px;margin-top:26px}.wo-sign .sg{flex:1}.wo-sign .dt{max-width:210px}.wo-sign .ln{border-bottom:1.5px solid #23272e;height:26px}.wo-sign .lb{font-size:9px;letter-spacing:1px;color:#8a8f98;font-weight:700;margin-top:3px}`
+    +`tr{break-inside:avoid}@media print{.printbar{display:none}body{background:#fff}.wo{box-shadow:none;margin:0;max-width:none;padding:0}}`;
+  const bar=`<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span class="tip">${woCount} work order${woCount===1?'':'s'} · one per job. Letter portrait.</span></div>`;
+  const auto=opts.autoPrint?`<scr`+`ipt>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},500)}</scr`+`ipt>`:'';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>MRA Work Orders — ${esc(sel.map(s=>s.label).join(', '))} — ${woDate}</title><style>${css}</style></head><body>${bar}${pages.join('')}${auto}</body></html>`;
+}
+function printWorkOrders(sel){
+  const html=buildWorkOrders(sel,{autoPrint:true});
+  if(html==null) return;
+  const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap again.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+function woPrint(){
+  const sel=[...document.querySelectorAll('#ppCrews input:checked')].map(x=>PRINT_CREWS[+x.dataset.i]);
+  if(!sel.length){ alert('Tick at least one crew for their work orders.'); return; }
+  ppClose(); printWorkOrders(sel);
+}
 // Builds the crew task-sheet page — used by the print window AND the 🔗 share-link live sheet
 // (?sheet=sal,elec,…). Photos hover-zoom (CSS) and click through full size; files open in a new tab.
 function buildCrewSheetHtml(sel, opts){
@@ -12566,6 +12651,12 @@ const _sheetSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('sh
   const want=q.split(',').map(x=>map[String(x).trim().toLowerCase()]).filter(Boolean);
   const sel=PRINT_CREWS.filter(c=>want.indexOf(c.label)>=0);
   return sel.length?sel:null; }catch(e){ return null; } })();
+// 🧾 Work-order link: MRA_Dashboard.html?wo=doug (or ?wo=sal,doug) opens that crew's work orders
+// in place — one per job, photos enlarged, print button. Used by the scheduled 7:15am email.
+const _woSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('wo'); if(!q) return null;
+  const map={sal:'Sal',wrap:'Wrap Team',wrapteam:'Wrap Team',elec:'Electricians',electricians:'Electricians',doug:'Doug',josh:'Josh',jeff:'Jeff'};
+  const want=q.split(',').map(x=>map[String(x).trim().toLowerCase()]).filter(Boolean);
+  const sel=PRINT_CREWS.filter(c=>want.indexOf(c.label)>=0); return sel.length?sel:null; }catch(e){ return null; } })();
 if(_sheetSel){
   const _sh=buildCrewSheetHtml(_sheetSel,{autoPrint:false, share:true});
   if(_sh!=null){
@@ -12575,6 +12666,11 @@ if(_sheetSel){
     document.title='MRA — Crew Task Sheet';
     try{ if(localStorage.getItem('mra_sheet_dark')==='1') document.body.classList.add('dark'); }catch(e){}
   }
+} else if(_woSel){
+  const _w=buildWorkOrders(_woSel,{autoPrint:false, silent:true});
+  const inner=(_w!=null)?_w.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'')
+    :'<head><meta charset="utf-8"><title>MRA — Work Orders</title></head><body style="font-family:Segoe UI,Arial;padding:44px;color:#555">No open work orders for <b>'+esc(_woSel.map(s=>s.label).join(', '))+'</b> right now.</body>';
+  document.documentElement.innerHTML=inner; document.title='MRA — Work Orders';
 } else {
 renderLinks();
 renderEquipment();
