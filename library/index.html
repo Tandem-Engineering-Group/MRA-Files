@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MRA Project Library</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --line:#30363d; --txt:#e6edf3;
+    --muted:#8b949e; --faint:#6e7681; --brand:#e04826; --blue:#58a6ff; --green:#3fb950; --amber:#d29922;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,Arial,sans-serif;font-size:15px}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,#0d1117 70%,rgba(13,17,23,.9));border-bottom:2px solid var(--brand);padding:14px 20px 12px}
+  .h-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  h1{font-size:20px;margin:0;font-weight:800}
+  h1 .mra{color:var(--brand)}
+  .sub{color:var(--muted);font-size:12.5px}
+  .back{margin-left:auto;font-size:13px}
+  .tools{display:flex;gap:10px;flex-wrap:wrap;margin-top:11px;align-items:center}
+  #q{flex:1;min-width:260px;padding:10px 13px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--txt);font-size:15px}
+  #q::placeholder{color:var(--faint)}
+  select,.tbtn{padding:9px 11px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;color:var(--txt);font-size:13px;cursor:pointer}
+  .tbtn.on{border-color:var(--brand);color:#fff}
+  .hint{color:var(--faint);font-size:12.5px;margin:3px 0 0}
+  main{padding:16px 20px 60px;max-width:1200px;margin:0 auto}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .card.tmpl{opacity:.85;border-style:dashed}
+  .card .pn{font-weight:800;font-size:16px;line-height:1.25}
+  .card .pn .jn{color:var(--brand);font-weight:800;font-size:.9em;margin-left:4px}
+  .card .cl{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+  .b{font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .b.pct{color:var(--green);border-color:rgba(63,185,80,.4)}
+  .b.od{color:var(--amber);border-color:rgba(210,153,34,.4)}
+  .b.tmpl{color:var(--blue);border-color:rgba(88,166,255,.4)}
+  .meta{color:var(--muted);font-size:12px;margin-top:6px;line-height:1.5}
+  .meta b{color:var(--txt);font-weight:600}
+  .actions{display:flex;gap:12px;margin-top:9px;align-items:center;flex-wrap:wrap}
+  .actions .lnk{font-size:12.5px;font-weight:600}
+  .toggle{font-size:12.5px;color:var(--blue);cursor:pointer;user-select:none;font-weight:600}
+  .tasks{margin-top:10px;border-top:1px solid var(--line);padding-top:8px;display:none}
+  .tasks.open{display:block}
+  .ph{font-weight:700;font-size:12.5px;color:var(--amber);margin:7px 0 2px}
+  .ph:first-child{margin-top:0}
+  .tk{font-size:12.5px;line-height:1.5;padding-left:14px;position:relative;color:var(--txt)}
+  .tk .ty{color:var(--faint);font-size:11px}
+  .tk.match{background:rgba(224,72,38,.14);border-radius:4px}
+  mark{background:rgba(224,72,38,.35);color:var(--txt);border-radius:2px;padding:0 1px}
+  .mcount{color:var(--brand);font-weight:700}
+  .empty{color:var(--muted);font-style:italic;padding:30px 4px}
+  .foot{color:var(--faint);font-size:11.5px;margin-top:26px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="h-row">
+    <h1><span class="mra">MRA</span> Project Library</h1>
+    <span class="sub" id="stamp"></span>
+    <a class="back" href="../MRA_Dashboard.html">← Back to dashboard</a>
+  </div>
+  <div class="tools">
+    <input id="q" type="search" placeholder="Search projects, clients, J#, PM, or any task…  (try: wall install, J1412, Medtronic, flooring)" autocomplete="off">
+    <select id="client"><option value="">All clients</option></select>
+    <button class="tbtn" id="tmplBtn">Hide templates/samples</button>
+  </div>
+  <div class="hint" id="hint">Type to search across every project and task. Click a project to expand its full phase/task breakdown, or open the original schedule.</div>
+</header>
+<main>
+  <div class="cards" id="cards"></div>
+  <div class="foot">Exported from Smartsheet · read-only snapshot · open a project's original schedule for full task-level dates &amp; owners.</div>
+</main>
+<script>
+/*__LIBRARY_DATA__*/
+var DATA = (window.MRA_LIBRARY||[]);
+var HIDE_TMPL=false;
+var $=function(id){return document.getElementById(id)};
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function hl(s,toks){ s=esc(s); toks.forEach(function(t){ if(!t)return; try{ s=s.replace(new RegExp('('+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),'<mark>$1</mark>'); }catch(e){} }); return s; }
+function norm(s){return String(s||'').toLowerCase()}
+
+// build client dropdown
+(function(){
+  var cs={}; DATA.forEach(function(p){ if(p.client) cs[p.client]=1; });
+  var sel=$('client'); Object.keys(cs).sort().forEach(function(c){ var o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+  $('stamp').textContent = DATA.length+' projects · '+DATA.reduce(function(a,p){return a+(p.tasks?p.tasks.length:0)},0)+' tasks';
+})();
+
+function projPct(p){ var v=(p.pctTasks||'').toString().replace('%',''); return v?(' · '+v+'% complete'):''; }
+
+function render(){
+  var q=norm($('q').value).trim();
+  var toks=q?q.split(/\s+/).filter(Boolean):[];
+  var clientF=$('client').value;
+  var box=$('cards'); var html=''; var shown=0;
+  DATA.forEach(function(p){
+    if(HIDE_TMPL && p.kind==='template') return;
+    if(clientF && p.client!==clientF) return;
+    var hay=[p.project,p.client,p.jobNum,p.pm,p.folder].filter(Boolean).join(' ').toLowerCase();
+    var tasks=p.tasks||[];
+    var matchTasks=[];
+    var projHit = !toks.length || toks.every(function(t){ return hay.indexOf(t)>=0; });
+    if(toks.length){
+      matchTasks = tasks.filter(function(tk){ var th=norm((tk.t||'')+' '+(tk.phase||'')+' '+(tk.type||'')); return toks.every(function(t){return th.indexOf(t)>=0}); });
+    }
+    if(toks.length && !projHit && !matchTasks.length) return;   // no match anywhere
+    shown++;
+    var jn = p.jobNum?(' <span class="jn">'+esc(p.jobNum)+'</span>'):'';
+    var badges='';
+    if(p.kind==='template') badges+='<span class="b tmpl">TEMPLATE</span>';
+    if(p.pctTasks) badges+='<span class="b pct">'+esc(p.pctTasks)+' done</span>';
+    if(p.pctOverdue && p.pctOverdue!=='0%') badges+='<span class="b od">'+esc(p.pctOverdue)+' overdue</span>';
+    if(tasks.length) badges+='<span class="b">'+tasks.length+' tasks</span>';
+    var metaBits=[];
+    if(p.pm) metaBits.push('PM <b>'+esc(p.pm)+'</b>');
+    if(p.start||p.end) metaBits.push(esc(p.start||'?')+' → '+esc(p.end||'?'));
+    if(p.duration) metaBits.push(esc(p.duration));
+    // tasks grouped by phase
+    var byPhase={}, order=[];
+    tasks.forEach(function(tk){ var ph=tk.phase||'(top level)'; if(!(ph in byPhase)){byPhase[ph]=[];order.push(ph);} byPhase[ph].push(tk); });
+    var tHtml=order.map(function(ph){
+      var rows=byPhase[ph].map(function(tk){
+        var isM = matchTasks.indexOf(tk)>=0;
+        return '<div class="tk'+(isM?' match':'')+'">'+hl(tk.t,toks)+(tk.type?' <span class="ty">· '+esc(tk.type)+'</span>':'')+'</div>';
+      }).join('');
+      return '<div class="ph">'+hl(ph,toks)+'</div>'+rows;
+    }).join('');
+    var open = (toks.length && matchTasks.length) ? ' open' : '';
+    var mc = (toks.length && matchTasks.length) ? ' <span class="mcount">'+matchTasks.length+' matching task'+(matchTasks.length===1?'':'s')+'</span>' : '';
+    html += '<div class="card'+(p.kind==='template'?' tmpl':'')+'">'+
+      '<div class="pn">'+hl(p.project,toks)+jn+'</div>'+
+      (p.client?'<div class="cl">'+hl(p.client,toks)+(p.folder&&p.folder!==p.client?(' · '+esc(p.folder)):'')+'</div>':'')+
+      '<div class="badges">'+badges+'</div>'+
+      (metaBits.length?'<div class="meta">'+metaBits.join(' · ')+'</div>':'')+
+      '<div class="actions">'+
+        (tasks.length?'<span class="toggle" onclick="var t=this.parentNode.parentNode.querySelector(\'.tasks\');t.classList.toggle(\'open\');this.textContent=t.classList.contains(\'open\')?\'▾ Hide tasks\':\'▸ Show '+tasks.length+' tasks\';">'+(open?'▾ Hide tasks':'▸ Show '+tasks.length+' tasks')+'</span>':'')+
+        (p.webUrl?'<a class="lnk" href="'+esc(p.webUrl)+'" target="_blank" rel="noopener">⬇ Open original</a>':'')+
+        mc+
+      '</div>'+
+      '<div class="tasks'+open+'">'+tHtml+'</div>'+
+    '</div>';
+  });
+  box.innerHTML = shown?html:'<div class="empty">No projects or tasks match “'+esc($('q').value)+'”.</div>';
+  $('hint').style.display = toks.length?'none':'';
+}
+$('q').addEventListener('input',render);
+$('client').addEventListener('change',render);
+$('tmplBtn').addEventListener('click',function(){ HIDE_TMPL=!HIDE_TMPL; this.classList.toggle('on',HIDE_TMPL); this.textContent=HIDE_TMPL?'Show templates/samples':'Hide templates/samples'; render(); });
+render();
+</script>
+</body>
+</html>
