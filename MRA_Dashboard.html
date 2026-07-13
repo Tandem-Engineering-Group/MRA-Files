@@ -3313,6 +3313,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"20.0", date:"2026-07-13", title:"🏭 Meeting: Report-out print now mirrors the on-screen view", items:[
+    "The 🖨 Report-out print is now a true picture of what you see on the dashboard — the owner summary tiles, the stacked status bar, the 📊 PM Project Load chart and the colour-coded PM rows (health dots + one-liners + the full past-due detail), laid out in two columns to fit a page — then the full Program Gantt on the next page. No more plain text list." ] },
   { rev:"19.9", date:"2026-07-13", title:"🏭 Meeting: past-due lists fully expandable", items:[
     "The behind/late detail no longer stops at 5 tasks — the “+ show N more…” link now expands the full past-due list right in place (and collapses again), so you can see every overdue item without leaving the meeting." ] },
   { rev:"19.8", date:"2026-07-13", title:"🏭 Meeting: tab-aware print + full Gantt on paper", items:[
@@ -9240,49 +9242,68 @@ function printProdMeeting(){
   const items=_pmtProjects();
   const reds=items.filter(x=>x.h.state==='late'||x.h.state==='behind');
   const greens=items.filter(x=>x.h.state==='ontrack');
+  const now=new Date(), stamp=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
   const HC={late:'#c81e1e',behind:'#b45309',ontrack:'#15803d',upcoming:'#1d4ed8',parked:'#475569'};
   const dot=st=>'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(HC[st]||'#666')+';margin-right:5px;vertical-align:middle"></span>';
-  const projLine=x=>{ const p=x.p,h=x.h; const tgt=p.finishISO?fmtMDY(p.finishISO):'TBD';
-    const b=(h.state==='late'||h.state==='behind')?_pmtBehindBits(p,today):null;
-    return '<li>'+dot(h.state)+'<b>'+esc(p.name)+'</b> — '+PMT_LAB[h.state]+', target '+tgt+(p.pct!=null?(', '+p.pct+'%'):'')+((b&&b.odN)?(' · <span style="color:#c81e1e;font-weight:700">'+b.odN+' past-due</span>'):'')+'</li>'; };
-  const now=new Date(), stamp=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
-  let title, sub, sections, land=false;
-  if(PMT_STAGE===2){
-    const parked=items.filter(x=>PMT_PARK.has(x.p.name)).sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]);
-    title='Discuss &amp; Align'; sub=parked.length+' item'+(parked.length===1?'':'s')+' flagged for discussion';
-    sections=parked.length?('<ul class="pl">'+parked.map(projLine).join('')+'</ul>'):'<i>Nothing flagged for discussion.</i>';
-  } else if(PMT_STAGE===3){
-    const gj=(D.jobs||[]).find(j=>j.row==='general'||j.project===GENERAL_PROJ);
-    const acts=((gj&&gj.tasks)||[]).filter(t=>!t.done && String(t.t||'').indexOf(PMT_TAG)===0);
-    title='Team &amp; Action Items'; sub=acts.length+' open action item'+(acts.length===1?'':'s');
-    sections=acts.length?('<ol>'+acts.map(t=>'<li>'+esc(String(t.t).slice(PMT_TAG.length).trim())+(t.who?(' — <b>'+esc(t.who)+'</b>'):' — <i>unowned</i>')+(t.due?(' (due '+fmtMDY(t.due)+')'):'')+'</li>').join('')+'</ol>'):'<i>No open action items.</i>';
-  } else {
-    land=true;
-    title='Production Status — Report-out'; sub=items.length+' active · '+greens.length+' green · '+reds.length+' yellow/red';
-    const byPM={}, order=[];
-    items.forEach(x=>{ const pm=(x.p.pm||'— no PM —'); if(!(pm in byPM)){byPM[pm]=[];order.push(pm);} byPM[pm].push(x); });
-    order.sort((a,b)=>a.localeCompare(b));
-    const rep=order.map(pm=>{ const arr=byPM[pm].slice().sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]||String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
-      const g=arr.filter(x=>x.h.state==='ontrack').length;
-      return '<div class="pm"><div class="pmh">'+esc(pm)+' <span>'+arr.length+' project'+(arr.length===1?'':'s')+' · '+g+' green</span></div><ul class="pl">'+arr.map(projLine).join('')+'</ul></div>'; }).join('');
-    sections='<div class="cols">'+rep+'</div>'
-      +'<div class="ganttpage"><h2>📊 Program Gantt</h2>'+_pmtGanttSVG(items,today)+'</div>';
+  // ---- Stages 2 & 3: simple list prints ----
+  if(PMT_STAGE===2 || PMT_STAGE===3){
+    const projLine=x=>{ const p=x.p,h=x.h; const tgt=p.finishISO?fmtMDY(p.finishISO):'TBD';
+      const b=(h.state==='late'||h.state==='behind')?_pmtBehindBits(p,today):null;
+      return '<li>'+dot(h.state)+'<b>'+esc(p.name)+'</b> — '+PMT_LAB[h.state]+', target '+tgt+(p.pct!=null?(', '+p.pct+'%'):'')+((b&&b.odN)?(' · <span style="color:#c81e1e;font-weight:700">'+b.odN+' past-due</span>'):'')+'</li>'; };
+    let title, sub, sections;
+    if(PMT_STAGE===2){
+      const parked=items.filter(x=>PMT_PARK.has(x.p.name)).sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]);
+      title='Discuss &amp; Align'; sub=parked.length+' item'+(parked.length===1?'':'s')+' flagged for discussion';
+      sections=parked.length?('<ul class="pl">'+parked.map(projLine).join('')+'</ul>'):'<i>Nothing flagged for discussion.</i>';
+    } else {
+      const gj=(D.jobs||[]).find(j=>j.row==='general'||j.project===GENERAL_PROJ);
+      const acts=((gj&&gj.tasks)||[]).filter(t=>!t.done && String(t.t||'').indexOf(PMT_TAG)===0);
+      title='Team &amp; Action Items'; sub=acts.length+' open action item'+(acts.length===1?'':'s');
+      sections=acts.length?('<ol>'+acts.map(t=>'<li>'+esc(String(t.t).slice(PMT_TAG.length).trim())+(t.who?(' — <b>'+esc(t.who)+'</b>'):' — <i>unowned</i>')+(t.due?(' (due '+fmtMDY(t.due)+')'):'')+'</li>').join('')+'</ol>'):'<i>No open action items.</i>';
+    }
+    const css='@page{size:letter portrait;margin:.4in}'
+      +"body{font-family:'Segoe UI',Arial,sans-serif;color:#111;font-size:11px;line-height:1.34}"
+      +'h1{font-size:17px;margin:0}h1 .mra{color:#e04826}.sub{color:#555;margin:2px 0 10px;font-size:11px}'
+      +'ul.pl{margin:2px 0;padding:0;list-style:none}ol{margin:4px 0 4px 22px}li{margin-bottom:3px}'
+      +'.printbar{background:#23272e;color:#fff;padding:8px 14px;margin:-8px -8px 12px;font-size:12px}.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-weight:700;cursor:pointer}@media print{.printbar{display:none}}';
+    const fitJS='<scr'+'ipt>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},600)};</scr'+'ipt>';
+    const html='<!doctype html><html><head><meta charset="utf-8"><title>MRA '+title.replace(/&amp;/g,'&')+' — '+stamp+'</title><style>'+css+'</style></head><body><div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button></div><h1><span class="mra">MRA</span> '+title+'</h1><div class="sub">'+stamp+' · '+sub+'</div>'+sections+fitJS+'</body></html>';
+    const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
+    w.document.open(); w.document.write(html); w.document.close(); return;
   }
-  const css='@page{size:letter '+(land?'landscape':'portrait')+';margin:.4in}'
-    +"body{font-family:'Segoe UI',Arial,sans-serif;color:#111;font-size:10.5px;line-height:1.34}"
-    +'h1{font-size:17px;margin:0}h1 .mra{color:#e04826}.sub{color:#555;margin:2px 0 10px;font-size:11px}'
-    +'.cols{column-count:'+(land?2:1)+';column-gap:26px}.pm{margin-bottom:9px;break-inside:avoid}'
-    +'.pmh{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1.5px solid #e04826;padding-bottom:2px;margin-bottom:3px}'
-    +'.pmh span{float:right;font-weight:600;color:#777;text-transform:none;letter-spacing:0}'
-    +'ul.pl{margin:2px 0;padding:0;list-style:none}ol{margin:4px 0 4px 22px}li{margin-bottom:2px}'
-    +'.ganttpage{break-before:page;margin-top:6px}h2{font-size:13px;border-bottom:2px solid #e04826;padding-bottom:3px;margin:0 0 8px}'
-    +'.printbar{background:#23272e;color:#fff;padding:8px 14px;margin:-8px -8px 12px;font-size:12px}.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-weight:700;cursor:pointer}@media print{.printbar{display:none}}';
-  const fitJS='<scr'+'ipt>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},650)};</scr'+'ipt>';
-  const html='<!doctype html><html><head><meta charset="utf-8"><title>MRA '+title.replace(/&amp;/g,'&')+' — '+stamp+'</title><style>'+css+'</style></head><body><div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button></div><h1><span class="mra">MRA</span> '+title+'</h1><div class="sub">'+stamp+' · '+sub+'</div>'+sections+fitJS+'</body></html>';
+  // ---- Stage 1: WYSIWYG — snapshot the live report-out, print with the dashboard's own CSS ----
+  const src=document.getElementById('pmtBody');
+  const tmp=document.createElement('div'); tmp.innerHTML=src?src.innerHTML:'';
+  tmp.querySelectorAll('.pmt-gpanel,.pmt-hint,.pmt-gsort,.pmt-park').forEach(n=>n.remove());
+  tmp.querySelectorAll('.pmt-odmore').forEach(n=>{ n.style.display='block'; });
+  tmp.querySelectorAll('.pmt-odtog').forEach(n=>n.remove());
+  const band=tmp.querySelector('.pmt-band'); const bandH=band?band.outerHTML:'';
+  const cols=document.createElement('div'); cols.className='pp-cols';
+  tmp.querySelectorAll('.pmt-pm').forEach(n=>cols.appendChild(n));
+  const styles=Array.prototype.map.call(document.querySelectorAll('style'),n=>n.textContent).join('\n');
+  const over='@page{size:letter landscape;margin:.35in}'
+    +'html,body{background:#fff!important;margin:0;padding:12px}'
+    +'.printbar{background:#23272e;color:#fff;padding:8px 14px;margin:-12px -12px 12px;font-size:12px}'
+    +'.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:7px 16px;font-weight:700;cursor:pointer}'
+    +'.pp-h1{font-size:18px;margin:0;color:#1b2531}.pp-sub{color:#586a7e;font-size:11px;margin:2px 0 10px}'
+    +'.pp-h2{font-size:13px;border-bottom:2px solid #e04826;padding-bottom:3px;margin:0 0 8px;color:#1b2531}'
+    +'.pp-cols{column-count:2;column-gap:22px;margin-top:10px}'
+    +'.pp-cols .pmt-pm{break-inside:avoid;margin-bottom:9px}'
+    +'.pmt-band{break-inside:avoid;margin-bottom:6px}'
+    +'.pmt-row{cursor:default!important}.pmt-det{display:block!important}'
+    +'.pp-gantt{break-before:page;margin-top:10px}'
+    +'@media print{.printbar{display:none}}';
+  const fitJS='<scr'+'ipt>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},700)};</scr'+'ipt>';
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Production Status — '+stamp+'</title><style>'+styles+'</style><style>'+over+'</style></head><body class="light">'
+    +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button></div>'
+    +'<h1 class="pp-h1"><span style="color:#e04826">MRA</span> Production Status — Report-out</h1>'
+    +'<div class="pp-sub">'+stamp+' · '+items.length+' active · '+greens.length+' green · '+reds.length+' yellow/red</div>'
+    +bandH+cols.outerHTML
+    +'<div class="pp-gantt"><h2 class="pp-h2">\u{1F4CA} Program Gantt — every active project</h2>'+_pmtGanttSVG(items,today)+'</div>'
+    +fitJS+'</body></html>';
   const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
-
 // 🔔 FLOOR return alarm — units marked in Fleetio as coming back within 14 days (amber, pulsing)
 // or already here inside their date window (green). Hidden entirely when nothing qualifies.
 function renderReturnAlarm(D){
