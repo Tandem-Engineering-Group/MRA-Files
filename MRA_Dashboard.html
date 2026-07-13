@@ -864,6 +864,10 @@
   .g-fill{position:absolute; left:0; top:0; bottom:0; opacity:.85}
   .g-hl{position:absolute; top:1px; bottom:1px; border-radius:4px; pointer-events:none; z-index:4}
   .g-hl.hl-white{background:rgba(255,255,255,.12); border:2px solid rgba(255,255,255,.9)}
+  .g-away{position:absolute; top:1px; bottom:1px; pointer-events:auto; z-index:5; border-radius:4px;
+    background:repeating-linear-gradient(45deg, rgba(11,14,19,.55) 0 5px, rgba(11,14,19,.15) 5px 10px)}
+  body.light .g-away{background:repeating-linear-gradient(45deg, rgba(255,255,255,.62) 0 5px, rgba(255,255,255,.25) 5px 10px)}
+  .atMraBtn.on{border-color:#e04826; color:#ffb4a0}
   .pill.fleet{background:rgba(56,189,248,.16); color:#7dd3fc; border-color:rgba(56,189,248,.45)}
   .taskline.fleet{color:#bae6fd}
   .fladd{display:inline-block; cursor:pointer; color:#7dd3fc; font-weight:700; font-size:10px; line-height:1;
@@ -1974,6 +1978,7 @@
             <span class="vmlabel">🎌 Holidays</span>
             <span class="rangebtns" id="projHolPick" title="Which holidays to shade on the Gantt"></span>
             <button class="expandbtn mraHlBtn" onclick="toggleMraHl()" title="Highlight where MRA Shop is assigned across all projects — spot over-scheduling. Click to toggle.">🟧 MRA Shop load</button>
+            <button class="expandbtn atMraBtn" onclick="toggleAtMra()" title="Hatch the stretches of each project bar where the unit is NOT being worked in our building (no MRA Shop tasks scheduled — at a partner, on tour, traveling). Makes 'can we fit it?' honest: the busy-looking timeline thins to what's actually in the shop.">🏭 At-MRA shading</button>
             <button id="nonoffToggle" class="expandbtn" onclick="toggleNonOff()" title="Hide / show 🏷 non-official projects (informal work) across this tab — Gantt, Progress, loads and KPIs">🏷 Hide non-official</button>
             <button id="parkToggle" class="expandbtn" onclick="togglePark()" title="Hide / show ⏸ parked (frozen / on-hold) projects across this tab — Gantt, Progress, loads and KPIs">⏸ Hide parked</button>
             <button id="archToggle" class="expandbtn" onclick="toggleArchived()" title="Wrapped projects (shipped, or 100% done, more than 8 days ago) auto-archive off the active board. Click to show/hide them — they're always in 🔍 search too.">🗄 Show archived</button>
@@ -3382,6 +3387,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"20.9", date:"2026-07-13", title:"⚠ Unassigned finder: ghost jobs no longer counted", items:[
+    "The unassigned-task finder was flagging tasks on <b>ghost jobs</b> — leftover task rows whose floor job was deleted/finished long ago (e.g. QuidelOrtho – Decommission, which only existed as a hidden orphan holder). Jobs that aren\u2019t actually on the board are now skipped, so the ⚠ count only shows work someone can really pick up." ] },
   { rev:"20.8", date:"2026-07-13", title:"🧩 Sub-job: full instructions on hover", items:[
     "Hover the 🧩 sub-job pill on a card (or the 🧩 checkbox on ➕ Add / ✎ edit) and the tooltip now spells out the whole deal — what a sub-job is, that Fleetio follows only the MAIN job, and how to set or clear it." ] },
   { rev:"20.7", date:"2026-07-13", title:"🧩 Sub-jobs: same J#, Fleetio follows only the MAIN job", items:[
@@ -8072,6 +8079,27 @@ function mraShopSegs(p){
     if(last && x.s<=last.e+2*DAY){ last.e=Math.max(last.e,x.e); } else merged.push({s:x.s,e:x.e}); });
   return merged.map(m=>({startISO:localISO(m.s), endISO:localISO(m.e)}));
 }
+/* 🏭 AT-MRA vs AWAY (Al's meeting ask): shade the parts of a project bar where the unit is NOT
+   being worked in our building — i.e. the gaps in MRA-Shop task coverage (at a partner, on tour,
+   traveling). Coverage counts done AND open MRA-Shop tasks; gaps under ~6 days aren't shaded. */
+let ATMRA_SHADE=false; try{ ATMRA_SHADE=(localStorage.getItem('mra_atmra')==='1'); }catch(e){}
+function projAwaySegs(p){
+  if(!ATMRA_SHADE || !p || !p.startISO || !p.finishISO) return [];
+  const S=parseISO(p.startISO), F=parseISO(p.finishISO); if(!S||!F) return [];
+  const raw=((p.tasks)||[]).filter(t=>isHlAssignee(t.who) && (t.startISO||t.finISO))
+    .map(t=>{const a=parseISO(t.startISO||t.finISO), b=parseISO(t.finISO||t.startISO); return a&&b?{s:a.getTime(),e:b.getTime()}:null;})
+    .filter(Boolean).sort((a,b)=>a.s-b.s);
+  if(!raw.length) return [];   // no MRA-shop tasks at all → can't tell, don't shade
+  const merged=[]; raw.forEach(x=>{ const last=merged[merged.length-1];
+    if(last && x.s<=last.e+2*DAY){ last.e=Math.max(last.e,x.e); } else merged.push({s:x.s,e:x.e}); });
+  const out=[]; let cur=S.getTime(); const MIN=6*DAY;
+  merged.forEach(m=>{ if(m.s-cur>=MIN) out.push({startISO:localISO(cur), endISO:localISO(m.s)}); cur=Math.max(cur,m.e); });
+  if(F.getTime()-cur>=MIN) out.push({startISO:localISO(cur), endISO:localISO(F.getTime())});
+  return out;
+}
+function toggleAtMra(){ ATMRA_SHADE=!ATMRA_SHADE; try{localStorage.setItem('mra_atmra',ATMRA_SHADE?'1':'0');}catch(e){}
+  document.querySelectorAll('.atMraBtn').forEach(b=>{ b.classList.toggle('on',ATMRA_SHADE); b.textContent=ATMRA_SHADE?'🏭 At-MRA shading: ON':'🏭 At-MRA shading'; });
+  if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(typeof GFS!=='undefined'&&GFS) renderGanttFS(); } }
 function syncMraHlBtns(){ document.querySelectorAll('.mraHlBtn').forEach(b=>{ b.classList.toggle('on',MRASHOP_HL);
     if(b.tagName==='BUTTON') b.textContent=MRASHOP_HL?'🟧 MRA Shop: ON':'🟧 MRA Shop load'; }); }
 function toggleMraHl(){ MRASHOP_HL=!MRASHOP_HL; try{localStorage.setItem('mra_hl_mrashop',MRASHOP_HL?'1':'0');}catch(e){}
@@ -8227,9 +8255,11 @@ function renderGantt(el, rows, win, opts){ opts=opts||{};
     const gutAttr = r.gutterClick ? ` onclick="${r.gutterClick}" style="cursor:pointer" title="Click to edit this task"` : '';
     const hl=(MRASHOP_HL&&r.hlSegs&&r.hlSegs.length)?r.hlSegs.map(s=>{const gg=barGeom(s.startISO,s.endISO,win);
       return gg?`<div class="g-hl hl-${MRA_HL_STYLE}" style="left:${gg.left}%;width:${gg.width}%" title="MRA Shop assigned"></div>`:'';}).join(''):'';
+    const aw=(r.awaySegs&&r.awaySegs.length)?r.awaySegs.map(s=>{const gg=barGeom(s.startISO,s.endISO,win);
+      return gg?`<div class="g-away" style="left:${gg.left}%;width:${gg.width}%" title="Away / not in our building ${fmtMD(s.startISO)} → ${fmtMD(s.endISO)} — no MRA Shop work scheduled (at a partner, on tour, or traveling)"></div>`:'';}).join(''):'';
     html+=`<div class="g-row${r.cls?' '+r.cls:''}${r.gutterClick?' g-rowedit':''}"${r.rowAttr?' '+r.rowAttr:''}${rowClick}><div class="g-gutter"${gutAttr}><div class="g-lbl">${r.caret||''}${esc(r.label)}</div>`
       +`<div class="g-sub">${esc(r.sub||'')}</div>${r.bay?`<div class="g-bay" title="Currently in ${escA(r.bay)} on the shop floor">${esc(r.bay)}</div>`:''}</div>`
-      +`<div class="g-track">${grid}${bar}${hl}${ms}</div></div>`;
+      +`<div class="g-track">${grid}${bar}${aw}${hl}${ms}</div></div>`;
   });
   el.innerHTML=html;
 }
@@ -10084,7 +10114,7 @@ function renderProjects(D){
       rows.push({
         label:(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+projLabel(p.name), sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
-        barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
+        barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), awaySegs:projAwaySegs(p), bay:projectBay(p.name),
         cls:'clickable'+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''), caret: hasTasks?`<span class="gcaret">${expanded?'▾':'▸'}</span>`:'',
         gutterClick: hasTasks?`toggleGanttExp('${escJsAttr(p.name)}')`:`openProjectEditor('${escJsAttr(p.name)}')`,
         barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`
@@ -10112,7 +10142,7 @@ function renderProjects(D){
     dated.forEach(p=>{ if(!barGeom(p.startISO,p.finishISO,win)) return;
       rows.push({ label:(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+projLabel(p.name), sub:(p.pm||"—")+" · "+p.taskCount+" tasks",
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct,
-        barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name),
+        barLabel:"", milestones:p.milestones, hlSegs:mraShopSegs(p), awaySegs:projAwaySegs(p), bay:projectBay(p.name),
         cls:'clickable'+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''), onclick:`openProjectEditor('${escJsAttr(p.name)}')`,
         barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }); });
   }
@@ -13449,7 +13479,7 @@ function renderGanttFS(){
       rows.push({label:(canExp?(exp?'▾ ':'▸ '):'   ')+(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+projLabel(p.name),
         sub:(p.pm||'—')+' · '+p.taskCount+' tasks'+(hasMs?' · '+p.milestones.length+' gates':''),
         startISO:p.startISO, endISO:p.finishISO, color:p._color, pct:p.pct, barLabel:'',
-        milestones:p.milestones, hlSegs:mraShopSegs(p), bay:projectBay(p.name), done, popKey:key,
+        milestones:p.milestones, hlSegs:mraShopSegs(p), awaySegs:projAwaySegs(p), bay:projectBay(p.name), done, popKey:key,
         barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')`,
         cls:(canExp?'clickable':'')+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''), onclick:canExp?`toggleGfsProject('${key}')`:''});
       if(exp && GANTT_TASKLEVEL && hasTasks){
@@ -13485,6 +13515,7 @@ let UNAS_OPEN=false;
 function unassignedTasks(){
   const D=window.MRA_DATA||{}; const out=[];
   (D.jobs||[]).forEach(j=>{ if(j.category==='leave') return; if((j.status||'').toLowerCase()==='shipped') return;
+    if(String(j.row||'').indexOf('orphan:')===0 || j.category==='pipeline') return;   // ghost/orphan holders (old tasks whose floor job is gone) aren't on the board — don't flag them
     (j.tasks||[]).forEach(t=>{ if(t.done) return; if(isSalesT(t)) return; if((shopWho(t)||'').trim()) return;
       out.push({proj:j.project, jobNum:j.jobNum||'', bay:j.bay||'', raw:t.t, disp:cleanTask(t.t,false), due:t.due||''}); }); });
   out.sort((a,b)=> String(a.due||'9999').localeCompare(String(b.due||'9999')) || String(a.proj).localeCompare(String(b.proj)) );
