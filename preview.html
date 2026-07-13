@@ -3412,6 +3412,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"21.4", date:"2026-07-13", title:"🐛 FIX: PM report showed completed project tasks as overdue", items:[
+    "The PM report was reading the wrong status field on project tasks, so <b>completed items (Washtenaw\u2019s Furniture stage etc.) showed as overdue</b> and the Done section missed completed project work. Fixed — Done now includes completed project tasks, Coming-due only shows genuinely open ones, and shipped jobs no longer feed the due/unassigned counts (matching the floor\u2019s ⚠ finder)." ] },
   { rev:"21.3", date:"2026-07-13", title:"📧 PM report: proper picker", items:[
     "The PM report now opens a clean picker — choose the <b>PM</b> from a dropdown and the <b>window</b> (24h / 7 / 14 / 30 days), then <b>📄 Open report</b> or <b>🔗 Copy link</b> (grabs the always-live URL to paste into an email). No more browser prompt box." ] },
   { rev:"21.2", date:"2026-07-13", title:"🧹 Housekeeping: ☰ Actions menu organized", items:[
@@ -11596,21 +11598,25 @@ function buildPMReportHtml(pmQ, days){
   // DONE: shop tasks closed in window + project tasks completed with finish in window
   const done=[];
   jobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut&&!isSalesT(t)) done.push({src:j.project, txt:cleanTask(t.t,false), who:t.who||'', d:t.cl, is24:t.cl>cut24, files:t.files||null}); }));
-  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const st=String(t.status||''); const fin=t.finISO||t.finishISO||'';
-    if(/complete/i.test(st) && fin && fin>cut && fin<=todayISO) done.push({src:p.name, txt:t.t||t.task||'', who:t.who||'', d:fin, is24:fin>cut24, files:null}); }));
+  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const st=String(t.st||t.status||''); const fin=t.finISO||t.finishISO||'';
+    const isDone=(t.done===true)||/complete/i.test(st);
+    if(isDone && fin && fin>cut && fin<=todayISO) done.push({src:p.name, txt:t.t||t.task||'', who:t.who||'', d:fin, is24:fin>cut24, files:null}); }));
   done.sort((a,b)=>String(b.d).localeCompare(String(a.d)));
   // DUE: open items due/finishing within 14d (or overdue)
   const due=[];
-  jobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done&&t.due&&t.due<=dueTo&&!isSalesT(t)) due.push({src:j.project, txt:cleanTask(t.t,false), who:t.who||'', d:t.due, od:t.due<todayISO}); }));
-  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const st=String(t.status||''); const fin=t.finISO||t.finishISO||'';
-    if(!/complete/i.test(st) && fin && fin<=dueTo) due.push({src:p.name, txt:t.t||t.task||'', who:t.who||'', d:fin, od:fin<todayISO}); }));
+  jobs.forEach(j=>{ if((j.status||'').toLowerCase()==='shipped') return;   // shipped jobs are done — nothing "coming due"
+    (j.tasks||[]).forEach(t=>{ if(!t.done&&t.due&&t.due<=dueTo&&!isSalesT(t)) due.push({src:j.project, txt:cleanTask(t.t,false), who:t.who||'', d:t.due, od:t.due<todayISO}); }); });
+  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const st=String(t.st||t.status||''); const fin=t.finISO||t.finishISO||'';
+    const isDone=(t.done===true)||/complete/i.test(st);
+    if(!isDone && fin && fin<=dueTo) due.push({src:p.name, txt:t.t||t.task||'', who:t.who||'', d:fin, od:fin<todayISO}); }));
   due.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
   const odN=due.filter(x=>x.od).length;
   // milestones next 30d
   const ms=[]; projs.forEach(p=>(p.milestones||[]).forEach(m=>{ const d=m.dateISO||m.date; if(d&&d>=todayISO&&d<=msTo) ms.push({src:p.name,txt:m.name||'Milestone',d}); }));
   ms.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
   // unassigned on her jobs
-  let unas=0; jobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done&&!isSalesT(t)&&!String((typeof shopWho==='function'?shopWho(t):t.who)||'').trim()) unas++; }));
+  let unas=0; jobs.forEach(j=>{ if((j.status||'').toLowerCase()==='shipped') return;
+    (j.tasks||[]).forEach(t=>{ if(!t.done&&!isSalesT(t)&&!String((typeof shopWho==='function'?shopWho(t):t.who)||'').trim()) unas++; }); });
   const li=x=>{
     const imgs=((x.files)||[]).filter(f=>/^image\//i.test(f.mime||'')).map(f=>'<a href="'+escA(f.url)+'" target="_blank" rel="noopener"><img class="rimg" src="'+escA(f.url)+'" alt="photo"></a>').join('');
     return '<li'+(x.is24?' class="hot"':'')+'>'+(x.is24?'<span class="new">NEW</span> ':'')+'<span class="tx">'+esc(x.txt)+'</span> <span class="src">'+esc(x.src)+'</span>'+(x.who?' <span class="who">'+esc(x.who)+'</span>':'')+(x.od?' <span class="od">OVERDUE '+fmt(x.d)+'</span>':' <span class="dt">'+fmt(x.d)+'</span>')+(imgs?'<div class="rimgs">'+imgs+'</div>':'')+'</li>'; };
