@@ -1194,6 +1194,8 @@
   .g-row.pmt-pmrow{background:rgba(88,166,255,.16); border-top:2px solid #58a6ff}
   .g-row.pmt-pmrow .g-lbl{color:#8ec3ff; font-size:12px; opacity:1}
   .g-row.pmt-pmrow .g-gutter{border-left:4px solid #58a6ff}
+  .g-row.pmt-famrow .g-lbl{font-weight:800;color:var(--txt)}
+  .g-row.pmt-famrow .g-gutter{border-left:3px solid #7c3aed}
   body.light .g-row.pmt-pmrow{background:rgba(37,99,235,.12)}
   body.light .g-row.pmt-pmrow .g-lbl{color:#1d4ed8}
   .pmt-clock{font-size:16px;font-weight:900;color:var(--amber);font-variant-numeric:tabular-nums}
@@ -3324,6 +3326,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"20.3", date:"2026-07-13", title:"🏭 Meeting Gantt: builds grouped under the family too", items:[
+    "The Program Gantt (By-PM view) now shows sibling builds under one <b>JFSD</b> family row — a rolled-up bar spanning all the builds’ dates — with each individual build’s bar indented beneath it, matching the report-out list." ] },
   { rev:"20.2", date:"2026-07-13", title:"🏭 Meeting: sibling builds grouped under one family", items:[
     "In the Production Meeting, builds that share a name prefix (JFSD - Axle Weight, JFSD - HVAC, …) now fold under a single <b>JFSD</b> header with the sub-builds listed beneath, and the family counts as <b>ONE project</b> everywhere in this view — the PM’s count, the summary tiles, and the PM Load chart. Just for the meeting view; the Gantt still shows each build’s own timeline." ] },
   { rev:"20.1", date:"2026-07-13", title:"🖨 Meeting print: fits ONE sheet + full print options", items:[
@@ -9122,7 +9126,22 @@ function _pmtDrawGantt(items,today){
     rows=[];
     order.forEach(pm=>{ const arr=byPM[pm].slice().sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]||byFinish(a,b));
       const _uc=_pmtUnitCountFor(arr); rows.push({label:pm, sub:_uc+' project'+(_uc===1?'':'s'), noBar:true, cls:'g-phaserow pmt-pmrow'});
-      arr.forEach(x=>rows.push(projRow(x))); });
+      // group sibling builds (JFSD …) under one family row, individual bars indented beneath
+      const fc={}; arr.forEach(x=>{ const ff=_pmtFamOf(x.p.name); if(ff) fc[ff]=(fc[ff]||0)+1; });
+      const fmap={}, forder=[];
+      arr.forEach(x=>{ const ff=_pmtFamOf(x.p.name); const isF=ff&&fc[ff]>=2; const key=isF?('F|'+ff):('S|'+x.p.name);
+        if(!(key in fmap)){ fmap[key]={f:isF?ff:null,members:[]}; forder.push(key); } fmap[key].members.push(x); });
+      forder.forEach(k=>{ const g=fmap[k];
+        if(!g.f){ rows.push(projRow(g.members[0])); return; }
+        const worst=g.members.slice().sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state])[0].h.state;
+        const starts=g.members.map(m=>m.p.startISO).filter(Boolean).sort();
+        const fins=g.members.map(m=>m.p.finishISO).filter(Boolean).sort();
+        const avg=Math.round(g.members.reduce((a,m)=>a+(m.p.pct||0),0)/g.members.length);
+        rows.push({ label:g.f, sub:g.members.length+' builds', startISO:starts[0], endISO:fins[fins.length-1],
+          color:HC[worst]||'#64748b', pct:avg, barLabel:'', milestones:[], cls:'pmt-famrow' });
+        g.members.forEach(m=>{ const r=projRow(m); const sub=(m.p.name.slice(g.f.length).replace(/^\s*[-\u2013\u2014]\s*/,'')||m.p.name);
+          r.label=(m.p.parked?'⏸ ':'')+(m.p.nonOfficial?'🏷 ':'')+sub; r.cls=(r.cls||'')+' g-subrow'; rows.push(r); }); });
+    });
   } else {
     rows=dated.map(projRow);
   }
