@@ -705,7 +705,19 @@
                         min-width: 280px
                     }
                 }
-    </style>
+    /* --- Table view (Al's ask: filterable, all metrics one row) --- */
+  .cat-table-wrap{overflow-x:auto;border:1px solid var(--line,#2a3543);border-radius:10px}
+  table.cat-table{border-collapse:collapse;width:100%;font-size:12.5px}
+  table.cat-table th,table.cat-table td{padding:7px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line,#2a3543)}
+  table.cat-table th{position:sticky;top:0;background:var(--panel2,#1d2632);cursor:pointer;user-select:none;font-weight:700;z-index:1}
+  table.cat-table th:hover{color:#e04826}
+  table.cat-table th .sortarr{opacity:.7;font-size:10px;margin-left:3px}
+  table.cat-table tbody tr:hover{background:rgba(224,72,38,.10)}
+  table.cat-table tbody tr:nth-child(even){background:rgba(127,127,127,.05)}
+  table.cat-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .cat-tcount{margin:0 0 10px;color:var(--muted,#8b9bb0);font-size:12px}
+  .cat-tbtn{background:none;border:none;color:#e04826;cursor:pointer;font-weight:700;font-size:12px}
+  </style>
  </head>
  <body>
     <!-- App shell: header, menu, navigation tabs, search controls, panels, and modal confirmation UI. -->
@@ -766,6 +778,9 @@
   <nav class="tabs">
    <button class="tab active" data-panel="lookupPanel">
     Lookup
+   </button>
+   <button class="tab" data-panel="tablePanel">
+    Table
    </button>
    <button class="tab" data-panel="entryPanel">
     Product Entry
@@ -836,6 +851,10 @@
   <main class="container" id="lookupPanel">
    <div id="results">
    </div>
+  </main>
+  <main class="container hidden" id="tablePanel">
+   <p class="cat-tcount" id="tableCount"></p>
+   <div class="cat-table-wrap"><table class="cat-table" id="catTable"></table></div>
   </main>
   <main class="container hidden" id="entryPanel">
    <section class="card">
@@ -1435,6 +1454,35 @@ If unsure at any point → Manual Review</pre>
             });
              return m;
 
+        } function catSizeText(p){ return [p.size_1,p.size_2].filter(Boolean).join(' x ')+(p.thickness?(' \u00b7 '+p.thickness):'')+(p.length?(' \u00b7 '+p.length):''); }
+        let tableSort={key:'canonical_name',dir:1};
+        function renderTable(){
+          const qv=$('search').value.toLowerCase(), fdep=$('departmentFilter').value,fcat=$('categoryFilter').value,fsub=$('subcategoryFilter').value,ffam=$('familyFilter').value,vendor=$('vendorFilter').value,job=$('projectFilter').value;
+          const prods=catalog.filter(p=> searchText(p).includes(qv) && (!fdep||p.department===fdep)&&(!fcat||p.category===fcat)&&(!fsub||p.subcategory===fsub)&&(!ffam||p.product_family===ffam));
+          let rows=[];
+          prods.forEach(p=>{ let os=ordersFor(p.internal_id);
+            if(vendor) os=os.filter(h=>h.vendor===vendor);
+            if(job) os=os.filter(h=>trimUnique(h.job_tags).includes(job));
+            const prodJobMatch=!job || trimUnique(p.job_tags).includes(job);
+            if(os.length){ os.forEach(h=>rows.push({p,h})); }
+            else if(!vendor && (!job||prodJobMatch)){ rows.push({p,h:null}); }
+          });
+          const jobsOf=o=>trimUnique((o.h&&trimUnique(o.h.job_tags).length)?o.h.job_tags:o.p.job_tags).join(', ');
+          const num=v=>{ const n=parseFloat(String(v==null?'':v).replace(/[$,]/g,'')); return Number.isFinite(n)?n:0; };
+          const val=(o,k)=>{ const p=o.p,h=o.h||{};
+            switch(k){ case 'canonical_name':return p.canonical_name||''; case 'product_family':return p.product_family||''; case 'department':return p.department||''; case 'category':return p.category||''; case 'size':return catSizeText(p); case 'vendor':return h.vendor||''; case 'sku':return h.sku||''; case 'order_date':return h.order_date||''; case 'quantity':return num(h.quantity); case 'unit_cost':return num(h.unit_cost); case 'extended_cost':return num(h.extended_cost); case 'jobs':return jobsOf(o); default:return ''; } };
+          const k=tableSort.key,dir=tableSort.dir;
+          rows.sort((a,b)=>{ const va=val(a,k),vb=val(b,k); if(typeof va==='number'&&typeof vb==='number') return (va-vb)*dir; return String(va).localeCompare(String(vb))*dir; });
+          const cols=[['canonical_name','Product'],['product_family','Family'],['department','Dept'],['category','Category'],['size','Size'],['vendor','Vendor'],['sku','SKU'],['order_date','Order Date'],['quantity','Qty'],['unit_cost','Unit Cost'],['extended_cost','Total'],['jobs','Job(s)'],['','']];
+          const arr=key=> key===tableSort.key?(tableSort.dir>0?'\u25b2':'\u25bc'):'';
+          const head='<thead><tr>'+cols.map(c=> c[1]? `<th data-k="${c[0]}">${esc(c[1])}<span class="sortarr">${arr(c[0])}</span></th>`:'<th></th>').join('')+'</tr></thead>';
+          const body='<tbody>'+rows.map(o=>{ const p=o.p,h=o.h;
+            return `<tr><td>${esc(p.canonical_name||'\u2014')}</td><td>${esc(p.product_family||'')}</td><td>${esc(p.department||'')}</td><td>${esc(p.category||'')}</td><td>${esc(catSizeText(p))}</td><td>${esc(h?(h.vendor||''):'')}</td><td>${esc(h?(h.sku||''):'')}</td><td>${esc(h?(h.order_date||''):'')}</td><td class="num">${esc(h?(h.quantity||''):'')}</td><td class="num">${h?(money(h.unit_cost)+(h.unit?' /'+esc(h.unit):'')):''}</td><td class="num">${(h&&h.extended_cost!==''&&h.extended_cost!=null)?money(h.extended_cost):''}</td><td>${esc(jobsOf(o))}</td><td><button class="cat-tbtn" data-ep="${esc(p.internal_id)}"${h?(' data-eh="'+esc(h.history_id)+'"'):''}>Edit</button></td></tr>`;
+          }).join('')+'</tbody>';
+          $('catTable').innerHTML=head+body;
+          $('tableCount').textContent=rows.length+' row'+(rows.length===1?'':'s')+' \u2014 products + order history matching your search & filters. Click a column to sort.';
+          qa('th[data-k]',$('catTable')).forEach(th=>th.onclick=()=>{ const key=th.dataset.k; if(!key)return; if(tableSort.key===key) tableSort.dir*=-1; else {tableSort.key=key;tableSort.dir=1;} renderTable(); });
+          qa('button[data-ep]',$('catTable')).forEach(btn=>btn.onclick=()=>{ document.querySelector('[data-panel="entryPanel"]').click(); if(btn.dataset.eh) openEditHistory(btn.dataset.eh); else openEditProduct(btn.dataset.ep); });
         } function render() {
              const qv = $('search').value.toLowerCase(), filters = {
                  department: $('departmentFilter').value, category: $('categoryFilter').value, subcategory: $('subcategoryFilter').value, product_family: $('familyFilter').value
@@ -2015,7 +2063,7 @@ If unsure at any point → Manual Review</pre>
              await persistAll();
              renderAll(true);
              clearAll();
-             alert(fileHandles[DATA_FILE] ? 'Saved and physical JSON files updated.' : 'Saved to browser cache. Connect Data Folder to update the physical JSON files directly.');
+             alert(fileHandles[DATA_FILE] ? 'Saved and physical JSON files updated.' : 'Saved on THIS device. The catalogue is a shared read-only reference right now, so this edit is not published to everyone yet \u2014 use Tools \u2192 Download JSON and send it to Rich to publish it, or ask Rich to switch on live editing.');
 
         } function renderDepartmentEditor() {
              const box = $('departmentList');
@@ -2149,7 +2197,7 @@ If unsure at any point → Manual Review</pre>
         };
          $('clearFilters').onclick = () => {
              ['departmentFilter', 'vendorFilter', 'categoryFilter', 'subcategoryFilter', 'familyFilter', 'projectFilter', 'search'].forEach(id => $(id).value = '');
-             render();
+             render(); if (!$('tablePanel').classList.contains('hidden')) renderTable();
 
         };
          $('expandAll').onclick = () => {
@@ -2170,11 +2218,12 @@ If unsure at any point → Manual Review</pre>
          document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
              document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
              b.classList.add('active');
-            ['lookupPanel', 'entryPanel', 'rulesPanel'].forEach(id => $(id).classList.add('hidden'));
+            ['lookupPanel', 'tablePanel', 'entryPanel', 'rulesPanel'].forEach(id => $(id) && $(id).classList.add('hidden'));
              $(b.dataset.panel).classList.remove('hidden');
+             if (b.dataset.panel === 'tablePanel') renderTable();
 
         });
-        ['search', 'departmentFilter', 'vendorFilter', 'categoryFilter', 'subcategoryFilter', 'familyFilter', 'projectFilter'].forEach(id => $(id).addEventListener('input', render));
+        ['search', 'departmentFilter', 'vendorFilter', 'categoryFilter', 'subcategoryFilter', 'familyFilter', 'projectFilter'].forEach(id => $(id).addEventListener('input', () => { render(); if (!$('tablePanel').classList.contains('hidden')) renderTable(); }));
          $('devMode').onchange = e => {
              $('previewCard').classList.toggle('hidden', !e.target.checked);
              $('departmentEditor').classList.toggle('hidden', !e.target.checked);
