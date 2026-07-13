@@ -1163,6 +1163,15 @@
   .pmt-tabs button{background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;text-align:left}
   .pmt-tabs button.active{border-color:var(--brand);background:rgba(224,72,38,.12)}
   .pmt-tabs .pmt-tsub{display:block;font-size:10px;color:var(--muted);font-weight:600}
+  .pmt-band{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+  .pmt-tiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .pmt-tile{flex:1;min-width:130px;background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--tc);border-radius:10px;padding:9px 13px}
+  .pmt-tile .tn{font-size:26px;font-weight:900;color:var(--tc);line-height:1}
+  .pmt-tile .tl{font-size:9.5px;letter-spacing:.7px;color:var(--muted);font-weight:700;margin-top:3px}
+  .pmt-stack{display:flex;height:16px;border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+  .pmt-seg{height:100%}
+  .pmt-leg{display:flex;gap:16px;margin-top:7px;font-size:10.5px;color:var(--muted);font-weight:600}
+  .pmt-leg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
   .pmt-clock{font-size:16px;font-weight:900;color:var(--amber);font-variant-numeric:tabular-nums}
   .pmt-clock.over{color:#fca5a5}
   .pmt-pm{margin-bottom:16px}
@@ -1650,7 +1659,7 @@
     </div>
     <div class="pmt-tabs">
       <button id="pmtTab1" onclick="pmtStage(1)">1️⃣ PM Report-out <span class="pmt-tsub">10 min · greens are one-liners</span></button>
-      <button id="pmtTab2" onclick="pmtStage(2)">2️⃣ Discuss &amp; Align <span class="pmt-tsub">parked + red/yellow items</span></button>
+      <button id="pmtTab2" onclick="pmtStage(2)">2️⃣ Discuss &amp; Align <span class="pmt-tsub">the discussion list (yellow/red auto-added)</span></button>
       <button id="pmtTab3" onclick="pmtStage(3)">3️⃣ Team &amp; Actions <span class="pmt-tsub">tracked week to week</span></button>
     </div>
     <div id="pmtBody"></div>
@@ -3280,6 +3289,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"19.2", date:"2026-07-13", title:"🏭 Meeting: owner summary band + clearer wording", items:[
+    "The report-out now opens with an <b>owner-ready summary</b> — big tiles (Active · Green · Yellow · Red · To&nbsp;discuss) and a stacked status bar — so the health of the whole program reads in two seconds.",
+    "Renamed the confusing “park” action: tapping a row now says <b>discuss ▸ / 🗣 on discuss list</b> — it just adds the project to the stage-2 discussion list (nothing to do with ⏸ parking a project on the Projects tab)." ] },
   { rev:"19.1", date:"2026-07-13", title:"⏸ Parked bars go grey in Project Progress", items:[
     "Al’s ask: a ⏸ parked project’s <b>progress bar now turns grey</b> in Project Progress (the half-faded teal still read as “bright”) — matching the dulled look of the Project Schedules Gantt. The expected-by-today tick hides on parked rows too." ] },
   { rev:"19.0", date:"2026-07-13", title:"🏭 Production Meeting · 🔁 repeating tasks · design-board context", items:[
@@ -9045,21 +9057,29 @@ function renderProdMeeting(){
   };
   const rowHtml=x=>{
     const parked=PMT_PARK.has(x.p.name);
-    return `<div class="pmt-row ${PMT_CLS[x.h.state]}${parked?' parked':''}" onclick="pmtPark('${escJsAttr(x.p.name)}')" title="Tap to ${parked?'un-park':'PARK for the discussion list (stage 2)'}"><span class="pmt-dot"></span><span class="pmt-line">${oneLiner(x.p,x.h)}${detail(x.p,x.h)}</span><span class="pmt-park">${parked?'🅿 parked':'park ▸'}</span></div>`;
+    return `<div class="pmt-row ${PMT_CLS[x.h.state]}${parked?' parked':''}" onclick="pmtPark('${escJsAttr(x.p.name)}')" title="Tap to ${parked?'take this OFF the stage-2 discussion list':'ADD this to the stage-2 discussion list'}"><span class="pmt-dot"></span><span class="pmt-line">${oneLiner(x.p,x.h)}${detail(x.p,x.h)}</span><span class="pmt-park">${parked?'🗣 on discuss list':'discuss ▸'}</span></div>`;
   };
+  const _band=(()=>{
+    const c={g:0,y:0,r:0,u:0,p:0};
+    items.forEach(x=>{ c[x.h.state==='ontrack'?'g':x.h.state==='behind'?'y':x.h.state==='late'?'r':x.h.state==='upcoming'?'u':'p']++; });
+    const tot=items.length||1;
+    const seg=(n,col,lab)=> n?`<div class="pmt-seg" style="width:${Math.max(3,Math.round(n/tot*100))}%;background:${col}" title="${n} ${lab}"></div>`:'';
+    const tile=(n,lab,col)=>`<div class="pmt-tile" style="--tc:${col}"><div class="tn">${n}</div><div class="tl">${lab}</div></div>`;
+    return `<div class="pmt-band"><div class="pmt-tiles">${tile(items.length,'ACTIVE PROJECTS','#58a6ff')}${tile(c.g,'GREEN — ON TRACK','#22c55e')}${tile(c.y,'YELLOW — BEHIND','#f59e0b')}${tile(c.r,'RED — LATE','#ef4444')}${tile(PMT_PARK.size,'TO DISCUSS','#e04826')}</div><div class="pmt-stack">${seg(c.g,'#22c55e','green')}${seg(c.y,'#f59e0b','yellow')}${seg(c.r,'#ef4444','red')}${seg(c.u,'#3b82f6','upcoming')}${seg(c.p,'#64748b','on hold')}</div><div class="pmt-leg"><span><i style="background:#22c55e"></i>green</span><span><i style="background:#f59e0b"></i>yellow</span><span><i style="background:#ef4444"></i>red</span><span><i style="background:#3b82f6"></i>upcoming</span><span><i style="background:#64748b"></i>on hold</span></div></div>`;
+  })();
   if(PMT_STAGE===1){
     const byPM={}, order=[];
     items.forEach(x=>{ const pm=(x.p.pm||'— no PM —'); if(!(pm in byPM)){byPM[pm]=[];order.push(pm);} byPM[pm].push(x); });
     order.sort((a,b)=>a.localeCompare(b));
-    let html=`<div class="pmt-hint">Round the room by PM. <b>Green = read the line and move on.</b> Yellow/red: what's behind, the issue, the help you need — then it's parked for stage 2. Tap any row to park it. All-green PM? One sentence: “all projects green and on schedule.”</div>`;
+    let html=_band+`<div class="pmt-hint">Round the room by PM. <b>Green = read the line and move on.</b> Yellow/red: what's behind, the issue, the help you need — they're on the <b>stage-2 discussion list</b> automatically. Tap any row to add or remove it. All-green PM? One sentence: “all projects green and on schedule.”</div>`;
     html+=order.map(pm=>{ const arr=byPM[pm].slice().sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]||String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
       const g=arr.filter(x=>x.h.state==='ontrack').length;
       return `<div class="pmt-pm"><div class="pmt-pmh">${esc(pm)}<span class="n">${arr.length} project${arr.length===1?'':'s'} · ${g} green</span></div>${arr.map(rowHtml).join('')}</div>`; }).join('');
     body.innerHTML=html;
   } else if(PMT_STAGE===2){
     const parked=items.filter(x=>PMT_PARK.has(x.p.name)).sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]);
-    body.innerHTML=`<div class="pmt-hint">The parked list — work each one: what's the conflict, who needs what, what's the decision. Tap a row to drop it off the list once it's resolved. For schedule deep-dives use the 📅 Crew/Resource Schedule and the Gantt on the PROJECTS tab.</div>`
-      +(parked.length?parked.map(rowHtml).join(''):`<div class="pmt-empty">Nothing parked — either it's a great week or stage 1 hasn't happened yet. 🎉</div>`);
+    body.innerHTML=`<div class="pmt-hint">The discussion list — work each one: what's the conflict, who needs what, what's the decision. Tap a row to take it off the list once it's resolved. For schedule deep-dives use the 📅 Crew/Resource Schedule and the Gantt on the PROJECTS tab.</div>`
+      +(parked.length?parked.map(rowHtml).join(''):`<div class="pmt-empty">Nothing on the discussion list — either it's a great week or stage 1 hasn't happened yet. 🎉</div>`);
   } else {
     const gj=(D.jobs||[]).find(j=>j.row==='general'||j.project===GENERAL_PROJ);
     const acts=((gj&&gj.tasks)||[]).filter(t=>!t.done && String(t.t||'').indexOf(PMT_TAG)===0);
