@@ -1176,6 +1176,7 @@
   .pmt-gh{font-size:13px;font-weight:800;margin-bottom:8px}
   .pmt-gsub{color:var(--muted);font-weight:600;font-size:10.5px;margin-left:6px}
   .pmt-gpanel .gantt{max-height:46vh;overflow:auto}
+  .pmt-gsort{float:right;margin-top:-3px;padding:4px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:11.5px;font-weight:600}
   .pmt-clock{font-size:16px;font-weight:900;color:var(--amber);font-variant-numeric:tabular-nums}
   .pmt-clock.over{color:#fca5a5}
   .pmt-pm{margin-bottom:16px}
@@ -3293,6 +3294,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"19.4", date:"2026-07-13", title:"🏭 Meeting Gantt: sorted like the list + sort picker", items:[
+    "The Program Gantt now defaults to <b>👥 By PM</b> — grouped with a header row per PM in the same order as the report-out below (Al first), worst projects first within each PM. A <b>sort picker</b> on the panel switches to 🎯 Target date · 📅 Start date · ⚠ Worst first · 🔤 A–Z (remembered per device)." ] },
   { rev:"19.3", date:"2026-07-13", title:"🏭 Meeting: full Program Gantt for the owner", items:[
     "Stage 1 now includes the <b>📊 Program Gantt</b> — the same one-bar-per-project timeline as the Projects tab (health colors, ◆ milestones, today line), spanning <b>every active project's real dates</b>. Click a bar to drop into that project's task-level detail." ] },
   { rev:"19.2", date:"2026-07-13", title:"🏭 Meeting: owner summary band + clearer wording", items:[
@@ -9038,24 +9041,42 @@ function _pmtBehindBits(p, today){
 }
 // Stage-1 Gantt: the SAME one-bar-per-project timeline as the Projects tab (colors, ◆ milestones,
 // today line), spanning every active project's real dates so the owner sees the whole program.
+let PMT_GSORT='pm'; try{ PMT_GSORT=localStorage.getItem('mra_pmt_gsort')||'pm'; }catch(e){}
+function pmtGsort(v){ PMT_GSORT=v; try{localStorage.setItem('mra_pmt_gsort',v);}catch(e){} renderProdMeeting(); }
 function _pmtDrawGantt(items,today){
   const el=document.getElementById('pmtGantt'); if(!el) return;
   const HC={late:'#ef4444', behind:'#f59e0b', ontrack:'#22c55e', upcoming:'#3b82f6', parked:'#64748b'};
-  const dated=items.filter(x=>x.p.startISO&&x.p.finishISO)
-    .sort((a,b)=>String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
+  let dated=items.filter(x=>x.p.startISO&&x.p.finishISO);
   if(!dated.length){ el.innerHTML='<div class="pmt-empty">No dated projects to chart.</div>'; return; }
+  const byFinish=(a,b)=>String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999'));
+  if(PMT_GSORT==='finish') dated.sort(byFinish);
+  else if(PMT_GSORT==='start') dated.sort((a,b)=>String(a.p.startISO||'9999').localeCompare(String(b.p.startISO||'9999')));
+  else if(PMT_GSORT==='health') dated.sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]||byFinish(a,b));
+  else if(PMT_GSORT==='az') dated.sort((a,b)=>String(a.p.name).localeCompare(String(b.p.name)));
   let tlo=Date.parse(today)-7*DAY, thi=tlo;
   dated.forEach(x=>{ const st=parseISO(x.p.startISO), f=parseISO(x.p.finishISO);
     if(st&&st.getTime()<tlo) tlo=st.getTime(); if(f&&f.getTime()>thi) thi=f.getTime(); });
   const days=Math.min(430, Math.max(31, Math.ceil((thi+10*DAY-tlo)/DAY)));
   const win=buildWindow(new Date(tlo), days);
-  const rows=dated.map(x=>{ const p=x.p;
+  const projRow=x=>{ const p=x.p;
     return { label:(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+p.name, sub:(p.pm||'—')+(p.pct!=null?(' · '+p.pct+'%'):''),
       startISO:p.startISO, endISO:p.finishISO, color:p._color||HC[x.h.state]||'#64748b', pct:p.pct,
       barLabel:'', milestones:p.milestones||[],
       cls:'clickable'+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''),
-      barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` };
-  });
+      barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` }; };
+  let rows;
+  if(PMT_GSORT==='pm'){
+    // group by PM alphabetically with a header row per PM — SAME order as the report-out list below
+    const byPM={}, order=[];
+    dated.forEach(x=>{ const pm=(x.p.pm||'— no PM —'); if(!(pm in byPM)){byPM[pm]=[];order.push(pm);} byPM[pm].push(x); });
+    order.sort((a,b)=>a.localeCompare(b));
+    rows=[];
+    order.forEach(pm=>{ const arr=byPM[pm].slice().sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]||byFinish(a,b));
+      rows.push({label:pm, sub:arr.length+' project'+(arr.length===1?'':'s'), noBar:true, cls:'g-phaserow'});
+      arr.forEach(x=>rows.push(projRow(x))); });
+  } else {
+    rows=dated.map(projRow);
+  }
   renderGantt(el, rows, win, {dates:true, showDays:true});
 }
 function renderProdMeeting(){
@@ -9099,7 +9120,7 @@ function renderProdMeeting(){
     const byPM={}, order=[];
     items.forEach(x=>{ const pm=(x.p.pm||'— no PM —'); if(!(pm in byPM)){byPM[pm]=[];order.push(pm);} byPM[pm].push(x); });
     order.sort((a,b)=>a.localeCompare(b));
-    let html=_band+`<div class="pmt-gpanel"><div class="pmt-gh">📊 Program Gantt — every active project, real dates <span class="pmt-gsub">(◆ milestones · ▏today · click a bar for the task-level detail)</span></div><div class="gantt" id="pmtGantt"></div></div>`+`<div class="pmt-hint">Round the room by PM. <b>Green = read the line and move on.</b> Yellow/red: what's behind, the issue, the help you need — they're on the <b>stage-2 discussion list</b> automatically. Tap any row to add or remove it. All-green PM? One sentence: “all projects green and on schedule.”</div>`;
+    let html=_band+`<div class="pmt-gpanel"><div class="pmt-gh">📊 Program Gantt — every active project, real dates <span class="pmt-gsub">(◆ milestones · ▏today · click a bar for the task-level detail)</span><select class="pmt-gsort" onchange="pmtGsort(this.value)" title="Order the Gantt — remembered on this device">${['pm|👥 By PM (matches the list)','finish|🎯 Target date','start|📅 Start date','health|⚠ Worst first','az|🔤 A–Z'].map(o=>{const[v,l]=o.split('|');return `<option value="${v}"${PMT_GSORT===v?' selected':''}>${l}</option>`}).join('')}</select></div><div class="gantt" id="pmtGantt"></div></div>`+`<div class="pmt-hint">Round the room by PM. <b>Green = read the line and move on.</b> Yellow/red: what's behind, the issue, the help you need — they're on the <b>stage-2 discussion list</b> automatically. Tap any row to add or remove it. All-green PM? One sentence: “all projects green and on schedule.”</div>`;
     html+=order.map(pm=>{ const arr=byPM[pm].slice().sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]||String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
       const g=arr.filter(x=>x.h.state==='ontrack').length;
       return `<div class="pmt-pm"><div class="pmt-pmh">${esc(pm)}<span class="n">${arr.length} project${arr.length===1?'':'s'} · ${g} green</span></div>${arr.map(rowHtml).join('')}</div>`; }).join('');
