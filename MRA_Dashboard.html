@@ -1172,6 +1172,10 @@
   .pmt-seg{height:100%}
   .pmt-leg{display:flex;gap:16px;margin-top:7px;font-size:10.5px;color:var(--muted);font-weight:600}
   .pmt-leg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+  .pmt-gpanel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+  .pmt-gh{font-size:13px;font-weight:800;margin-bottom:8px}
+  .pmt-gsub{color:var(--muted);font-weight:600;font-size:10.5px;margin-left:6px}
+  .pmt-gpanel .gantt{max-height:46vh;overflow:auto}
   .pmt-clock{font-size:16px;font-weight:900;color:var(--amber);font-variant-numeric:tabular-nums}
   .pmt-clock.over{color:#fca5a5}
   .pmt-pm{margin-bottom:16px}
@@ -3142,7 +3146,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>④ᶜ² 🧾 Maintenance Work Orders</h4>
     <p><span class="k">☰ Actions ▸ 🧾 Work Orders…</span> (or the 🖨 Print picker). Tick a crew — <b>Sal, Doug, Electricians…</b> — and it generates a <b>maintenance work order for each of that crew's jobs</b>, one per page: the classic form with <b>BAY · JOB # · ASSET #</b>, work-order / expected / actual completion dates, the crew's open tasks as numbered <b>ISSUE / DESCRIPTION</b> lines (Fleetio # shown as the issue number, due dates flagged), the job's <b>photos &amp; documents enlarged</b>, and a <b>signature / date</b> line. So Doug with 5 jobs prints 5 work orders. Tick several crews to batch. <b>🖨 Print / Save PDF</b> from the top bar. A crew's set also opens directly at <span class="k">…?wo=doug</span> — that's the link the daily 7:15 AM maintenance email uses.</p></div>
   <div class="hsec"><h4>④ᶜ³ 🏭 Production Status Meeting (Monday 10am)</h4>
-    <p><span class="k">🏭 Production Meeting</span> (PROJECTS tab header, or ☰ Menu) is the Monday meeting on one screen, straight off live data. <b>Stage 1 — PM report-out (⏱ 10:00 timer):</b> every active project grouped by PM with the dash’s own <b>green / yellow / red</b>; green projects get their one-liner auto-written (just read it); yellow/red expand with what’s behind, who has the past-due tasks and the next gate — and they’re auto-<b>parked</b>. Tap any row to park/un-park it. <b>Stage 2 — Discuss &amp; Align:</b> the parked list to work through as a group. <b>Stage 3 — Team &amp; Actions:</b> action items with an owner + due date, saved as <b>real tasks</b> on the 🛠 General lane — they persist in the Lists, show up again next Monday, and drop off when ✓ done. <span class="k">🖨 Print</span> makes the one-pager record.</p></div>
+    <p><span class="k">🏭 Production Meeting</span> (PROJECTS tab header, or ☰ Menu) is the Monday meeting on one screen, straight off live data. <b>Stage 1 — PM report-out (⏱ 10:00 timer):</b> every active project grouped by PM with the dash’s own <b>green / yellow / red</b>; green projects get their one-liner auto-written (just read it); yellow/red expand with what’s behind, who has the past-due tasks and the next gate — and they’re auto-<b>parked</b>. Tap any row to park/un-park it. <b>Stage 2 — Discuss &amp; Align:</b> the parked list to work through as a group. <b>Stage 3 — Team &amp; Actions:</b> action items with an owner + due date, saved as <b>real tasks</b> on the 🛠 General lane — they persist in the Lists, show up again next Monday, and drop off when ✓ done. <span class="k">🖨 Print</span> makes the one-pager record. Stage 1 also carries the <b>📊 Program Gantt</b> — every active project as a bar on real dates (health colors, ◆ milestones, today line) — plus the owner summary tiles and stacked status bar up top.</p></div>
   <div class="hsec"><h4>④ᵈ 📊 Workload — open tasks</h4>
     <p>Under <b>Program Development Load</b>. Where that panel counts <i>projects</i>, this gauges <b>how much work is left</b>: comparative bars of <b>open tasks per PM</b> (left) and <b>per resource / crew</b> (right — MRA Shop, MRA Design, Wrap Team, Electricians, …), longest bar = most loaded. <b>Overdue tasks show in red</b> (with the overdue count in parentheses). It's a <i>fuzzy</i> gauge by open‑task count today; once tasks carry <b>Est. Hours</b> it can weight by real effort instead.</p>
     <p><b>Click any row</b> (including <b>Unassigned</b>) to see a <b>per-project breakdown</b> — how many open tasks that PM / crew has on each project, overdue in red. Click a project in that list to open its detailed Gantt.</p></div>
@@ -3289,6 +3293,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"19.3", date:"2026-07-13", title:"🏭 Meeting: full Program Gantt for the owner", items:[
+    "Stage 1 now includes the <b>📊 Program Gantt</b> — the same one-bar-per-project timeline as the Projects tab (health colors, ◆ milestones, today line), spanning <b>every active project's real dates</b>. Click a bar to drop into that project's task-level detail." ] },
   { rev:"19.2", date:"2026-07-13", title:"🏭 Meeting: owner summary band + clearer wording", items:[
     "The report-out now opens with an <b>owner-ready summary</b> — big tiles (Active · Green · Yellow · Red · To&nbsp;discuss) and a stacked status bar — so the health of the whole program reads in two seconds.",
     "Renamed the confusing “park” action: tapping a row now says <b>discuss ▸ / 🗣 on discuss list</b> — it just adds the project to the stage-2 discussion list (nothing to do with ⏸ parking a project on the Projects tab)." ] },
@@ -9030,6 +9036,28 @@ function _pmtBehindBits(p, today){
   const whoTxt=Object.keys(who).slice(0,4).map(w=>w+' ('+who[w]+')').join(', ');
   return {odN:od.length, od:od.slice(0,5), whoTxt, gate};
 }
+// Stage-1 Gantt: the SAME one-bar-per-project timeline as the Projects tab (colors, ◆ milestones,
+// today line), spanning every active project's real dates so the owner sees the whole program.
+function _pmtDrawGantt(items,today){
+  const el=document.getElementById('pmtGantt'); if(!el) return;
+  const HC={late:'#ef4444', behind:'#f59e0b', ontrack:'#22c55e', upcoming:'#3b82f6', parked:'#64748b'};
+  const dated=items.filter(x=>x.p.startISO&&x.p.finishISO)
+    .sort((a,b)=>String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
+  if(!dated.length){ el.innerHTML='<div class="pmt-empty">No dated projects to chart.</div>'; return; }
+  let tlo=Date.parse(today)-7*DAY, thi=tlo;
+  dated.forEach(x=>{ const st=parseISO(x.p.startISO), f=parseISO(x.p.finishISO);
+    if(st&&st.getTime()<tlo) tlo=st.getTime(); if(f&&f.getTime()>thi) thi=f.getTime(); });
+  const days=Math.min(430, Math.max(31, Math.ceil((thi+10*DAY-tlo)/DAY)));
+  const win=buildWindow(new Date(tlo), days);
+  const rows=dated.map(x=>{ const p=x.p;
+    return { label:(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+p.name, sub:(p.pm||'—')+(p.pct!=null?(' · '+p.pct+'%'):''),
+      startISO:p.startISO, endISO:p.finishISO, color:p._color||HC[x.h.state]||'#64748b', pct:p.pct,
+      barLabel:'', milestones:p.milestones||[],
+      cls:'clickable'+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''),
+      barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` };
+  });
+  renderGantt(el, rows, win, {dates:true, showDays:true});
+}
 function renderProdMeeting(){
   const D=window.MRA_DATA||{}; if(!(D.projects&&D.projects.length)) return;
   const today=D.todayISO||localISO(Date.now());
@@ -9071,11 +9099,12 @@ function renderProdMeeting(){
     const byPM={}, order=[];
     items.forEach(x=>{ const pm=(x.p.pm||'— no PM —'); if(!(pm in byPM)){byPM[pm]=[];order.push(pm);} byPM[pm].push(x); });
     order.sort((a,b)=>a.localeCompare(b));
-    let html=_band+`<div class="pmt-hint">Round the room by PM. <b>Green = read the line and move on.</b> Yellow/red: what's behind, the issue, the help you need — they're on the <b>stage-2 discussion list</b> automatically. Tap any row to add or remove it. All-green PM? One sentence: “all projects green and on schedule.”</div>`;
+    let html=_band+`<div class="pmt-gpanel"><div class="pmt-gh">📊 Program Gantt — every active project, real dates <span class="pmt-gsub">(◆ milestones · ▏today · click a bar for the task-level detail)</span></div><div class="gantt" id="pmtGantt"></div></div>`+`<div class="pmt-hint">Round the room by PM. <b>Green = read the line and move on.</b> Yellow/red: what's behind, the issue, the help you need — they're on the <b>stage-2 discussion list</b> automatically. Tap any row to add or remove it. All-green PM? One sentence: “all projects green and on schedule.”</div>`;
     html+=order.map(pm=>{ const arr=byPM[pm].slice().sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]||String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
       const g=arr.filter(x=>x.h.state==='ontrack').length;
       return `<div class="pmt-pm"><div class="pmt-pmh">${esc(pm)}<span class="n">${arr.length} project${arr.length===1?'':'s'} · ${g} green</span></div>${arr.map(rowHtml).join('')}</div>`; }).join('');
     body.innerHTML=html;
+    _pmtDrawGantt(items,today);
   } else if(PMT_STAGE===2){
     const parked=items.filter(x=>PMT_PARK.has(x.p.name)).sort((a,b)=>HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]);
     body.innerHTML=`<div class="pmt-hint">The discussion list — work each one: what's the conflict, who needs what, what's the decision. Tap a row to take it off the list once it's resolved. For schedule deep-dives use the 📅 Crew/Resource Schedule and the Gantt on the PROJECTS tab.</div>`
