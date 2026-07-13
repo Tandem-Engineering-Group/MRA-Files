@@ -1176,6 +1176,9 @@
   .pmt-bmain{flex:1 1 340px;min-width:300px}
   .pmt-load{flex:0 1 320px;min-width:260px;border-left:1px solid var(--line);padding-left:16px}
   .pmt-load .pl-h{font-size:9.5px;letter-spacing:.7px;color:var(--muted);font-weight:700;margin-bottom:9px}
+  .pmt-odtog{color:#8ec3ff;cursor:pointer;font-weight:700;margin-top:2px;display:inline-block}
+  .pmt-odtog:hover{text-decoration:underline}
+  body.light .pmt-odtog{color:#1d4ed8}
   .pl-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px}
   .pl-name{flex:0 0 96px;color:var(--txt);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pl-track{flex:1;min-width:40px}
@@ -3310,6 +3313,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"19.9", date:"2026-07-13", title:"🏭 Meeting: past-due lists fully expandable", items:[
+    "The behind/late detail no longer stops at 5 tasks — the “+ show N more…” link now expands the full past-due list right in place (and collapses again), so you can see every overdue item without leaving the meeting." ] },
   { rev:"19.8", date:"2026-07-13", title:"🏭 Meeting: tab-aware print + full Gantt on paper", items:[
     "🖨 <b>Print is now tab-aware</b> — it prints whichever tab you’re on. The <b>Report-out</b> print is a clean PM-grouped one-pager (two columns, health dots, target + % + past-due) <b>followed by the FULL Program Gantt</b> rendered to fit the page — the whole timeline prints, no scrolling / nothing cut off. Discuss &amp; Align and Team &amp; Actions each print their own list." ] },
   { rev:"19.7", date:"2026-07-13", title:"🏭 Meeting: PM Project Load mini-chart in the top band", items:[
@@ -9061,7 +9066,7 @@ function _pmtBehindBits(p, today){
   const gate=(typeof nextGate==='function')?nextGate(p,today):null;
   const who={}; od.forEach(t=>{ const w=(t.who||'').split('/')[0].trim()||'—'; who[w]=(who[w]||0)+1; });
   const whoTxt=Object.keys(who).slice(0,4).map(w=>w+' ('+who[w]+')').join(', ');
-  return {odN:od.length, od:od.slice(0,5), whoTxt, gate};
+  return {odN:od.length, od:od, whoTxt, gate};
 }
 // Stage-1 Gantt: the SAME one-bar-per-project timeline as the Projects tab (colors, ◆ milestones,
 // today line), spanning every active project's real dates so the owner sees the whole program.
@@ -9103,6 +9108,7 @@ function _pmtDrawGantt(items,today){
   }
   renderGantt(el, rows, win, {dates:true, showDays:true});
 }
+function pmtOdMore(btn){ const m=btn.previousElementSibling; if(!m) return; const o=(m.style.display==='none'); m.style.display=o?'block':'none'; btn.textContent=o?'− show less':(btn.getAttribute('data-more')||'+ more'); }
 function renderProdMeeting(){
   const D=window.MRA_DATA||{}; if(!(D.projects&&D.projects.length)) return;
   const today=D.todayISO||localISO(Date.now());
@@ -9126,8 +9132,11 @@ function renderProdMeeting(){
     if(h.state!=='late'&&h.state!=='behind') return '';
     const b=_pmtBehindBits(p,today);
     const gates=b.gate?(' · next gate: <b>'+esc(b.gate.name)+'</b> '+fmtMDY(b.gate.dateISO)):'';
-    const odl=b.od.map(t=>`<div>• ${esc(t.t)}${t.who?' — '+esc(t.who):''} <span class="bad">(due ${fmtMDY(t.finISO)})</span></div>`).join('');
-    return `<div class="pmt-det"><span class="bad">${b.odN} past-due task${b.odN===1?'':'s'}</span>${b.whoTxt?(' · with: '+esc(b.whoTxt)):''}${gates}${odl}${b.odN>5?`<div>+${b.odN-5} more…</div>`:''}</div>`;
+    const line=t=>`<div>• ${esc(t.t)}${t.who?' — '+esc(t.who):''} <span class="bad">(due ${fmtMDY(t.finISO)})</span></div>`;
+    const first=b.od.slice(0,5).map(line).join('');
+    const rest=b.od.slice(5);
+    const more=rest.length?`<div class="pmt-odmore" style="display:none">${rest.map(line).join('')}</div><div class="pmt-odtog" data-more="+ show ${rest.length} more…" onclick="event.stopPropagation();pmtOdMore(this)">+ show ${rest.length} more…</div>`:'';
+    return `<div class="pmt-det"><span class="bad">${b.odN} past-due task${b.odN===1?'':'s'}</span>${b.whoTxt?(' · with: '+esc(b.whoTxt)):''}${gates}${first}${more}</div>`;
   };
   const rowHtml=x=>{
     const parked=PMT_PARK.has(x.p.name);
