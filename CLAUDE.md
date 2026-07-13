@@ -297,6 +297,55 @@ Rich wants a two-step complete for **project-fed** design tasks (NOT the ad-hoc/
 
 Treat help + rev as PART OF the feature, not an afterthought.
 
+## Shipped 2026-07-13 — Production Meeting · Sales & Planning · sub-jobs · punch list / recaps (rev 19.0 → 21.0)
+
+*(Full rev detail = the CHANGELOG array. Session highlights + gotchas:)*
+
+- **🏭 Production Status Meeting (19.0–20.3)** — Projects header + ☰ Menu. 3 stages: PM report-out (owner band:
+  tiles + stacked bar + **PM Project Load** chart; **Program Gantt** grouped by PM w/ sort picker + highlighted PM
+  header rows + **JFSD-family rollup rows**), Discuss & Align (**manual** discuss-list — auto-copying yellow/red made
+  stage 2 = stage 1, Rich was confused; now only what you tap `discuss ▸`), Team & Actions (real `[MTG]` tasks on
+  🛠 General). Past-due lists expandable (+ show N more). **Print = WYSIWYG snapshot** of the live view (dashboard
+  CSS under body.light) + full SVG gantt, with an options bar (portrait/landscape/letter/legal/A4) and **Fit-to-1-page
+  auto-scale** (transform on #sheet) — Rich asked 3× for 1-pager, don't regress this. Sibling builds (`JFSD - *`)
+  group under one family unit in ALL meeting counts.
+- **📈 Sales & Planning (20.4–20.6)** — ☰ Menu + Projects header. Committed projects = solid bars; **prospects** =
+  purple hatched bars (name/vehicle/scope/est dates/probability %) stored as **`[SALES]`-tagged tasks on 🛠 General**
+  (comments carry `[sales]{json}`) → sync via Lists, **hidden from floor** (tile filter + unassigned finder skip
+  `isSalesT`). ◀ ▶ nudge a week; **✔ Signed → promote** creates the real project via `addProjectTask` (kickoff task)
+  and removes the bar. Exec band (Committed/Prospects/**Expected new builds**=Σpr/**Next PM free**) + PM LOAD strip +
+  executive one-page print (`spPrint`, SVG hatch pattern). From Al's 7/10 sync (transcript) + al_planning_for_sales.xlsx.
+- **🧩 Sub-jobs (20.7–20.8)** — several jobs share a J# (J1524 trailer + pedestal builds). `[subjob]` tag in job
+  **Notes** (checkbox on ➕ Add job / ✎ edit manages it; tag stripped from the textarea, ship-history preserved).
+  `jobIsSub()` gates: Fleetio MRA date line, 🔧 issue pill, What's-Next GPS/returns. Card shows 🧩 pill (full
+  instructions on hover). ➕ Add job with an existing J# asks: sub-job vs add-tasks-to-existing.
+- **🧾 Punch list + 📧 recaps (21.0)** — `buildJobPunch` (✎ edit job → 🧾 Punch list; `?punch=J####`): ONE doc per
+  job, ALL crews grouped (PRINT_CREWS + named + UNASSIGNED), WO-style shell, digital-first. `buildFloorRecapHtml`
+  (☰ Actions → 📧 Floor recap; `?recap=1&days=N`): closed-in-window w/ who+photos + still-open per job.
+  `buildPMReportHtml` (**Megan's ask**; ☰ Actions → 📧 PM report…; `?recap=1&pm=Megan&days=7`): her projects' health
+  overview (projHealth/_pmtBehindBits), done last 7d (**last-24h highlighted**), coming due ≤14d (overdue flagged),
+  ◆ milestones ≤30d, stat tiles. **Email flows PARKED** — Rich builds them after Megan reviews (3-step clone of
+  Doug's 7:15 flow: Recurrence → Send email w/ the link).
+- **Fixes:** ⏸ parked bars grey in Project Progress (Al, 19.1); recurring shop tasks 🔁 daily/weekly/monthly via
+  `[repeat:…]` tag in Comments + spawnRepeat on close (19.0, Jeff's eyewash PM); design-board subtasks show
+  **↳ part of <parent>** + phase chips (19.0); unassigned finder skips **orphan/ghost jobs** (`row 'orphan:*'` /
+  category 'pipeline' — e.g. QuidelOrtho Decommission leftovers, 20.9); catalogue got a sortable/filterable **Table
+  tab** (Al's ask; edits still cache-only — write-back undecided).
+- **⚠ PARKED / TO-DO (hold these):** (1) **at-MRA/away Gantt shading + "no shop work" filter — built but WRONG per
+  Rich** (Al wants end-of-project offsite, really just a filter); code dormant, toggle hidden (`.atMraBtn`
+  display:none, `ATMRA_SHADE`/`projAwaySegs` remain) — re-scope with Al before touching; (2) scheduled email flows
+  for PM report/floor recap; (3) 🧹 ghost-job cleanup admin view; (4) **BOM import** blocked on Rich copying the
+  "materials & parts"/BOM files into `SMartsheets projects` (M365 connector can't reach the original project folders);
+  (5) catalogue shared-edit write-back (needs a blob-write flow like EOTM, or fold parts into Lists); (6) Al's
+  planning-view extras: phase-chunked planning bars, PM capacity hours model; (7) whole-job punch "issue button"
+  (route to PM, don't collide with Comments — phase 2); (8) non-official icon legend + AWS "didn't save" check;
+  (9) full-screen Gantt detail-view consistency (older).
+- **Gotchas this session:** python heredoc escapes bite (em-dash/quote SyntaxErrors abort BEFORE writing — file
+  stays clean, just rerun); JS-string changelog items must escape inner double quotes (`class=\"k\"`); `ejSub` id
+  was taken (bring-back banner) → checkboxes are `ajSubJob`/`ejSubJob`; repo's checked-in data.js is a stale June-16
+  snapshot — headless tests must curl the LIVE data.js; playwright lives at /opt/node22/lib/node_modules/playwright
+  + chromium at /opt/pw-browsers/chromium-1194 (screenshot-verify visual changes, send Rich the PNG).
+
 ## Shipped 2026-07-09 — Meeting view · Off-Site/Parts tile · closed-task search · stranded-edit fix · write-in assignees
 
 *(The complete rev-by-rev history is the `CHANGELOG` array in `MRA_Dashboard.html` — the footer badge + "What's new"
