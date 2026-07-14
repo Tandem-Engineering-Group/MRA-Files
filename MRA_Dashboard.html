@@ -1651,7 +1651,7 @@
       <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
       <div class="mi-div">👁 Views &amp; tools</div>
       <button class="mi" onclick="openYardNext();closeDrops()" title="Decision view: everything around the shop grouped by where it physically is (GPS) — here / holding yard / inbound">🚦 What's Next…</button>
-      <button class="mi" onclick="openUnassigned()" title="Find every open task that has no crew assigned - and assign them right there">⚠ Find unassigned tasks</button>
+      <button class="mi" onclick="openUnassigned()" title="Find every open task with no crew - including 📋 PROJECT-schedule tasks assigned to the generic MRA Shop bucket that start within 2 weeks (or are overdue) - and assign them right there">⚠ Find unassigned tasks</button>
       <button class="mi" onclick="setView('history');closeDrops()" title="Search EVERYTHING — incl. CLOSED tasks — by job #, job name, task wording or person; filter to ✓ Closed only with closed dates">🔎 Search closed / history</button>
       <button class="mi" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
       <button class="mi" id="btnTractor2" onclick="toggleTractor()" title="Show tractor Fleetio issues on the bay cards too">🚜 Show tractor issues</button>
@@ -1791,7 +1791,7 @@
       <button class="mi" onclick="openOutToday();closeDrops()" title="Somebody called in / is off-site today? Mark them out — their crew column gets an 'Out today' badge and they show under Staff on Leave (needs code)">🚫 Out today…</button>
       <div class="mi-div">👁 Views &amp; tools</div>
       <button class="mi" onclick="openYardNext();closeDrops()" title="Decision view: everything around the shop grouped by where it physically is (GPS) — here / holding yard / inbound">🚦 What's Next…</button>
-      <button class="mi" onclick="openUnassigned()" title="Find every open task that has no crew assigned - and assign them right there">⚠ Find unassigned tasks</button>
+      <button class="mi" onclick="openUnassigned()" title="Find every open task with no crew - including 📋 PROJECT-schedule tasks assigned to the generic MRA Shop bucket that start within 2 weeks (or are overdue) - and assign them right there">⚠ Find unassigned tasks</button>
       <button class="mi" onclick="setView('history');closeDrops()" title="Search EVERYTHING — incl. CLOSED tasks — by job #, job name, task wording or person; filter to ✓ Closed only with closed dates">🔎 Search closed / history</button>
       <button class="mi" id="btnClosed" onclick="toggleClosed()" title="Show completed tasks (struck through) on each job">Show closed</button>
       <button class="mi" id="btnTractor" onclick="toggleTractor()" title="Show tractor Fleetio issues on the bay cards too (no code needed). Off = trailers only; they always show on the FLEETIO tab regardless.">🚜 Show tractor issues</button>
@@ -2808,7 +2808,7 @@
     <div class="modal" style="max-width:580px">
       <button class="modal-close" onclick="closeUnas()" title="Close">×</button>
       <h3>⚠ Unassigned tasks <span class="count" id="unasCount"></span></h3>
-      <div class="msub">Every open task with <b>no crew</b>, grouped by job. Tap the 👤 to assign one right here — it drops off the list once it has a crew.</div>
+      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule, and everything drops off once it has a crew.</div>
       <div id="unasList" style="max-height:62vh;overflow:auto;margin-top:6px"></div>
     </div>
   </div>
@@ -3424,6 +3424,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"22.0", date:"2026-07-14", title:"\u26a0 Unassigned finder now surfaces \u201cMRA Shop\u201d project tasks (2-week window)", items:[
+    "Production-meeting ask: project-schedule tasks assigned to the generic <b>\u201cMRA Shop\u201d</b> bucket = shop work no crew has picked up. They now show in the <b>\u26a0 unassigned finder</b>, tagged <b>\u{1F4CB} project schedule</b> — but <b>only when they start/finish within the next 2 weeks or are overdue</b> (months-out lines stay hidden until their window; the rule is spelled out right in the finder). Tap \u{1F464} to give one a crew and the <b>project schedule updates too</b>." ] },
   { rev:"21.9", date:"2026-07-14", title:"🧾 Punch list: \u26a0 Issue button explains itself", items:[
     "Hover the <b>\u26a0 Issue</b> button and it now walks you through the whole thing (tap \u2192 type what\u2019s wrong \u2192 add your name \u2192 lands with the PM; original line untouched; no code; never prints) — plus an amber how-to banner at the top of every digital punch list. No more guessing." ] },
   { rev:"21.8", date:"2026-07-14", title:"⛔ At-MRA hatching fully off", items:[
@@ -13877,8 +13879,28 @@ function unassignedTasks(){
     if(String(j.row||'').indexOf('orphan:')===0 || j.category==='pipeline') return;   // ghost/orphan holders (old tasks whose floor job is gone) aren't on the board — don't flag them
     (j.tasks||[]).forEach(t=>{ if(t.done) return; if(isSalesT(t)) return; if((shopWho(t)||'').trim()) return;
       out.push({proj:j.project, jobNum:j.jobNum||'', bay:j.bay||'', raw:t.t, disp:cleanTask(t.t,false), due:t.due||''}); }); });
+  // \u{1F4CB} PROJECT-schedule tasks assigned to the generic "MRA Shop" bucket = shop work nobody has
+  // picked up yet (production-mtg ask). Only ones starting/finishing within the NEXT 2 WEEKS (or
+  // overdue) surface here — months-out schedule lines stay put. Assigning writes the project schedule.
+  { const today=D.todayISO||localISO(Date.now());
+    const lim=localISO(Date.parse(today)+14*86400000);
+    const isShop=w=>String(w||'').split('/').some(x=>x.trim().toLowerCase()==='mra shop');
+    (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{
+      if(t.done===true || /complete/i.test(String(t.st||''))) return;
+      if(!isShop(t.who)) return;
+      if(/yes/i.test(String(t.ml||''))) return;                       // milestones aren't work items
+      const dt=t.startISO||t.finISO; if(!dt || dt>lim) return;        // the 2-week window
+      const handle=(t.id!=null&&t.id!=='')?String(t.id):(t._id!=null?('s'+t._id):null);
+      if(!handle) return;                                             // not writable yet — next sync
+      out.push({proj:p.name, jobNum:'', bay:'', raw:t.t, disp:t.t, due:t.finISO||'', kind:'proj', handle:handle}); })); }
   out.sort((a,b)=> String(a.due||'9999').localeCompare(String(b.due||'9999')) || String(a.proj).localeCompare(String(b.proj)) );
   return out;
+}
+// \u{1F4CB} assign a surfaced project-schedule task: same picker, writes back via the design-board
+// path (editProjectTask by id) so the PROJECT SCHEDULE gets the crew — not just the board.
+function unasProjAsg(pname, handle){
+  if(!ensureAuth('assign a project task', ()=>unasProjAsg(pname,handle))) return;
+  qaOpen(null, w=>{ dtbReassignTo(false, pname, handle, w); setTimeout(()=>{ try{ renderUnas(); updateUnasChip(); }catch(e){} },80); });
 }
 function updateUnasChip(){ const c=document.getElementById('unasChip'); if(!c) return; const n=unassignedTasks().length;
   const nn=document.getElementById('unasN'); if(nn) nn.textContent=n; c.style.display=n?'':'none'; }
@@ -13890,10 +13912,13 @@ function renderUnas(){
   { const c=document.getElementById('unasCount'); if(c) c.textContent=list.length; }
   if(!list.length){ box.innerHTML='<div style="color:var(--muted);font-style:italic;padding:18px 4px">🎉 Nothing unassigned — every open task has a crew.</div>'; return; }
   const byJob={}, order=[];
-  list.forEach(t=>{ const k=t.proj+'|'+t.jobNum; if(!(k in byJob)){ byJob[k]=[]; order.push(k); } byJob[k].push(t); });
+  list.forEach(t=>{ const k=(t.kind||'job')+'|'+t.proj+'|'+t.jobNum; if(!(k in byJob)){ byJob[k]=[]; order.push(k); } byJob[k].push(t); });
   box.innerHTML=order.map(k=>{ const arr=byJob[k], j0=arr[0];
-    return `<div class="unas-job"><div class="unas-jh">${esc(j0.proj)}${j0.jobNum?` <span class="unas-jn">${esc(j0.jobNum)}</span>`:''}${j0.bay?` <span class="unas-bay">${esc(j0.bay)}</span>`:''}</div>`
-      + arr.map(t=>`<div class="unas-t">${qaChip(t.proj,t.raw)}<span class="unas-tx">${esc(t.disp)}</span>${t.due?` <span class="unas-due${(today&&t.due<today)?' od':''}">📅 ${esc(fmtMD(t.due))}</span>`:''}</div>`).join('')
+    const tag=j0.kind==='proj'
+      ? ` <span class="unas-bay" title="These come from the PROJECT SCHEDULE — tasks assigned to the generic 'MRA Shop' bucket, meaning no crew has picked them up. Only ones starting or finishing within the NEXT 2 WEEKS (or overdue) show here. Tap 👤 to give one a crew — the project schedule updates too.">📋 project schedule · next 2 wks</span>`
+      : (j0.bay?` <span class="unas-bay">${esc(j0.bay)}</span>`:'');
+    return `<div class="unas-job"><div class="unas-jh">${esc(j0.proj)}${j0.jobNum?` <span class="unas-jn">${esc(j0.jobNum)}</span>`:''}${tag}</div>`
+      + arr.map(t=>`<div class="unas-t">${t.kind==='proj'?`<span class="qa" onclick="event.stopPropagation();unasProjAsg('${escA(t.proj)}','${escA(t.handle)}')" title="Assign this project-schedule task to a crew — writes the crew back to the project schedule">\u{1F464}</span>`:qaChip(t.proj,t.raw)}<span class="unas-tx">${t.kind==='proj'?'📋 ':''}${esc(t.disp)}</span>${t.due?` <span class="unas-due${(today&&t.due<today)?' od':''}">📅 ${esc(fmtMD(t.due))}</span>`:''}</div>`).join('')
       + `</div>`;
   }).join('');
 }
