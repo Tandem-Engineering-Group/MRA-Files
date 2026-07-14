@@ -337,7 +337,13 @@ Treat help + rev as PART OF the feature, not an afterthought.
   for PM report/floor recap; (3) 🧹 ghost-job cleanup admin view; (4) **BOM import** blocked on Rich copying the
   "materials & parts"/BOM files into `SMartsheets projects` (M365 connector can't reach the original project folders);
   (5) catalogue shared-edit write-back (needs a blob-write flow like EOTM, or fold parts into Lists); (6) Al's
-  planning-view extras: phase-chunked planning bars, PM capacity hours model.
+  planning-view extras: phase-chunked planning bars, PM capacity hours model; (7) **PROJECT tasks assigned to
+  "MRA Shop" should surface in the ⚠ unassigned finder** (production-mtg ask, added 2026-07-14): tag them like
+  Fleetio tasks get 🔧 (e.g. 📋 project), assigning one writes back to the project schedule (editProjectTask,
+  like the design-board reassign). ⚠ OPEN QUESTION before building: scope window — Medtronic alone has dozens of
+  future MRA-Shop tasks; probably only surface those with start/finish ≤ ~14 days out or overdue. Confirm w/ Rich
+  (he offered to explain more). (8) at-MRA hatching now HARD-off (rev 21.8) — was stuck on for devices that tried
+  the toggle; still awaiting the Al re-scope.
   ✅ CLEARED 2026-07-14 (rev 21.6–21.7): 🧹 ghost-task cleanup screen (☰ Menu; found 16 stale rows day one) ·
   gantt icon legend (🏷/⏸/🧩 w/ hover detail) · ⏱ new-project watchdog (alerts if a dash-created project hasn't
   landed in the Lists after ~40 min — the AWS case) · punch-list ⚠ Issue button (crew note+name → "⚠ ISSUE:" task
