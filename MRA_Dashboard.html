@@ -3430,6 +3430,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"22.7", date:"2026-07-14", title:"🗓 Meeting: Parking-Lot cards match the Coming-back side", items:[
+    "The 🅿 In-the-Parking-Lot cards now carry the same info as the Coming-back column: <b>🗓 Fleetio MRA date range</b>, <b>GPS chip</b> (📍 at MRA / \u26a0 elsewhere / 📡 no GPS), job <b>status + dates + client</b>, the 🧩 sub-job tag, and an <b>\u270e open</b> button straight into the job editor." ] },
   { rev:"22.6", date:"2026-07-14", title:"🔗 Quick link renamed: Logistics Calendar", items:[
     "The new quick link is now titled <b>Logistics Calendar</b>." ] },
   { rev:"22.5", date:"2026-07-14", title:"🗓 Meeting view: hover an issue \u2192 details dock on the right", items:[
@@ -8918,7 +8920,9 @@ function _mtgData(D){
   }).sort((a,b)=>(a.state===b.state?0:(a.state==='soon'?-1:1)) || ((a.dn??99)-(b.dn??99)));
   // Col 2 - parking lot work
   const lot=(D.jobs||[]).filter(j=>/^\s*parking\s*lot\s*$/i.test(j.bay||'') && (j.status||'').toLowerCase()!=='shipped' && j.category!=='leave')
-    .map(j=>({proj:j.project, jobNum:j.jobNum, tasks:(j.tasks||[]).filter(t=>!t.done).map(t=>({t:cleanTask(t.t,false), raw:t.t, who:(t.who||'').trim(), due:t.due||null}))}))
+    .map(j=>({proj:j.project, jobNum:j.jobNum, row:j.row, status:j.status||'', startISO:j.startISO||null, endISO:j.completionISO||null,
+      client:j.client||'', pm:j.pm||'', sub:(typeof jobIsSub==='function'&&jobIsSub(j)),
+      tasks:(j.tasks||[]).filter(t=>!t.done).map(t=>({t:cleanTask(t.t,false), raw:t.t, who:(t.who||'').trim(), due:t.due||null}))}))
     .sort((a,b)=>(b.tasks.length-a.tasks.length)||a.proj.localeCompare(b.proj));
   // Col 3 - decisions
   const dec=[]; const njob2=s2=>String(s2||'').toUpperCase().replace(/[^0-9]/g,'');
@@ -8983,7 +8987,16 @@ function renderMeeting(){
   document.getElementById('mtgLot').innerHTML = M.lot.length ? M.lot.map(l=>{
     const lis=l.tasks.slice(0,10).map(t=>{ const fm=String(t.raw||'').match(/🔧\s*#(\d+)/); const fa=fm?fioArrow('issue',fm[1]):'';
       return `<li class="${t.who?'':'un'}">${esc(String(t.t).slice(0,60))}${fa} — <span class="who">${t.who?esc(t.who):'⚠ unassigned'}</span>${t.due?` <span class="mtg-due">due ${esc(fmtMDY(t.due))}</span>`:''}</li>`; }).join('');
-    return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(l.proj)}</div><div class="m">${l.jobNum?esc(l.jobNum)+' · ':''}${l.tasks.length} open task${l.tasks.length===1?'':'s'}</div>${lis?`<ul>${lis}</ul>`:'<div class="mtg-empty">no open tasks</div>'}${l.tasks.length>10?`<div class="m">+${l.tasks.length-10} more…</div>`:''}</div>`;
+    // Same info as the Coming-back side (Rich's ask): dates/status, 🗓 Fleetio MRA range, GPS chip, open-editor.
+    const fr=l.sub?null:_fioRange(_fioRetForJob(l.jobNum));
+    const frLine=fr?`<div class="m" style="color:#7fb0ff;font-weight:700" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(fr)}</div>`:'';
+    let gpsChip='';
+    if(!l.sub){ const loc=(typeof _ynLoc==='function')?_ynLoc(l.proj,l.jobNum):null;
+      if(loc&&(loc.yard||'').trim()) gpsChip=_isMraYard(loc)?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`:` <span class="mtg-gpswarn" title="Samsara GPS puts this unit at ${escA(loc.yard)} — not at MRA">⚠ GPS: ${esc(loc.yard)}</span>`;
+      else if(loc&&(loc.place||'').trim()) gpsChip=` <span class="mtg-gpswarn" title="Samsara GPS last fix">⚠ GPS: ${esc(loc.place)}</span>`;
+      else gpsChip=` <span class="mtg-gpsno" title="No Samsara GPS on this unit — location can't be auto-checked">📡 no GPS</span>`; }
+    const dts=(l.startISO||l.endISO)?` · ${fmtMD(l.startISO)}→${fmtMD(l.endISO)}`:'';
+    return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(l.proj)}${l.sub?' <span title="Sub-job / parts build — Fleetio follows the MAIN job">🧩</span>':''}${gpsChip}</div><div class="m">${l.jobNum?esc(l.jobNum)+' · ':''}${l.status?esc(l.status)+' · ':''}${l.tasks.length} open task${l.tasks.length===1?'':'s'}${dts}${l.client?' · '+esc(l.client):''} <button class="mtg-asg" style="padding:1px 9px;font-size:10px" onclick="event.stopPropagation();mtgOpenJob(${JSON.stringify(l.row)})" title="Open this job's editor — bay, dates, tasks, punch list (needs code)">✎ open</button></div>${frLine}${lis?`<ul>${lis}</ul>`:'<div class="mtg-empty">no open tasks</div>'}${l.tasks.length>10?`<div class="m">+${l.tasks.length-10} more…</div>`:''}</div>`;
   }).join('') : `<div class="mtg-empty">Nothing in the Parking Lot.</div>`;
   window._MTG_DEC=M.dec;
   document.getElementById('mtgDec').innerHTML = M.dec.length ? M.dec.slice(0,30).map((d,i)=>{
