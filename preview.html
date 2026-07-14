@@ -1616,6 +1616,7 @@
         <button class="mi" onclick="closeDrops(); openDesignTeam()" title="The design / CAD team board — what Steve, Sarah, Mark &amp; Brandon are working on, with notes + a printable one-pager each">🎨 Design Team board</button>
         <button class="mi" onclick="closeDrops(); openProdMeeting()" title="Run the Monday 10am production status meeting from the dash - PM report-out (green one-liners, yellow/red expanded), park items to discuss, tracked action items">🏭 Production Meeting</button>
         <button class="mi" onclick="closeDrops(); openSalesPlan()" title="The simple sales/planning timeline - the committed board as solid bars, potential new projects overlaid as purple hatched bars (name, vehicle, scope, dates, probability), plus PM capacity">📈 Sales &amp; Planning</button>
+        <button class="mi" onclick="closeDrops(); openGhosts()" title="Admin cleanup: leftover task rows whose floor job is gone (they never show on the board). Close or delete them so they stop lurking in the Lists.">🧹 Ghost tasks</button>
         <button class="mi" onclick="closeDrops(); openUsers()" title="Add / edit / remove who can log in to edit, and set their codes (admin only)">👥 Manage logins</button>
         <button class="mi" onclick="closeDrops(); openHolidays()" title="Add or remove company holidays flagged on every schedule (admin only)">📅 Manage holidays</button>
         <button class="mi" onclick="closeDrops(); openEotmEdit()" title="Change the Employee of the Month name + photo (admin only)">🏆 Employee of the Month</button>
@@ -2006,6 +2007,9 @@
         <span style="color:var(--amber)">◆ milestone gate</span>
         <span style="color:var(--red)">▏today</span>
         <span style="color:var(--muted)">solid = % complete</span>
+        <span style="color:var(--muted)" title="Non-official project — informal / not a formal job yet (flag it in ✎ Edit Project Tasks → 🏷 Non-official). Stays on the Gantt and PM Load, just tagged, with an amber wash on its row.">🏷 = non-official</span>
+        <span style="color:var(--muted)" title="Parked project — frozen / on hold (⏸ Park in the project editor). Dimmed, never counted at-risk; un-park to resume.">⏸ = parked</span>
+        <span style="color:var(--muted)" title="Sub-builds that share a name prefix (JFSD - …) roll up under one family in the Production Meeting.">🧩 sub-job = no Fleetio</span>
       </div>
       <div class="gantt-note" id="projGanttNote"></div>
     </div>
@@ -2776,6 +2780,14 @@
   </div>
 
   <!-- ===================== PRINT PICKER (whole board or any mix of crews) ===================== -->
+  <div class="modal-overlay" id="ghostModal" onclick="if(event.target.id==='ghostModal')this.classList.remove('show')">
+    <div class="modal" style="max-width:640px">
+      <button class="modal-close" onclick="document.getElementById('ghostModal').classList.remove('show')" title="Close">×</button>
+      <h3>🧹 Ghost tasks <span class="count" id="ghostCount"></span></h3>
+      <div class="msub">Leftover task rows whose floor job was deleted or finished long ago — they don't show on the board (and don't count as unassigned), but they're still sitting in the Lists. <b>✓ Close</b> or <b>🗑 Delete</b> them here to clean house (needs code).</div>
+      <div id="ghostList" style="max-height:62vh;overflow:auto;margin-top:8px"></div>
+    </div>
+  </div>
   <div class="modal-overlay" id="pmrModal" onclick="if(event.target.id==='pmrModal')this.classList.remove('show')">
     <div class="modal" style="max-width:420px">
       <button class="modal-close" onclick="document.getElementById('pmrModal').classList.remove('show')" title="Close">×</button>
@@ -3412,6 +3424,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"21.6", date:"2026-07-13", title:"🧹 Ghost-task cleanup + icon legend + new-project watchdog", items:[
+    "<b>🧹 Ghost tasks</b> (☰ Menu) — leftover task rows whose floor job is long gone (the QuidelOrtho kind) get a cleanup screen: see them all, <b>✓ Close</b> or <b>🗑 Delete</b> each one so they stop lurking in the Lists.",
+    "The Gantt <b>legend</b> now explains the little icons — 🏷 non-official, ⏸ parked, 🧩 sub-job — with full details on hover. No more guessing in the meeting.",
+    "<b>⏱ New-project watchdog</b> — when a brand-new project is created from the dash (editor or Sales &amp; Planning promote) and still hasn\u2019t appeared in the Lists ~40 minutes later, the board tells you loudly instead of letting it silently vanish (the \u201cAWS didn\u2019t save\u201d case)." ] },
   { rev:"21.5", date:"2026-07-13", title:"🐛 ALIGNED: meeting / PM report / portfolio now tell one story", items:[
     "The Production Meeting could call a project \u201cgreen, no issues\u201d while it sat on dozens of past-due tasks (green = % vs the time curve only, and the past-due detail only rendered on yellow/red). Now <b>every</b> row shows its \u26a0 past-due count and the expandable list — a green-on-the-curve project with 42 overdue items reads \u201cgreen on the curve \u2014 \u26a0 42 past-due tasks\u201d, matching the PM report and Portfolio Status exactly.",
     "PM report task lines now carry their <b>\u21b3 parent task and phase</b> (like the design board), so six \u201cInternal Review, Modifications\u201d rows finally say what each one belongs to." ] },
@@ -7142,6 +7158,7 @@ function submitProjTask(){
   // preserve an existing sub even if the parent dropdown is blank (Lists rows carry sub, not a parent id).
   f.sub = (_parent ? 'x' : ((editing && _oldEdit && _oldEdit.sub) ? 'x' : ''));
   const payload=Object.assign({ action: editing?"editProjectTask":"addProjectTask", project:name, pin:CLOSE_PIN, user:CURRENT_USER }, f);
+  if(!editing && !oProj(name)){ try{ _npWatch(name); }catch(e){} }   // brand-new project → watch that the create actually lands
   if(editing){ payload.id=window._ptId; payload.taskOld=_oldEdit?_oldEdit.t:task;
     if(_oldEdit&&_oldEdit._id!=null) payload._id=_oldEdit._id; else if(window._ptSpId!=null) payload._id=window._ptSpId; }   // exact SharePoint row → dup-safe
   const btn=document.getElementById('ptSubmit'); btn.disabled=true; btn.textContent="Saving…";
@@ -9635,6 +9652,7 @@ function spPromote(name){
   const today=(D.todayISO)||localISO(Date.now());
   const st=p.st||today, ln=p.ln||p.st||today;
   const cmts='Promoted from Sales & Planning prospect'+(p.v?(' \u00b7 '+p.v):'')+(p.sc?(' \u00b7 '+p.sc):'')+(p.pr!=null?(' \u00b7 was '+p.pr+'% likely'):'')+(p.no?(' \u00b7 '+p.no):'');
+  try{ _npWatch(name); }catch(e){}
   shopWrite({ action:'addProjectTask', project:name, task:'Project kickoff', phase:'Project Planning', type:'',
     assigned:'', status:'Not Started', start:st, finish:ln, pred:'', milestone:'', parentId:'', sub:'',
     estDays:'', estHours:'', budget:'', comments:cmts, pin:CLOSE_PIN, user:CURRENT_USER });
@@ -9826,6 +9844,49 @@ function spPrint(){
   const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+
+/* ---------- 🧹 GHOST TASKS (admin): orphan holders = surviving Shop Tasks rows whose floor job was
+   deleted/finished (row 'orphan:*' / category 'pipeline'). Hidden from the board + unassigned finder;
+   this modal lets Rich close or delete them properly so they stop lurking in the Lists. ---------- */
+function _ghostJobs(){ const D=window.MRA_DATA||{};
+  return (D.jobs||[]).filter(j=>(String(j.row||'').indexOf('orphan:')===0 || j.category==='pipeline') && (j.tasks||[]).some(t=>!t.done)); }
+function openGhosts(){ if(typeof closeDrops==='function') closeDrops(); renderGhosts();
+  document.getElementById('ghostModal').classList.add('show'); }
+function renderGhosts(){
+  const box=document.getElementById('ghostList'); if(!box) return;
+  const gj=_ghostJobs();
+  { const c=document.getElementById('ghostCount'); if(c) c.textContent=gj.reduce((a,j)=>a+(j.tasks||[]).filter(t=>!t.done).length,0); }
+  if(!gj.length){ box.innerHTML='<div style="color:var(--muted);font-style:italic;padding:16px 4px">✨ No ghost tasks — the Lists are clean.</div>'; return; }
+  box.innerHTML=gj.map(j=>`<div style="margin-bottom:14px"><div style="font-weight:800;border-bottom:1px solid var(--line);padding-bottom:3px;margin-bottom:5px">${esc(j.project||'(unnamed)')} <span style="color:var(--faint);font-weight:400;font-size:11px">ghost — no floor job</span></div>`
+    + (j.tasks||[]).filter(t=>!t.done).map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12.5px"><span style="flex:1">${esc(cleanTask(t.t,false))}${t.cm?`<div style="color:var(--faint);font-size:10.5px">${esc(String(t.cm).slice(0,120))}</div>`:''}</span>`
+      +`<button class="expandbtn" style="padding:2px 10px" onclick="ghostClose('${escJsAttr(j.project)}','${escJsAttr(t.t)}')" title="Mark it done (keeps the history)">✓ Close</button>`
+      +`<button class="expandbtn" style="padding:2px 10px;border-color:#ef4444;color:#fca5a5" onclick="ghostDelete('${escJsAttr(j.project)}','${escJsAttr(t.t)}')" title="Delete the row entirely">🗑</button></div>`).join('')
+    + `</div>`).join('');
+}
+function ghostClose(proj, raw){ if(!ensureAuth('close a ghost task', ()=>ghostClose(proj,raw))) return;
+  closeTaskByName(proj, raw); renderGhosts(); }
+function ghostDelete(proj, raw){ if(!ensureAuth('delete a ghost task', ()=>ghostDelete(proj,raw))) return;
+  if(!confirm('Delete this leftover task row for good?\n\n"'+String(raw).slice(0,90)+'"')) return;
+  shopWrite({ action:'deleteTask', project:proj, task:raw, pin:CLOSE_PIN, user:CURRENT_USER });
+  const j=(((window.MRA_DATA||{}).jobs)||[]).find(x=>x.project===proj);
+  if(j&&j.tasks){ j.tasks=j.tasks.filter(x=>x.t!==raw); }
+  renderGhosts(); }
+/* ---------- ⏱ NEW-PROJECT WATCHDOG (the "AWS didn't save" case): brand-new projects created from
+   the dash ride a create op that has silently no-opped before. Register the name; if it still hasn't
+   appeared in the Lists-built data ~40 min later, say so loudly instead of letting it vanish. ---------- */
+function _npWatch(name){ try{ const L=JSON.parse(localStorage.getItem('mra_npwatch')||'[]');
+  if(!L.some(x=>x.n===name)) L.push({n:name, ts:Date.now()});
+  localStorage.setItem('mra_npwatch',JSON.stringify(L)); }catch(e){} }
+function _npCheck(){ try{
+  const L=JSON.parse(localStorage.getItem('mra_npwatch')||'[]'); if(!L.length) return;
+  const names=new Set((((window.MRA_DATA||{}).projects)||[]).map(p=>String(p.name).toLowerCase()));
+  const keep=[];
+  L.forEach(x=>{ if(names.has(String(x.n).toLowerCase())) return;              // landed — done watching
+    if(Date.now()-x.ts > 40*60000){                                            // 40 min = two full sync cycles
+      alert('⚠ Heads up: the new project "'+x.n+'" was created from the dashboard over 40 minutes ago but still hasn\u2019t appeared in the Lists.\n\nThe create may have silently failed — re-add it (or check the "MRA Lists Write 2" flow run history).');
+      return; }                                                                 // alert once, stop watching
+    keep.push(x); });
+  localStorage.setItem('mra_npwatch',JSON.stringify(keep)); }catch(e){} }
 
 // 🔔 FLOOR return alarm — units marked in Fleetio as coming back within 14 days (amber, pulsing)
 // or already here inside their date window (green). Hidden entirely when nothing qualifies.
@@ -13884,6 +13945,7 @@ async function refresh(){
     EDIT_PENDING=false; snapClear();   // the lists have caught up past the edit -> trust the server, drop the stash
     window.MRA_DATA=incoming;
     mergePending(incoming);   // re-apply any just-added tasks this device hasn't seen land yet
+    try{ _npCheck(); }catch(e){}   // ⏱ new-project watchdog — flag creates that never landed
     renderAll();
     return true;
   }catch(e){ return false; /* file:// or server down — keep showing current data */ }
