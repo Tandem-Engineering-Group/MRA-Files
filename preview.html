@@ -1473,6 +1473,11 @@
   .fl-detail-d{ font-size:13px; line-height:1.45; margin-top:10px; white-space:pre-wrap; color:var(--txt) }
   .fl-detail-imgs{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px }
   .fl-detail-imgs img{ max-height:120px; max-width:100%; border:1px solid var(--line); border-radius:6px }
+  /* 🗓 Meeting view: hover an issue line → same detail card as the Open-Issues full screen, docked right */
+  .mtg-issdock{ position:fixed; right:16px; top:64px; width:min(440px,42vw); max-height:calc(100vh - 84px); overflow:auto;
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--brand); border-radius:12px;
+    padding:14px 16px; z-index:220; box-shadow:0 12px 34px rgba(0,0,0,.5) }
+  @media (max-width:900px){ .mtg-issdock{ left:12px; right:12px; width:auto; top:auto; bottom:12px; max-height:55vh } }
   .fl-detail-files{ display:flex; flex-direction:column; gap:4px; margin-top:8px }
   .fl-detail-files a{ font-size:12px; color:var(--blue) }
   table.flt .typ{font-size:10px; background:#243042; color:#cdd8e6; border-radius:20px; padding:2px 9px; white-space:nowrap}
@@ -1696,6 +1701,7 @@
 
   <!-- ===================== 🗓 MAINTENANCE MEETING VIEW (full-screen) ===================== -->
   <div class="mtg-overlay" id="mtgOverlay">
+    <div id="mtgIssDetail" class="mtg-issdock" style="display:none"></div>
     <div class="mtg-head">
       <h3>🗓 Maintenance Meeting</h3>
       <span class="sub" id="mtgStamp"></span>
@@ -3404,7 +3410,7 @@ const FLEETIO_HELP = `
   <div class="hsec"><h4>③ ⚠ Open Issues &amp; 📋 Work Orders</h4>
     <p>The <b>⚠ Open Issues</b> list sits up top and shows <b>every</b> open Fleetio issue (no longer capped) — each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. A <b>Sort</b> dropdown orders them: <b>Overdue first</b> (default), <b>Oldest first</b>, <b>Newest first</b>, <b>Priority</b>, or by <b>issue #</b> (remembered per device). <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>hover an issue and its details (description, photos, files) dock on the right</b> (tap on touch; ✕ / Esc closes) — with <b>✓ Resolve…</b> and <b>💬 Comment…</b> buttons that write <b>straight to Fleetio</b>: sign in with your board code, type the short resolution note Fleetio requires (or your comment), done. The issue drops off the board on your screen immediately; Fleetio and everyone else catch up on the next ~15-min cycle. There's still an ↗ link for anything deeper. <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
   <div class="hsec"><h4>③ᵇ ↩️ Coming Back to MRA</h4>
-    <p>Right under Open Issues: units a Fleetio issue marks as coming back to MRA, <b>earliest date first</b>. <b>Best way (exact):</b> fill the issue's <b>Back to MRA Date</b> field (and optional <b>Leaving MRA Date</b> for a range) — the panel shows the date/range and marks it <span class="k">here</span> (green) while the unit's in that window, <span class="k">due</span> (amber) within two weeks. <b>Fallback:</b> if those fields are blank it still reads the <b>description</b> (e.g. “Returning to MRA 7/6–7/10”, “Back to MRA as of 7/1/26”). Click a row to open the issue in Fleetio. The <span class="k">🗓 Meeting view</span> button opens the <b>weekly maintenance-meeting agenda</b> full screen — coming-back units with owners, Parking-Lot work by crew, and a <b>⚡ Decisions needed</b> list (unassigned / undated items); assign from the board as usual and it updates live, and <span class="k">🖨 Print</span> makes a one-pager. Every Coming-back card also <b>cross-checks the shop board by J#</b>: already assigned shows a green <span class="k">✓ On board · (bay)</span> that jumps into that job's editor (<span class="k">🔄 On board (shipped)</span> if it shipped — use 🔄 Bring back there); every on-board unit <b>spells out its job(s) right on the card — name, bay, status, dates, open tasks</b> — nothing behind a click, and a split unit's badge carries <b>all its locations</b> (✓ On board · Parking Lot + Bay 5 Front) for the quick scanners (a line opens that job's editor; the badge on a split unit opens a picker, which also offers ➕ New job for the same unit); a <b>shipped</b> job shows <span class="k">🔄 bring back</span> on its badge/line/picker entry — click and the editor opens <b>pre-set as a return</b> (Active · Parking Lot · today, ship history logged) ready to re-assign; and a HERE-NOW unit with no Samsara tracker shows <span class="k">📡 no GPS</span> so you know its location can't be auto-checked; only a unit with <b>no job at all</b> shows <span class="k">🏭 Assign to board</span>, which opens <b>➕ Add job pre-filled</b> from the return (name, J#, arrival → leaving dates, Parking Lot).</p></div>
+    <p>Right under Open Issues: units a Fleetio issue marks as coming back to MRA, <b>earliest date first</b>. <b>Best way (exact):</b> fill the issue's <b>Back to MRA Date</b> field (and optional <b>Leaving MRA Date</b> for a range) — the panel shows the date/range and marks it <span class="k">here</span> (green) while the unit's in that window, <span class="k">due</span> (amber) within two weeks. <b>Fallback:</b> if those fields are blank it still reads the <b>description</b> (e.g. “Returning to MRA 7/6–7/10”, “Back to MRA as of 7/1/26”). Click a row to open the issue in Fleetio. The <span class="k">🗓 Meeting view</span> button opens the <b>weekly maintenance-meeting agenda</b> full screen — coming-back units with owners, Parking-Lot work by crew, and a <b>⚡ Decisions needed</b> list (unassigned / undated items); assign from the board as usual and it updates live, and <span class="k">🖨 Print</span> makes a one-pager. Every Coming-back card also <b>cross-checks the shop board by J#</b>: already assigned shows a green <span class="k">✓ On board · (bay)</span> that jumps into that job's editor (<span class="k">🔄 On board (shipped)</span> if it shipped — use 🔄 Bring back there); every on-board unit <b>spells out its job(s) right on the card — name, bay, status, dates, open tasks</b> — nothing behind a click, and a split unit's badge carries <b>all its locations</b> (✓ On board · Parking Lot + Bay 5 Front) for the quick scanners (a line opens that job's editor; the badge on a split unit opens a picker, which also offers ➕ New job for the same unit); a <b>shipped</b> job shows <span class="k">🔄 bring back</span> on its badge/line/picker entry — click and the editor opens <b>pre-set as a return</b> (Active · Parking Lot · today, ship history logged) ready to re-assign; and a HERE-NOW unit with no Samsara tracker shows <span class="k">📡 no GPS</span> so you know its location can't be auto-checked; only a unit with <b>no job at all</b> shows <span class="k">🏭 Assign to board</span>, which opens <b>➕ Add job pre-filled</b> from the return (name, J#, arrival → leaving dates, Parking Lot). And like the Open-Issues full screen, <b>hover any #NNN issue line</b> (tap on touch) and its <b>detail card docks on the right</b> — description, photos, <span class="k">\u2713 Resolve\u2026</span> / <span class="k">\u{1F4AC} Comment\u2026</span> straight to Fleetio; \u2715 / Esc closes it.</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
     <p>Right under the Service Backlog charts: every unit <b>physically on the floor right now</b> (in a bay or the lot), grouped by job like the shop board — its open Fleetio <b>issues / work orders / service</b> listed underneath, color-edged by urgency. Hit <span class="k">➕</span> on an issue to drop it into the crew queues as an <b>assignable, closeable Shop Task</b> (it auto-closes here once it's resolved in Fleetio) — or the green <span class="k">✓</span> next to it to <b>resolve the issue in Fleetio on the spot</b> (asks for the short note Fleetio requires) — or <span class="k">➕ Queue all (N)</span> on the card to add <b>every un-queued issue at once</b> (they land unassigned; divvy up after). This panel and the three charts <b>start collapsed</b> — click the ▾ to open (remembered). Honors the 🧤/🍁 flag picker up top.</p></div>
   <div class="hsec"><h4>⑤ 🚛 By Trailer — click to drill in</h4>
@@ -3424,6 +3430,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"22.5", date:"2026-07-14", title:"🗓 Meeting view: hover an issue \u2192 details dock on the right", items:[
+    "Same treatment as the Open-Issues full screen: on the 🗓 Maintenance Meeting, <b>hover any #NNN issue line</b> (tap on touch) and its <b>detail card docks on the right</b> — description, photos, files, <b>\u2713 Resolve\u2026</b> / <b>\u{1F4AC} Comment\u2026</b> straight to Fleetio, and the \u2197 link. \u2715 or Esc closes just the card." ] },
   { rev:"22.4", date:"2026-07-14", title:"🔗 Quick links: Logistic Calendars", items:[
     "Added <b>Logistic Calendars</b> (the 2026 Logistics Calendars folder in SharePoint) to the 🔗 quick links in the header." ] },
   { rev:"22.3", date:"2026-07-14", title:"🧾 Work orders + punch lists: ASSET # is now the real fleet unit", items:[
@@ -8990,7 +8998,27 @@ function mtgDecClick(ev,i){ if(ev&&ev.stopPropagation) ev.stopPropagation(); con
   if(d.kind==='issue'&&d.row!=null){ qaOpen(ev, w=>addFleetioTask(d.row,String(d.num),w)); }
 }
 function openMeeting(){ MTG_OPEN=true; renderMeeting(); document.getElementById('mtgOverlay').classList.add('show'); }
-function closeMeeting(){ MTG_OPEN=false; document.getElementById('mtgOverlay').classList.remove('show'); }
+function closeMeeting(){ MTG_OPEN=false; mtgIssClose(); document.getElementById('mtgOverlay').classList.remove('show'); }
+/* Hover (tap on touch) any #NNN issue line on the Meeting view → the SAME detail card as the
+   Open-Issues full screen docks on the right: description, photos, files, ✓ Resolve… / 💬 Comment…
+   (write straight to Fleetio) + ↗ link. ✕ or Esc closes just the card. */
+function mtgIssShow(num){ const d=document.getElementById('mtgIssDetail'); if(!d||!num) return;
+  if(d.dataset.num===String(num) && d.style.display!=='none') return;
+  d.innerHTML=fioIssueDetailHtml(num).replace(/fioCloseDetail\(\)/g,'mtgIssClose()');
+  d.dataset.num=String(num); d.style.display='block'; }
+function mtgIssClose(){ const d=document.getElementById('mtgIssDetail'); if(d){ d.style.display='none'; d.dataset.num=''; } }
+document.addEventListener('mouseover',e=>{ const ov=document.getElementById('mtgOverlay'); if(!ov||!ov.classList.contains('show')) return;
+  if(e.target.closest('#mtgIssDetail')) return;
+  const ln=e.target.closest('li,.row'); if(!ln||!ov.contains(ln)) return;
+  const ne=ln.querySelector('.fionum'); if(!ne) return;
+  const num=String(ne.textContent||'').replace(/[^0-9]/g,''); if(num) mtgIssShow(num); });
+document.addEventListener('click',e=>{ const ov=document.getElementById('mtgOverlay'); if(!ov||!ov.classList.contains('show')) return;
+  if(e.target.closest('#mtgIssDetail')||e.target.closest('a')||e.target.closest('button')) return;
+  const ln=e.target.closest('li,.row'); if(!ln||!ov.contains(ln)) return;
+  const ne=ln.querySelector('.fionum'); if(!ne) return;
+  const num=String(ne.textContent||'').replace(/[^0-9]/g,''); if(num) mtgIssShow(num); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&MTG_OPEN){ const d=document.getElementById('mtgIssDetail');
+  if(d&&d.style.display!=='none'){ mtgIssClose(); e.stopImmediatePropagation(); } } }, true);
 // 🏭 Assign a coming-back unit to the shop board, right from the meeting. Cross-checks the unit's J#
 // against the board first: one existing job → its editor (shipped ones show 🔄 Bring back there);
 // SEVERAL jobs (a unit split up, e.g. J1524 = Maintenance + Pedestal) → a picker so you choose which;
