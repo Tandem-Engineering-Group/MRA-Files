@@ -337,9 +337,13 @@ Treat help + rev as PART OF the feature, not an afterthought.
   for PM report/floor recap; (3) 🧹 ghost-job cleanup admin view; (4) **BOM import** blocked on Rich copying the
   "materials & parts"/BOM files into `SMartsheets projects` (M365 connector can't reach the original project folders);
   (5) catalogue shared-edit write-back (needs a blob-write flow like EOTM, or fold parts into Lists); (6) Al's
-  planning-view extras: phase-chunked planning bars, PM capacity hours model; (7) whole-job punch "issue button"
-  (route to PM, don't collide with Comments — phase 2); (8) non-official icon legend + AWS "didn't save" check;
-  (9) full-screen Gantt detail-view consistency (older).
+  planning-view extras: phase-chunked planning bars, PM capacity hours model.
+  ✅ CLEARED 2026-07-14 (rev 21.6–21.7): 🧹 ghost-task cleanup screen (☰ Menu; found 16 stale rows day one) ·
+  gantt icon legend (🏷/⏸/🧩 w/ hover detail) · ⏱ new-project watchdog (alerts if a dash-created project hasn't
+  landed in the Lists after ~40 min — the AWS case) · punch-list ⚠ Issue button (crew note+name → "⚠ ISSUE:" task
+  on the same job assigned to the PM, TBD/blank → Rich; works from opener AND ?punch= deep link; hidden on print).
+  ⚠ STALE ITEM KILLED: "full-screen Gantt detail-view consistency" was ALREADY SHIPPED as rev 8.2 (2026-06-25) —
+  detail slider (Tasks→Phases→Milestones→Summary), arrows up top, ⚙ View menu; verified working 2026-07-14.
 - **Gotchas this session:** python heredoc escapes bite (em-dash/quote SyntaxErrors abort BEFORE writing — file
   stays clean, just rerun); JS-string changelog items must escape inner double quotes (`class=\"k\"`); `ejSub` id
   was taken (bring-back banner) → checkboxes are `ajSubJob`/`ejSubJob`; repo's checked-in data.js is a stale June-16
