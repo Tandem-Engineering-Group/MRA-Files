@@ -3424,6 +3424,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"22.3", date:"2026-07-14", title:"🧾 Work orders + punch lists: ASSET # is now the real fleet unit", items:[
+    "Maintenance ask: the <b>ASSET #</b> box on work orders and punch lists now shows the actual <b>fleet unit(s)</b> (pulled from the job\u2019s Fleetio issues) instead of the written-out job title — the title moved to the line just below, next to the client and PM, so nothing is lost." ] },
   { rev:"22.2", date:"2026-07-14", title:"\u26a0 Unassigned finder: \u{1F4CB} rows now show start \u2192 finish", items:[
     "A \u{1F4CB} project task qualifies for the list when its <b>START</b> falls inside the next 2 weeks (or it\u2019s overdue) — but the row displayed only the <b>finish</b> date, which can be months later and looked wrong. Rows now read <b>\u25b6 start \u2192 finish</b> so the 2-week rule is visible at a glance." ] },
   { rev:"22.1", date:"2026-07-14", title:"📧 PM report: photos on coming-due items too", items:[
@@ -11504,6 +11506,16 @@ function buildWorkOrders(sel, opts){
     }).filter(x=>x.open.length||(x.fio&&x.fio.length)).sort((a,b)=>oIdx(a.j.bay)-oIdx(b.j.bay)||String(a.j.project||'').localeCompare(String(b.j.project||'')));
     cjobs.forEach(({j,open,fio})=>{
       woCount++;
+      // ASSET # = the real fleet unit(s) (maintenance ask) — from this job's Fleetio issues:
+      // queued 🔧 tasks' issue numbers + tractor issues + any issue sharing the J#.
+      const _k=jk(j.jobNum);
+      const _assets=[...new Set([
+        ...open.map(o=>{const m=String(o.raw||'').match(/#(\d+)/); return m?m[1]:null;}).filter(Boolean)
+          .map(n=>{const iss=allIss.find(x=>String(x.num)===String(n)); return iss&&iss.asset;}),
+        ...(fio||[]).map(it=>it.asset),
+        ...(_k?allIss.filter(it=>jk(it.jobNum)===_k).map(it=>it.asset):[])
+      ].filter(Boolean))];
+      const _assetTxt=_assets.slice(0,3).join(' \u00b7 ');
       const rows=open.map(o=>{
         const m=String(o.raw||'').match(/#(\d+)/), num=m?m[1]:null;
         const d=(num&&fdet[num])?String(fdet[num]).replace(/\s+/g,' ').trim():'';
@@ -11516,8 +11528,8 @@ function buildWorkOrders(sel, opts){
         return `<tr><td class="wck">☐</td><td class="wiss">${num?('#'+num):''}</td><td class="wdesc"><div class="wd1">${esc(o.disp)}${dueS}</div>${desc?`<div class="wd2">${esc(desc.slice(0,320))}</div>`:''}${imgs?`<div class="wimgs">${imgs}</div>`:''}${files?`<div class="wfiles">${files}</div>`:''}</td></tr>`;
       }).join('') + (fio||[]).map(it=>{ const num=String(it.num); const dd=String(it.detail||'').replace(/\s+/g,' ').trim(); const _dc=(fdocs[num]||[]).filter((x,ix,ar)=>ar.findIndex(y=>y.url===x.url)===ix); const im=_dc.filter(x=>/^image\//i.test(x.mime||'')).map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener"><img class="wimg" src="${escA(x.url)}" alt="photo"></a>`).join(''); const fl=_dc.filter(x=>!/^image\//i.test(x.mime||'')).map(x=>`<a class="wfile" href="${escA(x.url)}" target="_blank" rel="noopener">\u{1F4CE} ${esc((x.n||'attachment').slice(0,50))}</a>`).join(' '); return `<tr class="wo-keep"><td class="wck">\u2610</td><td class="wiss">#${esc(num)} \ud83d\ude9c</td><td class="wdesc"><div class="wd1">${esc(it.summary||('Issue '+num))} <span class="wtr">TRACTOR</span>${it.asset?` <span class="wasset">${esc(it.asset)}</span>`:''}</div>${dd?`<div class="wd2">${esc(dd.slice(0,320))}</div>`:''}${im?`<div class="wimgs">${im}</div>`:''}${fl?`<div class="wfiles">${fl}</div>`:''}</td></tr>`; }).join('');
       const headCell=`<div class="wo-top"><img class="wo-logo" src="${MRA_LOGO}" alt="MRA"><div class="wo-ttl">MAINTENANCE WORK ORDER</div><div class="wo-crew"><div class="wl">CREW</div><div class="wv">${esc(cr.label)}</div></div></div>`
-        +`<div class="wo-meta"><div><span class="k">BAY</span><span class="v">${esc(j.bay)||'&mdash;'}</span></div><div><span class="k">JOB #</span><span class="v">${esc(j.jobNum)||'&mdash;'}</span></div><div><span class="k">ASSET #</span><span class="v">${esc(j.project)||'&mdash;'}</span></div><div><span class="k">WORK ORDER DATE</span><span class="v">${woDate}</span></div><div><span class="k">EXPECTED COMPLETION</span><span class="v">${j.completionISO?fmt(j.completionISO):' '}</span></div><div><span class="k">ACTUAL COMPLETION</span><span class="v"> </span></div></div>`
-        +((j.client||j.pm)?`<div class="wo-sub">${j.client?esc(j.client):''}${j.pm?((j.client?' &middot; ':'')+'PM '+esc(j.pm)):''}</div>`:'');
+        +`<div class="wo-meta"><div><span class="k">BAY</span><span class="v">${esc(j.bay)||'&mdash;'}</span></div><div><span class="k">JOB #</span><span class="v">${esc(j.jobNum)||'&mdash;'}</span></div><div><span class="k">ASSET #</span><span class="v">${esc(_assetTxt)||'&mdash;'}</span></div><div><span class="k">WORK ORDER DATE</span><span class="v">${woDate}</span></div><div><span class="k">EXPECTED COMPLETION</span><span class="v">${j.completionISO?fmt(j.completionISO):' '}</span></div><div><span class="k">ACTUAL COMPLETION</span><span class="v"> </span></div></div>`
+        +`<div class="wo-sub"><b>${esc(j.project)||''}</b>${j.client?(' &middot; '+esc(j.client)):''}${j.pm?(' &middot; PM '+esc(j.pm)):''}</div>`;
       const idLine=`${esc(j.jobNum)||''}${(j.jobNum&&j.project)?' &middot; ':''}${esc(j.project)||''} &middot; ${esc(cr.label)} &middot; ${woDate}`;
       const notesRow=`<tr class="wo-keep"><td colspan="3"><div class="wo-notes"><div class="nh">NOTES &middot; PARTS NEEDED &middot; FOLLOW-UP</div><div class="nlines"></div></div></td></tr>`;
       const signRow=`<tr class="wo-keep"><td colspan="3"><div class="wo-sign"><div class="sg"><div class="ln"></div><div class="lb">SIGNATURE</div></div><div class="sg dt"><div class="ln"></div><div class="lb">DATE</div></div></div></td></tr>`;
@@ -11550,6 +11562,14 @@ function buildJobPunch(j, opts){
   if(!tl.length){ if(!opts.silent) alert('No open tasks on '+(j.project||'this job')+' — nothing to punch-list.'); return null; }
   const KNOWN=/\bsal\b|wrap|w2 graphic|\bw2\b|electr|beyer/i;
   const basisFor=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN.test(who))?who:(who?(who+" "+txt):txt); };
+  const allIss=(D.fleetio&&D.fleetio.issues)||[]; const jk=v=>String(v||'').replace(/[^0-9]/g,'');
+  const _k=jk(j.jobNum);
+  const _assets=[...new Set([
+    ...tl.map(o=>{const m=String(o.raw||'').match(/#(\d+)/); return m?m[1]:null;}).filter(Boolean)
+      .map(n=>{const iss=allIss.find(x=>String(x.num)===String(n)); return iss&&iss.asset;}),
+    ...(_k?allIss.filter(it=>jk(it.jobNum)===_k).map(it=>it.asset):[])
+  ].filter(Boolean))];
+  const _assetTxt=_assets.slice(0,3).join(' \u00b7 ');
   const groups=[], used=new Set();
   PRINT_CREWS.forEach(cr=>{ const g=tl.filter(t=>!used.has(t) && cr.re.test(basisFor(t.who,t.raw||t.disp))); if(g.length){ g.forEach(t=>used.add(t)); groups.push({label:cr.label, items:g}); } });
   const others={}; tl.forEach(t=>{ if(used.has(t)) return; const w=(t.who||'').split('/')[0].trim(); const k=w||'UNASSIGNED'; (others[k]=others[k]||[]).push(t); });
@@ -11568,8 +11588,8 @@ function buildJobPunch(j, opts){
   };
   const rows=groups.map(g=>`<tr class="pl-sec wo-keep"><td colspan="3">\u25B8 ${esc(String(g.label).toUpperCase())} \u2014 ${g.items.length} item${g.items.length===1?'':'s'}</td></tr>`+g.items.map(row).join('')).join('');
   const headCell=`<div class="wo-top"><img class="wo-logo" src="${MRA_LOGO}" alt="MRA"><div class="wo-ttl">JOB PUNCH LIST</div><div class="wo-crew"><div class="wl">OPEN ITEMS</div><div class="wv">${tl.length}</div></div></div>`
-    +`<div class="wo-meta"><div><span class="k">BAY</span><span class="v">${esc(j.bay)||'&mdash;'}</span></div><div><span class="k">JOB #</span><span class="v">${esc(j.jobNum)||'&mdash;'}</span></div><div><span class="k">ASSET #</span><span class="v">${esc(j.project)||'&mdash;'}</span></div><div><span class="k">DATE</span><span class="v">${pDate}</span></div><div><span class="k">EXPECTED COMPLETION</span><span class="v">${j.completionISO?fmt(j.completionISO):' '}</span></div><div><span class="k">ACTUAL COMPLETION</span><span class="v"> </span></div></div>`
-    +((j.client||j.pm)?`<div class="wo-sub">${j.client?esc(j.client):''}${j.pm?((j.client?' &middot; ':'')+'PM '+esc(j.pm)):''}</div>`:'');
+    +`<div class="wo-meta"><div><span class="k">BAY</span><span class="v">${esc(j.bay)||'&mdash;'}</span></div><div><span class="k">JOB #</span><span class="v">${esc(j.jobNum)||'&mdash;'}</span></div><div><span class="k">ASSET #</span><span class="v">${esc(_assetTxt)||'&mdash;'}</span></div><div><span class="k">DATE</span><span class="v">${pDate}</span></div><div><span class="k">EXPECTED COMPLETION</span><span class="v">${j.completionISO?fmt(j.completionISO):' '}</span></div><div><span class="k">ACTUAL COMPLETION</span><span class="v"> </span></div></div>`
+    +`<div class="wo-sub"><b>${esc(j.project)||''}</b>${j.client?(' &middot; '+esc(j.client)):''}${j.pm?(' &middot; PM '+esc(j.pm)):''}</div>`;
   const idLine=`${esc(j.jobNum)||''}${(j.jobNum&&j.project)?' &middot; ':''}${esc(j.project)||''} &middot; PUNCH LIST &middot; ${pDate}`;
   const notesRow=`<tr class="wo-keep"><td colspan="3"><div class="wo-notes"><div class="nh">NOTES &middot; PARTS NEEDED &middot; FOLLOW-UP</div><div class="nlines"></div></div></td></tr>`;
   const signRow=`<tr class="wo-keep"><td colspan="3"><div class="wo-sign"><div class="sg"><div class="ln"></div><div class="lb">SIGNATURE</div></div><div class="sg dt"><div class="ln"></div><div class="lb">DATE</div></div></div></td></tr>`;
