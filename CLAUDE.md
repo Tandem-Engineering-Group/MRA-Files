@@ -297,6 +297,16 @@ Rich wants a two-step complete for **project-fed** design tasks (NOT the ad-hoc/
 
 Treat help + rev as PART OF the feature, not an afterthought.
 
+## 🔝 NEXT SESSION: GPS backfill from Fleetio telematics (Rich 2026-07-15)
+J1559 On Cloud Infowheel (unit 4489 Dodge Ram) shows "📡 no GPS" although Fleetio telematics HAS a
+3-min-old location — because `fleetio.locations` is built from SAMSARA ONLY in Export-Data.ps1 (default
+branch `claude/exciting-keller-wm7u2p`); units tracked in Fleetio-but-not-Samsara (vans/trucks) all read
+no-GPS. FIX: in the export, after the Samsara pull, backfill $fLoc for missing units from the Fleetio
+vehicles' current location (check the vehicles API payload for current_location fields). Dash-side
+`_ynLoc` matching is CORRECT (matches 4489 via tour "ON CLOUD J1559") — no JS change needed.
+Also in flight: SWA created?(await Rich URL+token) · Infowheels 3D builder awaiting Brandon/Mark OBJ
+exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
+
 ## Shipped 2026-07-15 — verification day (rev 23.1 → 23.7)
 
 - 23.1/23.2 ⚠ finder 📋 rows: muted context line (↳ parent · phase · comments — Al's Teams ask) + flex-wrap layout fix.
