@@ -3456,6 +3456,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"24.7", date:"2026-07-15", title:"\u{1F501} Recurring tasks: closing one no longer looks broken", items:[
+    "Closing a \u{1F501} repeating task (Jeff’s weekly eyewash PM) instantly created next cycle’s copy <b>with the same name</b> — so the close looked like it failed, you closed it again, and copies piled up. Now the auto-created next copy <b>stays hidden until 3 days before it’s due</b> (then reappears everywhere as normal), a close always targets the copy you clicked (earliest-due open one), and a repeat <b>never spawns a second open copy</b> no matter how many times it’s closed." ] },
   { rev:"24.6", date:"2026-07-15", title:"\u{1F4E1} Stale GPS is now called out, not trusted", items:[
     "Some trackers stop reporting (unit 83 FM Global last pinged <b>Sept 2022</b> from PA) — the board treated that ancient fix as the unit’s current location and warned “⚠ GPS: Dauphin County, PA” while the trailer sat at MRA. Now any fix <b>older than 14 days</b> shows as a muted <b>\u{1F4E1} GPS stale · last seen …</b> chip (with how old), and stale fixes <b>never</b> trigger at-MRA calls, mismatch warnings, or the deficiency list’s GPS checks — everywhere: bay cards, meeting view, What’s-Next, filters." ] },
   { rev:"24.5", date:"2026-07-15", title:"\u{1F4E4} Leave upload reads the payroll report", items:[
@@ -5255,6 +5257,13 @@ function toggleCloseMode(btn){
    rides the normal Lists write path and is shared on every device. Closing a repeating task
    auto-creates the next occurrence with the next due date (Jeff's weekly eyewash PM etc.). */
 function repeatOf(cm){ const m=String(cm||'').match(/\[repeat:([a-z]+)(?::(\d))?\]/i); if(!m) return null; return {kind:m[1].toLowerCase(), dow:(m[2]!=null?+m[2]:null)}; }
+// 🔁 SNOOZED repeat: the auto-created next-cycle copy, still >3 days from due. Hidden from the
+// working lists (cards, crew queues, sheets, counts) so closing a repeat doesn't LOOK like it
+// failed — it pops back in when its window opens.
+function isSnzRep(t){ try{ if(!t||t.done||!t.due) return false; if(!repeatOf(t.cm)) return false;
+  const today=((window.MRA_DATA||{}).todayISO)||localISO(Date.now());
+  const lim=localISO(parseISO(today).getTime()+3*86400000);
+  return String(t.due)>lim; }catch(e){ return false; } }
 function stripRepeat(cm){ return String(cm||'').replace(/\s*\[repeat:[^\]]*\]/ig,'').trim(); }
 function _withRepeat(cm,val){ cm=stripRepeat(cm); if(val){ const p=String(val).split(':'); const tag='[repeat:'+p[0]+(p[0]==='weekly'?(':'+(p[1]!=null?p[1]:1)):'')+']'; cm=(cm?cm+' ':'')+tag; } return cm; }
 function _repVal(cm){ const r=repeatOf(cm); if(!r) return ''; return r.kind==='weekly'?('weekly:'+(r.dow!=null?r.dow:1)):r.kind; }
@@ -5272,7 +5281,7 @@ function spawnRepeat(j,t){
     const today=((window.MRA_DATA||{}).todayISO)||localISO(Date.now());
     const from=(t.due&&t.due>today)?t.due:today;
     const nextISO=nextRepeatISO(rep,from); if(!nextISO) return;
-    if((j.tasks||[]).some(x=>!x.done && x!==t && x.t===t.t && x.due===nextISO)) return;   // already spawned
+    if((j.tasks||[]).some(x=>!x.done && x!==t && x.t===t.t)) return;   // another open copy already exists — repeats never stack
     shopWrite({action:'addTask', project:j.project, jobNum:j.jobNum||'', bay:j.bay||'', task:t.t,
       assigned:t.who||'', milestone:'', comments:t.cm||'', due:nextISO, pin:CLOSE_PIN, user:CURRENT_USER});
     const tobj={t:t.t, who:t.who||'', op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:'', cm:t.cm||'', due:nextISO};
@@ -5291,7 +5300,8 @@ function closeTaskByName(proj, task, el){
   if(el){ el.textContent="…"; el.style.pointerEvents="none"; }
   shopWrite({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});   // queued (serialized) send
   rememberClosed(proj, task);
-  const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.find(x=>x.t===task); if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); spawnRepeat(j,t); } oRecompute(j); }
+  const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.filter(x=>!x.done&&x.t===task).sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')))[0];
+    if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); spawnRepeat(j,t); } oRecompute(j); }
   oApply();   // instant: task drops out of open list now, not in 15 min
   fioOfferResolve(task);   // 🔧 #NNN fleet-linked task? offer to resolve the Fleetio issue too
 }
@@ -5461,7 +5471,10 @@ function _findId(listKey, match){
   if(match.__id!=null && match.__id!=='') return match.__id;   // exact SharePoint item id passed by the caller (dup-safe)
   const D=_D()||{}, P=match.Project, T=match.Task;
   if(listKey==='Jobs'){ const j=(D.jobs||[]).find(x=>x.project===P); return j&&j._id!=null?j._id:null; }
-  if(listKey==='ShopTasks'){ for(const j of (D.jobs||[])){ if(j.project!==P) continue; const tk=(j.tasks||[]).find(t=>t.t===T); if(tk&&tk._id!=null) return tk._id; } return null; }
+  if(listKey==='ShopTasks'){ for(const j of (D.jobs||[])){ if(j.project!==P) continue;
+    const all=(j.tasks||[]).filter(t=>t.t===T); if(!all.length) continue;
+    const tk=all.filter(t=>!t.done).sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')))[0]||all[0];
+    if(tk&&tk._id!=null) return tk._id; } return null; }
   if(listKey==='ProjectTasks'){ const pr=(D.projects||[]).find(x=>x.name===P); if(!pr) return null; const tk=(pr.tasks||[]).find(t=>t.t===T); return tk&&tk._id!=null?tk._id:null; }
   if(listKey==='Users'){ const nm=(match.Name||match.name||''); const u=(D.users||[]).find(x=>String(x.name||'').toLowerCase()===String(nm).toLowerCase()); return u&&u._id!=null?u._id:null; }
   if(listKey==='Holidays'){ const nm=(match.Name||match.name||''), dt=(match.Date||match.date||''); const hh=(D.holidays||[]).find(x=>String(x.name||'')===String(nm) && String(x.dateISO||x.date||'')===String(dt)); return hh&&hh._id!=null?hh._id:null; }
@@ -5814,10 +5827,12 @@ function mergePending(D){
     }
   }
   pendSave(keep);
+  // 🔁 snoozed-repeat pass: recompute every job so openCount/openTasks agree with what's shown.
+  (D.jobs||[]).forEach(j=>{ if(j.tasks&&j.tasks.length) oRecompute(j); });
 }
 function oJob(project){ return (window.MRA_DATA&&window.MRA_DATA.jobs||[]).find(j=>j.project===project); }
 function oJobRow(row){ return (window.MRA_DATA&&window.MRA_DATA.jobs||[]).find(j=>j.row===row); }
-function oRecompute(j){ if(j&&j.tasks){ const op=j.tasks.filter(t=>!t.done), dn=j.tasks.filter(t=>t.done);
+function oRecompute(j){ if(j&&j.tasks){ const op=j.tasks.filter(t=>!t.done&&!isSnzRep(t)), dn=j.tasks.filter(t=>t.done);
   j.openCount=op.length; j.doneCount=dn.length; j.openTasks=op.map(t=>t.t); j.doneTasks=dn.map(t=>t.t); j.salOpen=op.filter(t=>isSal(t.t)).length; } }
 function oRecat(j){ const D=window.MRA_DATA||{}; const phys=(D.physicalBays||[]).map(b=>(b||'').toLowerCase());
   const s=(j.status||'').toLowerCase(), b=(j.bay||'');
@@ -8839,7 +8854,7 @@ function renderFloor(D){
     if(jOpen){
       if(!WALL && (j.openTasks||[]).length){
         const opens=(j.tasks&&j.tasks.length)
-          ? j.tasks.filter(t=>!t.done&&!isSalesT(t)).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t),who:shopWho(t),files:t.files||null,due:t.due||'',op:t.op||'',cm:t.cm||''}))
+          ? j.tasks.filter(t=>!t.done&&!isSalesT(t)&&!isSnzRep(t)).map(t=>({raw:t.t,disp:cleanTask(t.t,false),sal:isSal(t.t),who:shopWho(t),files:t.files||null,due:t.due||'',op:t.op||'',cm:t.cm||''}))
           : (j.openTasks||[]).map(tk=>({raw:null,disp:cleanTask(tk,false),sal:isSal(tk),who:shopWho({raw:tk})}));
         const grp={}, gkeys=[];
         opens.forEach(o=>{ const k=o.who||''; if(!(k in grp)){ grp[k]=[]; gkeys.push(k); } grp[k].push(o); });
@@ -10264,7 +10279,7 @@ function renderSal(D){
     (D.jobs||[]).filter(j=>j.category!=="leave" && !["shipped","on hold"].includes((j.status||"").toLowerCase()) && !bayIsHeld(j.bay)).forEach(j=>{
       const within7=t=>{ if(!t.cl) return false; const a=daysAgo(t.cl); return a!=null && a>=0 && a<=7; };
       const tasks=(j.tasks&&j.tasks.length)
-        ? j.tasks.filter(t=> !t.done || (SAL_SHOWCLOSED && within7(t)) )
+        ? j.tasks.filter(t=> (!t.done && !isSnzRep(t)) || (SAL_SHOWCLOSED && within7(t)) )
                  .map(t=>({disp:cleanTask(t.t,true),raw:t.t,who:t.who||"", closed:!!t.done, cl:t.cl||null, op:t.op||null, due:t.due||null, files:t.files||null}))
         : (j.openTasks||[]).map(tk=>({disp:cleanTask(tk,true),raw:null,who:"", closed:false, cl:null, op:null, due:null}));
       const open=tasks.filter(t=>re.test(basisFor(t))).filter(x=>x.disp)
@@ -11817,7 +11832,7 @@ function buildWorkOrders(sel, opts){
   sel.forEach(cr=>{
     const isMaint=/\bdoug\b|maintenance/i.test(cr.label);
     const cjobs=jobs.map(j=>{
-      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||"",files:t.files||null})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:"",files:null}));
+      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done&&!isSnzRep(t)).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||"",files:t.files||null})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:"",files:null}));
       const open=tl.filter(t=>cr.re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
       open.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
       let fio=[];
@@ -12301,7 +12316,7 @@ function buildCrewSheetHtml(sel, opts){
   const secs=sel.map(cr=>{
     const cards=[]; let n=0, od=0;
     jobs.forEach(j=>{
-      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||"",files:t.files||null})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:"",files:null}));
+      const tl=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>!t.done&&!isSnzRep(t)).map(t=>({disp:cleanTask(t.t,false),who:t.who||"",raw:t.t,due:t.due||null,cm:t.cm||"",files:t.files||null})):(j.openTasks||[]).map(tk=>({disp:cleanTask(tk,false),who:"",raw:tk,due:null,cm:"",files:null}));
       const open=tl.filter(t=>cr.re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
       open.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));   // due-soonest first, undated last
       open.forEach(o=>{ if(o.due&&o.due<todayISO) od++; });
@@ -14412,6 +14427,8 @@ function renderUnas(){
   }).join('');
 }
 function renderAll(){
+  // 🔁 keep openCount/openTasks in sync with the snoozed-repeat rule on every paint (idempotent)
+  try{ ((window.MRA_DATA||{}).jobs||[]).forEach(j=>{ if(j.tasks&&j.tasks.length) oRecompute(j); }); }catch(e){}
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
   fioApplyResolved(D);   // drop issues this device resolved in Fleetio until the export confirms
