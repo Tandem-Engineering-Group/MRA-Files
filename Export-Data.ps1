@@ -1018,7 +1018,18 @@ if (Test-Path $FleetioTokenFile) {
 # Samsara is the upstream GPS source (Fleetio only mirrors it nightly). One paginated call
 # gets every tracked vehicle AND trailer's current location + a reverse-geocoded address. Fills
 # the shared $fLoc (keyed by fleet #), which $fleetio.locations references. Matches by the leading
-# token of the Samsara name; keeps the freshest fix per unit. Writes samsara-debug.txt.
+# token of the Samsara name; keeps the freshest fix per unit. ALSO joins Samsara<->Fleetio by VIN
+# and publishes the fix under the Fleetio fleet # when the two systems name a unit differently
+# (e.g. Samsara "IW164" = Fleetio "4489 DODGE RAM...", same VIN). Writes samsara-debug.txt.
+# VIN -> Fleetio fleet# map. Some units carry a DIFFERENT name in Samsara than in Fleetio
+# (Samsara "IW164" = Fleetio "4489 DODGE RAM 3500...", same VIN 3C7WRVMG2RE124489), so the
+# name-token match never links them and the board reads "no GPS". Both payloads carry the VIN -
+# join on it below and ALSO key the fix under the Fleetio fleet # (what the dashboard looks up).
+$vinToFleet = @{}
+foreach ($fr in @($fleetRoster)) {
+    $fv = ([string]$fr.vin).Trim().ToUpper()
+    if ($fv.Length -ge 11 -and [string]$fr.f -ne '') { $vinToFleet[$fv] = [string]$fr.f }
+}
 $SamsaraTokenFile = Join-Path $ScriptDir 'samsara.txt'
 if (Test-Path $SamsaraTokenFile) {
     try {
@@ -1029,7 +1040,7 @@ if (Test-Path $SamsaraTokenFile) {
         "=== Samsara GPS  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $SamDbg -Encoding utf8
         # Pull BOTH vehicles (trucks/tractors) AND trailers - Samsara tracks trailers on a
         # separate endpoint, so trailers (e.g. #54) were getting no location before.
-        $samV = 0; $samT = 0
+        $samV = 0; $samT = 0; $samJ = 0
         foreach ($ep in @('vehicles','trailers')) {
             $cursor = $null; $guard = 0; $dumped = $false; $hasNext = $false; $n = 0
             do {
@@ -1056,6 +1067,17 @@ if (Test-Path $SamsaraTokenFile) {
                     if ($null -ne $g.latitude -and $null -ne $g.longitude) { $lat = [math]::Round([double]$g.latitude,5); $lng = [math]::Round([double]$g.longitude,5) }
                     $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = $atISO; yard = $yard; lat = $lat; lng = $lng }
                     $n++
+                    # VIN join: if Fleetio knows this unit under a different fleet #, publish the
+                    # same fix under that key too (freshest-fix rule still applies).
+                    $svin = ''
+                    try { if ($v.externalIds) { $svin = ([string]$v.externalIds.'samsara.vin').Trim().ToUpper() } } catch { $svin = '' }
+                    if ($svin -ne '' -and $vinToFleet.ContainsKey($svin)) {
+                        $k2 = [string]$vinToFleet[$svin]
+                        if ($k2 -ne '' -and $k2 -ne $key) {
+                            $ex2 = $fLoc[$k2]
+                            if (-not ($ex2 -and $ex2.atISO -and $atISO -and ([string]$atISO -lt [string]$ex2.atISO))) { $fLoc[$k2] = $fLoc[$key]; $samJ++ }
+                        }
+                    }
                 }
                 $cursor  = $obj.pagination.endCursor
                 $hasNext = [bool]$obj.pagination.hasNextPage
@@ -1064,8 +1086,8 @@ if (Test-Path $SamsaraTokenFile) {
             "samsara $ep set: $n" | Out-File $SamDbg -Append -Encoding utf8
         }
         $samN = $fLoc.Count
-        "samsara TOTAL located keys: $samN  (vehicles $samV, trailers $samT)" | Out-File $SamDbg -Append -Encoding utf8
-        Write-Output "  -> Samsara: located $samN unit(s) [veh $samV, trl $samT]; debug -> samsara-debug.txt"
+        "samsara TOTAL located keys: $samN  (vehicles $samV, trailers $samT, vin-joined $samJ)" | Out-File $SamDbg -Append -Encoding utf8
+        Write-Output "  -> Samsara: located $samN unit(s) [veh $samV, trl $samT, vin-joined $samJ]; debug -> samsara-debug.txt"
         if ($null -eq $fleetio) { $fleetio = [PSCustomObject]@{ generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt'); issues=@(); workOrders=@(); service=@(); locations=$fLoc; fleet=@() } }
     } catch { Write-Output "  -> Samsara fetch failed: $($_.Exception.Message)" }
 }
