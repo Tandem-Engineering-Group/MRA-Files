@@ -1667,6 +1667,7 @@
       <button class="mi" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter">✉ Daily Letter</button>
       <button class="mi" onclick="openFloorRecap(1)" title="Everything that CLOSED on the floor in the last 24 hours (who + photos) plus what's still open per job — the daily recap. This same page is what the scheduled recap email links to (?recap=1).">📧 Floor recap — last 24h</button>
       <button class="mi" onclick="openPMReport()" title="Per-PM report (Megan's ask): her projects' health overview, everything done in the last 7 days (last 24h highlighted), what's coming due in 14 days, milestones. Emailable via ?recap=1&pm=Megan.">📧 PM report…</button>
+      <button class="mi" onclick="openDeficiency()" title="Every correctable data problem on the board, grouped by PM → project + a floor section — past-due & undated tasks, missing PMs/J#s/dates, unassigned, GPS mismatches, ghosts — each line with a FIX hint. Emailable via ?fix=1 (add &pm=Megan for one PM).">🩺 Deficiency list</button>
     </div>
   </div>
 
@@ -1808,6 +1809,7 @@
       <button class="mi" id="btnNight" onclick="openNightLetter();closeDrops()" title="Generate the daily shop update letter — copy to email or print/PDF">✉ Daily Letter</button>
       <button class="mi" onclick="openFloorRecap(1)" title="Everything that CLOSED on the floor in the last 24 hours (who + photos) plus what's still open per job — the daily recap. This same page is what the scheduled recap email links to (?recap=1).">📧 Floor recap — last 24h</button>
       <button class="mi" onclick="openPMReport()" title="Per-PM report (Megan's ask): her projects' health overview, everything done in the last 7 days (last 24h highlighted), what's coming due in 14 days, milestones. Emailable via ?recap=1&pm=Megan.">📧 PM report…</button>
+      <button class="mi" onclick="openDeficiency()" title="Every correctable data problem on the board, grouped by PM → project + a floor section — past-due & undated tasks, missing PMs/J#s/dates, unassigned, GPS mismatches, ghosts — each line with a FIX hint. Emailable via ?fix=1 (add &pm=Megan for one PM).">🩺 Deficiency list</button>
           </div>
         </div>
       </h2>
@@ -3436,6 +3438,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"23.7", date:"2026-07-15", title:"\u{1FA7A} Deficiency list — fix these (by PM / project)", items:[
+    "☰ Actions → <b>\u{1FA7A} Deficiency list</b>: every correctable problem on one page, grouped <b>by PM → project</b> plus a Floor &amp; Ops section — past-due and undated project tasks, missing PMs, overdue/undated/unassigned shop tasks, missing J#s and dates, \u{1F4CD} GPS mismatches, \u{1F9F9} ghosts, and Fleetio MRA-date gaps — <b>every line with a green FIX hint</b>. Always-live at <span class=\"k\">?fix=1</span> (add <span class=\"k\">&amp;pm=Megan</span> for one PM) — built for a scheduled morning email. Fix items and the list shrinks itself." ] },
   { rev:"23.6", date:"2026-07-15", title:"\u{1F4E6} OFF-SITE / PARTS tab up top", items:[
     "The KPI row gains <b>OFF-SITE / PARTS</b> — the parts-tile jobs exactly (build-and-ship work for units that aren\u2019t here). Its floor tile auto-hides when empty, so this tab is the constant signal; hover for the list. Every lane now has a matching, reconciling number up top." ] },
   { rev:"23.5", date:"2026-07-15", title:"\u{1F6EC} Pipeline panel: collapsible, starts collapsed", items:[
@@ -11925,6 +11929,123 @@ function pmrCopyLink(){
 }
 function ppJobsLabSync(){ const n=document.querySelectorAll('#ppJobs input.ppjob:checked').length;
   const l=document.getElementById('ppJobsLab'); if(l) l.textContent=n?(n+' selected'):'ALL (default)'; }
+// ---------- 🩺 DEFICIENCY LIST (Al's ask via Rich): every correctable data problem on the board,
+// grouped BY PM → project (plus a floor/ops section), each with a FIX hint — "help needed" focused.
+// ☰ Actions → 🩺 Deficiency list, or ?fix=1 (&pm=Megan) for the emailable/scheduled link.
+function buildDeficiencyHtml(pmQ){
+  const D=window.MRA_DATA||{};
+  const today=D.todayISO||localISO(Date.now());
+  const fmt=iso=>{ if(!iso) return ""; const p=String(iso).split("-"); return (+p[1])+"/"+(+p[2])+"/"+p[0]; };
+  const now=new Date(), rDate=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
+  const q=String(pmQ||'').trim().toLowerCase();
+  const pmMatch=v=>!q || String(v||'').toLowerCase().indexOf(q)>=0;
+  const isDoneT=t=>(t.done===true)||/complete/i.test(String(t.st||t.status||''));
+  // ---- project-side deficiencies, grouped by PM ----
+  const byPM={};
+  (D.projects||[]).forEach(p=>{
+    if(!pmMatch(p.pm)) return;
+    const pm=(p.pm||'').trim()||'— NO PM SET —';
+    const od=[], nod=[];
+    (p.tasks||[]).forEach(t=>{ if(isDoneT(t)) return;
+      if(t.finISO && t.finISO<today) od.push(t);
+      else if(!t.finISO) nod.push(t); });
+    const tbd=!((p.pm||'').trim()) || /^tbd$/i.test((p.pm||'').trim());
+    if(!od.length && !nod.length && !tbd) return;
+    (byPM[pm]=byPM[pm]||[]).push({p,od,nod,tbd});
+  });
+  let odTot=0,nodTot=0,tbdTot=0;
+  Object.values(byPM).forEach(arr=>arr.forEach(x=>{ odTot+=x.od.length; nodTot+=x.nod.length; if(x.tbd) tbdTot++; }));
+  const pmSecs=Object.keys(byPM).sort().map(pm=>{
+    const rows=byPM[pm].map(x=>{
+      const odl=x.od.slice(0,15).map(t=>`<li>⚠ <b>${esc(t.t)}</b>${t.who?' — '+esc(t.who):''} <span class="od">due ${fmt(t.finISO)}</span> <span class="fx">FIX: mark complete or re-date</span></li>`).join('')
+        +(x.od.length>15?`<li class="more">+ ${x.od.length-15} more past-due…</li>`:'');
+      const nodl=x.nod.length?`<li>\u{1F4C5} <b>${x.nod.length} open task${x.nod.length===1?'':'s'} with NO finish date</b> <span class="fx">FIX: set dates so they show on schedules (${esc(x.nod.slice(0,3).map(t=>String(t.t).slice(0,28)).join(' · '))}${x.nod.length>3?'…':''})</span></li>`:'';
+      const tbdl=x.tbd?`<li>\u{1F464} <b>No PM assigned</b> <span class="fx">FIX: ☰ project editor → \u{1F464} Set PM</span></li>`:'';
+      return `<div class="dproj"><div class="dph">${esc(x.p.name)}${x.od.length?` <span class="cnt">${x.od.length} past-due</span>`:''}${x.nod.length?` <span class="cnt amber">${x.nod.length} undated</span>`:''}</div><ul>${tbdl}${odl}${nodl}</ul></div>`;
+    }).join('');
+    return `<h2>\u{1F464} ${esc(pm)}</h2>${rows}`;
+  }).join('');
+  // ---- floor / ops deficiencies (skip when a PM filter is set) ----
+  let floorSec='';
+  let shopOd=0, shopNod=0, shopUnas=0, gpsN=0, ghostN=0, noJn=0, noDates=0, holdStat=0, mraGaps=0;
+  if(!q){
+    const live=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0 && j.category!=='pipeline' || (j.category==='pipeline'&&String(j.row||'').indexOf('orphan:')!==0));
+    const real=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0);
+    const shipped=j=>(j.status||'').toLowerCase()==='shipped';
+    const odL=[],nodL=[],unL=[];
+    real.forEach(j=>{ if(shipped(j)) return;
+      (j.tasks||[]).forEach(t=>{ if(t.done||isSalesT(t)) return;
+        if(t.due&&t.due<today) odL.push({j,t});
+        if(!t.due) nodL.push({j,t});
+        if(!String((typeof shopWho==='function'?shopWho(t):t.who)||'').trim()) unL.push({j,t}); }); });
+    shopOd=odL.length; shopNod=nodL.length; shopUnas=unL.length;
+    const noJnL=real.filter(j=>!shipped(j)&&j.category!=='general'&&!(j.jobNum||'').trim()&&j.project!==GENERAL_PROJ);
+    const noDtL=real.filter(j=>!shipped(j)&&!j.startISO&&j.project!==GENERAL_PROJ);
+    noJn=noJnL.length; noDates=noDtL.length;
+    const gpsL=[];
+    const _isLot=b=>/^\s*parking\s*lot\s*$/i.test(b||'');
+    real.forEach(j=>{ if(shipped(j)||!_isLot(j.bay)||jobIsSub(j)) return;
+      const loc=(typeof _ynLoc==='function')?_ynLoc(j.project,j.jobNum):null;
+      const wh=loc?String((loc.yard||loc.place||'')).trim():'';
+      if(wh && !(loc.yard&&_isMraYard(loc))) gpsL.push({j,wh}); });
+    gpsN=gpsL.length;
+    const hsL=real.filter(j=>!shipped(j)&&(j.status||'').toLowerCase()==='on hold'&&!bayIsHeld(j.bay));
+    holdStat=hsL.length;
+    const ghosts=(D.jobs||[]).filter(j=>String(j.row||'').indexOf('orphan:')===0&&(j.tasks||[]).some(t=>!t.done));
+    ghostN=ghosts.reduce((a,j)=>a+(j.tasks||[]).filter(t=>!t.done).length,0);
+    const heldNoMra=real.filter(j=>!shipped(j)&&bayIsHeld(j.bay)&&!jobIsSub(j)&&!_fioRetForJob(j.jobNum));
+    mraGaps=heldNoMra.length;
+    const li=(icon,main,fx)=>`<li>${icon} ${main} <span class="fx">FIX: ${fx}</span></li>`;
+    floorSec=`<h2>\u{1F3ED} Floor & Ops (Rich / Luciana / Doug)</h2><div class="dproj"><ul>`
+      +odL.slice(0,20).map(x=>li('⚠',`<b>${esc(cleanTask(x.t.t,false)).slice(0,60)}</b> — ${esc(x.j.project)}${x.t.who?' ('+esc(x.t.who)+')':''} <span class="od">due ${fmt(x.t.due)}</span>`,'close it or move the date')).join('')
+      +(odL.length>20?`<li class="more">+ ${odL.length-20} more overdue shop tasks…</li>`:'')
+      +(nodL.length?li('\u{1F4C5}',`<b>${nodL.length} open shop task${nodL.length===1?'':'s'} with no due date</b>`,'add due dates — they drive the crew Due filters + prints'):'')
+      +unL.map(x=>li('\u{1F464}',`<b>${esc(cleanTask(x.t.t,false)).slice(0,60)}</b> — ${esc(x.j.project)} is <b>unassigned</b>`,'⚠ finder → tap \u{1F464} to give it a crew')).join('')
+      +noJnL.map(j2=>li('\u{1F3F7}',`<b>${esc(j2.project)}</b> has no Job #`,'✎ edit → add the J#')).join('')
+      +noDtL.map(j2=>li('\u{1F4C6}',`<b>${esc(j2.project)}</b> has no start date`,'✎ edit → set dates')).join('')
+      +gpsL.map(x=>li('\u{1F4CD}',`<b>${esc(x.j.project)}</b> — board says Parking Lot, GPS says <b>${esc(x.wh)}</b>`,'fix the bay (✎ edit) or confirm the unit moved')).join('')
+      +hsL.map(j2=>li('⏸',`<b>${esc(j2.project)}</b> is status On Hold but sits in <b>${esc(j2.bay||'?')}</b>`,'move it to the On Hold bay, or clear the status')).join('')
+      +(ghostN?li('\u{1F9F9}',`<b>${ghostN} ghost task${ghostN===1?'':'s'}</b> on dead jobs`,'☰ Menu → \u{1F9F9} Ghost tasks → restore / close / delete'):'')
+      +(mraGaps?li('\u{1F5D3}',`<b>${mraGaps} Next Up / On Hold unit${mraGaps===1?'':'s'}</b> with no Back-to-MRA dates in Fleetio`,'fill Back to MRA / Leaving MRA on an issue so the \u{1F5D3} line shows'):'')
+      +`</ul></div>`;
+  }
+  const tile=(n,lab,col)=>`<div class="st" style="border-left-color:${col}"><div class="n" style="color:${col}">${n}</div><div class="l">${lab}</div></div>`;
+  const tiles=`<div class="stats">`
+    +tile(odTot,'PROJECT TASKS PAST-DUE','#b91c1c')+tile(nodTot,'PROJECT TASKS UNDATED','#b45309')+tile(tbdTot,'PROJECTS NO PM','#b45309')
+    +(!q?tile(shopOd,'SHOP OVERDUE','#b91c1c')+tile(shopUnas,'UNASSIGNED','#b45309')+tile(gpsN,'GPS MISMATCH','#b45309')+tile(ghostN,'GHOSTS','#7c3aed'):'')
+    +`</div>`;
+  const css=`*{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#f2f3f5}
+.printbar{background:#23272e;color:#fff;padding:9px 16px;font-size:12px;display:flex;gap:14px;align-items:center}
+.printbar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-weight:700;cursor:pointer}
+.wrap{max-width:7.8in;margin:16px auto;background:#fff;padding:.45in .55in;box-shadow:0 2px 16px rgba(0,0,0,.13)}
+h1{font-size:19px;margin:0}h1 .mra{color:#e04826}.sub{color:#586a7e;font-size:11.5px;margin:3px 0 12px}
+h2{font-size:13px;border-bottom:2px solid #e04826;padding-bottom:3px;margin:16px 0 7px}
+.stats{display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.st{flex:1;min-width:96px;border:1px solid #dfe5ec;border-left:4px solid #999;border-radius:9px;padding:8px 11px}
+.st .n{font-size:21px;font-weight:900;line-height:1}.st .l{font-size:7.5px;letter-spacing:.5px;color:#7b8794;font-weight:700;margin-top:2px}
+.dproj{margin-bottom:10px}.dph{font-weight:800;font-size:12.5px;margin-bottom:3px}
+.dph .cnt{background:#fde0e0;color:#b91c1c;border-radius:20px;padding:1px 8px;font-size:9.5px;margin-left:5px}
+.dph .cnt.amber{background:#fdeccb;color:#8a5e00}
+ul{margin:2px 0 4px 6px;padding:0;list-style:none}li{font-size:11px;margin-bottom:3px;line-height:1.4}
+.od{color:#b91c1c;font-weight:800;font-size:10px}
+.fx{color:#15803d;font-weight:700;font-size:9.5px;background:#f0fdf4;border-radius:6px;padding:0 6px}
+li.more{color:#7b8794;font-style:italic}
+.foot{color:#8a8f98;font-size:9.5px;border-top:1px solid #d7dadf;margin-top:14px;padding-top:6px}
+@page{size:letter portrait;margin:.5in}@media print{.printbar{display:none}body{background:#fff}.wrap{box-shadow:none;margin:0;max-width:none;padding:0}}`;
+  const total=odTot+nodTot+tbdTot+shopOd+shopNod+shopUnas+gpsN+ghostN+noJn+noDates+holdStat+mraGaps;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>MRA Deficiency List — ${rDate}</title><style>${css}</style></head><body>`
+    +`<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Deficiency list${q?' · PM filter: '+esc(pmQ):''} · refresh for live data · every line has a FIX hint</span></div>`
+    +`<div class="wrap"><h1><span class="mra">MRA</span> Deficiency List — fix these</h1><div class="sub">${rDate} · ${total} item${total===1?'':'s'} to correct · board data as of ${esc(D.generatedText||'')}${q?' · PM: '+esc(pmQ):''}</div>`
+    +tiles
+    +(pmSecs||'<div style="color:#15803d;font-weight:700">✨ No project-side deficiencies'+(q?' for this PM':'')+'.</div>')
+    +floorSec
+    +`<div class="foot">MRA Command Center · auto-generated · fix items on the dashboard and this list shrinks on the next refresh</div></div></body></html>`;
+}
+function openDeficiency(pm){ if(typeof closeDrops==='function') closeDrops();
+  const html=buildDeficiencyHtml(pm||'');
+  const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap again.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
 function woPrint(){
   const sel=[...document.querySelectorAll('#ppCrews input:checked')].map(x=>PRINT_CREWS[+x.dataset.i]);
   if(!sel.length){ alert('Tick at least one crew for their work orders.'); return; }
@@ -14174,6 +14295,7 @@ const _sheetSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('sh
 // 🧾 Work-order link: MRA_Dashboard.html?wo=doug (or ?wo=sal,doug) opens that crew's work orders
 // in place — one per job, photos enlarged, print button. Used by the scheduled 7:15am email.
 const _recapQ=(()=>{ try{ const q=new URLSearchParams(location.search); return q.get('recap')?Math.max(1,+(q.get('days')||1)||1):null; }catch(e){ return null; } })();
+const _fixQ=(()=>{ try{ return new URLSearchParams(location.search).get('fix')?1:null; }catch(e){ return null; } })();
 const _punchQ=(()=>{ try{ return new URLSearchParams(location.search).get('punch'); }catch(e){ return null; } })();
 const _woSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('wo'); if(!q) return null;
   const map={sal:'Sal',wrap:'Wrap Team',wrapteam:'Wrap Team',elec:'Electricians',electricians:'Electricians',doug:'Doug',josh:'Josh',jeff:'Jeff'};
@@ -14193,6 +14315,11 @@ if(_sheetSel){
   const inner=(_w!=null)?_w.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'')
     :'<head><meta charset="utf-8"><title>MRA — Work Orders</title></head><body style="font-family:Segoe UI,Arial;padding:44px;color:#555">No open work orders for <b>'+esc(_woSel.map(s=>s.label).join(', '))+'</b> right now.</body>';
   document.documentElement.innerHTML=inner; document.title='MRA — Work Orders';
+} else if(_fixQ){
+  const _fpm=(()=>{ try{ return new URLSearchParams(location.search).get('pm')||''; }catch(e){ return ''; } })();
+  const _f=buildDeficiencyHtml(_fpm);
+  document.documentElement.innerHTML=_f.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
+  document.title='MRA — Deficiency List';
 } else if(_recapQ){
   const _pmQ=(()=>{ try{ return new URLSearchParams(location.search).get('pm'); }catch(e){ return null; } })();
   const _r=_pmQ?buildPMReportHtml(_pmQ, new URLSearchParams(location.search).get('days')||7):buildFloorRecapHtml(_recapQ);
