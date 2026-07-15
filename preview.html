@@ -3456,6 +3456,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"24.6", date:"2026-07-15", title:"\u{1F4E1} Stale GPS is now called out, not trusted", items:[
+    "Some trackers stop reporting (unit 83 FM Global last pinged <b>Sept 2022</b> from PA) — the board treated that ancient fix as the unit’s current location and warned “⚠ GPS: Dauphin County, PA” while the trailer sat at MRA. Now any fix <b>older than 14 days</b> shows as a muted <b>\u{1F4E1} GPS stale · last seen …</b> chip (with how old), and stale fixes <b>never</b> trigger at-MRA calls, mismatch warnings, or the deficiency list’s GPS checks — everywhere: bay cards, meeting view, What’s-Next, filters." ] },
   { rev:"24.5", date:"2026-07-15", title:"\u{1F4E4} Leave upload reads the payroll report", items:[
     "The Staff-on-Leave <b>\u{1F4E4} Upload</b> now decodes the <b>HR payroll leave report</b> as-is (the export where every line = one 8-hour day): keeps <b>Approved</b> rows, flips “Roe, Kayla M.” → “Kayla Roe”, <b>merges day-rows into date ranges</b> (weekends bridged), and skips anyone whose dates already overlap an entry on the board. Simple Name · Start · Return sheets still work too." ] },
   { rev:"24.4", date:"2026-07-15", title:"\u{1F4C5} Staff on Leave opens on the calendar", items:[
@@ -8813,9 +8815,10 @@ function renderFloor(D){
       const _loc=(typeof _ynLoc==='function')?_ynLoc(j.project,j.jobNum):null;
       const _isPark=isParkingBay(j.bay);
       const _wh=_loc?String((_loc.yard||_loc.place||'')).trim():'';
-      if(_wh && _loc.yard && _isMraYard(_loc)) pills+=`<span class="pill" title="Samsara GPS confirms this unit is at MRA">📍 at MRA</span>`;
+      if(_wh && _gpsStale(_loc)) pills+=`<span class="pill" title="This unit's tracker hasn't reported in over 2 weeks (${escA(_ynAgo(_loc.atISO))}) — last seen ${escA(_wh)}. Too old to treat as its current location.">📡 GPS stale · last ${esc(_wh.slice(0,26))} (${esc(_ynAgo(_loc.atISO))})</span>`;
+      else if(_wh && _loc.yard && _isMraYard(_loc)) pills+=`<span class="pill" title="Samsara GPS confirms this unit is at MRA">📍 at MRA</span>`;
       else if(_wh) pills+=`<span class="pill ${_isPark?'due':''}" title="Samsara GPS puts this unit at ${escA(_wh)}${_isPark?' — NOT in our lot: fix the bay or move the unit' : ''}">${_isPark?'⚠':'📍'} GPS: ${esc(_wh.slice(0,34))}</span>`;
-      else pills+=`<span class="pill" title="No Samsara GPS on this unit (no tracker) — location can't be auto-checked">📡 no GPS</span>`;
+      else pills+=`<span class="pill" title="No Samsara GPS on this unit (no tracker) — location can't be auto-checked">📡 no GPS</span>`;   // stale handled above
     }
     if(c.overdue) pills+=`<span class="pill due">${Math.abs(c.daysLeft)}d overdue</span>`;
     else if(c.dueSoon) pills+=`<span class="pill soon">due ${c.daysLeft}d</span>`;
@@ -9177,6 +9180,7 @@ function _mtgGps(asset){ const D=window.MRA_DATA||{}; const locs=(D.fleetio&&D.f
   const k=_normKey(m[1]); let loc=null;
   for(const kk in locs){ if(_normKey(kk)===k){ loc=locs[kk]; break; } }
   if(!loc) return null;
+  if(_gpsStale(loc)) return {stale:true, where:String(loc.yard||loc.place||'').trim(), ago:_ynAgo(loc.atISO)};
   return {at:_isMraYard(loc), where:String(loc.yard||loc.place||'').trim()};
 }
 // Click a meeting card to highlight it and keep your place while you walk the list (click again to clear).
@@ -9190,7 +9194,7 @@ function renderMeeting(){
     const stay=(u.dateISO&&u.endISO&&u.endISO>=u.dateISO)?(daysBetween(u.endISO,u.dateISO)+1):null;   // length of the visit, inclusive (needs the Leaving-MRA date on the Fleetio issue)
     // GPS truth-check on HERE NOW: the state comes from the Fleetio DATE fields; Samsara says where it actually is.
     const gps=(u.state==='here')?_mtgGps(u.asset):null;
-    const gpsChip=gps?(gps.at?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`
+    const gpsChip=gps?(gps.stale?` <span class="mtg-gpsno" title="This unit's tracker hasn't reported in over 2 weeks (${escA(gps.ago||'')}) — last seen ${escA(gps.where||'?')}. Too old to verify where it is now.">📡 GPS stale (${esc(gps.ago||'')})</span>`:gps.at?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`
       :` <span class="mtg-gpswarn" title="Samsara GPS says this unit is NOT at MRA right now — the Back-to-MRA / Leaving-MRA dates on its Fleetio issue are probably stale. Fix the dates or resolve the issue.">⚠ GPS: ${esc(gps.where||'not at MRA')}</span>`)
       :(u.state==='here'?` <span class="mtg-gpsno" title="No Samsara GPS on this unit (no tracker, or Samsara doesn't list it) — location can't be auto-checked; HERE NOW comes from the Fleetio dates only">📡 no GPS</span>`:'');
     const when=u.state==='here'
@@ -9229,7 +9233,8 @@ function renderMeeting(){
     const frLine=fr?`<div class="m" style="color:#7fb0ff;font-weight:700" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(fr)}</div>`:'';
     let gpsChip='';
     if(!l.sub){ const loc=(typeof _ynLoc==='function')?_ynLoc(l.proj,l.jobNum):null;
-      if(loc&&(loc.yard||'').trim()) gpsChip=_isMraYard(loc)?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`:` <span class="mtg-gpswarn" title="Samsara GPS puts this unit at ${escA(loc.yard)} — not at MRA">⚠ GPS: ${esc(loc.yard)}</span>`;
+      if(loc&&_gpsStale(loc)) gpsChip=` <span class="mtg-gpsno" title="This unit's tracker hasn't reported in over 2 weeks (${escA(_ynAgo(loc.atISO))}) — last seen ${escA(String(loc.yard||loc.place||'?'))}. Too old to verify.">📡 GPS stale (${esc(_ynAgo(loc.atISO))})</span>`;
+      else if(loc&&(loc.yard||'').trim()) gpsChip=_isMraYard(loc)?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`:` <span class="mtg-gpswarn" title="Samsara GPS puts this unit at ${escA(loc.yard)} — not at MRA">⚠ GPS: ${esc(loc.yard)}</span>`;
       else if(loc&&(loc.place||'').trim()) gpsChip=` <span class="mtg-gpswarn" title="Samsara GPS last fix">⚠ GPS: ${esc(loc.place)}</span>`;
       else gpsChip=` <span class="mtg-gpsno" title="No Samsara GPS on this unit — location can't be auto-checked">📡 no GPS</span>`; }
     const dts=(l.startISO||l.endISO)?` · ${fmtMD(l.startISO)}→${fmtMD(l.endISO)}`:'';
@@ -9375,6 +9380,11 @@ function _ynLoc(name, jobNum){
   }
   return null;
 }
+// A GPS fix older than 14 days is STALE — show it as history ("last seen"), never as a live
+// location claim, and never let it trigger an at-MRA/at-yard call or a mismatch warning.
+// (Unit 83 FM Global's tracker last reported 09/2022 from PA — the board said "⚠ GPS: Dauphin
+// County, PA" while the trailer was really back at MRA.)
+function _gpsStale(loc){ if(!loc||!loc.atISO) return false; const t=new Date(loc.atISO).getTime(); if(!t||isNaN(t)) return false; return (Date.now()-t)>14*86400000; }
 function _ynAgo(atISO){ if(!atISO) return ''; const t=new Date(atISO).getTime(); if(!t||isNaN(t)) return '';
   const ms=Date.now()-t; if(ms<0) return 'just now'; const h=ms/3600000;
   if(h<1) return Math.max(1,Math.round(ms/60000))+'m ago'; if(h<48) return Math.round(h)+'h ago'; return Math.round(h/24)+'d ago'; }
@@ -9427,13 +9437,13 @@ function _ynData(D){
     const held   = it.onBoard && /next\s*up|on\s*hold|off.?site/i.test(bay) && !isParts;
     let state;
     if(onHere){ state='here'; }                                                       // the board wins for on-floor trailers — don't let a fuzzy GPS "place" bump it off "here"
-    else if(loc && (loc.yard||'').trim()){ state=_isMraYard(loc)?'here':'hold'; }     // off-board: GPS geofence decides
+    else if(loc && (loc.yard||'').trim() && !_gpsStale(loc)){ state=_isMraYard(loc)?'here':'hold'; }     // off-board: GPS geofence decides
     else if(loc && (loc.place||'').trim()){ state='inbound'; }                        // GPS says out on the road
     else if(it.ret){ state='inbound'; }                                               // has a back-to-MRA date
     else if(held){ state='hold'; }
     else { state='inbound'; }
     it.state=state;
-    it.mismatch = onHere && loc && (loc.yard||'').trim() && !_isMraYard(loc);          // board says here, GPS says a holding yard
+    it.mismatch = onHere && loc && (loc.yard||'').trim() && !_isMraYard(loc) && !_gpsStale(loc);          // board says here, GPS says a holding yard
     (state==='here'?here:state==='hold'?hold:inbound).push(it); });
   const byWork=(a,b)=>(b.openCount-a.openCount)||(((a.endISO||'9999')+'').localeCompare((b.endISO||'9999')+''));
   here.sort(byWork); hold.sort(byWork);
@@ -9450,7 +9460,8 @@ function _ynCard(it,today){
   let where, sub='', nogps='';
   if(onHere){
     where = isLot ? '🅿️ Parking Lot' : (isParts ? ('📦 '+esc(bay)) : ('🔧 '+esc(bay)));
-    if(loc && _isMraYard(loc)) sub=`<span class="yn-ok">✓ GPS at MRA${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
+    if(loc && _gpsStale(loc)) sub=`<span class="yn-seen">📡 GPS stale · last ${esc(String(loc.yard||loc.place||'?'))} ${esc(_ynAgo(loc.atISO))}</span>`;
+    else if(loc && _isMraYard(loc)) sub=`<span class="yn-ok">✓ GPS at MRA${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
     else if(loc && (loc.yard||'').trim()) sub=`<span class="yn-mm">⚠ GPS shows it at ${esc(loc.yard)}${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
     else if(loc && (loc.place||'').trim()) sub=`<span class="yn-mm">⚠ GPS shows it in ${esc(loc.place)}${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
   } else {
@@ -11417,7 +11428,7 @@ function mraKeys(){ const D=window.MRA_DATA,g=D&&D.generatedAt; if(g===_mraGen) 
   if(typeof FLEET!=='undefined') FLEET.forEach(a=>roster.add(_normKey(a.f)));
   const locs=(D&&D.fleetio&&D.fleetio.locations)||{};
   const located=new Set();
-  Object.keys(locs).forEach(k=>{ const nk=_normKey(k); located.add(nk); if(_isMraYard(locs[k])) _mraKeys.add(nk); });
+  Object.keys(locs).forEach(k=>{ const nk=_normKey(k); if(_gpsStale(locs[k])) return; located.add(nk); if(_isMraYard(locs[k])) _mraKeys.add(nk); });
   // Floor fallback (no GPS fix): a unit parked in a real WORK BAY is physically at the MRA shop.
   ((D&&D.jobs)||[]).forEach(j=>{ const b=String(j.bay||''); if(!/^bay\s/i.test(b)) return;
     (String(j.project||'').match(/\b\d{2,5}\b/g)||[]).forEach(n=>{ const k=_normKey(n); if(roster.has(k) && !located.has(k)) _mraKeys.add(k); }); });
@@ -12171,7 +12182,7 @@ function buildDeficiencyHtml(pmQ){
     real.forEach(j=>{ if(shipped(j)||!_isLot(j.bay)||jobIsSub(j)) return;
       const loc=(typeof _ynLoc==='function')?_ynLoc(j.project,j.jobNum):null;
       const wh=loc?String((loc.yard||loc.place||'')).trim():'';
-      if(wh && !(loc.yard&&_isMraYard(loc))) gpsL.push({j,wh}); });
+      if(wh && !_gpsStale(loc) && !(loc.yard&&_isMraYard(loc))) gpsL.push({j,wh}); });
     gpsN=gpsL.length;
     const hsL=real.filter(j=>!shipped(j)&&(j.status||'').toLowerCase()==='on hold'&&!bayIsHeld(j.bay));
     holdStat=hsL.length;
