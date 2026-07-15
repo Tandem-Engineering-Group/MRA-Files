@@ -301,9 +301,12 @@ Treat help + rev as PART OF the feature, not an afterthought.
 J1559 On Cloud Infowheel (unit 4489 Dodge Ram) shows "📡 no GPS" although Fleetio telematics HAS a
 3-min-old location — because `fleetio.locations` is built from SAMSARA ONLY in Export-Data.ps1 (default
 branch `claude/exciting-keller-wm7u2p`); units tracked in Fleetio-but-not-Samsara (vans/trucks) all read
-no-GPS. FIX: in the export, after the Samsara pull, backfill $fLoc for missing units from the Fleetio
-vehicles' current location (check the vehicles API payload for current_location fields). Dash-side
-`_ynLoc` matching is CORRECT (matches 4489 via tour "ON CLOUD J1559") — no JS change needed.
+no-GPS. ROOT CAUSE FOUND (Rich's Samsara shots 7/15): SAME VAN, TWO NAMES — Samsara "IW164" vs Fleetio
+"4489 DODGE RAM 3500...", identical VIN 3C7WRVMG2RE124489. Export links Samsara↔Fleetio by unit
+number in the NAME → never connects. FIX: **VIN join** in Export-Data.ps1's Samsara matcher (both
+payloads carry VIN) — key $fLoc under the Fleetio fleet # too. Fixes all dual-identity InfoWheels
+vans (IW163-167 class match by name already; 4489-style don't). Dash-side `_ynLoc` is CORRECT —
+no JS change needed. Test: J1559 On Cloud card shows 📍 after next export.
 Also in flight: SWA created?(await Rich URL+token) · Infowheels 3D builder awaiting Brandon/Mark OBJ
 exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
 
