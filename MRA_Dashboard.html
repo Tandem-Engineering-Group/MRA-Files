@@ -3430,6 +3430,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"22.9", date:"2026-07-14", title:"🧹 Ghost tasks: 🏭 Restore to board", items:[
+    "Some ghosts are real jobs whose floor row got deleted (the wrap jobs). Each ghost group now has <b>🏭 Restore to board\u2026</b> — it opens ➕ Add job pre-filled with the exact name; set the bay/status/dates, Save, and <b>all of its waiting tasks re-attach automatically</b> (instantly on your screen, everywhere on the next sync)." ] },
   { rev:"22.8", date:"2026-07-14", title:"\u23ED Next Up / On Hold tile is BACK on the bay board", items:[
     "By popular demand: the combined <b>Next Up / On Hold</b> tile returns to the bay board, right under the Parking Lot — every job in a holding bay (Next Up \u00b7 On Hold \u00b7 On Hold/Off-Site), date-sorted, jobs collapsed by default (tap \u25b8 to expand one), collapsible like every tile. The \u{1F6EC} Pipeline panel below still covers inbound + capacity — same jobs, same numbers.",
     "And the top tabs now MATCH the board: <b>ON HOLD</b> counts one clear rule — parked in a holding bay OR flagged status On Hold (hover shows each job\u2019s bay so you can see exactly why it counts); <b>NEXT UP</b> = jobs in the Next Up bay, same as the tile." ] },
@@ -6114,7 +6116,13 @@ function submitAddJob(){
         client:payload.client, jobNum:payload.jobNum, status:payload.status, pm:payload.pm,
         startISO:payload.start||null, completionISO:payload.completion||null, notesRaw:payload.notes,
         openTasks:[], openCount:0, doneCount:0, doneTasks:[], salOpen:0, tasks:[] };
-        oRecat(nj); D.jobs.push(nj); }
+        // 🏭 ghost restore: adopt the orphan holder's tasks onto the re-created job (they share the
+        // project name, so the next Lists build binds them server-side too) and drop the ghost.
+        if(window._ghostRestoreProj && String(window._ghostRestoreProj).toLowerCase()===String(payload.project).toLowerCase()){
+          const gi=D.jobs.findIndex(x=>x.project===window._ghostRestoreProj && (String(x.row||'').indexOf('orphan:')===0||x.category==='pipeline'));
+          if(gi>=0){ nj.tasks=D.jobs[gi].tasks||[]; D.jobs.splice(gi,1); }
+          window._ghostRestoreProj=null; }
+        oRecat(nj); if(typeof oRecompute==='function') oRecompute(nj); D.jobs.push(nj); }
       oApply();
       msg.style.color='var(--green)'; msg.textContent='✓ Job added.'; btn.textContent="Add job";
       setTimeout(()=>document.getElementById('addJobModal').classList.remove('show'),1100); })
@@ -9927,11 +9935,22 @@ function renderGhosts(){
   const gj=_ghostJobs();
   { const c=document.getElementById('ghostCount'); if(c) c.textContent=gj.reduce((a,j)=>a+(j.tasks||[]).filter(t=>!t.done).length,0); }
   if(!gj.length){ box.innerHTML='<div style="color:var(--muted);font-style:italic;padding:16px 4px">✨ No ghost tasks — the Lists are clean.</div>'; return; }
-  box.innerHTML=gj.map(j=>`<div style="margin-bottom:14px"><div style="font-weight:800;border-bottom:1px solid var(--line);padding-bottom:3px;margin-bottom:5px">${esc(j.project||'(unnamed)')} <span style="color:var(--faint);font-weight:400;font-size:11px">ghost — no floor job</span></div>`
+  box.innerHTML=gj.map(j=>`<div style="margin-bottom:14px"><div style="font-weight:800;border-bottom:1px solid var(--line);padding-bottom:3px;margin-bottom:5px;display:flex;align-items:center;gap:8px"><span style="flex:1">${esc(j.project||'(unnamed)')} <span style="color:var(--faint);font-weight:400;font-size:11px">ghost — no floor job</span></span><button class="expandbtn" style="padding:2px 10px;border-color:#22c55e;color:#86efac" onclick="ghostRestore('${escJsAttr(j.project||'')}')" title="This is a REAL job that shouldn't be a ghost? Re-create its floor job: opens ➕ Add job pre-filled with this exact name — set the bay/status/dates and Save, and ALL of these tasks re-attach to it automatically (on your screen instantly, everywhere on the next sync).">🏭 Restore to board…</button></div>`
     + (j.tasks||[]).filter(t=>!t.done).map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12.5px"><span style="flex:1">${esc(cleanTask(t.t,false))}${t.cm?`<div style="color:var(--faint);font-size:10.5px">${esc(String(t.cm).slice(0,120))}</div>`:''}</span>`
       +`<button class="expandbtn" style="padding:2px 10px" onclick="ghostClose('${escJsAttr(j.project)}','${escJsAttr(t.t)}')" title="Mark it done (keeps the history)">✓ Close</button>`
       +`<button class="expandbtn" style="padding:2px 10px;border-color:#ef4444;color:#fca5a5" onclick="ghostDelete('${escJsAttr(j.project)}','${escJsAttr(t.t)}')" title="Delete the row entirely">🗑</button></div>`).join('')
     + `</div>`).join('');
+}
+// 🏭 Restore a ghost to a REAL board job: re-create the Input row via the normal ➕ Add job
+// (pre-filled with the EXACT project name — the orphaned task rows already carry it, so they
+// re-bind to the new job by name: locally right away, in the Lists on the next build).
+function ghostRestore(proj){
+  if(!ensureAuth('restore a ghost job', ()=>ghostRestore(proj))) return;
+  window._ghostRestoreProj=proj;
+  document.getElementById('ghostModal').classList.remove('show');
+  openAddJob();
+  const pi=document.getElementById('ajProject'); if(pi){ pi.value=proj; }
+  const msg=document.getElementById('ajMsg'); if(msg){ msg.style.color='var(--amber)'; msg.textContent='Restoring a ghost — keep the project name EXACTLY "'+proj+'" so its '+((_ghostJobs().find(g=>g.project===proj)||{tasks:[]}).tasks.filter(t=>!t.done).length)+' waiting task(s) re-attach.'; }
 }
 function ghostClose(proj, raw){ if(!ensureAuth('close a ghost task', ()=>ghostClose(proj,raw))) return;
   closeTaskByName(proj, raw); renderGhosts(); }
