@@ -3430,6 +3430,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"22.8", date:"2026-07-14", title:"\u23ED Next Up / On Hold tile is BACK on the bay board", items:[
+    "By popular demand: the combined <b>Next Up / On Hold</b> tile returns to the bay board, right under the Parking Lot — every job in a holding bay (Next Up \u00b7 On Hold \u00b7 On Hold/Off-Site), date-sorted, jobs collapsed by default (tap \u25b8 to expand one), collapsible like every tile. The \u{1F6EC} Pipeline panel below still covers inbound + capacity — same jobs, same numbers.",
+    "And the top tabs now MATCH the board: <b>ON HOLD</b> counts one clear rule — parked in a holding bay OR flagged status On Hold (hover shows each job\u2019s bay so you can see exactly why it counts); <b>NEXT UP</b> = jobs in the Next Up bay, same as the tile." ] },
   { rev:"22.7", date:"2026-07-14", title:"🗓 Meeting: Parking-Lot cards match the Coming-back side", items:[
     "The 🅿 In-the-Parking-Lot cards now carry the same info as the Coming-back column: <b>🗓 Fleetio MRA date range</b>, <b>GPS chip</b> (📍 at MRA / \u26a0 elsewhere / 📡 no GPS), job <b>status + dates + client</b>, the 🧩 sub-job tag, and an <b>\u270e open</b> button straight into the job editor." ] },
   { rev:"22.6", date:"2026-07-14", title:"🔗 Quick link renamed: Logistics Calendar", items:[
@@ -8521,7 +8524,10 @@ function renderFloor(D){
   const kpis=[
     {n:cnt("active"),l:"ACTIVE",c:"active",list:byStatus("active")},
     {n:cnt("scheduled"),l:"SCHEDULED",c:"sched",list:byStatus("scheduled")},
-    {n:cnt("on hold"),l:"ON HOLD",c:"hold",list:byStatus("on hold")},
+    (()=>{ // ON HOLD = parked in a holding bay (excl. Next Up) OR status "On Hold" — one rule, matches the tile; the hover list shows each job's bay
+      const oh=jobs.filter(j=>(j.status||"").toLowerCase()!=="shipped" && j.category!=="leave" &&
+        ((bayIsHeld(j.bay)&&!/next\s*up/i.test(j.bay||"")) || (j.status||"").toLowerCase()==="on hold"));
+      return {n:oh.length,l:"ON HOLD",c:"hold",list:oh}; })(),
     {n:shippedRecent.length,l:"SHIPPED · "+SHIP_WINDOW_DAYS+"d",c:"ship",list:shippedRecent},
     {n:nextUpJobs.length,l:"NEXT UP",c:"pipe",list:nextUpJobs},
     {n:totalOpen,l:"OPEN TASKS",c:"tasks",list:openJobs,tasks:true},
@@ -8698,7 +8704,10 @@ function renderFloor(D){
     bayHtml+=`<div class="baycol" data-col="${escA(bays[0])}">`+bays.map(b=>bayCard(b, byBay[b]||[])).join('')+`</div>`; });
   // final column: Parking Lot on top, combined Next Up / On Hold below (scrolls)
   const parkCard=bayCard('Parking Lot', parkingJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true, sortByDate:true, defaultCollapsed:true});
-  // Next Up / On Hold moved OFF the bay board — the 🛬 Pipeline panel below covers inbound + holding.
+  // ⏭ Combined Next Up / On Hold tile RESTORED (crew missed it — 2026-07-14): every job parked in a
+  // holding bay (Next Up · On Hold · On Hold/Off-Site), date-sorted, jobs default-collapsed like the
+  // lot. The 🛬 Pipeline panel below still covers inbound units + capacity; same jobs, same data.
+  const heldCard=bayCard('Next Up / On Hold', heldJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true, sortByDate:true, defaultCollapsed:true});
   // 'General' tile UNDER the lot: jobs assigned to bay "General" (equipment-only / no floor space).
   // These had NO card anywhere (not a physical bay, not held → not in the pipeline panel either).
   // Excludes the 🛠 General crew-task lane, which lives in the crew columns and is a different thing.
@@ -8710,8 +8719,8 @@ function renderFloor(D){
   // assign a job to it via the Bay dropdown (✎ edit / ➕ Add job) or drag a card onto the tile.
   const partsJobs=jobs.filter(j=>(j.status||"").toLowerCase()!=="shipped" && j.category!=="leave" && j.category!=="general" && bayIsParts(j.bay));
   const partsCard=partsJobs.length?bayCard('Off Site / Parts', partsJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true, sortByDate:true, defaultCollapsed:true}):'';
-  WALL_COLS.push({key:'Parking Lot', bays:partsJobs.length?['Parking Lot','General','Off Site / Parts']:['Parking Lot','General']});
-  bayHtml+=`<div class="baycol parkcol" data-col="Parking Lot">`+parkCard+genCard+partsCard+`</div>`;
+  WALL_COLS.push({key:'Parking Lot', bays:partsJobs.length?['Parking Lot','Next Up / On Hold','General','Off Site / Parts']:['Parking Lot','Next Up / On Hold','General']});
+  bayHtml+=`<div class="baycol parkcol" data-col="Parking Lot">`+parkCard+heldCard+genCard+partsCard+`</div>`;
   document.getElementById('bays').innerHTML=bayHtml;
   applyWallLayout();
   document.getElementById('bayCount').textContent=physBays.length+" bays";
@@ -8732,7 +8741,7 @@ function renderFloor(D){
   document.getElementById('flagCount').textContent=flagged.length;
   setupFloorCollapse();   // Flagged / Leave / Coming-Back start collapsed (counts stay visible) — remembered per device
 
-  // (Next Up / On Hold now live in the combined bay-board tile above.)
+  // (Next Up / On Hold render in the combined bay-board tile above + the 🛬 Pipeline panel.)
 
   // Leave (upcoming)
   const leaveSorted=leaveJobs.slice().filter(j=>!j.completionISO||j.completionISO>=today)
