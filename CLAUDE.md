@@ -297,7 +297,15 @@ Rich wants a two-step complete for **project-fed** design tasks (NOT the ad-hoc/
 
 Treat help + rev as PART OF the feature, not an afterthought.
 
-## 🔝 NEXT SESSION: GPS backfill from Fleetio telematics (Rich 2026-07-15)
+## ✅ DONE 2026-07-15 PM: GPS VIN-join backfill (was "NEXT SESSION")
+**SHIPPED + VERIFIED live:** Export-Data.ps1 (default branch, commit 8c6356a) now builds a
+`$vinToFleet` map from the Fleetio roster and, in the Samsara loop, publishes each GPS fix under
+the Fleetio fleet # too when the VIN matches a different name (reads `$v.externalIds.'samsara.vin'`;
+freshest-fix rule kept; `vin-joined N` counter in stdout + samsara-debug.txt). Verified:
+`locations["4489"]` = Madison Heights (joined from Samsara "IW164"), J1559 On Cloud card shows
+GPS instead of "📡 no GPS". Card shows ⚠ (city, not the MRA-yard geofence) — honest per Samsara.
+--- original note: ---
+## GPS backfill from Fleetio telematics (Rich 2026-07-15)
 J1559 On Cloud Infowheel (unit 4489 Dodge Ram) shows "📡 no GPS" although Fleetio telematics HAS a
 3-min-old location — because `fleetio.locations` is built from SAMSARA ONLY in Export-Data.ps1 (default
 branch `claude/exciting-keller-wm7u2p`); units tracked in Fleetio-but-not-Samsara (vans/trucks) all read
@@ -309,6 +317,28 @@ vans (IW163-167 class match by name already; 4489-style don't). Dash-side `_ynLo
 no JS change needed. Test: J1559 On Cloud card shows 📍 after next export.
 Also in flight: SWA created?(await Rich URL+token) · Infowheels 3D builder awaiting Brandon/Mark OBJ
 exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
+
+## Shipped 2026-07-15 PM (second wave, rev 24.3 → 24.5) — floor cleanup · 🆕 badge · leave calendar/upload
+
+- **#1195 "Broken Vent" investigation (Rich: "not showing"):** it WAS everywhere (data.js since 7/13
+  23:30, Fleetio tab row 69/76, meeting card, dash card behind "🔧 1 Fleetio ▸") — a DISCOVERABILITY
+  problem: default sort = overdue→priority→OLDEST, so new issues sank to the bottom. Fix = 24.3 badge/float.
+- **24.3:** (1) ⚠ Open Issues: issues opened ≤7d get **🆕 new** badge (`_fioIsNew`/`_fioAge`) + float
+  right under the overdue block in the default sort; (2) **FLOOR slimmed (Rich):** `#crewSchedPanel`,
+  `#floorGanttPanel`, `#fl-flagged`, `#fl-returns` hidden via CSS `display:none!important` (NOT deleted —
+  one line brings any back; renders still run into hidden divs, zero null-refs). 🔔 due-back banner stays;
+  Coming-Back lives on FLEETIO tab + Meeting view. **"Open Work by Assignee" panel STAYS** (Rich's
+  screenshot was sent in error — he said "wrong screenshot"); (3) **Staff on Leave: 📅 month-calendar
+  view** (`renderLeaveBox`/`_lvCalHtml`, chips = who's out, ‹ › nav, tap-to-edit, `#fl-leave` spans
+  full grid width) + **📤 Upload** (`lvUploadBtn`/`_lvImport`, SheetJS via `ensureXLSX`).
+- **24.4:** leave box **defaults to calendar** (LEAVE_VIEW='cal'; ☰ List flips back, remembered).
+- **24.5:** Upload **decodes the HR payroll leave report** (Rich's vaca.xlsx: single-column lines, one
+  row per 8-hour day): `_lvPayroll` regex-parses lines, Approved-only, "Roe, Kayla M."→"Kayla Roe",
+  **merges day-rows into ranges** (weekend gaps bridged), plus shared dupe pass (`_lvLast` last-name +
+  date-overlap vs existing board leave). Verified vs his real file: 24 day-rows → 8 entries, Giglio's
+  two separate weeks stay separate. Generic Name·Start·Return sheets still work.
+- Deploys: all `mode=live`, verified by polling `rev:"24.x"`. Leave writes ride the normal `addJob`
+  (bay APL/Holidays · status Leave) path → ~15–30 min to sync back like any board edit.
 
 ## Shipped 2026-07-15 — verification day (rev 23.1 → 23.7)
 
