@@ -2830,6 +2830,11 @@
           <label style="font-size:11px;color:var(--muted)">Pick crew(s) — for a task sheet or their work orders:</label>
           <div id="ppCrews" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px"></div>
           <div style="font-size:10.5px;color:var(--faint);margin-top:6px">🧾 <b>Work Orders</b> = one printable work order <b>per job</b> for the ticked crew(s), with the job's photos &amp; docs enlarged and a signature line (Doug with 5 jobs → 5 work orders).</div>
+          <details id="ppJobsWrap" style="margin-top:9px">
+            <summary style="cursor:pointer;font-size:11.5px;color:var(--muted);font-weight:700" title="Default = every job. Open this to print work orders for only the job(s) you pick — e.g. just the one you added today.">🏭 Jobs: <span id="ppJobsLab">ALL (default)</span> ▾</summary>
+            <div style="font-size:10.5px;color:var(--faint);margin:6px 0 4px">Tick specific job(s) to print ONLY those work orders — leave everything unticked for all jobs.</div>
+            <div id="ppJobs" style="display:grid;grid-template-columns:1fr;gap:5px;max-height:180px;overflow:auto;margin-top:4px"></div>
+          </details>
         </div>
         <div class="addbtns">
           <button class="btn-ghost" onclick="ppClose()">Cancel</button>
@@ -3431,6 +3436,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"23.3", date:"2026-07-15", title:"🧾 Work Orders: pick specific jobs (default still ALL)", items:[
+    "The 🖨 Print picker now has a <b>🏭 Jobs</b> section: leave it alone and Work Orders print for <b>every job</b> like always — or open it and tick just the job(s) you want (added one job today? print only that one). Works with any crew selection." ] },
   { rev:"23.2", date:"2026-07-15", title:"\u26a0 Unassigned finder: context line layout fixed", items:[
     "The new muted context line was squeezing in BESIDE the task text and jumbling the row — it now sits cleanly on its own line under the task, with the dates back on the right where they belong." ] },
   { rev:"23.1", date:"2026-07-15", title:"\u26a0 Unassigned finder: \u{1F4CB} tasks show comments + phase (Al)", items:[
@@ -11551,6 +11558,12 @@ const PRINT_CREWS=[
   {label:'Josh',         re:/\bjosh\b/i},
   {label:'Jeff',         re:/\bjeff\b/i}];
 function openPrintPick(){ const g=document.getElementById('ppCrews'); if(!g) return;
+  { const jl=document.getElementById('ppJobs');
+    if(jl){ const D=window.MRA_DATA||{};
+      const live=(D.jobs||[]).filter(j=>j.category!=="leave" && !["shipped","on hold"].includes((j.status||"").toLowerCase()) && !bayIsHeld(j.bay))
+        .slice().sort((a,b)=>String(a.project||'').localeCompare(String(b.project||'')));
+      jl.innerHTML=live.map(j=>`<label style="display:flex;gap:7px;align-items:center;font-size:12px;cursor:pointer;margin:0;color:var(--txt)"><input type="checkbox" class="ppjob" data-row="${escA(String(j.row))}" style="width:auto;margin:0;flex:0 0 auto" onchange="ppJobsLabSync()"> <span>${esc(j.project)}${j.jobNum?(' · '+esc(j.jobNum)):''}${j.bay?(' — '+esc(j.bay)):''}</span></label>`).join('')||'<div style="color:var(--faint);font-size:11px">no live jobs</div>';
+      const w=document.getElementById('ppJobsWrap'); if(w) w.open=false; ppJobsLabSync(); } }
   g.innerHTML=PRINT_CREWS.map((c,i)=>`<label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;margin:0;color:var(--txt);font-weight:600"><input type="checkbox" data-i="${i}" style="width:auto;margin:0;flex:0 0 auto;transform:scale(1.25)"> <span>${esc(c.label)}</span></label>`).join('');
   document.getElementById('printPickModal').classList.add('show'); }
 function ppClose(e){ if(!e || e.target.id==='printPickModal' || (e.target.classList&&e.target.classList.contains('modal-close')))
@@ -11576,7 +11589,8 @@ function buildWorkOrders(sel, opts){
   const D=window.MRA_DATA||{};
   if(!(D.jobs&&D.jobs.length)){ if(!opts.silent) alert("The board isn't loaded yet — try again in a moment."); return null; }
   const live=j=>j.category!=="leave" && !["shipped","on hold"].includes((j.status||"").toLowerCase()) && !bayIsHeld(j.bay);
-  const jobs=(D.jobs||[]).filter(live);
+  let jobs=(D.jobs||[]).filter(live);
+  if(opts.jobRows&&opts.jobRows.size) jobs=jobs.filter(j=>opts.jobRows.has(String(j.row)));   // 🏭 job-scoped print (picker) — default is ALL
   const KNOWN=/\bsal\b|wrap|w2 graphic|\bw2\b|electr|beyer/i;
   const basisFor=(who,txt)=>{ who=(who||"").trim(); txt=txt||""; return (who&&KNOWN.test(who))?who:(who?(who+" "+txt):txt); };
   const fdet={}, fdocs={}; ((D.fleetio&&D.fleetio.issues)||[]).forEach(i=>{ if(i&&i.num!=null){ fdet[String(i.num)]=String(i.detail||""); fdocs[String(i.num)]=i.docs||[]; } });
@@ -11634,8 +11648,8 @@ function buildWorkOrders(sel, opts){
   const auto=opts.autoPrint?`<scr`+`ipt>window.onload=function(){setTimeout(function(){try{window.print()}catch(e){}},500)}</scr`+`ipt>`:'';
   return `<!doctype html><html><head><meta charset="utf-8"><title>MRA Work Orders — ${esc(sel.map(s=>s.label).join(', '))} — ${woDate}</title><style>${css}</style></head><body>${bar}${pages.join('')}${auto}</body></html>`;
 }
-function printWorkOrders(sel){
-  const html=buildWorkOrders(sel,{autoPrint:true});
+function printWorkOrders(sel, xopts){
+  const html=buildWorkOrders(sel,Object.assign({autoPrint:true},xopts||{}));
   if(html==null) return;
   const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap again.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
@@ -11892,10 +11906,13 @@ function pmrCopyLink(){
   const done=()=>{ if(m) m.textContent='✓ Link copied — paste it into an email (always shows live data when opened).'; };
   try{ navigator.clipboard.writeText(url).then(done,()=>{ if(m) m.textContent=url; }); }catch(e){ if(m) m.textContent=url; }
 }
+function ppJobsLabSync(){ const n=document.querySelectorAll('#ppJobs input.ppjob:checked').length;
+  const l=document.getElementById('ppJobsLab'); if(l) l.textContent=n?(n+' selected'):'ALL (default)'; }
 function woPrint(){
   const sel=[...document.querySelectorAll('#ppCrews input:checked')].map(x=>PRINT_CREWS[+x.dataset.i]);
   if(!sel.length){ alert('Tick at least one crew for their work orders.'); return; }
-  ppClose(); printWorkOrders(sel);
+  const jr=new Set([...document.querySelectorAll('#ppJobs input.ppjob:checked')].map(x=>String(x.dataset.row)));
+  ppClose(); printWorkOrders(sel, jr.size?{jobRows:jr}:undefined);
 }
 // Builds the crew task-sheet page — used by the print window AND the 🔗 share-link live sheet
 // (?sheet=sal,elec,…). Photos hover-zoom (CSS) and click through full size; files open in a new tab.
