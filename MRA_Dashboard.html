@@ -3445,6 +3445,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"24.1", date:"2026-07-15", title:"\u{1FA7A} Deficiency list: print options + true LIVE view (Al)", items:[
+    "Al\u2019s asks: the Deficiency page now has the same <b>print options bar</b> as the Gantt prints (portrait/landscape \u00b7 Letter/Legal/A4 \u00b7 fit-to-1-page) — and it\u2019s a <b>live view</b>: keep it open in a tab and it <b>auto-refreshes every 5 minutes</b> (plus a \u{1F504} Refresh now button) so it shrinks as you fix things on the other screen." ] },
   { rev:"24.0", date:"2026-07-15", title:"\u{1F41B} FIX: PM report name matching", items:[
     "Al\u2019s report was pulling ABB\u2019s floor job because the PM filter matched \u201cal\u201d anywhere in a name — including Brandon Kos<b>al</b>. Matching is now whole-word (\u201cAl\u201d = Al Karloff only), same for every PM link." ] },
   { rev:"23.9", date:"2026-07-15", title:"\u{1F527} Task descriptions no longer cut off", items:[
@@ -12050,13 +12052,32 @@ li.more{color:#7b8794;font-style:italic}
 .foot{color:#8a8f98;font-size:9.5px;border-top:1px solid #d7dadf;margin-top:14px;padding-top:6px}
 @page{size:letter portrait;margin:.5in}@media print{.printbar{display:none}body{background:#fff}.wrap{box-shadow:none;margin:0;max-width:none;padding:0}}`;
   const total=odTot+nodTot+tbdTot+shopOd+shopNod+shopUnas+gpsN+ghostN+noJn+noDates+holdStat+mraGaps;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>MRA Deficiency List — ${rDate}</title><style>${css}</style></head><body>`
-    +`<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Deficiency list${q?' · PM filter: '+esc(pmQ):''} · refresh for live data · every line has a FIX hint</span></div>`
-    +`<div class="wrap"><h1><span class="mra">MRA</span> Deficiency List — fix these</h1><div class="sub">${rDate} · ${total} item${total===1?'':'s'} to correct · board data as of ${esc(D.generatedText||'')}${q?' · PM: '+esc(pmQ):''}</div>`
+  const bar='<div class="printbar">'
+    +'<button onclick="window.print()">\u{1F5A8} Print / Save PDF</button>'
+    +'<label style="display:flex;gap:5px;align-items:center">Orientation <select id="ori" onchange="applyOpts()" style="color:#111"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option></select></label>'
+    +'<label style="display:flex;gap:5px;align-items:center">Paper <select id="pap" onchange="applyOpts()" style="color:#111"><option value="letter" selected>Letter</option><option value="legal">Legal</option><option value="a4">A4</option></select></label>'
+    +'<label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="fit" onchange="applyOpts()"> Fit to 1 page</label>'
+    +'<button onclick="location.reload()" style="background:#3a4048">\u{1F504} Refresh now</button>'
+    +'<span style="color:#aeb6c2">LIVE — auto-refreshes every 5 min${q?' \u00b7 PM: '+esc(pmQ):''} \u00b7 every line has a FIX hint</span></div>';
+  const winJS='<scr'+'ipt>'
+    +'var PAPER={letter:[816,1056],legal:[816,1344],a4:[794,1123]};'
+    +'function applyOpts(){var ori=document.getElementById("ori").value,pap=document.getElementById("pap").value,fit=document.getElementById("fit").checked;'
+    +'var d=PAPER[pap]||PAPER.letter,w=d[0],h=d[1];if(ori==="landscape"){var t=w;w=h;h=t;}var mpx=0.5*96;'
+    +'document.getElementById("pg").textContent="@page{size:"+pap+" "+ori+";margin:.5in}";'
+    +'var sh=document.querySelector(".wrap"),wr=document.getElementById("dwrap");'
+    +'sh.style.transform="none";sh.style.maxWidth=(w-2*mpx)+"px";wr.style.height="";'
+    +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=sh.scrollWidth,ch=sh.scrollHeight,sc=Math.min(1,uW/cw,uH/ch);sh.style.transformOrigin="top left";sh.style.transform="scale("+sc+")";wr.style.height=(ch*sc+30)+"px";}}'
+    +'setTimeout(function(){location.reload()},300000);'
+    +'window.onload=function(){try{applyOpts()}catch(e){}};'
+    +'</scr'+'ipt>';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>MRA Deficiency List — ${rDate}</title><style>${css}</style><style id="pg"></style></head><body>`
+    +bar
+    +`<div id="dwrap"><div class="wrap"><h1><span class="mra">MRA</span> Deficiency List — fix these</h1><div class="sub">${rDate} · ${total} item${total===1?'':'s'} to correct · board data as of ${esc(D.generatedText||'')}${q?' · PM: '+esc(pmQ):''}</div>`
     +tiles
     +(pmSecs||'<div style="color:#15803d;font-weight:700">✨ No project-side deficiencies'+(q?' for this PM':'')+'.</div>')
     +floorSec
-    +`<div class="foot">MRA Command Center · auto-generated · fix items on the dashboard and this list shrinks on the next refresh</div></div></body></html>`;
+    +`<div class="foot">MRA Command Center · LIVE view — auto-refreshes every 5 min · fix items on the dashboard and this list shrinks</div></div></div>`
+    +winJS+`</body></html>`;
 }
 function openDeficiency(pm){ if(typeof closeDrops==='function') closeDrops();
   const html=buildDeficiencyHtml(pm||'');
