@@ -790,6 +790,21 @@
   .badge.green{background:#13331f; color:#86efac}
   .badge.blue{background:#142a44; color:#93c5fd}
   .badge.grey{background:#242c38; color:#9fb0c4}
+  /* Floor cleanup (rev 24.3, Rich): these panels are HIDDEN, not deleted — one line brings any back. */
+  #crewSchedPanel,#floorGanttPanel,#fl-flagged,#fl-returns{display:none!important}
+  #fl-leave{grid-column:1 / -1}
+  /* Staff on Leave — month calendar view */
+  .lvcal-bar{display:flex;align-items:center;gap:6px;margin:4px 0 8px}
+  .lvcal-mon{font-size:13px;min-width:140px;text-align:center}
+  .lvcal-n{margin-left:auto;font-size:11px;color:var(--muted)}
+  .lvcal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .lvcal-h{font-size:10px;color:var(--faint);text-align:center;text-transform:uppercase;padding:2px 0}
+  .lvcal-d{min-height:52px;border:1px solid var(--line);border-radius:6px;padding:3px 4px;background:var(--panel)}
+  .lvcal-d.off{background:transparent;border-style:dashed;opacity:.35}
+  .lvcal-d.tod{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red)}
+  .lvcal-dn{font-size:10px;color:var(--faint);margin-bottom:2px}
+  .lvcal-chip{display:block;font-size:10px;font-weight:700;background:#3a2e12;color:var(--amber);border-radius:5px;padding:1px 4px;margin:1px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  body.light .lvcal-chip{background:#fdeccb;color:#8a5e00}
 
   /* ---------- PM bars ---------- */
   .pmrow{display:grid; grid-template-columns:130px 1fr 30px; align-items:center; gap:10px; margin-bottom:9px}
@@ -1931,8 +1946,9 @@
         <div id="flags"></div>
       </div>
       <div class="panel" id="fl-leave">
-        <h2>Staff on Leave <span class="count" id="leaveCount"></span><button class="leaveedit" onclick="toggleCloseMode(document.getElementById('btnCloseMode'))" title="Turn on Edit mode here to add or change leave (needs code)">🔒 Edit</button><button class="leaveadd" onclick="openLeave()" title="Add a leave / time-off entry">➕ Add</button></h2>
+        <h2>Staff on Leave <span class="count" id="leaveCount"></span><button class="leaveedit" id="lvViewBtn" onclick="lvToggleView()" title="Flip between the list and a month calendar of who's out">📅 Calendar</button><button class="leaveedit" onclick="lvUploadBtn()" title="Load a leave / vacation file (.xlsx or .csv) — Name · Start · Return columns; every row becomes a leave entry, duplicates skipped (needs code)">📤 Upload</button><button class="leaveedit" onclick="toggleCloseMode(document.getElementById('btnCloseMode'))" title="Turn on Edit mode here to add or change leave (needs code)">🔒 Edit</button><button class="leaveadd" onclick="openLeave()" title="Add a leave / time-off entry">➕ Add</button></h2>
         <div id="leave"></div>
+        <input type="file" id="lvFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="lvFileChosen(this)">
       </div>
       <div class="panel" id="fl-returns">
         <h2>↩️ Coming Back to MRA <span class="count" id="returnsCount"></span></h2>
@@ -2129,7 +2145,7 @@
         <span style="margin-left:8px;font-size:10px;color:var(--faint);letter-spacing:0;font-weight:400;text-transform:none">every open Fleetio issue — in full screen, click one for its details</span>
         <label style="margin-left:12px;font-size:11px;color:var(--muted);font-weight:400;text-transform:none">Sort:
           <select id="fIssSortSel" onchange="setFioIssSort(this.value)" title="Order the open issues" style="font-size:11px;padding:3px 7px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt);margin-left:4px">
-            <option value="overdue">⚠ Overdue first</option>
+            <option value="overdue">⚠ Overdue → 🆕 new first</option>
             <option value="oldest">📅 Oldest first</option>
             <option value="newest">🆕 Newest first</option>
             <option value="priority">🔺 Priority (high→low)</option>
@@ -3275,7 +3291,7 @@ const GENERAL_HELP = `
   <h3>How to use the <span class="mra">MRA</span> Command Center</h3>
   <div class="msub">Everything here builds itself from the Excel workbook — you never edit the dashboard by hand.</div>
   <div class="hsec"><h4>① The tabs up top</h4>
-    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, the next 2 weeks, flagged jobs, staff on leave, and <b>↩️ Coming Back to MRA</b> (trailers arriving back + parked at MRA now, from the logistics calendars). A <b>🔔 pulsing banner appears at the top when a unit is due back at MRA within 2 weeks</b> (tap it for details; it hides when nothing is due). The <b>⚑ Flagged, Staff on Leave and ↩️ Coming Back panels start collapsed</b> — their counts stay in the header; click the <span class="k">▾</span> to open one (remembered per device). In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
+    <p><span class="k">FLOOR</span> = what's happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile and Parking Lot), open tasks grouped by crew, and staff on leave. A <b>🔔 pulsing banner appears at the top when a unit is due back at MRA within 2 weeks</b> (tap it for details; it hides when nothing is due) — the full <b>↩️ Coming-Back list lives on the FLEETIO tab</b> and the 🗓 Meeting view. <b>Staff on Leave starts collapsed</b> — its count stays in the header; click the <span class="k">▾</span> to open it (remembered per device). In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, Program Development load and team capacity. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
@@ -3289,9 +3305,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>④ 🧰 Open Tasks by Assignee — Sal · Wrap · Electricians ⇄ Doug · Josh · Jeff</h4>
     <p>Live queues, one per crew. <b>Placement matters:</b> trailers in a <b>bay or the Parking Lot</b> feed these lists; a trailer waiting in <b>Next Up / On Hold / Off-Site</b> keeps its assigned tasks on its own card until it's moved out — then they appear here automatically. A task lands in a crew's column based on the <span class="k">Assigned</span> boxes on ➕ Add / ✎ Edit task — pick <b>Sal</b>, <b>Wrap Team</b>, <b>Electricians</b>, <b>Doug</b>, <b>Josh</b> or <b>Jeff</b>, or <b>type ANY name</b> (the boxes suggest the crews plus every name already used; the 👤 quick-assign popover has a ✏️ type-a-name box too). Assign it to someone without a column (e.g. <i>Vendor</i>, or a typed name) and it still shows on the trailer's card and routes by any crew name in the task text — but only the six crews get their own column. <b>Sal</b> gets a <b>double-wide, two-column</b> layout (he always has the most), so his list is about half as tall; the rest stay single. On a phone the columns stack. <b>On the shop TV the panel auto-rotates between two pages</b> — <b>Sal · Wrap · Electricians</b> ⇄ <b>Doug · Josh · Jeff</b> — with clickable ●○ page dots; on a laptop both rows show at once. In the <span class="k">⚙ wall gear</span> you can turn <b>🔁 Rotate crews</b> on/off and set <b>how often</b> it swaps (every <b>5–20 s</b>). In 📺 Wall mode the lists also auto-scroll. Up top, a <span class="k">Due:</span> window (Today / Week / 2 wks / Month / All) filters by due date — <b>a shop TV defaults to Month</b> — and a <span class="k">Sort:</span> menu orders each crew's tasks — <b>📅 Due — soonest first</b> (the default), latest-due, <b>🆕 Recently added</b>, or <b>🏭 Trailer / bay</b>; both remembered per device. An <b>⚠ N overdue</b> chip counts open tasks past their due date. Each task line has a <b>👤 quick-assign</b> chip — tap, pick a crew, done (no dialog) — or just <b>drag the task onto another crew's column</b> to re-assign it, or <b>onto a job card on the bay board</b> to move it to that trailer (mouse/desktop; touch uses the chip / ✎ ⇄ Move). The <span class="k">➕ Add</span> menu here adds a <b>trailer task</b>, a <b>general crew task</b>, or a <b>whole new job</b> from one spot. Both ➕ Add and ✎ Edit task have a <span class="k">🔁 Repeat</span> picker (daily · weekly on any weekday · monthly): close a repeating task and the <b>next one is created automatically</b> with the next due date — perfect for weekly PMs like the eyewash station; repeating tasks show a 🔁 on the bay cards. <b>👤 Crew picker:</b> the chip row up top (All · Sal · Wrap · Elec · Doug · Josh · Jeff) shows <b>only the selected crews' columns on this device</b> — tap more than one to combine (Sal + Electricians), tap <b>All</b> to bring everyone back; the visible columns grow to fill the width, and the choice is <b>remembered per device</b> (perfect for Sal's own iPad or his back-shop monitor — on a wall/TV screen set it from the <span class="k">⚙ gear ▸ 👤 Crews</span>, where it also pauses the page rotation). Fleetio descriptions under tasks clamp to <b>one line — tap to expand</b>. These are the <b>short-term</b> open tasks; for the longer view see the next panel.</p>
     <p><b>Sizing on the TV (admin 🎨 Design panel):</b> every crew tile on <i>both</i> pages — Sal · Wrap · Electricians and Doug · Josh · Jeff — can be sized independently (width + height) from the tile picker, same as the bays.</p></div>
-  <div class="hsec"><h4>④ᵇ 📅 Crew / Resource Schedule (longer-term plan)</h4>
-    <p>Right under the crew queues: pick <b>any</b> resource from the dropdown (MRA Shop, Electrician, Wrap Team, a person…) and see <b>where they're booked over time</b> — a Gantt with one bar per project (their start→finish span on it, with the standard <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> and a today line) plus a full <b>dated task list</b> below, soonest first, tagged <span class="hchip">active</span> / <span class="hchip">upcoming</span> / <span class="hchip late">past due</span>. <span class="k">Show completed</span> folds in completed work. This reads the project schedule's <b>Assigned-To + Start/Finish</b> dates (the Shop Tasks tab is short-term and mostly undated, so it isn't used here). The picker is <b>two-level</b>: a group (MRA Design, MRA Shop, Electricians, Wrap Team, Maintenance) <b>rolls up everyone</b> ("MRA Design — all") with each member indented under it ("› Steve K") — pick the group to see all of it, or a person to drill in. Members come from the workbook's <b>Sub-Resource</b> column (Assigned To = group, Sub-Resource = person); until that's filled, the board reads them from existing "Group / Person" assignments. Name variants are still merged (e.g. <b>MasterWraps → Wrap Team</b>, <b>Electrician → Electricians</b>). <span class="k">🖨 Print</span> lays the Gantt + full task list on one <b>11×17 (tabloid) landscape</b> page (auto-fit) — pick 11×17 paper, or Save as PDF.</p></div>
-  <div class="hsec"><h4>④ᶜ ✉ Daily Shop Letter</h4>
+    <div class="hsec"><h4>④ᶜ ✉ Daily Shop Letter</h4>
     <p>In the FLOOR <span class="k">☰ Actions</span> menu, <span class="k">✉ Daily Letter</span> writes a clean end-of-day shop update — each bay's job with its <b>open task lines</b>, a <b>Recently Completed (last 7 days)</b> list, open tasks per crew, trailers coming back to MRA in the next 14 days, projects at-risk + milestones due this week, and fleet service flags. Pick a <b>date</b>, then <b>📋 Copy text</b> to paste it into an email or <b>🖨 Print / PDF</b>. No login needed.</p></div>
   <div class="hsec"><h4>④ᶜ² 🧾 Maintenance Work Orders</h4>
     <p><span class="k">☰ Actions ▸ 🧾 Work Orders…</span> (or the 🖨 Print picker). Tick a crew — <b>Sal, Doug, Electricians…</b> — and it generates a <b>maintenance work order for each of that crew's jobs</b>, one per page: the classic form with <b>BAY · JOB # · ASSET #</b>, work-order / expected / actual completion dates, the crew's open tasks as numbered <b>ISSUE / DESCRIPTION</b> lines (Fleetio # shown as the issue number, due dates flagged), the job's <b>photos &amp; documents enlarged</b>, and a <b>signature / date</b> line. So Doug with 5 jobs prints 5 work orders. Tick several crews to batch. <b>🖨 Print / Save PDF</b> from the top bar. A crew's set also opens directly at <span class="k">…?wo=doug</span> — that's the link the daily 7:15 AM maintenance email uses.</p></div>
@@ -3308,10 +3322,7 @@ const GENERAL_HELP = `
     <p>Groups every open <b>Project Task</b> by the person it's <i>assigned</i> to, most-loaded first, with a due-date chip
     (<span style="color:#fca5a5">red</span> = overdue, <span style="color:var(--amber)">amber</span> = due ≤ 7 days). The
     <span class="k">Everyone / People only</span> toggle hides crews & vendors — your choice is remembered. It's <b>compact by default</b> — scrolls within a fixed height so it doesn't dominate the tab — with an <span class="k">⤢ Expand</span> button to grow it to full height (remembered per device). <b>Project Progress</b> works the same way.</p></div>
-  <div class="hsec"><h4>⑥⁰ 📅 Floor Schedule — Gantt or Calendar</h4>
-    <p>The <b>Next 2 Weeks — Floor Schedule</b> panel has a <span class="k">📊 Gantt</span> / <span class="k">📅 Calendar</span> toggle (top-right of its title). <b>Calendar</b> is an old-school month grid — use <span class="k">‹</span> / <span class="k">›</span> to change month, <span class="k">Today</span> to jump back. Each trailer is a bar across its <b>build dates</b> (bay start → ship), colored by status, click it for details.</p>
-    <p>It starts on the <b>Bays</b>; the <span class="k">Show:</span> chips add <b>Parking Lot</b> and <b>Next Up / Hold</b>. The <span class="k">👤</span> dropdown filters to one person/crew (Sal, Wrap, Electricians…). Note: a trailer only appears if it has start/ship dates set.</p></div>
-  <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
+    <div class="hsec"><h4>⑥ ⛶ Expand — full-screen Gantts</h4>
     <p>Both Gantts have an <span class="k">⛶ Expand</span> button (<b>Esc</b> or ✕ to close). <b>Projects:</b> a <span class="k">📊</span> <b>detail slider</b> up top (<b>Projects → Phases → Tasks</b>) — same slider as the inline Gantt — or click a project name (▾) to expand just one, click a <b>bar</b> to open that project's <b>detailed view</b> (⑥ᵈ below). Its <span class="k">🔍 zoom</span> / <span class="k">↔ scroll</span> sliders and <span class="k">🎌 holiday</span> picker now live in the <span class="k">⚙ View</span> menu (the <span class="k">🖨 Print</span> stays out), and the <span class="k">‹</span> / <span class="k">›</span> scroll arrows sit up top just outside the toolbar — so this view matches the inline one. <b>Floor:</b> a capacity strip for Bays 3–5 and <span style="color:var(--red)">red-ringed ⚠ conflicts</span> when two trailers share an inside spot.</p>
     <p><b>Holidays shade the whole Gantt</b> (amber band, top to bottom) so you can plan around them; the <span class="k">🎌 US</span> and <span class="k">Canada</span> toggles (above the Gantt and in the Expand view) turn each on/off independently — show both, one, or none. Each bar also shows its <b>length in days</b> (e.g. <i>12d</i>). The <span class="k">🖨 Print</span> button in the Expand view prints whatever Gantt you're viewing (including a single project's detailed view) on one 11×17 page. The <b>date row (and holidays) stays pinned to the top</b> as you scroll, so the dates are always in view. A <span class="k">👥 assignee</span> dropdown narrows the Gantt to one person/crew (e.g. <i>MRA Design</i>, <i>Wrap Team</i>, a PM) — their <b>tasks</b> in a project's detailed view, or just the <b>projects they're on</b> in the all-projects view.</p></div>
   <div class="hsec"><h4>⑥ᵇ 🔍 Gantt zoom &amp; ↔ scroll</h4>
@@ -3357,7 +3368,7 @@ const GENERAL_HELP = `
       <li><span class="k">➕ Add task</span> / <span class="k">➕ Add job</span> (top of Bay Status) — drop a new task on a project, or create a brand-new job on the schedule. Tick <span class="k">🔥 Hot</span> for urgent must-happen work — it shows amber + bold everywhere, <b>pinned to the top</b> of its list (*** or !!! in the text counts as hot too; un-tick in ✎ Edit to clear it). <b>Assigned to</b> now has a <b>2nd dropdown</b> — pick two crews for a <b>team-effort</b> task and it shows in both their columns (leave blank for one).</li>
       <li><span class="k">✎ edit</span> on a job card — move bay, change start/finish dates, tweak notes; <b>🗑 Delete job</b> is in that form too. <b>Tip:</b> just <b>click any job # </b>(on a bay tile or a crew task card) to jump straight into that job's editor (asks for your code first).</li>
       <li>On each task line: <span class="k">✓ close</span>, <span class="k">✎</span> edit (text, assignee, status, milestone, comments), <span class="k">🗑</span> delete. Turn on <span class="k">Show closed</span> and closed tasks get <span class="k">↩</span> reopen + 🗑 delete.</li>
-      <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates + optional <b>reason</b>), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.) For a same-day call-in, <span class="k">☰ Actions ▸ 🚫 Out today…</span> (top or floating menu) pre-fills a one-day entry — the person's <b>whole crew card highlights red</b> with a 🚫 badge naming who's out and why, and a strip above the crew columns lists everyone out. Team members without their own column (Sal's crew: Jake, John, Brent, Kayla…) — use the <b>“Show on crew card”</b> picker in the form to route them onto the right card (e.g. Kayla → Sal).</li>
+      <li><span class="k">Staff on Leave</span> — hit <span class="k">🔒 Edit</span> right in that box (no need to scroll up), then <span class="k">➕ Add</span> a leave/time-off entry (name + dates + optional <b>reason</b>), and <span class="k">✎</span> edit or <span class="k">🗑</span> delete each one. (To rename someone, delete and re-add.) For a same-day call-in, <span class="k">☰ Actions ▸ 🚫 Out today…</span> (top or floating menu) pre-fills a one-day entry — the person's <b>whole crew card highlights red</b> with a 🚫 badge naming who's out and why, and a strip above the crew columns lists everyone out. Team members without their own column (Sal's crew: Jake, John, Brent, Kayla…) — use the <b>“Show on crew card”</b> picker in the form to route them onto the right card (e.g. Kayla → Sal). The box now also has a <span class="k">📅 Calendar</span> button — flips the list into a <b>month calendar of who's out</b> (‹ › change month, <span class="k">Today</span> jumps back, tap a name to edit) — and <span class="k">📤 Upload</span>: load a whole <b>vacation file</b> (.xlsx or .csv with <b>Name · Start · Return</b> columns, any order) and every row becomes a leave entry — duplicates already on the board are skipped, and you get a preview to confirm before anything is sent.</li>
       <li><b>📷 Attachments</b> — the ➕ Add and ✎ Edit task forms have <span class="k">📷 Photo · 📎 PDF / file · 🔗 Link</span> buttons. Snap a picture at check-in (photos shrink themselves before upload, so it's quick from a phone), attach a PDF, or paste a link (a SharePoint doc, a spec page…). Attachments show as <b>thumbnails right on the task line</b> — hover to zoom, click to open full size — and follow the task onto the crew sheets, the 🔗 custom dash links and the prints, exactly like the Fleetio photos do.</li>
     </ul>
     <div class="tip">Your change shows on the board <b>the instant you save</b> — you don't wait for the next refresh. (Everyone else's screens catch up on the normal ~15-min cycle.) Dates are stamped in Eastern time. <b>Everything you change</b> — adds, edits, completes, deletes, moves — now also sticks on <b>your</b> device even if you <b>hit refresh / reload the page</b> (handy on an iPad, which reloads tabs on its own). It holds your changes until the workbook's data.js catches up on the next ~15-min export, then quietly hands off to the real data — so nothing ever appears to vanish when you refresh. One special case: an edit on a <b>brand-new row</b> (e.g. assigning a 🔧 task seconds after queueing it) waits on this device until the row syncs, then sends by row-id — if any are waiting, a <b>⏳ “N edits waiting to sync” chip</b> shows bottom-left (tap it to sign in &amp; send now); signing in also sends them automatically. When the chip is gone, everything's saved.</div></div>
@@ -3423,7 +3434,7 @@ const FLEETIO_HELP = `
   <div class="hsec"><h4>② 📊 At-a-glance charts</h4>
     <p><b>Service Backlog</b> donut = overdue (red) vs due-soon (amber). <b>Open Issues by Type</b> = your Fleetio issue labels, ranked. <b>Top Units</b> = the units with the most open items.</p></div>
   <div class="hsec"><h4>③ ⚠ Open Issues &amp; 📋 Work Orders</h4>
-    <p>The <b>⚠ Open Issues</b> list sits up top and shows <b>every</b> open Fleetio issue (no longer capped) — each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. A <b>Sort</b> dropdown orders them: <b>Overdue first</b> (default), <b>Oldest first</b>, <b>Newest first</b>, <b>Priority</b>, or by <b>issue #</b> (remembered per device). <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>hover an issue and its details (description, photos, files) dock on the right</b> (tap on touch; ✕ / Esc closes) — with <b>✓ Resolve…</b> and <b>💬 Comment…</b> buttons that write <b>straight to Fleetio</b>: sign in with your board code, type the short resolution note Fleetio requires (or your comment), done. The issue drops off the board on your screen immediately; Fleetio and everyone else catch up on the next ~15-min cycle. There's still an ↗ link for anything deeper. <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
+    <p>The <b>⚠ Open Issues</b> list sits up top and shows <b>every</b> open Fleetio issue (no longer capped) — each showing its <b>#number</b>, the <b>trailer + job #</b>, overdue/priority chips and how long it's been open. A <b>Sort</b> dropdown orders them: <b>Overdue first</b> (default — and anything <b>opened in the last 7 days</b> wears a <b>🆕 new</b> badge and floats right under the overdue block, so a brand-new issue can never hide at the bottom), <b>Oldest first</b>, <b>Newest first</b>, <b>Priority</b>, or by <b>issue #</b> (remembered per device). <b>Hover a row</b> to highlight it, and hit <span class="k">⛶ Full screen</span> to blow the list up for a meeting walk-through (<span class="k">⤡ Contract</span> / <b>Esc</b> to exit). In full screen, <b>hover an issue and its details (description, photos, files) dock on the right</b> (tap on touch; ✕ / Esc closes) — with <b>✓ Resolve…</b> and <b>💬 Comment…</b> buttons that write <b>straight to Fleetio</b>: sign in with your board code, type the short resolution note Fleetio requires (or your comment), done. The issue drops off the board on your screen immediately; Fleetio and everyone else catch up on the next ~15-min cycle. There's still an ↗ link for anything deeper. <b>📋 Open Work Orders</b> follow below. <b>Service overdue</b> isn't in this list — it has its own <b>🔧 Service — Due &amp; Overdue</b> panel further down. <b>Compact by default</b> (scrolls within a fixed height) with an <span class="k">⤢ Expand</span> button; every Fleetio panel can also <b>collapse</b> via the <span class="k">▾</span> in its header.</p></div>
   <div class="hsec"><h4>③ᵇ ↩️ Coming Back to MRA</h4>
     <p>Right under Open Issues: units a Fleetio issue marks as coming back to MRA, <b>earliest date first</b>. <b>Best way (exact):</b> fill the issue's <b>Back to MRA Date</b> field (and optional <b>Leaving MRA Date</b> for a range) — the panel shows the date/range and marks it <span class="k">here</span> (green) while the unit's in that window, <span class="k">due</span> (amber) within two weeks. <b>Fallback:</b> if those fields are blank it still reads the <b>description</b> (e.g. “Returning to MRA 7/6–7/10”, “Back to MRA as of 7/1/26”). Click a row to open the issue in Fleetio. The <span class="k">🗓 Meeting view</span> button opens the <b>weekly maintenance-meeting agenda</b> full screen — coming-back units with owners, Parking-Lot work by crew, and a <b>⚡ Decisions needed</b> list (unassigned / undated items); assign from the board as usual and it updates live, and <span class="k">🖨 Print</span> makes a one-pager. Every Coming-back card also <b>cross-checks the shop board by J#</b>: already assigned shows a green <span class="k">✓ On board · (bay)</span> that jumps into that job's editor (<span class="k">🔄 On board (shipped)</span> if it shipped — use 🔄 Bring back there); every on-board unit <b>spells out its job(s) right on the card — name, bay, status, dates, open tasks</b> — nothing behind a click, and a split unit's badge carries <b>all its locations</b> (✓ On board · Parking Lot + Bay 5 Front) for the quick scanners (a line opens that job's editor; the badge on a split unit opens a picker, which also offers ➕ New job for the same unit); a <b>shipped</b> job shows <span class="k">🔄 bring back</span> on its badge/line/picker entry — click and the editor opens <b>pre-set as a return</b> (Active · Parking Lot · today, ship history logged) ready to re-assign; and a HERE-NOW unit with no Samsara tracker shows <span class="k">📡 no GPS</span> so you know its location can't be auto-checked; only a unit with <b>no job at all</b> shows <span class="k">🏭 Assign to board</span>, which opens <b>➕ Add job pre-filled</b> from the return (name, J#, arrival → leaving dates, Parking Lot). And like the Open-Issues full screen, <b>hover any #NNN issue line</b> (tap on touch) and its <b>detail card docks on the right</b> — description, photos, <span class="k">\u2713 Resolve\u2026</span> / <span class="k">\u{1F4AC} Comment\u2026</span> straight to Fleetio; \u2715 / Esc closes it.</p></div>
   <div class="hsec"><h4>④ 🔧 In the Shop — Open Fleetio Items</h4>
@@ -3445,6 +3456,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"24.3", date:"2026-07-15", title:"\u{1F9F9} Floor cleanup · \u{1F195} new-issue badge · \u{1F4C5} leave calendar & upload", items:[
+    "<b>Shop floor slimmed down (Rich):</b> the \u{1F4C5} Crew / Resource Schedule, Next 2 Weeks — Floor Schedule, ⛑ Flagged &amp; Past Due and ↩️ Coming Back to MRA panels are <b>off the FLOOR tab</b>. The \u{1F514} due-back banner stays, and the Coming-Back list still lives on the FLEETIO tab + the \u{1F5D3} Meeting view.",
+    "<b>⚠ Open Issues (FLEETIO):</b> anything opened in the <b>last 7 days</b> now wears a <b>\u{1F195} new</b> badge and <b>floats to the top</b>, right under the overdue block — a brand-new issue (like #1195 Broken Vent, buried at row 69 of 76) can never hide at the bottom again.",
+    "<b>Staff on Leave:</b> new <b>\u{1F4C5} Calendar</b> button — a month grid of who’s out (‹ › change month, tap a name to edit) — and <b>\u{1F4E4} Upload</b>: load a vacation file (.xlsx/.csv, Name · Start · Return columns) and every row becomes a leave entry, duplicates skipped, preview before it sends." ] },
   { rev:"24.2", date:"2026-07-15", title:"\u{1F3A8} Design board: task comments visible on every card", items:[
     "Each project-fed design card now shows the task\u2019s <b>\u{1F4AC} comments</b> in muted text under the title (full text on hover) — Al\u2019s notes ride along with the task everywhere." ] },
   { rev:"24.1", date:"2026-07-15", title:"\u{1FA7A} Deficiency list: print options + true LIVE view (Al)", items:[
@@ -6257,6 +6272,107 @@ function bringBackHere(){
 
 /* ---------- Staff on Leave: add / edit / delete (writes to the Input sheet as a Leave row) ---------- */
 let _lvRow=null;
+// ---- Staff on Leave: list / 📅 calendar view + 📤 vacation-file upload (rev 24.3) ----
+let LEAVE_VIEW='list'; try{ LEAVE_VIEW=localStorage.getItem('mra_leave_view')||'list'; }catch(e){}
+let LEAVE_CAL_YM=null;   // 'YYYY-MM' the calendar shows; null = current month
+function _lvYM(){ if(LEAVE_CAL_YM) return LEAVE_CAL_YM; const t=(window.MRA_DATA||{}).todayISO||localISO(Date.now()); return t.slice(0,7); }
+function lvToggleView(){ LEAVE_VIEW=(LEAVE_VIEW==='cal')?'list':'cal'; try{localStorage.setItem('mra_leave_view',LEAVE_VIEW);}catch(e){} lvRerender(); }
+function lvCalNav(d){ const p=_lvYM().split('-'); const dt=new Date(+p[0], +p[1]-1+d, 1); LEAVE_CAL_YM=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0'); lvRerender(); }
+function lvCalToday(){ LEAVE_CAL_YM=null; lvRerender(); }
+function lvRerender(){ const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+  renderLeaveBox(((D.jobs)||[]).filter(j=>j.category==='leave'), today); }
+function renderLeaveBox(leaveJobs, today){
+  const _el=document.getElementById('leave'); if(!_el) return;
+  const _vb=document.getElementById('lvViewBtn'); if(_vb) _vb.textContent=(LEAVE_VIEW==='cal')?'☰ List':'📅 Calendar';
+  if(LEAVE_VIEW==='cal'){
+    const _up=leaveJobs.filter(j=>!j.completionISO||j.completionISO>=today).length;
+    const _c=document.getElementById('leaveCount'); if(_c) _c.textContent=_up;
+    _el.innerHTML=_lvCalHtml(leaveJobs, today); return; }
+  // Leave (upcoming)
+  const leaveSorted=leaveJobs.slice().filter(j=>!j.completionISO||j.completionISO>=today)
+    .sort((a,b)=>(a.startISO||"9999").localeCompare(b.startISO||"9999"));
+  document.getElementById('leave').innerHTML=leaveSorted.map(j=>{
+    const who=esc(j.project.replace(/\s*[–-]\s*APL.*$/i,""));
+    const range=j.startISO?(fmtMD(j.startISO)+(j.completionISO&&j.completionISO!==j.startISO?"–"+fmtMD(j.completionISO):"")):"";
+    const activeNow=j.startISO && j.startISO<=today && ((j.completionISO||j.startISO)>=today);
+    const pr=_lvParse(j.notesRaw||'');   // reason stays PRIVATE — visible only when you open ✎ edit
+    return `<div class="row"><div><div class="lead">${who}${activeNow?' <span class="badge red">OUT TODAY</span>':''}${pr.lane?` <span class="badge grey" title="Highlighted on this crew's card up top">→ ${esc(pr.lane)}</span>`:''}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit this entry — dates, reason, crew card">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
+  }).join("")||`<div class="empty">No upcoming leave</div>`;
+  document.getElementById('leaveCount').textContent=leaveSorted.length;
+}
+// Month grid: every leave entry that touches the shown month, drawn on each day it covers.
+function _lvCalHtml(leaveJobs, today){
+  const ym=_lvYM(); const p=ym.split('-'); const y=+p[0], m=+p[1];
+  const first=new Date(y, m-1, 1); const days=new Date(y, m, 0).getDate(); const lead=first.getDay();
+  const monName=first.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+  const mStart=ym+'-01', mEnd=ym+'-'+String(days).padStart(2,'0');
+  const ent=leaveJobs.filter(j=>j.startISO && j.startISO<=mEnd && ((j.completionISO||j.startISO)>=mStart));
+  let h=`<div class="lvcal-bar"><button class="expandbtn" onclick="lvCalNav(-1)" title="Previous month">‹</button><b class="lvcal-mon">${esc(monName)}</b><button class="expandbtn" onclick="lvCalNav(1)" title="Next month">›</button><button class="expandbtn" onclick="lvCalToday()" title="Jump back to the current month">Today</button><span class="lvcal-n">${ent.length} on leave this month</span></div>`;
+  h+=`<div class="lvcal">`+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="lvcal-h">${d}</div>`).join('');
+  for(let i=0;i<lead;i++) h+=`<div class="lvcal-d off"></div>`;
+  for(let d=1;d<=days;d++){ const iso=ym+'-'+String(d).padStart(2,'0');
+    const out=ent.filter(j=>j.startISO<=iso && ((j.completionISO||j.startISO)>=iso));
+    h+=`<div class="lvcal-d${iso===today?' tod':''}"><div class="lvcal-dn">${d}</div>`+
+      out.map(j=>{ const who=esc(String(j.project||'').replace(/\s*[–-]\s*APL.*$/i,'').trim());
+        const rng=fmtMD(j.startISO)+(j.completionISO&&j.completionISO!==j.startISO?('–'+fmtMD(j.completionISO)):'');
+        return `<span class="lvcal-chip" onclick="openLeaveEdit(${j.row})" title="${who} — out ${esc(rng)} (tap to edit; needs code)">${who}</span>`; }).join('')+`</div>`; }
+  h+=`</div>`;
+  return h;
+}
+// 📤 Upload a vacation/leave file: .xlsx/.csv, tolerant headers (Name · Start · End/Return · Reason,
+// any order; no header row = A/B/C/D). Each row -> the SAME addJob write ➕ Add uses. Dupes skipped.
+function lvUploadBtn(){ if(!ensureAuth('upload a leave file')) return; const f=document.getElementById('lvFile'); if(f){ f.value=''; f.click(); } }
+function lvFileChosen(inp){ const file=inp.files&&inp.files[0]; if(!file) return;
+  ensureXLSX(err=>{ if(err){ alert('Could not load the file reader — check the internet connection and try again.'); return; }
+    const rd=new FileReader();
+    rd.onload=e=>{ try{ _lvImport(new Uint8Array(e.target.result), file.name); }catch(ex){ alert('Could not read that file: '+(ex&&ex.message||ex)); } };
+    rd.onerror=()=>alert('Could not open that file.');
+    rd.readAsArrayBuffer(file); });
+}
+function _lvDateISO(v){ if(v==null||v==='') return '';
+  if(v instanceof Date){ return isNaN(v)?'':localISO(v.getTime()); }
+  const s=String(v).trim();
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[1]+'-'+m[2]+'-'+m[3];
+  m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if(m){ let yy=+m[3]; if(yy<100) yy+=2000; return yy+'-'+String(+m[1]).padStart(2,'0')+'-'+String(+m[2]).padStart(2,'0'); }
+  if(/^\d+(\.\d+)?$/.test(s)){ const n=+s; if(n>20000&&n<80000) return localISO(Math.round((n-25569)*86400*1000)); }   // Excel date serial
+  const d=new Date(s); return isNaN(d)?'':localISO(d.getTime());
+}
+function _lvImport(bytes, fname){
+  const wb=XLSX.read(bytes,{type:'array', cellDates:true});
+  const ws=wb.Sheets[wb.SheetNames[0]]; if(!ws){ alert('That file has no sheets.'); return; }
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1, raw:true, defval:''});
+  const H={ name:/^(name|employee|person|staff|who|crew)/i, start:/(start|from|first\s*day|leave|begin|out\s*(on|date))/i,
+            end:/(end|return|back|through|until|^to$|last\s*day)/i, reason:/(reason|type|notes?|comment)/i };
+  let hr=-1; const ci={name:0,start:1,end:2,reason:3};
+  for(let r=0;r<Math.min(rows.length,12);r++){ const cells=(rows[r]||[]).map(c=>String(c||'').trim());
+    const ni=cells.findIndex(c=>H.name.test(c)); const si=cells.findIndex((c,i2)=>i2!==ni&&H.start.test(c));
+    if(ni>=0&&si>=0){ hr=r; ci.name=ni; ci.start=si;
+      ci.end=cells.findIndex((c,i2)=>i2!==si&&i2!==ni&&H.end.test(c));
+      ci.reason=cells.findIndex((c,i2)=>i2!==ni&&i2!==si&&i2!==ci.end&&H.reason.test(c)); break; } }
+  const D=window.MRA_DATA||{}; const existing={};
+  ((D.jobs)||[]).forEach(j=>{ if(j.category==='leave'&&j.startISO)
+    existing[String(j.project||'').replace(/\s*[–-]\s*APL.*$/i,'').trim().toLowerCase()+'|'+j.startISO]=1; });
+  const add=[], skip=[];
+  rows.forEach((row,i)=>{ if(i<=hr) return; row=row||[];
+    const name=String(row[ci.name]||'').trim(); const start=_lvDateISO(row[ci.start]);
+    if(!name&&!String(row[ci.start]||'').trim()) return;   // fully blank line
+    if(!name||!start){ skip.push('row '+(i+1)+' — missing '+(!name?'name':'a readable start date')); return; }
+    const end=(ci.end>=0?_lvDateISO(row[ci.end]):'')||start;
+    const reason=(ci.reason>=0?String(row[ci.reason]||'').trim():'');
+    if(existing[name.toLowerCase()+'|'+start]){ skip.push(name+' '+fmtMD(start)+' — already on the board'); return; }
+    add.push({name:name, start:start, end:end, reason:reason}); });
+  if(!add.length){ alert('No new leave entries found in "'+fname+'".'+(skip.length?('\n\nSkipped:\n• '+skip.slice(0,12).join('\n• ')):'')+'\n\nExpected columns: Name · Start · Return (any order, or A/B/C with no header).'); return; }
+  const preview=add.slice(0,15).map(a=>'• '+a.name+' — '+fmtMD(a.start)+(a.end!==a.start?(' → '+fmtMD(a.end)):'')).join('\n');
+  if(!confirm('Add '+add.length+' leave entr'+(add.length>1?'ies':'y')+' from "'+fname+'"?\n\n'+preview+(add.length>15?('\n…and '+(add.length-15)+' more'):'')+(skip.length?('\n\nSkipping '+skip.length+': '+skip.slice(0,6).join(' · ')+(skip.length>6?' …':'')):''))) return;
+  let sent=0;
+  const fire=()=>{ if(sent>=add.length){ alert('✓ Sent '+sent+' leave entr'+(sent>1?'ies':'y')+' to the board — they show under Staff on Leave within ~15–30 min (next sync cycle).'); return; }
+    const a=add[sent++];
+    shopWrite({ action:'addJob', project:a.name, bay:'APL/Holidays', status:'Leave',
+      start:a.start, completion:a.end, jobNum:'', client:'', pm:'', notes:a.reason, pin:CLOSE_PIN, user:CURRENT_USER });
+    setTimeout(fire, 450); };
+  fire();
+}
 function openLeave(){ if(!ensureAuth("add a leave entry")) return; _lvRow=null; window._lvJob=null;
   document.getElementById('lvTitle').textContent='➕ Add leave';
   const n=document.getElementById('lvName'); n.value=''; n.readOnly=false; n.style.opacity=''; n.title='';
@@ -8816,17 +8932,7 @@ function renderFloor(D){
 
   // (Next Up / On Hold render in the combined bay-board tile above + the 🛬 Pipeline panel.)
 
-  // Leave (upcoming)
-  const leaveSorted=leaveJobs.slice().filter(j=>!j.completionISO||j.completionISO>=today)
-    .sort((a,b)=>(a.startISO||"9999").localeCompare(b.startISO||"9999"));
-  document.getElementById('leave').innerHTML=leaveSorted.map(j=>{
-    const who=esc(j.project.replace(/\s*[–-]\s*APL.*$/i,""));
-    const range=j.startISO?(fmtMD(j.startISO)+(j.completionISO&&j.completionISO!==j.startISO?"–"+fmtMD(j.completionISO):"")):"";
-    const activeNow=j.startISO && j.startISO<=today && ((j.completionISO||j.startISO)>=today);
-    const pr=_lvParse(j.notesRaw||'');   // reason stays PRIVATE — visible only when you open ✎ edit
-    return `<div class="row"><div><div class="lead">${who}${activeNow?' <span class="badge red">OUT TODAY</span>':''}${pr.lane?` <span class="badge grey" title="Highlighted on this crew's card up top">→ ${esc(pr.lane)}</span>`:''}</div></div><div class="right"><span class="badge grey">${range}</span> <span class="ttool edit" onclick="openLeaveEdit(${j.row})" title="Edit this entry — dates, reason, crew card">✎</span><span class="ttool del" onclick="delLeaveBtn(${j.row})" title="Delete this leave entry">🗑</span></div></div>`;
-  }).join("")||`<div class="empty">No upcoming leave</div>`;
-  document.getElementById('leaveCount').textContent=leaveSorted.length;
+  renderLeaveBox(leaveJobs, today);   // list OR 📅 calendar view (rev 24.3)
 
   // 🚫 Out-today: leave entries ACTIVE today badge their crew's column header, and a strip up top
   // lists everyone out (incl. team members without a lane, e.g. Sal's crew: Jake / John / Brent / Kayla).
@@ -10735,6 +10841,11 @@ let FIO_ISS_SORT='overdue';
 try{ const s=localStorage.getItem('mra_fio_iss_sort'); if(s) FIO_ISS_SORT=s; }catch(e){}
 function setFioIssSort(v){ FIO_ISS_SORT=v||'overdue'; try{localStorage.setItem('mra_fio_iss_sort',FIO_ISS_SORT);}catch(e){}
   if(window.MRA_DATA) renderFleetio(window.MRA_DATA); }
+// 🆕 "new" = opened within the last 7 days (so a brand-new issue can't hide at the bottom).
+function _fioAge(i){ if(i&&i.openedISO){ const t=(window.MRA_DATA&&window.MRA_DATA.todayISO)||localISO(Date.now());
+  const d=daysBetween(t,i.openedISO); return (d==null||isNaN(d))?null:Math.max(0,d); }
+  return (i&&i.ageDays!=null)?i.ageDays:null; }
+function _fioIsNew(i){ const a=_fioAge(i); return a!=null&&a<=7; }
 function _fioIssCmp(a,b){
   const prRank={high:0,emergency:0,medium:1,low:2};
   const ao=a.openedISO||'', bo=b.openedISO||'';
@@ -10749,8 +10860,10 @@ function _fioIssCmp(a,b){
       return ((prRank[(a.priority||'').toLowerCase()]??3)-(prRank[(b.priority||'').toLowerCase()]??3)) || ((b.ageDays||0)-(a.ageDays||0));
     case 'num_desc': return (Number(b.num)||0)-(Number(a.num)||0);
     case 'num_asc':  return (Number(a.num)||0)-(Number(b.num)||0);
-    default:         // 'overdue' — overdue first, then priority, then oldest
+    default:         // 'overdue' — overdue first, then 🆕 new (≤7d, newest on top), then priority, then oldest
       return (b.overdue?1:0)-(a.overdue?1:0)
+        || (_fioIsNew(b)?1:0)-(_fioIsNew(a)?1:0)
+        || ((_fioIsNew(a)&&_fioIsNew(b))?((_fioAge(a)||0)-(_fioAge(b)||0)):0)
         || ((prRank[(a.priority||'').toLowerCase()]??3)-(prRank[(b.priority||'').toLowerCase()]??3))
         || ((b.ageDays||0)-(a.ageDays||0));
   }
@@ -10908,11 +11021,12 @@ function renderFleetio(D){
     const age = i.openedISO ? Math.max(0,daysBetween(today,i.openedISO)) : (i.ageDays!=null?i.ageDays:null);
     const b = i.overdue?`<span class="badge red">overdue</span>` : ageBadge(age);
     const pr = i.priority?`<span class="badge ${/(high|emerg)/i.test(i.priority)?'red':/med/i.test(i.priority)?'amber':'grey'}">${esc(i.priority)}</span>`:'';
+    const nw = _fioIsNew(i)?`<span class="badge blue" title="Opened in the last 7 days — new issues float to the top of this list, right under any overdue">🆕 new</span>`:'';
     const wa=fAsg(i); const who = wa.length?` · 👤 ${esc(wa.join(', '))}`:'';
     const rby = i.reporter?` · ✍ ${esc(i.reporter)}`:'';
     return `<div class="row"><div><div class="lead">${fioTitle('issue',i.num,i.summary||('Issue '+(i.num||'')))}</div>`+
       `<div class="meta">${esc(i.asset||'')}${canFlag(i.asset)}${plantFlag(i.asset)}${mapPinFor(i.asset)}${i.jobNum?' · '+esc(i.jobNum):''}${who}${rby}</div>`+
-      `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${pr} ${b}</div></div>`;
+      `${i.detail?`<div class="det" title="${escA(i.detail)}">${esc(i.detail)}</div>`:''}</div><div class="right">${nw} ${pr} ${b}</div></div>`;
   }).join('') : `<div class="empty">${issEmpty}</div>`);
   document.getElementById('fIssueCount').textContent=issues.length;
 
