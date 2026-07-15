@@ -3445,6 +3445,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"24.0", date:"2026-07-15", title:"\u{1F41B} FIX: PM report name matching", items:[
+    "Al\u2019s report was pulling ABB\u2019s floor job because the PM filter matched \u201cal\u201d anywhere in a name — including Brandon Kos<b>al</b>. Matching is now whole-word (\u201cAl\u201d = Al Karloff only), same for every PM link." ] },
   { rev:"23.9", date:"2026-07-15", title:"\u{1F527} Task descriptions no longer cut off", items:[
     "The Fleetio description under a crew task was clamped to one line (\u201ctap to expand\u201d) — unreadable on Sal\u2019s monitor. Descriptions now <b>wrap in full everywhere</b>, no tapping needed." ] },
   { rev:"23.8", date:"2026-07-15", title:"\u{1F4FA} Wall mode: job cards compressed to ~2 lines", items:[
@@ -11846,7 +11848,9 @@ function buildPMReportHtml(pmQ, days){
   const fmt=iso=>{ if(!iso) return ""; const p=String(iso).split("-"); return (+p[1])+"/"+(+p[2])+"/"+p[0]; };
   const now=new Date(), rDate=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
   const q=String(pmQ||'').trim().toLowerCase();
-  const pmMatch=v=>q && String(v||'').toLowerCase().indexOf(q)>=0;
+  // whole-word match: 'al' must hit 'Al Karloff' but NOT 'Brandon Kosal' / 'Sal' (substring bug — ABB leaked into Al's report)
+  const pmMatch=v=>{ if(!q) return false; const sv=String(v||'').toLowerCase();
+    return sv===q || sv.startsWith(q+' ') || sv.split(/[\s\/]+/).some(w=>w===q); };
   const projs=(D.projects||[]).filter(p=>pmMatch(p.pm));
   const pmName=(projs[0]&&projs[0].pm)||pmQ;
   const jobs=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0 && j.category!=='pipeline' && (pmMatch(j.pm) || projs.some(p=>String(p.name).toLowerCase()===String(j.project||'').toLowerCase())));
