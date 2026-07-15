@@ -297,6 +297,30 @@ Rich wants a two-step complete for **project-fed** design tasks (NOT the ad-hoc/
 
 Treat help + rev as PART OF the feature, not an afterthought.
 
+## Shipped 2026-07-14 — outage + day-2 polish (rev 21.6 → 22.7)
+
+- **⚡ AZURE OUTAGE (Microsoft's side, resolved):** all writes to the `mrashopdash` storage account failed
+  ~00:12→14:16 UTC 7/14 with `ErrorCode:ResourceNotFound` — BOTH GitHub Actions AND Power Automate flows
+  (independent creds) → account-level, partner called Microsoft. READS kept working (board stayed up; edits
+  saved to Lists, synced after recovery). LESSONS: (1) the generic `grep rev:"[0-9.]*" | head -1` on the live
+  HTML matches a DOC-COMMENT `rev:"3.1"` at ~line 3424 FIRST — always grep the SPECIFIC rev string (a false
+  "site reverted to June" alarm came from this); (2) failed-deploy triage: check `data.js` Last-Modified +
+  whether PA flows also fail before blaming code; (3) with the GitHub MCP down, deploys can ride a TEMP push
+  trigger on deploy.yml (`branches:[main,<dev>]` — file at the PUSHED ref is used; paths filter needs a
+  dashboard-file change) — added + reverted same day.
+- **Shipped:** 21.6 🧹 ghost-task screen + gantt icon legend + ⏱ new-project watchdog · 21.7 punch ⚠ Issue
+  button · 21.9 issue-button hover walkthrough + banner · 22.0 **MRA-Shop project tasks in the ⚠ unassigned
+  finder** (start ≤14d or overdue; 👤 assign writes back via dtbReassignTo/editProjectTask) · 22.2 rows show
+  ▶ start → finish (finish-only read as >2wks, Rich confused) · 22.3 **WO/punch ASSET # = real fleet unit(s)**
+  (from the job's Fleetio issues; title → sub line; maintenance ask) · 22.4/22.6 Logistics Calendar quick link ·
+  22.5 **meeting hover-dock** (reuses `fioIssueDetailHtml` in `#mtgIssDetail`, `.fionum` delegate, Esc closes
+  card first) · 22.7 **meeting Parking-Lot cards match Coming-back** (Fleetio MRA range, `_ynLoc` GPS chip,
+  status/dates/client, ✎ open; sub-jobs skip fleet bits).
+- **Operational finds for Rich:** SWC IL J1422 board=Parking Lot but GPS=Springfield Charter Township (fix bay
+  or move unit); 42 genuinely past-due Medtronic tasks (26 MRA Design) — statuses need cleanup, all views now
+  surface them honestly (21.5 alignment).
+- Cleanup: dropped the wrong-base stash + local healthpreview backup branch (commit lives as default-branch tip).
+
 ## Shipped 2026-07-13 — Production Meeting · Sales & Planning · sub-jobs · punch list / recaps (rev 19.0 → 21.0)
 
 *(Full rev detail = the CHANGELOG array. Session highlights + gotchas:)*
