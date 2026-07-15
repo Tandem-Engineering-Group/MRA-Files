@@ -297,6 +297,25 @@ Rich wants a two-step complete for **project-fed** design tasks (NOT the ad-hoc/
 
 Treat help + rev as PART OF the feature, not an afterthought.
 
+## Shipped 2026-07-15 — verification day (rev 23.1 → 23.7)
+
+- 23.1/23.2 ⚠ finder 📋 rows: muted context line (↳ parent · phase · comments — Al's Teams ask) + flex-wrap layout fix.
+- 23.3 Work Orders: 🏭 Jobs selector in the print picker (default ALL; tick to print one job's WOs).
+- 23.4 **Next Up/On Hold reconciles by eye**: ONE rule — tile = NEXT UP + ON HOLD KPIs (both bay-based);
+  tile header shows split (bayCard `opts.headExtra`); ⏭/⏸ lane pill per held job; status-On-Hold-elsewhere
+  jobs get amber "⏸ on hold (status)" pill on their own card (Pod 1086 case) and DON'T count in the tab.
+- 23.5 Pipeline panel default-collapsed (joined setupFloorCollapse list). 23.6 OFF-SITE/PARTS KPI tab.
+- 23.7 **🩺 Deficiency List** (`buildDeficiencyHtml`; ☰ Actions + `?fix=1&pm=`): all correctable problems
+  by PM→project + Floor&Ops, green FIX hint per line — built for a scheduled AM email (Rich builds the
+  3-step Recurrence→Send-email flow; steps given in chat 7/15).
+- Fleetio-MRA-on-held-tile answered: feature already on all cards; 5 of 6 held units simply have no
+  Back-to-MRA dates in Fleetio (only SMC J1542 does) — data-side fix.
+- Audit findings 7/15: 89 open project tasks past-due (Medtronic 43/Cisco 14/Oakland 10/Trumpf 8),
+  35 undated; shop side clean (75 open/11 od/2 unassigned); ghosts left: ADLM 2026 (9!), Trumpf Trailer
+  Build, SWC MMOT Hawaii, Make Sal Happy; 2 TBD PMs (Siemens 53ft #1/#2); S&P pipeline empty (0 prospects).
+- GOTCHA: `isParkingBay`/`isHeldBay` are renderFloor-LOCAL (globals are `bayIsParts`/`bayIsHeld`) — standalone
+  builders need their own lot regex.
+
 ## Shipped 2026-07-14 — outage + day-2 polish (rev 21.6 → 22.7)
 
 - **⚡ AZURE OUTAGE (Microsoft's side, resolved):** all writes to the `mrashopdash` storage account failed
