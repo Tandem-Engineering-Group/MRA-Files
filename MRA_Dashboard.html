@@ -3436,6 +3436,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"23.5", date:"2026-07-15", title:"\u{1F6EC} Pipeline panel: collapsible, starts collapsed", items:[
+    "The \u{1F6EC} Pipeline — Inbound &amp; Holding panel now <b>starts collapsed</b> (unit count stays in the header) with the same \u25b8 caret as Flagged / Leave / Coming-Back — click to open, remembered per device." ] },
+  { rev:"23.4", date:"2026-07-15", title:"\u23ED Next Up / On Hold: numbers now reconcile by eye", items:[
+    "The tile and the top tabs now use ONE rule: <b>tile count = NEXT UP + ON HOLD, always</b>. The tile header shows the split (\u23ED N next up \u00b7 \u23F8 M on hold) and <b>every job on the tile carries a pill saying which lane it\u2019s in</b> — count them yourself.",
+    "The old +1 mystery: a job can be <i>flagged</i> status \u201cOn Hold\u201d while physically sitting in a bay or the lot (Pod 1086 in Bay 5 Front). Those no longer inflate the ON HOLD tab — instead their own card shows an amber <b>\u23F8 on hold (status)</b> pill telling you exactly where it is and how to move it if it belongs on the tile." ] },
   { rev:"23.3", date:"2026-07-15", title:"🧾 Work Orders: pick specific jobs (default still ALL)", items:[
     "The 🖨 Print picker now has a <b>🏭 Jobs</b> section: leave it alone and Work Orders print for <b>every job</b> like always — or open it and tick just the job(s) you want (added one job today? print only that one). Works with any crew selection." ] },
   { rev:"23.2", date:"2026-07-15", title:"\u26a0 Unassigned finder: context line layout fixed", items:[
@@ -8546,9 +8551,10 @@ function renderFloor(D){
   const kpis=[
     {n:cnt("active"),l:"ACTIVE",c:"active",list:byStatus("active")},
     {n:cnt("scheduled"),l:"SCHEDULED",c:"sched",list:byStatus("scheduled")},
-    (()=>{ // ON HOLD = parked in a holding bay (excl. Next Up) OR status "On Hold" — one rule, matches the tile; the hover list shows each job's bay
+    (()=>{ // ON HOLD = the Next Up / On Hold tile's on-hold jobs EXACTLY (bay-based) — so tile = ON HOLD + NEXT UP, verifiable by eye.
+      // A job flagged status "On Hold" while physically in a bay/lot shows a "⏸ on hold (status)" pill on its own card instead.
       const oh=jobs.filter(j=>(j.status||"").toLowerCase()!=="shipped" && j.category!=="leave" &&
-        ((bayIsHeld(j.bay)&&!/next\s*up/i.test(j.bay||"")) || (j.status||"").toLowerCase()==="on hold"));
+        bayIsHeld(j.bay) && !/next\s*up/i.test(j.bay||""));
       return {n:oh.length,l:"ON HOLD",c:"hold",list:oh}; })(),
     {n:shippedRecent.length,l:"SHIPPED · "+SHIP_WINDOW_DAYS+"d",c:"ship",list:shippedRecent},
     {n:nextUpJobs.length,l:"NEXT UP",c:"pipe",list:nextUpJobs},
@@ -8605,6 +8611,10 @@ function renderFloor(D){
     if(showBay && j.bay) pills+=`<span class="pill">${esc(j.bay)}</span>`;
     pills+=`<span class="pill j jjump" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.jobNum||"—")}</span><span class="pill">${fmtMD(j.startISO)}→${fmtMD(j.completionISO)}</span>`;
     if(jobIsSub(j)) pills+=`<span class="pill" title="🧩 SUB-JOB — a parts / side build sharing this job number with the MAIN job (e.g. a pedestal build for the same J#). It carries NO Fleetio: the 🗓 MRA date range, 🔧 Fleetio issues and GPS on What's Next all follow the MAIN job only. Tasks, crews and prints work like any job. Set or clear this with the 🧩 Sub-job checkbox in ✎ edit.">🧩 sub-job</span>`;
+    // ⏭/⏸ verification pills (Rich 2026-07-15): held-tile jobs say WHICH lane they're in; a job
+    // flagged status "On Hold" while physically elsewhere gets an explicit marker on its own card.
+    if(bayIsHeld(j.bay)) pills+=/next\s*up/i.test(j.bay||'')?`<span class="pill" title="In the Next Up bay">⏭ next up</span>`:`<span class="pill" title="In the ${escA(j.bay)} bay">⏸ on hold</span>`;
+    else if((j.status||'').toLowerCase()==='on hold') pills+=`<span class="pill soon" title="Status is On Hold but the job physically sits in ${escA(j.bay||'a bay')} — it does NOT count in the ON HOLD tab or the Next Up / On Hold tile. Move it to the On Hold bay (✎ edit) if it should.">⏸ on hold (status)</span>`;
     // 📍 GPS on the holding lanes (Rich 2026-07-14): Parking Lot = loud ⚠ when Samsara disagrees
     // with the board (phantom lot trailers waste trips); Next Up / On Hold = quiet location info
     // (being elsewhere is normal there). Real bays skip it; 🧩 sub-jobs never carry GPS.
@@ -8705,7 +8715,7 @@ function renderFloor(D){
     const _tileTasks=list.some(j=>j.openCount>0);
     const _anyJobOpen=list.some(j=>{ const dc=WALL||DEFCOLL_ROWS.has(j.row); return dc?expandedJobs.has(j.row):!collapsedJobs.has(j.row); });
     const allJobsBtn=_tileTasks?`<button class="tilejobs" onclick="event.stopPropagation();toggleTileJobs(this)" title="${_anyJobOpen?'Collapse':'Expand'} every job's tasks in this tile at once">${_anyJobOpen?'⊟ tasks':'⊞ tasks'}</button>`:'';
-    return `<div class="bay ${cls}${col?' collapsed':''}${!list.length?' bay-empty':''}" data-bay="${escA(bay)}" ondragover="jobDragOver(event)" ondragleave="jobDragLeave(event)" ondrop="jobDrop(event,'${escJsAttr(bay)}')"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}</div>${allJobsBtn}`+
+    return `<div class="bay ${cls}${col?' collapsed':''}${!list.length?' bay-empty':''}" data-bay="${escA(bay)}" ondragover="jobDragOver(event)" ondragleave="jobDragLeave(event)" ondrop="jobDrop(event,'${escJsAttr(bay)}')"><div class="bay-head" data-bay="${escA(bay)}" onclick="toggleBayTile(this)" title="Click to collapse / expand this tile"><div class="name">${caret}${esc(bay)}${cnt}${opts.headExtra||''}</div>${allJobsBtn}`+
       `<div class="st ${stCls}">${stTxt}</div></div><div class="${bodyCls}">${body}</div></div>`;
   };
 
@@ -8740,7 +8750,9 @@ function renderFloor(D){
   // ⏭ Combined Next Up / On Hold tile RESTORED (crew missed it — 2026-07-14): every job parked in a
   // holding bay (Next Up · On Hold · On Hold/Off-Site), date-sorted, jobs default-collapsed like the
   // lot. The 🛬 Pipeline panel below still covers inbound units + capacity; same jobs, same data.
-  const heldCard=bayCard('Next Up / On Hold', heldJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true, sortByDate:true, defaultCollapsed:true});
+  const _huN=heldJobs.filter(j=>/next\s*up/i.test(j.bay||'')).length, _hhN=heldJobs.length-_huN;
+  const heldCard=bayCard('Next Up / On Hold', heldJobs, {emptyTxt:"empty", scroll:true, expandAll:WALL, headCount:true, sortByDate:true, defaultCollapsed:true,
+    headExtra:` <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0;text-transform:none">⏭ ${_huN} next up · ⏸ ${_hhN} on hold</span>`});
   // 'General' tile UNDER the lot: jobs assigned to bay "General" (equipment-only / no floor space).
   // These had NO card anywhere (not a physical bay, not held → not in the pipeline panel either).
   // Excludes the 🛠 General crew-task lane, which lives in the crew columns and is a different thing.
@@ -10665,7 +10677,7 @@ function setupCollapse(rootSel, keyPrefix, defCollapsed){
 // FLOOR: only the three low-traffic panels are collapsible, and they DEFAULT to collapsed
 // (their counts stay visible in the header) — expand once and the choice is remembered.
 function setupFloorCollapse(){
-  ['fl-flagged','fl-leave','fl-returns'].forEach(id=>{
+  ['fl-flagged','fl-leave','fl-returns','pipePanel'].forEach(id=>{
     const pl=document.getElementById(id); if(!pl) return;
     const h=pl.querySelector(':scope > h2'); if(!h) return;
     const key='flcol_'+id; let st=null; try{ st=localStorage.getItem(key); }catch(e){}
