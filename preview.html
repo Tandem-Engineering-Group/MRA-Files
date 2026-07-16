@@ -3480,6 +3480,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"25.2", date:"2026-07-16", title:"\u{1F4CB} Schedule tasks now show ON the bay cards too — linked by JOB #", items:[
+    "Crew-assigned \u{1F4CB} project-schedule tasks now also show <b>on the job's bay card up top</b> (Trumpf J1554 in Bay 4, Medtronic J1553 in Bay 5, Cisco J1558…) — a <b>\u{1F4CB} N schedule</b> pill next to the \u{1F527} Fleetio one; expand for the lines (▶ start → finish · \u{1F464} who · ⚒ break-into-shop-tasks · click = project editor).",
+    "Matching is <b>by JOB NUMBER first</b> (a project with a J# links only by J#; name-match is just the fallback for projects with no J# yet), and the tasks land on the project's <b>main</b> card — a real bay beats Parking Lot / Next Up / On Hold, \u{1F9E9} sub-jobs never carry them. So they show <b>everywhere now</b>: bay card, crew column, and the ⚠ finder while unassigned." ] },
   { rev:"25.1", date:"2026-07-16", title:"\u{1F464} Assigning keeps the MRA Shop bucket — “MRA Shop / Sal”", items:[
     "Assigning a \u{1F4CB} MRA-Shop schedule task now writes <b>“MRA Shop / Sal”</b> instead of replacing the bucket (Rich: the <b>MRA Shop load</b> views must keep counting these). The person still lands in their crew column; the ⚠ finder correctly treats bucket+person as picked-up; re-assigning swaps just the person.",
     "Yesterday’s ~20 assignments were repaired to the same format (e.g. Trumpf/Medtronic → “MRA Shop / Sal”), so MRA Shop load is whole again." ] },
@@ -8876,6 +8879,7 @@ function renderFloor(D){
     const jOpen = (WALL||defColl) ? expandedJobs.has(j.row) : !collapsedJobs.has(j.row);
     const _trk=new Set((j.tasks||[]).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
     const fl=jobIsSub(j)?[]:fleetioFor(j).filter(it=>!_trk.has(String(it.num)) && !_fleetioTasked.has(String(it.num)));  // hide issues already a task on THIS or ANY job; 🧩 sub-jobs never carry Fleetio
+    const pj=(WALL||jobIsSub(j))?[]:_projTasksForJob(j);   // 📋 schedule work linked to this job (J# first, name fallback)
     // Open-task count pill. WALL/TV: a plain count (tasks live in the Open Tasks by Assignee
     // panel below, so the TV stays compact). NORMAL view: a clickable "N tasks ▸" that
     // collapses/expands this trailer's open tasks right on the tile.
@@ -8884,6 +8888,7 @@ function renderFloor(D){
       else pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Show / hide this trailer's open tasks">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
     }
     if(fl.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Live Fleetio maintenance issues for this trailer — expand to assign (➕)">🔧 ${fl.length} Fleetio ${jOpen?"▾":"▸"}</span>`;
+    if(pj.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="PROJECT-schedule tasks linked to this job (matched by job # / name) — crew-assigned, next 2 weeks or overdue. Expand to see them; ⚒ breaks one into shop tasks.">📋 ${pj.length} schedule ${jOpen?"▾":"▸"}</span>`;
     { const _un=(j.tasks||[]).filter(t=>!t.done && !((typeof shopWho==='function'?(shopWho(t)||''):(t.who||''))).trim()).length; if(_un>0) pills+=`<span class="pill unas clickable" onclick="event.stopPropagation();openUnassigned()" title="${_un} open task${_un>1?'s':''} on this job with no crew assigned — tap to see &amp; assign">⚠ ${_un} unassigned</span>`; }
     let tl="";
     if(jOpen){
@@ -8917,6 +8922,13 @@ function renderFloor(D){
           return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>${FLEETIO_WRITE_URL?`<span class="fladd" style="color:#22c55e" onclick="fioResolveBtn('${escA(String(it.num))}')" title="Resolve this issue in Fleetio — asks for the short note Fleetio requires">✓</span>`:''}🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>${fioDetHtml(it.num)}${fioDocsHtml(it.num)}`;
         }).join("")+`</div>`;
       }
+      if(pj.length){
+        tl+=`<div class="tasklist fleetlist">`+pj.map(x=>{
+          const brk=x.handle?`<span class="fladd" onclick="event.stopPropagation();ptbOpen('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="⚒ Break this schedule line into real shop tasks on this trailer — each becomes its own closable task; closing the last one flags this line 🟡 for the PM to verify (needs code)">⚒</span>`:'';
+          const odOver=x.fin&&daysBetween(x.fin,today)<0;
+          return `<div class="taskline" onclick="openProjectEditor('${escJsAttr(x.proj)}')" style="cursor:pointer" title="From the PROJECT schedule (${escA(x.proj)}) — click to open the project editor (needs code)">${brk}📋 ${esc(x.t)}${x.pv?' <span class="pill due" style="font-size:9px;padding:0 4px">🟡 awaiting verify</span>':''} <span class="duedate${odOver?' od':''}">▶ ${x.st0?esc(fmtMD(x.st0)):'…'} → ${x.fin?esc(fmtMD(x.fin)):'…'}</span> <span style="color:var(--faint);font-size:10px">👤 ${esc(x.who)}</span></div>`;
+        }).join("")+`</div>`;
+      }
     }
     if(SHOWCLOSED){
       const doneStruct=(j.tasks&&j.tasks.length)?j.tasks.filter(t=>t.done):null;
@@ -8928,7 +8940,7 @@ function renderFloor(D){
     const jc=c.state==="done"?" done":"";
     // Normal view: a caret right by the job name collapses/expands just that job's tasks,
     // so a single job (e.g. WFCU in Bay 5 Front) can be shrunk on its own.
-    const jcaret = (!WALL && (j.openCount>0 || fl.length))
+    const jcaret = (!WALL && (j.openCount>0 || fl.length || pj.length))
       ? `<span class="job-collapse" onclick="toggleJob(${j.row})" title="Collapse / expand this job">${jOpen?'▾':'▸'}</span>` : '';
     return `<div class="job${jc}" id="floorjob-${j.row}" ondragover="jobTileDragOver(event)" ondrop="jobTileDrop(event,${typeof j.row==='number'?j.row:`'${escJsAttr(String(j.row))}'`})"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}${j.jobNum?` <span class="jnum-t">${esc(j.jobNum)}</span>`:''}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag onto a BAY to move this trailer there — or onto ANOTHER TRAILER'S card to slot it above (re-orders the list; needs code)">⠿</span>`:''}</div>`+
       `${(()=>{const _fr=jobIsSub(j)?null:_fioRange(_fioRetForJob(j.jobNum));
@@ -14475,6 +14487,52 @@ function unassignedTasks(){
 }
 // \u{1F4CB} assign a surfaced project-schedule task: same picker, writes back via the design-board
 // path (editProjectTask by id) so the PROJECT SCHEDULE gets the crew — not just the board.
+// ---- Project <-> floor-job link: JOB NUMBER first (Trumpf=J1554, Cisco=J1558...), name fallback ----
+// A project with a J# set links ONLY by J# (no name guessing). Without one, normalized name
+// containment links "Trumpf" -> "AZ250/Trumpf - Analysis". The MAIN job = the one in a real bay
+// (bay beats Parking Lot / Next Up / On Hold; 🧩 sub-jobs last) — that's the card schedule work shows on.
+function _projJobsFor(pname){
+  const D=window.MRA_DATA||{}; const p=(D.projects||[]).find(x=>x.name===pname); if(!p) return [];
+  const dig=s=>String(s||'').toUpperCase().replace(/[^0-9]/g,'');
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const pj=dig(p.jobNum), pn=norm(pname);
+  return (D.jobs||[]).filter(j=>{
+    if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return false;
+    if(pj) return dig(j.jobNum)===pj;
+    const jn=norm(j.project); if(!jn||!pn) return false;
+    return jn.indexOf(pn)>=0 || pn.indexOf(jn)>=0;
+  });
+}
+function _projMainJob(pname){
+  const list=_projJobsFor(pname); if(!list.length) return null;
+  const rank=j=>{ const b=String(j.bay||''); if(typeof bayIsHeld==='function'&&bayIsHeld(b)) return 3; if(/parking|next\s*up/i.test(b)) return 2; return (typeof jobIsSub==='function'&&jobIsSub(j))?1:0; };
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const extra=j=>Math.abs(norm(j.project).length-norm(pname).length);   // closest name wins a bay tie (Revamp beats Equipment Return)
+  return list.slice().sort((a,b)=>rank(a)-rank(b)||extra(a)-extra(b)||String(a.row).localeCompare(String(b.row)))[0];
+}
+// Schedule tasks that belong on THIS job's bay card: crew/shop-assigned, open, in the 2-week window.
+function _projTasksForJob(j){
+  try{
+    const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+    const lim=localISO(Date.parse(today)+14*86400000);
+    const CRW=/\bsal\b|wrap|electr|doug|josh|jeff|maintenance|mra\s*shop/i;
+    const out=[];
+    (D.projects||[]).forEach(p=>{
+      const mj=_projMainJob(p.name); if(!mj || String(mj.row)!==String(j.row)) return;
+      (p.tasks||[]).forEach(t=>{
+        if(t.done===true||/complete/i.test(String(t.st||''))) return;
+        if(/yes/i.test(String(t.ml||''))) return;
+        const w=String(t.who||'').trim(); if(!w||!CRW.test(w)) return;
+        const dt=t.startISO||t.finISO; if(!dt||dt>lim) return;
+        out.push({proj:p.name, t:String(t.t||''), who:w, st0:t.startISO||null, fin:t.finISO||null,
+          handle:((t.id!=null&&t.id!=='')?String(t.id):(t._id!=null?('s'+t._id):null)),
+          pv:(typeof projIsPendingVerify==='function'&&projIsPendingVerify(t))});
+      });
+    });
+    out.sort((a,b)=>String(a.fin||'9999').localeCompare(String(b.fin||'9999')));
+    return out;
+  }catch(e){ return []; }
+}
 // ---- ⚒ Break a project-schedule task into real shop tasks (rev 25.0) ----
 // Generic schedule lines ("Fabrication and Installation in Shop") become several concrete,
 // closable SHOP tasks on a trailer; the schedule line is the parent. Closing the last child
@@ -14487,9 +14545,7 @@ function ptbOpen(proj, handle){
   _PTB={proj:proj, handle:handle};
   document.getElementById('ptbSub').innerHTML='<b>'+esc(t.t||'')+'</b> — '+esc(proj)+((t.startISO||t.finISO)?(' · ▶ '+fmtMD(t.startISO||t.finISO)+((t.finISO&&t.finISO!==t.startISO)?(' → '+fmtMD(t.finISO)):'')):'');
   const D=window.MRA_DATA||{}; const live=(D.jobs||[]).filter(j=>j.category!=='leave'&&(j.status||'').toLowerCase()!=='shipped'&&j.project!==GENERAL_PROJ);
-  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-  const pn=norm(proj); let best='';
-  live.forEach(j=>{ const jn=norm(j.project); if(!best&&jn&&pn&&(jn.indexOf(pn.slice(0,10))>=0||pn.indexOf(jn.slice(0,10))>=0)) best=String(j.row); });
+  const _mj=_projMainJob(proj); const best=_mj?String(_mj.row):'';
   document.getElementById('ptbJob').innerHTML=live.map(j=>`<option value="${escA(String(j.row))}"${String(j.row)===best?' selected':''}>${esc(j.project)}${j.jobNum?(' · '+esc(j.jobNum)):''}${j.bay?(' — '+esc(j.bay)):''}</option>`).join('')+`<option value="__general__"${best?'':' selected'}>🛠 General (no trailer)</option>`;
   document.getElementById('ptbTasks').value='';
   { const ps=String(t.who||'').split('/').map(x=>x.trim()).filter(x=>x&&!/^mra\s*shop$/i.test(x));
