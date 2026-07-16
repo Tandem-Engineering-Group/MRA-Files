@@ -3485,6 +3485,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"26.3", date:"2026-07-16", title:"\u{1F511} Role match now uses name + email (fixes Admin/Editor landing as Viewer)", items:[
+    "If someone’s listed email didn’t exactly match their real @gomra.com login they dropped to the default Viewer (Al lost his Projects tab). Roles now match on the <b>person’s name as well as the email</b>, order-insensitive — so Admins/Editors get the right access even if the email on file was a guess. Hover the signed-in pill to see the exact email + access it resolved to." ] },
   { rev:"26.2", date:"2026-07-16", title:"\u{1F527} FIX: sign-in library URL (login now actually shows)", items:[
     "26.0/26.1 quietly fell back to the old no-login view because the Microsoft sign-in library was loading from a dead URL. Fixed (correct version + a backup CDN), so the \u{1F510} Sign in pill and role gating now appear on the live board. Signed out, you see the floor + a Sign in button; sign in with @gomra.com for the rest." ] },
   { rev:"26.1", date:"2026-07-16", title:"\u{1F511} One login: your sign-in IS your edit access", items:[
@@ -5317,6 +5319,15 @@ const ROLE_BY_EMAIL = {
   'tony@gomra.com':'exec', 'johnr@gomra.com':'exec', 'gbitonti@gomra.com':'exec'
   // everyone else who signs in = 'staff' (default). Steve Kowalski intentionally omitted (removed).
 };
+// Name fallback — matches by the person's DISPLAY name too (order-insensitive), so a wrong-guess
+// email can't drop someone to the wrong role. "Al Karloff" = Admin regardless of his email format.
+function _nmKey(s){ return String(s||'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' '); }
+const ROLE_BY_NAME = (function(){ const m={}, g={
+  admin:['Rich Miller','Al Karloff','Luciana Giglio'],
+  editor:['Megan Fraser','Brandon Choy'],
+  design:['Sarah Williams','Mark Mustonen'],
+  exec:['Tony Amato','John Renaud','Gino Bitonti'] };
+  for(const role in g) g[role].forEach(n=>{ m[_nmKey(n)]=role; }); return m; })();
 const ROLE_CAPS = {
   anon:  { tabs:['floor'],                                  hide:['builder','sales','ghost','logins','holidays','eotm'] },
   staff: { tabs:['floor','fleetio','assets'],               hide:['builder','sales','ghost','logins','holidays','eotm'] },
@@ -5375,7 +5386,9 @@ function ssoRole(){
   if(!SSO.active() || SSO.failed) return null;        // off the live host, or MSAL failed -> behave like today
   if(!SSO.ready) return 'anon';                        // live host, still resolving -> safe default = floor only
   if(!SSO.user) return 'anon';
-  return ROLE_BY_EMAIL[SSO.email()] || 'staff';
+  const em=SSO.email(); if(ROLE_BY_EMAIL[em]) return ROLE_BY_EMAIL[em];
+  const nk=_nmKey(SSO.name()); if(ROLE_BY_NAME[nk]) return ROLE_BY_NAME[nk];
+  return 'staff';
 }
 function ssoCaps(){ const r=ssoRole(); return r?ROLE_CAPS[r]:null; }
 // Apply tab + menu visibility for the current role (no-op when not gating).
@@ -5400,7 +5413,8 @@ function syncSsoPill(){
   const enforce=ssoEnforcing();
   if(!inP||!outP) return;
   if(!enforce || wall){ inP.style.display='none'; outP.style.display='none'; return; }   // hide on TV / when not gating
-  if(SSO.user){ inP.style.display='none'; outP.style.display=''; if(nm) nm.textContent=SSO.name(); }
+  if(SSO.user){ inP.style.display='none'; outP.style.display=''; if(nm) nm.textContent=SSO.name();
+    try{ outP.title='Signed in: '+SSO.email()+' · access: '+(ssoRole()||'?')+' — click to sign out'; }catch(e){} }
   else { inP.style.display=''; outP.style.display='none'; }
 }
 function signOut(){ CLOSE_PIN=null; CURRENT_USER="";
