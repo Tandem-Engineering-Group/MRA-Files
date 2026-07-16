@@ -3481,6 +3481,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"25.7", date:"2026-07-16", title:"\u{1F4E1} Dead trackers now show Fleetio's newer last-known spot", items:[
+    "When a unit's Samsara tracker is dead, the board now falls back to <b>Fleetio's last-known location</b> when it's newer (Fleetio stamps one from geotagged inspections/fuel/WOs) — so unit 83 reads <b>“\u{1F4E1} tracker DEAD · last MRA/Madison Heights (≈3 mo) · per Fleetio”</b> instead of a 2022 fix from PA. Anything silent <b>over 60 days</b> is labeled <b>tracker DEAD</b> (2–8 weeks stays “GPS stale”); fresh trackers unchanged. Fix the tracker and it all self-heals." ] },
   { rev:"25.6", date:"2026-07-16", title:"\u{1F69A} InfoWheels 3D Builder in the ☰ Menu", items:[
     "The new <b>InfoWheels 3D configurator</b> (spin the van · wrap colors · floor & wall finishes · cabinet slots · \u{1F4F8} screenshot · \u{1F517} shareable config links) is now one tap away: <b>☰ Menu → \u{1F69A} InfoWheels 3D Builder</b> — also at the short link <span class=\"k\">/builder.html</span>. Rev 1 runs on a to-proportion placeholder van; the real IW 2.0 Inventor models drop in when the design team exports them." ] },
   { rev:"25.5", date:"2026-07-16", title:"\u{1F4CB} Schedule tasks on the crew ↗ links & prints too", items:[
@@ -8878,7 +8880,7 @@ function renderFloor(D){
       const _loc=(typeof _ynLoc==='function')?_ynLoc(j.project,j.jobNum):null;
       const _isPark=isParkingBay(j.bay);
       const _wh=_loc?String((_loc.yard||_loc.place||'')).trim():'';
-      if(_wh && _gpsStale(_loc)) pills+=`<span class="pill" title="This unit's tracker hasn't reported in over 2 weeks (${escA(_ynAgo(_loc.atISO))}) — last seen ${escA(_wh)}. Too old to treat as its current location.">📡 GPS stale · last ${esc(_wh.slice(0,26))} (${esc(_ynAgo(_loc.atISO))})</span>`;
+      if(_wh && _gpsStale(_loc)) pills+=`<span class="pill" title="This unit's tracker hasn't reported in over 2 weeks — the last stamp is shown (from ${_loc.src==='fleetio'?'Fleetio’s last-known location — a geotagged inspection/fuel/WO, since the tracker itself is dead':'the tracker'}). Too old to treat as its current location.">📡 ${esc(_gpsStaleTxt(_loc).slice(0,60))}</span>`;
       else if(_wh && _loc.yard && _isMraYard(_loc)) pills+=`<span class="pill" title="Samsara GPS confirms this unit is at MRA">📍 at MRA</span>`;
       else if(_wh) pills+=`<span class="pill ${_isPark?'due':''}" title="Samsara GPS puts this unit at ${escA(_wh)}${_isPark?' — NOT in our lot: fix the bay or move the unit' : ''}">${_isPark?'⚠':'📍'} GPS: ${esc(_wh.slice(0,34))}</span>`;
       else pills+=`<span class="pill" title="No Samsara GPS on this unit (no tracker) — location can't be auto-checked">📡 no GPS</span>`;   // stale handled above
@@ -9252,7 +9254,7 @@ function _mtgGps(asset){ const D=window.MRA_DATA||{}; const locs=(D.fleetio&&D.f
   const k=_normKey(m[1]); let loc=null;
   for(const kk in locs){ if(_normKey(kk)===k){ loc=locs[kk]; break; } }
   if(!loc) return null;
-  if(_gpsStale(loc)) return {stale:true, where:String(loc.yard||loc.place||'').trim(), ago:_ynAgo(loc.atISO)};
+  if(_gpsStale(loc)) return {stale:true, where:String(loc.yard||loc.place||'').trim(), ago:_ynAgo(loc.atISO), txt:_gpsStaleTxt(loc)};
   return {at:_isMraYard(loc), where:String(loc.yard||loc.place||'').trim()};
 }
 // Click a meeting card to highlight it and keep your place while you walk the list (click again to clear).
@@ -9266,7 +9268,7 @@ function renderMeeting(){
     const stay=(u.dateISO&&u.endISO&&u.endISO>=u.dateISO)?(daysBetween(u.endISO,u.dateISO)+1):null;   // length of the visit, inclusive (needs the Leaving-MRA date on the Fleetio issue)
     // GPS truth-check on HERE NOW: the state comes from the Fleetio DATE fields; Samsara says where it actually is.
     const gps=(u.state==='here')?_mtgGps(u.asset):null;
-    const gpsChip=gps?(gps.stale?` <span class="mtg-gpsno" title="This unit's tracker hasn't reported in over 2 weeks (${escA(gps.ago||'')}) — last seen ${escA(gps.where||'?')}. Too old to verify where it is now.">📡 GPS stale (${esc(gps.ago||'')})</span>`:gps.at?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`
+    const gpsChip=gps?(gps.stale?` <span class="mtg-gpsno" title="This unit's tracker hasn't reported in over 2 weeks — too old to verify where it is now.">📡 ${esc((gps.txt||'GPS stale').slice(0,54))}</span>`:gps.at?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`
       :` <span class="mtg-gpswarn" title="Samsara GPS says this unit is NOT at MRA right now — the Back-to-MRA / Leaving-MRA dates on its Fleetio issue are probably stale. Fix the dates or resolve the issue.">⚠ GPS: ${esc(gps.where||'not at MRA')}</span>`)
       :(u.state==='here'?` <span class="mtg-gpsno" title="No Samsara GPS on this unit (no tracker, or Samsara doesn't list it) — location can't be auto-checked; HERE NOW comes from the Fleetio dates only">📡 no GPS</span>`:'');
     const when=u.state==='here'
@@ -9305,7 +9307,7 @@ function renderMeeting(){
     const frLine=fr?`<div class="m" style="color:#7fb0ff;font-weight:700" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(fr)}</div>`:'';
     let gpsChip='';
     if(!l.sub){ const loc=(typeof _ynLoc==='function')?_ynLoc(l.proj,l.jobNum):null;
-      if(loc&&_gpsStale(loc)) gpsChip=` <span class="mtg-gpsno" title="This unit's tracker hasn't reported in over 2 weeks (${escA(_ynAgo(loc.atISO))}) — last seen ${escA(String(loc.yard||loc.place||'?'))}. Too old to verify.">📡 GPS stale (${esc(_ynAgo(loc.atISO))})</span>`;
+      if(loc&&_gpsStale(loc)) gpsChip=` <span class="mtg-gpsno" title="This unit's tracker hasn't reported in over 2 weeks — too old to verify.">📡 ${esc(_gpsStaleTxt(loc).slice(0,54))}</span>`;
       else if(loc&&(loc.yard||'').trim()) gpsChip=_isMraYard(loc)?` <span class="mtg-gpsok" title="Samsara GPS confirms this unit is at MRA">📍 GPS: at MRA</span>`:` <span class="mtg-gpswarn" title="Samsara GPS puts this unit at ${escA(loc.yard)} — not at MRA">⚠ GPS: ${esc(loc.yard)}</span>`;
       else if(loc&&(loc.place||'').trim()) gpsChip=` <span class="mtg-gpswarn" title="Samsara GPS last fix">⚠ GPS: ${esc(loc.place)}</span>`;
       else gpsChip=` <span class="mtg-gpsno" title="No Samsara GPS on this unit — location can't be auto-checked">📡 no GPS</span>`; }
@@ -9457,6 +9459,14 @@ function _ynLoc(name, jobNum){
 // (Unit 83 FM Global's tracker last reported 09/2022 from PA — the board said "⚠ GPS: Dauphin
 // County, PA" while the trailer was really back at MRA.)
 function _gpsStale(loc){ if(!loc||!loc.atISO) return false; const t=new Date(loc.atISO).getTime(); if(!t||isNaN(t)) return false; return (Date.now()-t)>14*86400000; }
+// One text for every stale chip: ">60d = tracker dead" (Rich), and when the stamp came from
+// Fleetio's last-known location (geotagged inspection/fuel/WO — not the tracker) say so.
+function _gpsStaleTxt(loc){ if(!loc) return '';
+  const wh=String(loc.yard||loc.place||'?').trim(), ago=_ynAgo(loc.atISO);
+  let days=null; try{ const t=new Date(loc.atISO).getTime(); if(t&&!isNaN(t)) days=Math.round((Date.now()-t)/86400000); }catch(e){}
+  const word=(days!=null&&days>60)?'tracker DEAD':'GPS stale';
+  return word+' · last '+wh+(ago?(' ('+ago+')'):'')+((loc.src==='fleetio')?' · per Fleetio':'');
+}
 function _ynAgo(atISO){ if(!atISO) return ''; const t=new Date(atISO).getTime(); if(!t||isNaN(t)) return '';
   const ms=Date.now()-t; if(ms<0) return 'just now'; const h=ms/3600000;
   if(h<1) return Math.max(1,Math.round(ms/60000))+'m ago'; if(h<48) return Math.round(h)+'h ago'; return Math.round(h/24)+'d ago'; }
@@ -9532,7 +9542,7 @@ function _ynCard(it,today){
   let where, sub='', nogps='';
   if(onHere){
     where = isLot ? '🅿️ Parking Lot' : (isParts ? ('📦 '+esc(bay)) : ('🔧 '+esc(bay)));
-    if(loc && _gpsStale(loc)) sub=`<span class="yn-seen">📡 GPS stale · last ${esc(String(loc.yard||loc.place||'?'))} ${esc(_ynAgo(loc.atISO))}</span>`;
+    if(loc && _gpsStale(loc)) sub=`<span class="yn-seen">📡 ${esc(_gpsStaleTxt(loc))}</span>`;
     else if(loc && _isMraYard(loc)) sub=`<span class="yn-ok">✓ GPS at MRA${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
     else if(loc && (loc.yard||'').trim()) sub=`<span class="yn-mm">⚠ GPS shows it at ${esc(loc.yard)}${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
     else if(loc && (loc.place||'').trim()) sub=`<span class="yn-mm">⚠ GPS shows it in ${esc(loc.place)}${loc.atISO?(' · '+esc(_ynAgo(loc.atISO))):''}</span>`;
