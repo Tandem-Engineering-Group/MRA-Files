@@ -3480,6 +3480,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"25.5", date:"2026-07-16", title:"\u{1F4CB} Schedule tasks on the crew ↗ links & prints too", items:[
+    "The \u{1F4CB} project-schedule tasks that ride the crew columns now also show on each crew's <b>↗ solo live link</b> (?sheet=sal) and the <b>🖨 crew-sheet print</b> — merged onto the trailer's card with ▶ start → finish dates and the phase, counted in the totals. (Work-order forms stay shop-tasks-only by design — say the word to add them there too.)" ] },
   { rev:"25.4", date:"2026-07-16", title:"\u{1F4CB} MERGED: schedule lines ride the trailer card in the crew columns", items:[
     "In the crew columns, a project's \u{1F4CB} schedule lines now sit <b>on its trailer card</b> (Oakland's on the J1420 Revamp card, Trumpf's on J1554) instead of a separate \u{1F4CB} group — shop tasks first, schedule lines under them, ⚒ on every line. A standalone \u{1F4CB} card only remains for projects with <b>no board job</b> (e.g. JFSD). Column header now counts them as tasks: “40 open · 13 trailers · 16 \u{1F4CB}”.",
     "Oakland Schools, Trumpf, Medtronic and SMC got their <b>Job # stamped on the project</b> (J1420 / J1554 / J1553 / J1542) — so the project↔job link is by <b>job number</b> now, exact, everywhere." ] },
@@ -12395,6 +12397,8 @@ function buildCrewSheetHtml(sel, opts){
     const dates=(c.startISO||c.completionISO)?` <span class="dt">${fmt(c.startISO)}–${fmt(c.completionISO)}</span>`:"";
     return `<div class="job"><div class="jh">${esc(c.project)} <span class="jn">${esc(c.jobNum||"")}</span> <span class="bayt">${esc(c.bay||"")}</span>${dates}</div><ul>`
       + c.open.map(o=>{
+          if(o.isProj){ const odp=o.due&&o.due<todayISO;
+            return `<li>📋 ${esc(o.disp)} <span class="due${odp?' od':''}">▶ ${o.st0?fmt(o.st0):'…'} → ${o.due?fmt(o.due):'…'}</span>${o.ph?` <span class="dt">· ${esc(o.ph)}</span>`:''}</li>`; }
           const m=String(o.raw||'').match(/#(\d+)/), num=m?m[1]:null;
           const d=(num&&fdet[num])?String(fdet[num]).replace(/\s+/g,' ').trim():'';
           const _docs=[...(o.files||[]), ...((num&&fdocs[num])||[])].filter((x,ix,ar)=>ar.findIndex(y=>y.url===x.url)===ix);
@@ -12417,8 +12421,28 @@ function buildCrewSheetHtml(sel, opts){
       const open=tl.filter(t=>cr.re.test(basisFor(t.who,t.raw||t.disp))).filter(x=>x.disp);
       open.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));   // due-soonest first, undated last
       open.forEach(o=>{ if(o.due&&o.due<todayISO) od++; });
-      if(open.length){ n+=open.length; cards.push({bay:j.bay,project:j.project,jobNum:j.jobNum,startISO:j.startISO,completionISO:j.completionISO,open}); }
+      if(open.length){ n+=open.length; cards.push({bay:j.bay,project:j.project,jobNum:j.jobNum,row:j.row,startISO:j.startISO,completionISO:j.completionISO,open}); }
     });
+    // 📋 project-schedule tasks for this crew — merged onto the trailer's card (matches the
+    // on-screen crew columns + solo ?sheet= link + this print); standalone 📋 card only when
+    // the project has no board job (e.g. JFSD).
+    { const limP=localISO(Date.parse(todayISO)+14*86400000);
+      (D.projects||[]).forEach(p=>{
+        const rows=(p.tasks||[]).filter(t=>{
+          if(t.done===true || /complete/i.test(String(t.st||''))) return false;
+          if(/yes/i.test(String(t.ml||''))) return false;
+          const w=String(t.who||'').trim(); if(!w||!cr.re.test(w)) return false;
+          const dt=t.startISO||t.finISO; return !!dt && dt<=limP;
+        }).map(t=>({disp:String(t.t||''), raw:null, isProj:true, ph:(t.phase||'').trim(),
+          due:(t.finISO||null), st0:(t.startISO||null), cm:'', files:null})).filter(x=>x.disp);
+        if(!rows.length) return;
+        rows.forEach(o=>{ n++; if(o.due&&o.due<todayISO) od++; });
+        const mj=(typeof _projMainJob==='function')?_projMainJob(p.name):null;
+        const host=mj?cards.find(c=>String(c.row)===String(mj.row)):null;
+        if(host){ host.open=host.open.concat(rows); }
+        else if(mj) cards.push({bay:mj.bay,project:mj.project,jobNum:mj.jobNum,row:mj.row,startISO:mj.startISO,completionISO:mj.completionISO,open:rows});
+        else cards.push({bay:'📋 project schedule',project:p.name,jobNum:'',startISO:null,completionISO:null,open:rows});
+      }); }
     cards.sort((a,b)=>oIdx(a.bay)-oIdx(b.bay)||(a.project||"").localeCompare(b.project||""));
     total+=n; totOd+=od; return {label:cr.label, n, od, cards};
   });
