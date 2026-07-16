@@ -3481,6 +3481,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"25.8", date:"2026-07-16", title:"\u{1F4CB} No more double-vision: worked schedule lines hide", items:[
+    "If a \u{1F4CB} schedule line already has a matching <b>open shop task</b> on its trailer (created via ⚒, or added by hand with the <b>same wording</b>), the schedule line now <b>hides</b> from the bay card, crew columns and crew sheets — the shop task is the working copy. When the shop work closes, the line comes back (⚒-linked ones via the \u{1F7E1} PM-verify offer). Tip: to break a schedule line into floor work, use its <b>⚒</b> button instead of typing a new task — that links them automatically." ] },
   { rev:"25.7", date:"2026-07-16", title:"\u{1F4E1} Dead trackers now show Fleetio's newer last-known spot", items:[
     "When a unit's Samsara tracker is dead, the board now falls back to <b>Fleetio's last-known location</b> when it's newer (Fleetio stamps one from geotagged inspections/fuel/WOs) — so unit 83 reads <b>“\u{1F4E1} tracker DEAD · last MRA/Madison Heights (≈3 mo) · per Fleetio”</b> instead of a 2022 fix from PA. Anything silent <b>over 60 days</b> is labeled <b>tracker DEAD</b> (2–8 weeks stays “GPS stale”); fresh trackers unchanged. Fix the tracker and it all self-heals." ] },
   { rev:"25.6", date:"2026-07-16", title:"\u{1F69A} InfoWheels 3D Builder in the ☰ Menu", items:[
@@ -10371,6 +10373,8 @@ function renderSal(D){
           .filter(x=>x.disp).filter(t=>dueInWindow(t.due));
         if(!rows.length) return;
         const mj=(typeof _projMainJob==='function')?_projMainJob(p.name):null;
+        rows=rows.filter(r=>!_ptCovered(p.name, r.handle, r.disp, mj?mj.row:null));
+        if(!rows.length) return;
         if(mj){
           const host=out.find(s=>String(s.row)===String(mj.row));
           if(host){ host.open=host.open.concat(rows); }
@@ -12447,10 +12451,13 @@ function buildCrewSheetHtml(sel, opts){
           const w=String(t.who||'').trim(); if(!w||!cr.re.test(w)) return false;
           const dt=t.startISO||t.finISO; return !!dt && dt<=limP;
         }).map(t=>({disp:String(t.t||''), raw:null, isProj:true, ph:(t.phase||'').trim(),
+          handle:((t.id!=null&&t.id!=='')?String(t.id):(t._id!=null?('s'+t._id):null)),
           due:(t.finISO||null), st0:(t.startISO||null), cm:'', files:null})).filter(x=>x.disp);
         if(!rows.length) return;
-        rows.forEach(o=>{ n++; if(o.due&&o.due<todayISO) od++; });
         const mj=(typeof _projMainJob==='function')?_projMainJob(p.name):null;
+        rows=rows.filter(r=>!_ptCovered(p.name, r.handle, r.disp, mj?mj.row:null));
+        if(!rows.length) return;
+        rows.forEach(o=>{ n++; if(o.due&&o.due<todayISO) od++; });
         const host=mj?cards.find(c=>String(c.row)===String(mj.row)):null;
         if(host){ host.open=host.open.concat(rows); }
         else if(mj) cards.push({bay:mj.bay,project:mj.project,jobNum:mj.jobNum,row:mj.row,startISO:mj.startISO,completionISO:mj.completionISO,open:rows});
@@ -14567,7 +14574,26 @@ function _projMainJob(pname){
 // Schedule tasks that belong on each job's bay card: crew/shop-assigned, open, 2-week window.
 // ⚠ PERF: built ONCE per paint into window._PJBYROW — computing this inside every bay-card
 // render (rev 25.2) meant cards×projects×jobs work per paint and froze iPads (black screen).
+// A 📋 schedule line is COVERED (hidden from cards/columns/sheets) while a matching OPEN shop
+// task exists — either ⚒-linked ([pt:proj|handle] in the shop task's comments) or word-for-word
+// the same text on the project's main job. The shop task is the working copy; when it closes,
+// the schedule line returns (⚒ ones via the 🟡 PM-verify offer). Stops the "I see it twice" dupes.
+function _ptCov(){ if(window._PTCOV) return window._PTCOV;
+  const D=window.MRA_DATA||{}; const tags=new Set(); const txt={};
+  (D.jobs||[]).forEach(j=>{ (j.tasks||[]).forEach(t=>{ if(t.done) return;
+    const m=String(t.cm||'').match(/\[pt:([^|\]]+)\|([^\]]+)\]/); if(m) tags.add(m[1].trim()+'|'+m[2].trim());
+    const k=String(j.row); (txt[k]=txt[k]||new Set()).add(String(t.t||'').toLowerCase().replace(/[^a-z0-9]/g,'')); }); });
+  return (window._PTCOV={tags:tags, txt:txt});
+}
+function _ptCovered(projName, handle, taskText, mainRow){
+  const cov=_ptCov();
+  if(handle && cov.tags.has(projName+'|'+String(handle))) return true;
+  if(mainRow!=null){ const s=cov.txt[String(mainRow)];
+    if(s && s.has(String(taskText||'').toLowerCase().replace(/[^a-z0-9]/g,''))) return true; }
+  return false;
+}
 function _pjRebuild(){
+  window._PTCOV=null;   // refresh the coverage index every paint
   const map={};
   try{
     const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
@@ -14586,7 +14612,9 @@ function _pjRebuild(){
       });
       if(!rows.length) return;                       // no qualifying tasks -> skip the job matching entirely
       const mj=_projMainJob(p.name); if(!mj) return;
-      const k=String(mj.row); map[k]=(map[k]||[]).concat(rows);
+      const kept=rows.filter(r=>!_ptCovered(p.name, r.handle, r.t, mj.row));
+      if(!kept.length) return;
+      const k=String(mj.row); map[k]=(map[k]||[]).concat(kept);
     });
     Object.keys(map).forEach(k=>map[k].sort((a,b)=>String(a.fin||'9999').localeCompare(String(b.fin||'9999'))));
   }catch(e){}
