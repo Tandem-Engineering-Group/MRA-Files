@@ -3485,6 +3485,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"26.2", date:"2026-07-16", title:"\u{1F527} FIX: sign-in library URL (login now actually shows)", items:[
+    "26.0/26.1 quietly fell back to the old no-login view because the Microsoft sign-in library was loading from a dead URL. Fixed (correct version + a backup CDN), so the \u{1F510} Sign in pill and role gating now appear on the live board. Signed out, you see the floor + a Sign in button; sign in with @gomra.com for the rest." ] },
   { rev:"26.1", date:"2026-07-16", title:"\u{1F511} One login: your sign-in IS your edit access", items:[
     "No more juggling a number code AND a login. Once you’re <b>signed in with your @gomra.com account</b>, editing just works if your role allows it (Admin / Editor / Design) — no code. View-only roles (execs, general staff) get a friendly “view-only” note instead. The number code stays only as a <b>fallback on shared shop-floor screens</b> (where nobody signs in individually), so floor task-closing never breaks." ] },
   { rev:"26.0", date:"2026-07-16", title:"\u{1F510} Microsoft (365) sign-in + role-based access", items:[
@@ -5332,9 +5334,12 @@ const SSO = (function(){
   function domainOK(e){ return /@gomra\.com$/i.test(String(e||'')); }
   function done(){ ready=true; try{ applyRoleUI(); }catch(e){} }
   function loadMsal(cb){ if(window.msal) return cb();
-    const s=document.createElement('script'); s.async=true;
-    s.src='https://alcdn.msftauth.net/browser/2.38.3/js/msal-browser.min.js';
-    s.onload=()=>cb(); s.onerror=()=>cb(new Error('msal')); document.head.appendChild(s); }
+    const urls=['https://alcdn.msftauth.net/browser/2.38.1/js/msal-browser.min.js',
+                'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js'];
+    let i=0; const tryNext=()=>{ if(i>=urls.length){ cb(new Error('msal')); return; }
+      const s=document.createElement('script'); s.async=true; s.src=urls[i++];
+      s.onload=()=>{ window.msal?cb():tryNext(); }; s.onerror=tryNext; document.head.appendChild(s); };
+    tryNext(); }
   function init(){
     if(!active()){ done(); return; }                 // localhost / SWA copy / preview -> no gating
     let settled=false; const finish=(f)=>{ if(settled) return; settled=true; if(f) failed=true; done(); };
