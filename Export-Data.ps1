@@ -1092,6 +1092,41 @@ if (Test-Path $SamsaraTokenFile) {
     } catch { Write-Output "  -> Samsara fetch failed: $($_.Exception.Message)" }
 }
 
+# --- Fleetio last-known-location fallback (Rich 2026-07-16): a unit's Fleetio "last known
+# location" updates from geotagged inspections/fuel/WOs even when its Samsara tracker is dead
+# (unit 83: Samsara last pinged 09/2022, Fleetio saw it at MRA 3 months ago). When Fleetio's
+# stamp is NEWER than the Samsara fix (or there is no fix), use it, marked src='fleetio' so the
+# dashboard can say "tracker dead - per Fleetio". Samsara stays primary whenever fresher.
+function _LocDT($s){ try { return ([datetime]::Parse([string]$s, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)) } catch { try { return [datetime]::Parse([string]$s) } catch { return $null } } }
+try {
+    $fbN = 0; $fbProbe = $true
+    foreach ($v in @($veh)) {
+        $cle = $v.current_location_entry
+        if ($fbProbe -and $v.name) { $fbProbe = $false
+            "loc-fallback probe: first vehicle '$($v.name)' current_location_entry present: $([bool]$cle)" | Out-File $SamDbg -Append -Encoding utf8 }
+        if (-not $cle) { continue }
+        $key = NormFleet $v.name; if ($key -eq '') { continue }
+        $cd = $cle.date; if (-not $cd) { $cd = $cle.created_at }
+        $cdt = _LocDT $cd; if (-not $cdt) { continue }
+        $ex = $fLoc[$key]
+        $exdt = if ($ex -and $ex.atISO) { _LocDT $ex.atISO } else { $null }
+        if ($exdt -and $exdt -ge $cdt) { continue }             # Samsara fix is fresher - keep it
+        $addr = [string]$cle.address
+        $lat = $null; $lng = $null
+        if ($cle.geolocation) { $lat = $cle.geolocation.latitude; $lng = $cle.geolocation.longitude }
+        $place = PlaceFromAddr $addr
+        if ($place -eq '' -and $null -ne $lat -and $null -ne $lng) { $place = ("{0:N3}, {1:N3}" -f [double]$lat, [double]$lng) }
+        if ($place -eq '') { continue }
+        if ($null -ne $lat) { $lat = [math]::Round([double]$lat,5) }
+        if ($null -ne $lng) { $lng = [math]::Round([double]$lng,5) }
+        $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = [string]$cd; yard = ''; lat = $lat; lng = $lng; src = 'fleetio' }
+        $fbN++
+    }
+    Write-Output "  -> Fleetio location fallback: $fbN unit(s) using Fleetio's newer last-known location"
+} catch { Write-Output "  -> Fleetio location fallback failed: $($_.Exception.Message)" }
+
+
+
 # --- Logistics calendars -> MRA trailer logistics ---------------------------
 # For each of this year's logistics calendars (OneDrive-synced), build a clean
 # timeline by reading each month from ITS OWN tab (the tabs disagree, so the
