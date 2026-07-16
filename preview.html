@@ -3485,6 +3485,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"26.5", date:"2026-07-16", title:"\u{1F527} FIX: edits reverting/\u201ccoming back\u201d after the 2-min sync", items:[
+    "After updates went to every 2 minutes, a sync could rebuild the board <b>before your save finished committing</b>, making an edit (e.g. shipping a job) revert and reappear. Widened the in-flight-write hold from 20s to 120s so your change is kept on screen until the save is safely in — no more \u201cit deleted then came back.\u201d" ] },
   { rev:"26.4", date:"2026-07-16", title:"\u{1F464} Added Quintin Olivito as Admin", items:[
     "Quintin Olivito (qolivito@gomra.com) added to the Admin list — full access." ] },
   { rev:"26.3", date:"2026-07-16", title:"\u{1F511} Role match now uses name + email (fixes Admin/Editor landing as Viewer)", items:[
@@ -5881,7 +5883,7 @@ function listsCaughtUp(incoming, editTs, listsBase){
   if(!listsBase) return true;                               // edit was made before watermarking existed → old behavior
   const la=(incoming&&incoming.listsAsOf)||'';
   if(!la) return false;                                     // incoming carries no lists stamp (fail-safe build) → keep holding
-  return la>listsBase && Date.parse(la)>=(editTs||0)+20000; // strictly newer snapshot, taken ≥20s after the edit (in-flight-write guard)
+  return la>listsBase && Date.parse(la)>=(editTs||0)+120000; // strictly newer snapshot, taken ≥120s after the edit — matches the 2-min sync so a save can't be reverted before it commits (was 20s, too short once updates went to 2-min)
 }
 function oApply(){ markPending(); if(window.MRA_DATA) renderAll(); }
 
