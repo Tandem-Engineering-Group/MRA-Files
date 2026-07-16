@@ -318,6 +318,49 @@ no JS change needed. Test: J1559 On Cloud card shows 📍 after next export.
 Also in flight: SWA created?(await Rich URL+token) · Infowheels 3D builder awaiting Brandon/Mark OBJ
 exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
 
+## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
+
+- **🔐 Microsoft 365 sign-in LIVE on the board.** MSAL.js browser (public client, PKCE — NO secret; tenant
+  blocks client secrets + required admin consent, Tim granted org-wide consent). Floor = anonymous (shop TVs
+  unchanged); everything else behind @gomra.com sign-in. `SSO` module gated to HOSTS=['mrashopdash.z13...'],
+  **FAIL-OPEN** (off-host / MSAL fail / 6s timeout → no gating, board behaves as pre-login → shop TV can never
+  wall). Config: TENANT 1dc2dfee-5d93-4f0c-aa97-2344b72fe6b0, CLIENT fad6a2aa-2dab-4c46-ad3a-29e7040036ae
+  (app reg "MRA Dashboard Lists Reader"). Redirect URIs (SPA) Tim registered: .../MRA_Dashboard.html + .../ .
+- **Roles (Rich's access xlsx):** admin=Rich/Al Karloff/Luciana Giglio · editor(full)=Megan Fraser/Brandon Choy ·
+  design(editor, restricted menu)=Sarah Williams/Mark Mustonen · exec(view-all read-only)=Tony Amato/John Renaud/
+  Gino Bitonti · everyone-else=staff (Floor/Fleetio/Assets, no Projects). Steve Kowalski REMOVED (fired — tell Tim
+  to disable his gomra acct). `ROLE_CAPS` tab+menu matrix; 5 special menu items tagged `data-perm`
+  (builder/sales/ghost/logins/holidays/eotm). **26.3: role matches EMAIL *and* display NAME** (order-insensitive)
+  — a wrong-guess email dropped Al to staff (lost Projects); name fallback fixes it. Pill tooltip shows resolved
+  email+role for self-diagnosis.
+- **26.1 ONE LOGIN:** signed-in edit-role (admin/editor/design) edits with NO number code (ensureAuth bridges →
+  CLOSE_PIN='1974' [flow-accepted, verified], CURRENT_USER=SSO name). View-only roles blocked w/ message. Code
+  modal kept as shared-floor fallback (leads with Microsoft button). 26.2 FIX: MSAL CDN url 2.38.3 was 404 →
+  2.38.1 + jsdelivr fallback (the 404 fail-opened = "login not showing" on all devices).
+- **⏱ LIVE UPDATES (was 15-min):** the "MRA Lists to JSON" flow ALREADY had the repository_dispatch HTTP step
+  (URI .../dispatches, body run-export, PAT). Rich changed its **Recurrence 15 min → 2 min** + re-saved (had to
+  delete a stale `Overwrite=true` param on the SharePoint Create file step — modern connector overwrites by
+  default). VERIFIED: exports now fire ~2 min apart, data.js updates same-cycle → **edits propagate in ~2-3 min**.
+- **📡 Fleetio GPS fallback shipped earlier (rev 25.7 + Export-Data.ps1 33c08de):** dead-tracker units use
+  Fleetio's newer last-known location; ">60d = tracker DEAD · per Fleetio" chip. Unit 83 now Madison Heights.
+- **🚚 InfoWheels 3D Builder** at /builder.html + ☰ Menu (rev 25.6, smooth van hull, true colors) — awaiting
+  Brandon/Mark real OBJ exports.
+- Deploys: 25.5→26.3 all `mode=live`, verified by polling rev. Branch claude/zealous-fermi-6n5pil.
+
+### 🔜 TOMORROW (2026-07-17) — locked in
+1. **📁 Migrate Claude files off Tandem → MRA (gomra.com) SharePoint** (Rich + Tim only). ⚠ NOT just a copy: the
+   Lists→JSON flow, workbook shuttle, and the SharePoint **Lists** (Jobs/ShopTasks/ProjectTasks/Users) all point at
+   `snptechnical.sharepoint.com/sites/MRASiteProject/.../MRA Claude Code/01.1 RL Claude Bot` and run under
+   **RMiller@tandemeng.com** connections. Moving to gomra.com = repoint every flow's Site Address + re-auth
+   connections as a gomra.com login, and likely recreate the Lists in the new site. Tim to create the gomra.com
+   SharePoint site (Rich+Tim owners) first. Scope carefully — it's a pipeline migration.
+2. **🔑 Rotate the GitHub PAT** — it appeared in a screenshot (github_pat_11CFZU…). Regenerate the fine-grained
+   PAT (Contents:write, org resource owner) → update it in BOTH flows (workbook shuttle + MRA Lists to JSON HTTP
+   steps). Walk Rich through it.
+3. **Verify Al Karloff's login** lands as Admin (name-fallback should fix the email-guess). Have anyone with wrong
+   access hover the pill → read email+role → fix the map.
+4. If Power Automate nags about run limits from the 2-min recurrence, dial to 3-5 min.
+
 ## Shipped 2026-07-16 PM (rev 25.5 → 25.8 · GPS fallback · catalogue rules re-audit · 3D builder)
 
 - **25.5 crew ?sheet= links + prints carry 📋 schedule tasks** (buildCrewSheetHtml merge, same rules as columns).
