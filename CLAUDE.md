@@ -318,6 +318,29 @@ no JS change needed. Test: J1559 On Cloud card shows 📍 after next export.
 Also in flight: SWA created?(await Rich URL+token) · Infowheels 3D builder awaiting Brandon/Mark OBJ
 exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
 
+## Shipped 2026-07-16 AM part 2 (rev 25.1 → 25.4) — MRA Shop bucket · J#-linking · merges · perf
+
+- **25.1 "MRA Shop / Sal" (Rich: keep MRA Shop load):** `dtbReassignTo` preserves the MRA Shop bucket
+  alongside the person; finder's isShop = shop-ONLY (bucket+person = picked up); ⚒ prefill strips bucket.
+  **DATA REPAIR:** the 19 plain-replaced assignments from 7/15 were rewritten to "MRA Shop / X" by capturing
+  the dashboard's own mergeById ops headlessly (stub fetch, drain _wq, stamp pin/user) and curling them to
+  LISTS_WRITE_URL — all 19 verified landed in data.js. (Repair list built by diffing the 7/13 data snapshot.)
+- **25.2 📋 schedule tasks ON bay cards, J#-FIRST linking (Rich):** `_projJobsFor`/`_projMainJob` (project with
+  a J# links ONLY by J#; name containment fallback; real bay beats lot/hold; closest-name tiebreak) + 📋 pill
+  & expandable schedule list on the main card, ⚒ per line.
+- **25.3 ⚡ PERF (iPad black screen):** per-card matching froze iPads → `_pjRebuild()` builds window._PJBYROW
+  once per renderAll; cards do O(1) lookups. NOTE: renderAll baseline is ~600ms at 6× CPU throttle — the page
+  is heavy; a real speed pass is a candidate next task.
+- **25.4 MERGED into crew columns (Rich's screenshots):** schedule lines ride the project's TRAILER card in the
+  crew columns (out entries carry row; host lookup via _projMainJob; standalone 📋 card only when no board job,
+  e.g. JFSD). Header: "42 open · 16 trailers · 18 📋" (📋 = task count).
+- **Project Job #s STAMPED IN THE LISTS** (build_from_lists P_PROJJOB='JobNum' col on ProjectTasks; first task's
+  value → project.jobNum): Oakland J1420 · Trumpf J1554 · Medtronic J1553 · SMC J1542 — verified in data.js.
+  Cisco (J1558) + JFSD (J1526) were already set. To link a future project: put its J# in the JobNum column of
+  any of its schedule rows (or ask Claude to stamp it).
+- **⚒/verify loop end-to-end test pattern:** stub CLOSE_PIN/CURRENT_USER/ensureAuth/shopWrite in headless page,
+  run ptbOpen→ptbSubmit→closeTaskByName×N, auto-accept dialogs → parent hits "Pending Verification".
+
 ## Shipped 2026-07-16 AM (rev 24.6 → 25.0) — stale GPS · repeat-close fix · WO 24h filter · 📋 tasks on crew columns · ⚒ break-into-shop-tasks
 
 - **24.6 stale GPS:** unit 83 FM Global's tracker last pinged 09/2022 from Dauphin Cty PA — board showed it as
