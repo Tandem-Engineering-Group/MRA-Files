@@ -2905,7 +2905,8 @@
       <h3>🔒 Sign in</h3>
       <div class="msub" id="siSub">Enter your code to edit.</div>
       <div class="addform">
-        <div><label>Code</label>
+        <button class="btn-primary" id="siMsBtn" style="display:none;width:100%;background:#1a56db;color:#fff;margin-bottom:10px" onclick="SSO.signIn()">🔐 Sign in with Microsoft (@gomra.com)</button>
+        <div><label>Shop-floor code (shared screens)</label>
           <input id="siCode" type="password" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false"
             placeholder="••••" onkeydown="if(event.key==='Enter'){event.preventDefault();siSubmit();}"></div>
         <div id="siMsg" style="font-size:12px; min-height:16px; color:var(--red)"></div>
@@ -3484,6 +3485,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"26.1", date:"2026-07-16", title:"\u{1F511} One login: your sign-in IS your edit access", items:[
+    "No more juggling a number code AND a login. Once you’re <b>signed in with your @gomra.com account</b>, editing just works if your role allows it (Admin / Editor / Design) — no code. View-only roles (execs, general staff) get a friendly “view-only” note instead. The number code stays only as a <b>fallback on shared shop-floor screens</b> (where nobody signs in individually), so floor task-closing never breaks." ] },
   { rev:"26.0", date:"2026-07-16", title:"\u{1F510} Microsoft (365) sign-in + role-based access", items:[
     "The board now has <b>company sign-in</b>. The <b>shop floor stays open with no login</b> (TVs + crew, exactly as before). Everything else asks people to <b>Sign in with their @gomra.com account</b> — a pill appears top-right. Roles decide what each person sees: <b>Admin</b> (all + manage logins/EOTM/holidays), <b>Editor</b> (all tabs + edit), <b>Design</b> (all tabs, minus the builder/sales/ghost/admin menu items), <b>View-all</b> execs (everything, read-only), and everyone else who signs in = <b>Viewer</b> (Floor/Fleetio/Assets). Roles come from a short list; anyone with a gomra.com account can sign in.",
     "<b>Fail-safe:</b> if the sign-in service can’t load, the board falls back to its normal open view rather than locking anyone out — the shop screen can never get stuck behind a login. (Editing still uses your number code for now; sign-in governs what’s visible.)" ] },
@@ -5248,8 +5251,15 @@ function findUser(code){
 }
 // Central sign-in: prompt once per session; remember who. Returns false if not recognized.
 let _authRetry=null;   // the action to auto-continue after a successful sign-in (no more "tap it twice")
+function ssoCanEdit(){ if(typeof ssoRole!=='function') return false; const r=ssoRole(); return !!(SSO&&SSO.user)&&(r==='admin'||r==='editor'||r==='design'); }
 function ensureAuth(action, retry){
   if(CLOSE_PIN) return true;
+  // 🔐 One login: a signed-in @gomra.com user whose role can edit needs NO number code.
+  if(typeof ssoEnforcing==='function' && ssoEnforcing()){
+    if(ssoCanEdit()){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; syncAuthUI(); _resetIdle(); return true; }
+    if(SSO.user){ alert('Your sign-in is view-only — ask Rich if you need edit access.'); return false; }
+    // nobody signed in: the modal below leads with Microsoft sign-in (the shared-floor code stays as a fallback)
+  }
   if(!CLOSE_FLOW_URL){ alert("Editing from the dashboard isn't switched on yet."); return false; }
   _authRetry=(typeof retry==='function')?retry:null;
   openSignIn(action);   // masked-code modal — on success the attempted action continues automatically
@@ -5258,7 +5268,9 @@ function ensureAuth(action, retry){
 // ---- Masked sign-in modal (replaces the native prompt so the code stars out) ----
 function openSignIn(action){
   const sub=document.getElementById('siSub'), msg=document.getElementById('siMsg'), inp=document.getElementById('siCode');
-  if(sub) sub.textContent="Enter your code to "+(action||"edit")+".";
+  const enforce=(typeof ssoEnforcing==='function'&&ssoEnforcing());
+  const ms=document.getElementById('siMsBtn'); if(ms) ms.style.display=enforce?'':'none';
+  if(sub) sub.textContent=enforce?('Sign in with your @gomra.com account to '+(action||'edit')+'. (Shared shop screens can use the code below.)'):('Enter your code to '+(action||'edit')+'.');
   if(msg) msg.textContent=""; if(inp) inp.value="";
   const m=document.getElementById('signInModal'); if(m) m.classList.add('show');
   setTimeout(()=>{ if(inp) inp.focus(); },60);
@@ -5286,7 +5298,8 @@ function siSubmit(){
 }
 // Visible sign-in pill + Log out, so a shared screen never silently stays editable.
 function syncAuthUI(){ const p=document.getElementById('authPill'), n=document.getElementById('authName');
-  if(p){ if(CLOSE_PIN){ p.style.display=''; if(n) n.textContent=(CURRENT_USER||'Signed in'); } else { p.style.display='none'; } }
+  const _enf=(typeof ssoEnforcing==='function'&&ssoEnforcing());
+  if(p){ if(CLOSE_PIN && !_enf){ p.style.display=''; if(n) n.textContent=(CURRENT_USER||'Signed in'); } else { p.style.display='none'; } }
   // Design panel handle is Rich-only
   const dh=document.getElementById('dsHandle'); if(dh) dh.style.display=(CLOSE_PIN && CURRENT_USER==='Rich Miller')?'flex':'none'; }
 /* ============================ Microsoft (365) sign-in + role gating ============================
@@ -5372,7 +5385,9 @@ function applyRoleUI(){
     el.style.display = (hide.indexOf(el.getAttribute('data-perm'))>=0) ? 'none' : '';
   });
   if(caps && typeof VIEW!=='undefined' && caps.tabs.indexOf(VIEW)<0){ try{ setView('floor'); }catch(e){} }
-  syncSsoPill();
+  // one-login bridge: signed-in editor/admin/design gets edit rights automatically (sign-out reloads -> clears)
+  if(ssoEnforcing() && ssoCanEdit() && !CLOSE_PIN){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; }
+  syncSsoPill(); try{ syncAuthUI(); }catch(e){}
 }
 function syncSsoPill(){
   const inP=document.getElementById('ssoIn'), outP=document.getElementById('ssoOut'), nm=document.getElementById('ssoName');
@@ -14849,6 +14864,7 @@ function renderAll(){
   { const ov=document.getElementById('dtbOverlay'); if(ov&&ov.classList.contains('show') && !(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)){
       if(dtbShared() && Date.now()-DTB_LASTWRITE>15000) dtbFetchRemote().then(r=>{ const o2=document.getElementById('dtbOverlay'); if(r&&o2&&o2.classList.contains('show')&&!(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)&&Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); renderDesignTeam(); } });
       else renderDesignTeam(); } }   // keep the Design board live (pull shared file if sharing's on), but don't clobber an in-progress edit OR a just-saved add
+  try{ applyRoleUI(); }catch(e){}
   setView(VIEW);
   restoreWallScroll(_wsnap);
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===RANGE));
