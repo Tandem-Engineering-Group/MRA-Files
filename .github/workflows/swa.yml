@@ -1,0 +1,41 @@
+name: Deploy to Azure Static Web App (preview)
+
+# Publishes a COPY of the dashboard to the MRA-Command-Center Static Web App
+# (wonderful-desert-0a27f7010.7.azurestaticapps.net). The live $web site is
+# completely untouched — this is the Step-4 login-migration preview. Auth rules
+# (floor = anonymous, everything else = gomra.com sign-in) get added to
+# staticwebapp.config.json once IT delivers the Entra client secret.
+#
+# data.js is snapshotted from the live site at deploy time, so the preview
+# shows real board data as of the deploy (it does not live-refresh yet).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  swa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage the app (dashboard + fresh data snapshot)
+        run: |
+          mkdir -p swa-app
+          cp MRA_Dashboard.html swa-app/
+          cp index.html swa-app/
+          if [ -d builder ]; then cp -r builder swa-app/; cp builder/index.html swa-app/builder.html; fi
+          if [ -d catalogue ]; then cp -r catalogue swa-app/; fi
+          curl -sSf -o swa-app/data.js "https://mrashopdash.z13.web.core.windows.net/data.js"
+          ls -la swa-app | head
+
+      - name: Deploy to the Static Web App
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_SWA_TOKEN }}
+          action: upload
+          app_location: swa-app
+          skip_app_build: true
+          skip_api_build: true
