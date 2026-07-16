@@ -2859,7 +2859,7 @@
     <div class="modal" style="max-width:580px">
       <button class="modal-close" onclick="closeUnas()" title="Close">×</button>
       <h3>⚠ Unassigned tasks <span class="count" id="unasCount"></span></h3>
-      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule, and everything drops off once it has a crew. <b>Assigned 📋 tasks don't vanish:</b> they show up in that crew's column on the FLOOR as a <b>📋 project-schedule card</b> (same 2-week window), click-through to the project editor. And because schedule lines are often generic, the <b>⚒</b> button (here and on the crew column) <b>breaks one into real shop tasks</b>: pick the trailer, type one task per line, assign + due — each becomes a normal closable task tagged to the schedule line, the line flips to <b>In Progress</b>, and when the <b>last</b> one closes the board offers <b>🟡 Mark ready</b> — the same PM sign-off loop as the design board (Megan/Al/the PM verifies &amp; closes it on the Projects tab).</div>
+      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule as <b>“MRA Shop / Sal”</b> (the MRA Shop bucket STAYS so the MRA Shop load views still count it; only the person changes on re-assign), and everything drops off once it has a crew. <b>Assigned 📋 tasks don't vanish:</b> they show up in that crew's column on the FLOOR as a <b>📋 project-schedule card</b> (same 2-week window), click-through to the project editor. And because schedule lines are often generic, the <b>⚒</b> button (here and on the crew column) <b>breaks one into real shop tasks</b>: pick the trailer, type one task per line, assign + due — each becomes a normal closable task tagged to the schedule line, the line flips to <b>In Progress</b>, and when the <b>last</b> one closes the board offers <b>🟡 Mark ready</b> — the same PM sign-off loop as the design board (Megan/Al/the PM verifies &amp; closes it on the Projects tab).</div>
       <div id="unasList" style="max-height:62vh;overflow:auto;margin-top:6px"></div>
     </div>
   </div>
@@ -3480,6 +3480,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"25.1", date:"2026-07-16", title:"\u{1F464} Assigning keeps the MRA Shop bucket — “MRA Shop / Sal”", items:[
+    "Assigning a \u{1F4CB} MRA-Shop schedule task now writes <b>“MRA Shop / Sal”</b> instead of replacing the bucket (Rich: the <b>MRA Shop load</b> views must keep counting these). The person still lands in their crew column; the ⚠ finder correctly treats bucket+person as picked-up; re-assigning swaps just the person.",
+    "Yesterday’s ~20 assignments were repaired to the same format (e.g. Trumpf/Medtronic → “MRA Shop / Sal”), so MRA Shop load is whole again." ] },
   { rev:"25.0", date:"2026-07-16", title:"⚒ Break a schedule task into shop tasks — with the PM sign-off loop", items:[
     "Schedule lines are often generic (“Fabrication and Installation in Shop”) — a new <b>⚒</b> button on every \u{1F4CB} task (crew columns + the ⚠ finder) opens <b>Break into shop tasks</b>: pick the trailer (best match pre-selected), type <b>one task per line</b>, assign + due — each line becomes a real, closable shop task on that job, tagged back to the schedule line, and the schedule line flips to <b>In Progress</b>.",
     "<b>Same sign-off loop as the design board:</b> when the <b>last</b> of those shop tasks is closed, the board offers to flag the schedule line <b>\u{1F7E1} Pending Verification</b> — it lands in the Projects tab's verification queue where <b>the PM (Megan/Al) or Rich verifies &amp; closes it</b>, or sends it back." ] },
@@ -12695,13 +12698,18 @@ function dtbReassignTo(general, a, b, who){
     renderDesignTeam(); return;
   }
   const p=oProj(a), t=p&&projTaskByAnyId(p,b); if(!t){ renderDesignTeam(); return; }
-  if((t.who||'')===who){ renderDesignTeam(); return; }
+  // Keep the "MRA Shop" bucket ALONGSIDE the person ("MRA Shop / Sal") so the MRA Shop load
+  // views still count the task (Rich). Re-assigning swaps just the person, bucket stays.
+  let newWho=who;
+  { const parts=String(t.who||'').split('/').map(x=>x.trim()).filter(Boolean);
+    if(parts.some(x=>/^mra\s*shop$/i.test(x)) && !/mra\s*shop/i.test(who)) newWho='MRA Shop / '+who; }
+  if((t.who||'')===newWho){ renderDesignTeam(); return; }
   const payload={ action:'editProjectTask', project:a, pin:CLOSE_PIN, user:CURRENT_USER,
     id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
-    assigned:who, status:t.st||'', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
+    assigned:newWho, status:t.st||'', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
     milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
     budget:(t.bud!=null?t.bud:''), comments:t.cm||'' };
-  shopWrite(payload); t.who=who; oRecomputeProject(p); oApply();
+  shopWrite(payload); t.who=newWho; oRecomputeProject(p); oApply();
   try{ if(typeof dtbNotifyNewTask==='function') dtbNotifyNewTask(who, t.t||'', t.finISO||''); }catch(e){}
   renderDesignTeam();
 }
@@ -14450,7 +14458,8 @@ function unassignedTasks(){
   // overdue) surface here — months-out schedule lines stay put. Assigning writes the project schedule.
   { const today=D.todayISO||localISO(Date.now());
     const lim=localISO(Date.parse(today)+14*86400000);
-    const isShop=w=>String(w||'').split('/').some(x=>x.trim().toLowerCase()==='mra shop');
+    const isShop=w=>{ const ps=String(w||'').split('/').map(x=>x.trim().toLowerCase()).filter(Boolean);
+      return ps.length>0 && ps.every(x=>x==='mra shop'); };   // "MRA Shop / Sal" = picked up → not unassigned
     (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{
       if(t.done===true || /complete/i.test(String(t.st||''))) return;
       if(!isShop(t.who)) return;
@@ -14483,7 +14492,8 @@ function ptbOpen(proj, handle){
   live.forEach(j=>{ const jn=norm(j.project); if(!best&&jn&&pn&&(jn.indexOf(pn.slice(0,10))>=0||pn.indexOf(jn.slice(0,10))>=0)) best=String(j.row); });
   document.getElementById('ptbJob').innerHTML=live.map(j=>`<option value="${escA(String(j.row))}"${String(j.row)===best?' selected':''}>${esc(j.project)}${j.jobNum?(' · '+esc(j.jobNum)):''}${j.bay?(' — '+esc(j.bay)):''}</option>`).join('')+`<option value="__general__"${best?'':' selected'}>🛠 General (no trailer)</option>`;
   document.getElementById('ptbTasks').value='';
-  document.getElementById('ptbWho').value=(t.who&&!/mra\s*shop/i.test(t.who))?t.who:'';
+  { const ps=String(t.who||'').split('/').map(x=>x.trim()).filter(x=>x&&!/^mra\s*shop$/i.test(x));
+    document.getElementById('ptbWho').value=ps.join(' / '); }
   document.getElementById('ptbDue').value=t.finISO||'';
   document.getElementById('ptbMsg').textContent='';
   const b=document.getElementById('ptbGo'); b.disabled=false; b.textContent='➕ Create tasks';
