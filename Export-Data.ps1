@@ -1099,30 +1099,47 @@ if (Test-Path $SamsaraTokenFile) {
 # dashboard can say "tracker dead - per Fleetio". Samsara stays primary whenever fresher.
 function _LocDT($s){ try { return ([datetime]::Parse([string]$s, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal)) } catch { try { return [datetime]::Parse([string]$s) } catch { return $null } } }
 try {
-    $fbN = 0; $fbProbe = $true
+    $fbN = 0; $fbTried = 0; $fbProbe = $true
+    $staleCut = [datetime]::UtcNow.AddDays(-14)
+    # candidates: units whose Samsara fix is stale or missing (dead tracker / no tracker at all)
+    $cands = @()
     foreach ($v in @($veh)) {
-        $cle = $v.current_location_entry
-        if ($fbProbe -and $v.name) { $fbProbe = $false
-            "loc-fallback probe: first vehicle '$($v.name)' current_location_entry present: $([bool]$cle)" | Out-File $SamDbg -Append -Encoding utf8 }
-        if (-not $cle) { continue }
         $key = NormFleet $v.name; if ($key -eq '') { continue }
-        $cd = $cle.date; if (-not $cd) { $cd = $cle.created_at }
-        $cdt = _LocDT $cd; if (-not $cdt) { continue }
         $ex = $fLoc[$key]
         $exdt = if ($ex -and $ex.atISO) { _LocDT $ex.atISO } else { $null }
-        if ($exdt -and $exdt -ge $cdt) { continue }             # Samsara fix is fresher - keep it
-        $addr = [string]$cle.address
-        $lat = $null; $lng = $null
-        if ($cle.geolocation) { $lat = $cle.geolocation.latitude; $lng = $cle.geolocation.longitude }
-        $place = PlaceFromAddr $addr
-        if ($place -eq '' -and $null -ne $lat -and $null -ne $lng) { $place = ("{0:N3}, {1:N3}" -f [double]$lat, [double]$lng) }
-        if ($place -eq '') { continue }
-        if ($null -ne $lat) { $lat = [math]::Round([double]$lat,5) }
-        if ($null -ne $lng) { $lng = [math]::Round([double]$lng,5) }
-        $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = [string]$cd; yard = ''; lat = $lat; lng = $lng; src = 'fleetio' }
-        $fbN++
+        if ($exdt -and $exdt -gt $staleCut) { continue }        # fresh Samsara - nothing to do
+        $cands += ,@($v, $key, $exdt)
     }
-    Write-Output "  -> Fleetio location fallback: $fbN unit(s) using Fleetio's newer last-known location"
+    # dead-tracker units first (a stale fix beats none for priority), cap the API calls
+    $cands = @($cands | Sort-Object { if ($null -ne $_[2]) { 0 } else { 1 } })
+    foreach ($c in $cands) {
+        if ($fbTried -ge 60) { break }
+        $v = $c[0]; $key = $c[1]; $exdt = $c[2]
+        $fbTried++
+        try {
+            $resp = Invoke-WebRequest -Uri "https://secure.fleetio.com/api/v1/vehicles/$($v.id)" -Headers $fhead -UseBasicParsing -Method GET -TimeoutSec 20
+            $vd = $resp.Content | ConvertFrom-Json
+            if ($fbProbe) { $fbProbe = $false
+                $lk = @($vd.PSObject.Properties.Name | Where-Object { $_ -match 'location' }) -join ','
+                Write-Output "  -> loc-fallback probe ($($v.name)): location-ish fields = [$lk]" }
+            $cle = $vd.current_location_entry; if (-not $cle) { Start-Sleep -Milliseconds 250; continue }
+            $cd = $cle.date; if (-not $cd) { $cd = $cle.created_at }
+            $cdt = _LocDT $cd; if (-not $cdt) { Start-Sleep -Milliseconds 250; continue }
+            if ($exdt -and $exdt -ge $cdt) { Start-Sleep -Milliseconds 250; continue }   # Samsara still fresher
+            $addr = [string]$cle.address
+            $lat = $null; $lng = $null
+            if ($cle.geolocation) { $lat = $cle.geolocation.latitude; $lng = $cle.geolocation.longitude }
+            $place = PlaceFromAddr $addr
+            if ($place -eq '' -and $null -ne $lat -and $null -ne $lng) { $place = ("{0:N3}, {1:N3}" -f [double]$lat, [double]$lng) }
+            if ($place -eq '') { Start-Sleep -Milliseconds 250; continue }
+            if ($null -ne $lat) { $lat = [math]::Round([double]$lat,5) }
+            if ($null -ne $lng) { $lng = [math]::Round([double]$lng,5) }
+            $fLoc[$key] = [PSCustomObject]@{ place = $place; full = $addr; atISO = [string]$cd; yard = ''; lat = $lat; lng = $lng; src = 'fleetio' }
+            $fbN++
+        } catch { }
+        Start-Sleep -Milliseconds 250
+    }
+    Write-Output "  -> Fleetio location fallback: $fbN of $fbTried stale/no-GPS unit(s) got Fleetio's newer last-known location"
 } catch { Write-Output "  -> Fleetio location fallback failed: $($_.Exception.Message)" }
 
 
