@@ -2489,6 +2489,25 @@
   </div>
 
   <!-- ===================== LEAVE MODAL (add / edit time-off) ===================== -->
+  <!-- ⚒ Break a project-schedule task into real shop tasks (rev 25.0) -->
+  <div class="modal-overlay" id="ptbModal" onclick="ptbClose(event)">
+    <div class="modal" style="max-width:520px">
+      <button class="modal-close" onclick="ptbClose()" title="Close">×</button>
+      <h3>⚒ Break into shop tasks</h3>
+      <div class="msub" id="ptbSub"></div>
+      <div class="addform">
+        <div><label>Put the tasks on</label><select id="ptbJob"></select></div>
+        <div><label>Shop tasks — ONE PER LINE (each line becomes its own closable task)</label><textarea id="ptbTasks" rows="6" placeholder="Build base frame&#10;Cut + fit wall panels&#10;Paint &amp; seal"></textarea></div>
+        <div class="addrow2">
+          <div><label>Assign to</label><input id="ptbWho" list="asgNames" placeholder="Sal, Electricians, …" autocomplete="off"></div>
+          <div><label>Due</label><input id="ptbDue" type="date"></div>
+        </div>
+        <div class="msub">The tasks land on that trailer's card + the crew's column, tagged to this schedule line. The schedule line flips to <b>In Progress</b> — and when the <b>last</b> shop task is closed, the board offers to flag it <b>🟡 ready for the PM to verify</b> (same sign-off loop as the design board; the PM closes it from the Projects tab).</div>
+        <div id="ptbMsg" style="font-size:12px;margin-top:6px"></div>
+        <div class="addbtns"><button class="btn-ghost" onclick="ptbClose()">Cancel</button><button class="btn-primary" id="ptbGo" onclick="ptbSubmit()">➕ Create tasks</button></div>
+      </div>
+    </div>
+  </div>
   <div class="modal-overlay" id="leaveModal" onclick="closeLeave(event)">
     <div class="modal" style="max-width:440px">
       <button class="modal-close" onclick="closeLeave()" title="Close">×</button>
@@ -2840,7 +2859,7 @@
     <div class="modal" style="max-width:580px">
       <button class="modal-close" onclick="closeUnas()" title="Close">×</button>
       <h3>⚠ Unassigned tasks <span class="count" id="unasCount"></span></h3>
-      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule, and everything drops off once it has a crew. <b>Assigned 📋 tasks don't vanish:</b> they show up in that crew's column on the FLOOR as a <b>📋 project-schedule card</b> (same 2-week window), click-through to the project editor.</div>
+      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule, and everything drops off once it has a crew. <b>Assigned 📋 tasks don't vanish:</b> they show up in that crew's column on the FLOOR as a <b>📋 project-schedule card</b> (same 2-week window), click-through to the project editor. And because schedule lines are often generic, the <b>⚒</b> button (here and on the crew column) <b>breaks one into real shop tasks</b>: pick the trailer, type one task per line, assign + due — each becomes a normal closable task tagged to the schedule line, the line flips to <b>In Progress</b>, and when the <b>last</b> one closes the board offers <b>🟡 Mark ready</b> — the same PM sign-off loop as the design board (Megan/Al/the PM verifies &amp; closes it on the Projects tab).</div>
       <div id="unasList" style="max-height:62vh;overflow:auto;margin-top:6px"></div>
     </div>
   </div>
@@ -3461,6 +3480,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"25.0", date:"2026-07-16", title:"⚒ Break a schedule task into shop tasks — with the PM sign-off loop", items:[
+    "Schedule lines are often generic (“Fabrication and Installation in Shop”) — a new <b>⚒</b> button on every \u{1F4CB} task (crew columns + the ⚠ finder) opens <b>Break into shop tasks</b>: pick the trailer (best match pre-selected), type <b>one task per line</b>, assign + due — each line becomes a real, closable shop task on that job, tagged back to the schedule line, and the schedule line flips to <b>In Progress</b>.",
+    "<b>Same sign-off loop as the design board:</b> when the <b>last</b> of those shop tasks is closed, the board offers to flag the schedule line <b>\u{1F7E1} Pending Verification</b> — it lands in the Projects tab's verification queue where <b>the PM (Megan/Al) or Rich verifies &amp; closes it</b>, or sends it back." ] },
   { rev:"24.9", date:"2026-07-16", title:"\u{1F4CB} Assigned project tasks now show in the crew columns", items:[
     "Assigning a \u{1F4CB} project-schedule task in the ⚠ finder wrote the crew back to the schedule — and then it showed <b>nowhere on the shop board</b> (the crew columns only knew about shop tasks), so yesterday's ~20 assignments looked like they vanished. Now every crew's column also shows their <b>\u{1F4CB} project-schedule work</b> (one card per project, ▶ start → finish dates, same 2-week/overdue window as the finder; click opens the project editor). The column header counts them separately: “12 open · 3 trailers · 2 \u{1F4CB}”." ] },
   { rev:"24.8", date:"2026-07-15", title:"\u{1F9FE} Work Orders: print ALL or only what changed since yesterday", items:[
@@ -5311,7 +5333,7 @@ function closeTaskByName(proj, task, el){
   shopWrite({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});   // queued (serialized) send
   rememberClosed(proj, task);
   const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.filter(x=>!x.done&&x.t===task).sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')))[0];
-    if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); spawnRepeat(j,t); } oRecompute(j); }
+    if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); spawnRepeat(j,t); ptOfferReady(t.cm); } oRecompute(j); }
   oApply();   // instant: task drops out of open list now, not in 15 min
   fioOfferResolve(task);   // 🔧 #NNN fleet-linked task? offer to resolve the Fleetio issue too
 }
@@ -10307,6 +10329,7 @@ function renderSal(D){
           const w=String(t.who||'').trim(); if(!w||!re.test(w)) return false;
           const dt=t.startISO||t.finISO; return !!dt && dt<=limP;
         }).map(t=>({disp:String(t.t||''), raw:null, isProj:true, ph:(t.phase||'').trim(), who:t.who||'',
+          handle:((t.id!=null&&t.id!=='')?String(t.id):(t._id!=null?('s'+t._id):null)),
           closed:false, cl:null, op:null, due:(t.finISO||null), st0:(t.startISO||null), files:null}))
           .filter(x=>x.disp).filter(t=>dueInWindow(t.due));
         if(rows.length) out.push({bay:'📋 project schedule', project:p.name, jobNum:'', open:rows, isProj:true});
@@ -10339,7 +10362,8 @@ function renderSal(D){
       `<div class="sb">project schedule · next 2 wks</div>`+
       `<ol>${s.open.slice().sort(_salTaskCmp).map(o=>{const odOver=o.due&&daysBetween(o.due,today)<0;
         const rng=(o.st0||o.due)?` <span class="duedate${odOver?' od':''}">▶ ${o.st0?esc(fmtMDY(o.st0)):'…'} → ${o.due?esc(fmtMDY(o.due)):'…'}</span>`:'';
-        return `<li onclick="openProjectEditor('${escJsAttr(s.project)}')" style="cursor:pointer" title="Opens the project editor (needs code)">📋 ${esc(o.disp)}${rng}${o.ph?` <span class="opdate">· ${esc(o.ph)}</span>`:''}</li>`;}).join('')}</ol></div>`; }
+        const brk=o.handle?`<span class="qa" onclick="event.stopPropagation();ptbOpen('${escJsAttr(s.project)}','${escJsAttr(o.handle)}')" title="⚒ Break this schedule line into real shop tasks on a trailer — each becomes its own closable task; closing the last one flags this line 🟡 for the PM to verify (needs code)">⚒</span>`:'';
+        return `<li onclick="openProjectEditor('${escJsAttr(s.project)}')" style="cursor:pointer" title="Opens the project editor (needs code)">${brk}📋 ${esc(o.disp)}${rng}${o.ph?` <span class="opdate">· ${esc(o.ph)}</span>`:''}</li>`;}).join('')}</ol></div>`; }
     return `<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
     `<ol>${s.open.slice().sort(_hotCmp).map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
@@ -14442,6 +14466,82 @@ function unassignedTasks(){
 }
 // \u{1F4CB} assign a surfaced project-schedule task: same picker, writes back via the design-board
 // path (editProjectTask by id) so the PROJECT SCHEDULE gets the crew — not just the board.
+// ---- ⚒ Break a project-schedule task into real shop tasks (rev 25.0) ----
+// Generic schedule lines ("Fabrication and Installation in Shop") become several concrete,
+// closable SHOP tasks on a trailer; the schedule line is the parent. Closing the last child
+// offers the design-board sign-off: 🟡 Pending Verification -> PM verifies on the Projects tab.
+let _PTB=null;
+function ptbOpen(proj, handle){
+  if(!ensureAuth('break a project task into shop tasks', ()=>ptbOpen(proj,handle))) return;
+  const p=oProj(proj), t=p&&projTaskByAnyId(p,handle);
+  if(!t){ alert("Couldn't find that schedule task — try reloading."); return; }
+  _PTB={proj:proj, handle:handle};
+  document.getElementById('ptbSub').innerHTML='<b>'+esc(t.t||'')+'</b> — '+esc(proj)+((t.startISO||t.finISO)?(' · ▶ '+fmtMD(t.startISO||t.finISO)+((t.finISO&&t.finISO!==t.startISO)?(' → '+fmtMD(t.finISO)):'')):'');
+  const D=window.MRA_DATA||{}; const live=(D.jobs||[]).filter(j=>j.category!=='leave'&&(j.status||'').toLowerCase()!=='shipped'&&j.project!==GENERAL_PROJ);
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const pn=norm(proj); let best='';
+  live.forEach(j=>{ const jn=norm(j.project); if(!best&&jn&&pn&&(jn.indexOf(pn.slice(0,10))>=0||pn.indexOf(jn.slice(0,10))>=0)) best=String(j.row); });
+  document.getElementById('ptbJob').innerHTML=live.map(j=>`<option value="${escA(String(j.row))}"${String(j.row)===best?' selected':''}>${esc(j.project)}${j.jobNum?(' · '+esc(j.jobNum)):''}${j.bay?(' — '+esc(j.bay)):''}</option>`).join('')+`<option value="__general__"${best?'':' selected'}>🛠 General (no trailer)</option>`;
+  document.getElementById('ptbTasks').value='';
+  document.getElementById('ptbWho').value=(t.who&&!/mra\s*shop/i.test(t.who))?t.who:'';
+  document.getElementById('ptbDue').value=t.finISO||'';
+  document.getElementById('ptbMsg').textContent='';
+  const b=document.getElementById('ptbGo'); b.disabled=false; b.textContent='➕ Create tasks';
+  try{ if(typeof fillAsgNames==='function') fillAsgNames(); }catch(e){}
+  document.getElementById('ptbModal').classList.add('show');
+  document.getElementById('ptbTasks').focus();
+}
+function ptbClose(e){ if(!e || e.target.id==='ptbModal' || (e.target.classList&&e.target.classList.contains('modal-close'))) document.getElementById('ptbModal').classList.remove('show'); }
+function _ptTag(proj, handle){ return '[pt:'+String(proj).replace(/[\[\]|]/g,' ').trim()+'|'+String(handle)+']'; }
+function ptbSubmit(){
+  if(!_PTB) return;
+  const lines=document.getElementById('ptbTasks').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const msg=document.getElementById('ptbMsg');
+  if(!lines.length){ msg.style.color='var(--red)'; msg.textContent='Type at least one task (one per line).'; return; }
+  const jv=document.getElementById('ptbJob').value; const D=window.MRA_DATA||{};
+  const jsel=(jv!=='__general__')?(D.jobs||[]).find(x=>String(x.row)===jv):null;
+  const proj=jsel?jsel.project:GENERAL_PROJ, jobNum=jsel?(jsel.jobNum||''):'', bay=jsel?(jsel.bay||''):'General';
+  const who=document.getElementById('ptbWho').value.trim();
+  const due=document.getElementById('ptbDue').value||'';
+  const tag=_ptTag(_PTB.proj,_PTB.handle);
+  const btn=document.getElementById('ptbGo'); btn.disabled=true; btn.textContent='Adding…';
+  let i=0;
+  const fire=()=>{
+    if(i>=lines.length){
+      try{ const p=oProj(_PTB.proj), t=p&&projTaskByAnyId(p,_PTB.handle);
+        if(t && !projIsDone(t) && !projIsPendingVerify(t) && !/in progress/i.test(t.st||'')){
+          shopWrite({ action:'editProjectTask', project:_PTB.proj, pin:CLOSE_PIN, user:CURRENT_USER,
+            id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
+            assigned:t.who||'', status:'In Progress', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
+            milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
+            budget:(t.bud!=null?t.bud:''), comments:t.cm||'' });
+          t.st='In Progress'; oRecomputeProject(p); }
+      }catch(e){}
+      document.getElementById('ptbModal').classList.remove('show');
+      oApply();
+      alert('✓ Created '+lines.length+' shop task'+(lines.length>1?'s':'')+' on '+proj+'.\n\nThe schedule line is now In Progress. When the LAST of these is closed, the board offers to flag it 🟡 ready for the PM to verify.');
+      return; }
+    const task=lines[i++];
+    shopWrite({ action:'addTask', project:proj, jobNum:jobNum, bay:bay, task:task, assigned:who,
+      milestone:'', comments:tag, due:due, pin:CLOSE_PIN, user:CURRENT_USER });
+    const tobj={t:task, who:who, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:'', cm:tag, due:due||null};
+    let jj=oJob(proj);
+    if(!jj && proj===GENERAL_PROJ){ jj={row:'general',bay:'General',project:GENERAL_PROJ,jobNum:'',status:'',category:'general',tasks:[],openTasks:[],openCount:0,doneCount:0,salOpen:0}; (window.MRA_DATA.jobs=window.MRA_DATA.jobs||[]).push(jj); }
+    if(jj){ if(!jj.tasks) jj.tasks=[]; jj.tasks.push(tobj); pendAdd({kind:'jobTask', project:proj, obj:tobj}); oRecompute(jj); }
+    setTimeout(fire, 420);
+  };
+  fire();
+}
+// Closing the LAST open shop task tagged to a schedule line -> offer the design-board sign-off.
+function ptOfferReady(cm){
+  try{ const m=String(cm||'').match(/\[pt:([^|\]]+)\|([^\]]+)\]/); if(!m) return;
+    const proj=m[1].trim(), handle=m[2].trim(); const D=window.MRA_DATA||{};
+    const tag='[pt:'+proj+'|'+handle+']';
+    const left=(D.jobs||[]).reduce((n,j)=>n+((j.tasks||[]).filter(t=>!t.done&&String(t.cm||'').indexOf(tag)>=0).length),0);
+    if(left>0) return;
+    setTimeout(()=>{ try{ dtbMarkReady(proj, handle); }catch(e){} }, 250);
+  }catch(e){}
+}
 function unasProjAsg(pname, handle){
   if(!ensureAuth('assign a project task', ()=>unasProjAsg(pname,handle))) return;
   qaOpen(null, w=>{ dtbReassignTo(false, pname, handle, w); setTimeout(()=>{ try{ renderUnas(); updateUnasChip(); }catch(e){} },80); });
@@ -14463,7 +14563,7 @@ function renderUnas(){
       : (j0.bay?` <span class="unas-bay">${esc(j0.bay)}</span>`:'');
     return `<div class="unas-job"><div class="unas-jh">${esc(j0.proj)}${j0.jobNum?` <span class="unas-jn">${esc(j0.jobNum)}</span>`:''}${tag}</div>`
       + arr.map(t=>{ const ctx=(t.kind==='proj')?[t.par?('\u21b3 '+t.par):'', t.ph, t.cm?t.cm.slice(0,180):''].filter(Boolean).join(' \u00b7 '):'';
-        return `<div class="unas-t">${t.kind==='proj'?`<span class="qa" onclick="event.stopPropagation();unasProjAsg('${escA(t.proj)}','${escA(t.handle)}')" title="Assign this project-schedule task to a crew — writes the crew back to the project schedule">\u{1F464}</span>`:qaChip(t.proj,t.raw)}<span class="unas-tx">${t.kind==='proj'?'📋 ':''}${esc(t.disp)}</span>${t.kind==='proj'?` <span class="unas-due${(today&&t.due&&t.due<today)?' od':''}" title="Start → finish from the project schedule. It's on this list because the START (or an overdue finish) falls inside the 2-week window — the finish can be later.">▶ ${esc(fmtMD(t.st0||t.due))}${(t.due&&t.due!==t.st0)?' → '+esc(fmtMD(t.due)):''}</span>`:(t.due?` <span class="unas-due${(today&&t.due<today)?' od':''}">📅 ${esc(fmtMD(t.due))}</span>`:'')}${ctx?`<div class="unas-ctx" title="${escA(ctx)}">${esc(ctx)}</div>`:''}</div>`; }).join('')
+        return `<div class="unas-t">${t.kind==='proj'?`<span class="qa" onclick="event.stopPropagation();unasProjAsg('${escA(t.proj)}','${escA(t.handle)}')" title="Assign this project-schedule task to a crew — writes the crew back to the project schedule">\u{1F464}</span><span class="qa" onclick="event.stopPropagation();ptbOpen('${escA(t.proj)}','${escA(t.handle)}')" title="⚒ Break this schedule line into real shop tasks on a trailer — each becomes its own closable task; closing the last one flags this line 🟡 for the PM to verify">⚒</span>`:qaChip(t.proj,t.raw)}<span class="unas-tx">${t.kind==='proj'?'📋 ':''}${esc(t.disp)}</span>${t.kind==='proj'?` <span class="unas-due${(today&&t.due&&t.due<today)?' od':''}" title="Start → finish from the project schedule. It's on this list because the START (or an overdue finish) falls inside the 2-week window — the finish can be later.">▶ ${esc(fmtMD(t.st0||t.due))}${(t.due&&t.due!==t.st0)?' → '+esc(fmtMD(t.due)):''}</span>`:(t.due?` <span class="unas-due${(today&&t.due<today)?' od':''}">📅 ${esc(fmtMD(t.due))}</span>`:'')}${ctx?`<div class="unas-ctx" title="${escA(ctx)}">${esc(ctx)}</div>`:''}</div>`; }).join('')
       + `</div>`;
   }).join('');
 }

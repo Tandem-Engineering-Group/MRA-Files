@@ -318,6 +318,31 @@ no JS change needed. Test: J1559 On Cloud card shows 📍 after next export.
 Also in flight: SWA created?(await Rich URL+token) · Infowheels 3D builder awaiting Brandon/Mark OBJ
 exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
 
+## Shipped 2026-07-16 AM (rev 24.6 → 25.0) — stale GPS · repeat-close fix · WO 24h filter · 📋 tasks on crew columns · ⚒ break-into-shop-tasks
+
+- **24.6 stale GPS:** unit 83 FM Global's tracker last pinged 09/2022 from Dauphin Cty PA — board showed it as
+  current ("⚠ GPS: Dauphin County, PA"). `_gpsStale(loc)` (>14d) → muted "📡 GPS stale · last …" chip everywhere
+  (bay pills, meeting `_mtgGps` {stale:true}, lot cards, What's-Next state/mismatch, deficiency GPS list, at-MRA
+  filter keys). Stale fixes never make location claims. (Tell Doug: unit 83 + 1214 trackers dead.)
+- **24.7 recurring tasks:** Rich closed Jeff's weekly eyewash 3× — closing a 🔁 spawns an identically-named
+  next-cycle copy instantly, looked like a failed close. `isSnzRep(t)` (open+repeat+due>today+3d) hides the copy
+  from cards/crew queues/sheets/WO prints + `oRecompute` excludes it (recompute pass at renderAll, idempotent);
+  close (optimistic + `_findId` ShopTasks) targets earliest-due OPEN copy; spawnRepeat never stacks (any open
+  same-name copy blocks). Data was clean — no dup rows landed from the 3 closes.
+- **24.8 WO 24h filter (Stephanie):** print picker "🧾 Which:" radio + `?wo=doug` page "Show: 🗂 All / 🕐 Updated
+  last 24h" buttons (`opts.since`; job prints only if a task was added (op) or closed (cl) since yesterday for
+  that crew; green NEW tag on fresh lines; `&new=1` deep-links filtered).
+- **24.9 📋 project tasks on crew columns:** Rich's ~20 finder assigns "disappeared" — writes all landed (32 crewed
+  project tasks in window), but crew columns only showed SHOP tasks. Now `build(re)` appends one 📋 card per
+  project (same window: startISO||finISO ≤ today+14, not done/complete, no milestones, who matches crew re);
+  header "N open · M trailers · K 📋". Card/lines click → openProjectEditor(name).
+- **25.0 ⚒ break-into-shop-tasks + PM sign-off:** ⚒ button on 📋 lines (crew columns + ⚠ finder) → `ptbOpen`
+  modal (job picker best-match preselect, one task per line, assign+due) → each line = real addTask on that job
+  with `[pt:<proj>|<handle>]` in comments (`_ptTag`), parent schedule line → In Progress. `ptOfferReady(cm)` on
+  close: when the LAST tagged sibling closes → `dtbMarkReady` (existing design-board machinery) → 🟡 Pending
+  Verification → Projects-tab verify queue (canVerify: PM/Rich). Verified headless end-to-end (Trumpf Flooring →
+  3 tasks → closes → "goes to Al Karloff to verify").
+
 ## Shipped 2026-07-15 PM (second wave, rev 24.3 → 24.5) — floor cleanup · 🆕 badge · leave calendar/upload
 
 - **#1195 "Broken Vent" investigation (Rich: "not showing"):** it WAS everywhere (data.js since 7/13
