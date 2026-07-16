@@ -318,6 +318,34 @@ no JS change needed. Test: J1559 On Cloud card shows 📍 after next export.
 Also in flight: SWA created?(await Rich URL+token) · Infowheels 3D builder awaiting Brandon/Mark OBJ
 exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
 
+## Shipped 2026-07-16 PM (rev 25.5 → 25.8 · GPS fallback · catalogue rules re-audit · 3D builder)
+
+- **25.5 crew ?sheet= links + prints carry 📋 schedule tasks** (buildCrewSheetHtml merge, same rules as columns).
+- **25.6 InfoWheels 3D Builder**: ☰ Menu link + root alias `/builder.html` (Azure 404s subfolder URLs
+  without index.html). Builder = self-contained three.js r147 (UMD+OrbitControls+RoomEnvironment embedded),
+  smooth ExtrudeGeometry ProMaster-class van hull (first boxy version = "dog ass" per Rich), wrap/accent
+  colors (LinearToneMapping keeps swatch-true color), floor/wall finishes, 4 cabinet slots/side
+  (empty/low/high/bench), 📸 screenshot, 🔗 config links (state in URL hash). deploy.yml uploads builder/.
+  Real IW2.0 Inventor OBJ exports from Brandon/Mark drop in later; UI stays.
+- **📡 GPS Fleetio fallback (Rich: "match Fleetio, note gps dead")**: Export-Data.ps1 (default branch,
+  commit after 33c08de) — after Samsara, units with stale(>14d)/missing fix get a per-vehicle GET
+  /api/v1/vehicles/{id} (the index does NOT embed current_location_entry; detail does; dead-tracker
+  candidates first, cap 60, 250ms gaps) and use the newer Fleetio last-known location with src:'fleetio'.
+  22 units gained locations (unit 83 → Madison Heights 4/24 ✓, never-tracked client trailers too).
+  Dash 25.7: `_gpsStaleTxt` — >60d = "tracker DEAD", "· per Fleetio" source note, all 4 chip sites.
+- **25.8 covered schedule lines hide**: `_ptCov` (open shop tasks' [pt:] tags + exact-normalized text on
+  the main job) filters all 3 📋 collectors — a schedule line being worked as a shop task shows ONCE
+  (Rich's Trumpf "2 tasks for the same" complaint; his ⚒-created tasks carried tags and self-resolved).
+- **🗂 CATALOGUE: Quintin's Product Lookup Rules V2.1 locked in** at `catalogue/PRODUCT_RULES.md` — THE
+  standard for every import. Subagent re-audit of the IMPORT-001..185 batch (commit e7d6533f, deployed):
+  185 → 156 proper products (5 deduped into existing, 11 within-batch, 13 fee/service lines removed +
+  17 history rows), all real DDCCSSFFF-III ids (existing CC/SS code map reused; new cats: Hydraulics,
+  Vehicle Accessories, Shop Equipment, Wire & Cable, Networking, Computers & Tablets, Furniture),
+  315 history rows relinked, canonical names per the category rule table. review_status:
+  365 ready / 38 manual_review (8020 bare SKUs, VHB 4950 possible dupe, Starlink possible dupe, CNC perf
+  sheet kept as custom product, etc. — Quintin should sweep these in the Table tab). Validator all-pass;
+  37 pre-existing `-Sxx` sub-item rows grandfathered (IDs permanent). Zero IMPORT- ids remain live.
+
 ## Shipped 2026-07-16 AM part 2 (rev 25.1 → 25.4) — MRA Shop bucket · J#-linking · merges · perf
 
 - **25.1 "MRA Shop / Sal" (Rich: keep MRA Shop load):** `dtbReassignTo` preserves the MRA Shop bucket
