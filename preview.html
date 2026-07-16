@@ -2840,7 +2840,7 @@
     <div class="modal" style="max-width:580px">
       <button class="modal-close" onclick="closeUnas()" title="Close">×</button>
       <h3>⚠ Unassigned tasks <span class="count" id="unasCount"></span></h3>
-      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule, and everything drops off once it has a crew.</div>
+      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule, and everything drops off once it has a crew. <b>Assigned 📋 tasks don't vanish:</b> they show up in that crew's column on the FLOOR as a <b>📋 project-schedule card</b> (same 2-week window), click-through to the project editor.</div>
       <div id="unasList" style="max-height:62vh;overflow:auto;margin-top:6px"></div>
     </div>
   </div>
@@ -3461,6 +3461,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"24.9", date:"2026-07-16", title:"\u{1F4CB} Assigned project tasks now show in the crew columns", items:[
+    "Assigning a \u{1F4CB} project-schedule task in the ⚠ finder wrote the crew back to the schedule — and then it showed <b>nowhere on the shop board</b> (the crew columns only knew about shop tasks), so yesterday's ~20 assignments looked like they vanished. Now every crew's column also shows their <b>\u{1F4CB} project-schedule work</b> (one card per project, ▶ start → finish dates, same 2-week/overdue window as the finder; click opens the project editor). The column header counts them separately: “12 open · 3 trailers · 2 \u{1F4CB}”." ] },
   { rev:"24.8", date:"2026-07-15", title:"\u{1F9FE} Work Orders: print ALL or only what changed since yesterday", items:[
     "For Stephanie’s daily maintenance email (and the \u{1F5A8} print picker): a new <b>\u{1F9FE} Which</b> choice — <b>\u{1F5C2} All work orders</b> (unchanged default) or <b>\u{1F550} Only updated in the last 24 hours</b>: a job prints only if a task was <b>added or closed</b> since yesterday, and freshly-added lines carry a green <b>NEW</b> tag.",
     "The emailed <span class=\"k\">?wo=doug</span> page gets the same <b>Show: \u{1F5C2} All / \u{1F550} Updated last 24h</b> buttons up top — nobody needs a new link, and <span class=\"k\">?wo=doug&amp;new=1</span> opens the filtered set directly if you want the email to default to it." ] },
@@ -10294,6 +10296,21 @@ function renderSal(D){
         .filter(t=> t.closed || dueInWindow(t.due));   // timeframe picker filters OPEN tasks by due date (closed-7d always show)
       if(open.length) out.push({bay:j.bay,project:j.project,jobNum:j.jobNum,open});
     });
+    // 📋 PROJECT-schedule tasks assigned to this crew (e.g. via the ⚠ finder's 👤 assign) — the
+    // shop board is where crews look, so schedule work rides their column too. Same window as
+    // the finder: starts/finishes within 2 weeks, or overdue. Grouped one card per project.
+    { const limP=localISO(Date.parse(today)+14*86400000);
+      (D.projects||[]).forEach(p=>{
+        const rows=(p.tasks||[]).filter(t=>{
+          if(t.done===true || /complete/i.test(String(t.st||''))) return false;
+          if(/yes/i.test(String(t.ml||''))) return false;             // milestones aren't work items
+          const w=String(t.who||'').trim(); if(!w||!re.test(w)) return false;
+          const dt=t.startISO||t.finISO; return !!dt && dt<=limP;
+        }).map(t=>({disp:String(t.t||''), raw:null, isProj:true, ph:(t.phase||'').trim(), who:t.who||'',
+          closed:false, cl:null, op:null, due:(t.finISO||null), st0:(t.startISO||null), files:null}))
+          .filter(x=>x.disp).filter(t=>dueInWindow(t.due));
+        if(rows.length) out.push({bay:'📋 project schedule', project:p.name, jobNum:'', open:rows, isProj:true});
+      }); }
     // Sort tasks WITHIN each trailer (unless keeping raw trailer order).
     if(SAL_SORT!=='bay') out.forEach(s=>s.open.sort(_salTaskCmp));
     // Then order the trailer cards themselves.
@@ -10317,7 +10334,13 @@ function renderSal(D){
     }
     return out;
   };
-  const card=(s)=>`<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
+  const card=(s)=>{ if(s.isProj){
+    return `<div class="salcard"><div class="sh jname" onclick="openProjectEditor('${escJsAttr(s.project)}')" title="PROJECT-schedule work assigned to this crew (from the ⚠ finder's 👤 assign, or the schedule itself). Click to open the project's task editor (needs code) — closing/edits happen there.">📋 ${esc(s.project)}</div>`+
+      `<div class="sb">project schedule · next 2 wks</div>`+
+      `<ol>${s.open.slice().sort(_salTaskCmp).map(o=>{const odOver=o.due&&daysBetween(o.due,today)<0;
+        const rng=(o.st0||o.due)?` <span class="duedate${odOver?' od':''}">▶ ${o.st0?esc(fmtMDY(o.st0)):'…'} → ${o.due?esc(fmtMDY(o.due)):'…'}</span>`:'';
+        return `<li onclick="openProjectEditor('${escJsAttr(s.project)}')" style="cursor:pointer" title="Opens the project editor (needs code)">📋 ${esc(o.disp)}${rng}${o.ph?` <span class="opdate">· ${esc(o.ph)}</span>`:''}</li>`;}).join('')}</ol></div>`; }
+    return `<div class="salcard"><div class="sh jname" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum||'')}','${escJsAttr(s.project||'')}')" title="Click to edit this job (needs code)">${esc(s.project)}</div>`+
     `<div class="sb">${esc(s.bay)}${s.jobNum?` · <span class="jnumlink" onclick="jobEditByNum(event,'${escJsAttr(s.jobNum)}')" title="Click to edit this job (needs code)">${esc(s.jobNum)}</span>`:""}</div>`+
     `<ol>${s.open.slice().sort(_hotCmp).map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
       const oent = o.op?` <span class="opdate">· added ${esc(fmtMDY(o.op))}</span>`:'';
@@ -10327,7 +10350,7 @@ function renderSal(D){
       const pend=isPendingClosed(s.project,o.raw);
       const hot=!pend && isHotTask(o.raw||o.disp);
       const drag=(!pend&&o.raw)?` draggable="true" ondragstart="ftDragStart(event,'${escJsAttr(s.project)}','${escJsAttr(o.raw)}')" title="Drag onto another crew's column to re-assign, or onto a job card up top to move it to that trailer (needs code)"`:'';
-      return `<li class="${pend?'done':''}${hot?' hot':''}"${drag}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}</li>`;}).join("")}</ol></div>`;
+      return `<li class="${pend?'done':''}${hot?' hot':''}"${drag}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}</li>`;}).join("")}</ol></div>`; };
   // ⚠ overdue chip in the panel header — distinct open crew tasks whose due date has passed.
   { const chip=document.getElementById('salOverChip');
     if(chip){ let n=0;
@@ -10341,7 +10364,8 @@ function renderSal(D){
     const cards=build(g.re);
     const tot=cards.reduce((s,x)=>s+x.open.filter(o=>!o.closed).length,0), c=document.getElementById(g.cnt);   // "X open" counts open only, not the shown-closed
     if(g.pageB) pageBTot+=tot;
-    if(c) c.textContent=tot+" open · "+cards.length+" trailer"+(cards.length===1?"":"s");
+    { const _trl=cards.filter(x=>!x.isProj).length, _pj=cards.filter(x=>x.isProj).length;
+      if(c) c.textContent=tot+" open · "+_trl+" trailer"+(_trl===1?"":"s")+(_pj?(" · "+_pj+" 📋"):""); }
     if(g.id==='asgSal'){
       // Sal always gets two columns (side by side on wide screens, stacked on narrow) — trailers kept whole,
       // first ~half of the tasks on the left, the rest on the right.
