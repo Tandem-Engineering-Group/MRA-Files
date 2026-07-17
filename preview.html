@@ -12965,6 +12965,81 @@ function buildMyWorkHtml(name){
     +tiles+body
     +'<div class="foot">MRA Command Center · your personalized work list · <a href="'+escA(dash)+'" style="color:#1a56db">open the live dashboard</a> to update tasks'+(m.awaitingMe.length?' &amp; verify sign-offs':'')+'</div></div></body></html>';
 }
+// ============================ 🏠 HOME landing PREVIEW (Quintin's redesign — ?home=1) ============================
+// A concept mock of the "Command Center" home: left nav + at-a-glance widgets, built from LIVE data.
+// Standalone page (like ?mywork=) so Rich/Al/Quintin can react to the layout before committing to the nav overhaul.
+function buildHomePreviewHtml(){
+  const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+  const soon=localISO(Date.parse(today)+14*86400000);
+  const fmt=iso=>{ if(!iso) return ''; const p=String(iso).split('-'); return (+p[1])+'/'+(+p[2])+'/'+p[0]; };
+  const isRealBay=b=>{ b=String(b||''); return b && !/parking|next\s*up|on\s*hold|off.?site|general|leave/i.test(b); };
+  const activeJobs=(D.jobs||[]).filter(j=>j.category!=='leave' && (j.status||'').toLowerCase()!=='shipped' && String(j.row||'').indexOf('orphan:')!==0);
+  // stats
+  let openT=0, odT=0; activeJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSalesT==='function'&&isSalesT(t))||(typeof isSnzRep==='function'&&isSnzRep(t))) return; openT++; if(t.due&&t.due<today) odT++; }));
+  const inBays=activeJobs.filter(j=>isRealBay(j.bay));
+  const projs=(D.projects||[]).filter(p=>(p.tasks||[]).length||p.finishISO||p.pct!=null);
+  const projLive=projs.filter(p=>(typeof projStatus!=='function'||projStatus(p,today)!=='done'));
+  const HC={late:'#ef4444',behind:'#f59e0b',ontrack:'#22c55e',upcoming:'#3b82f6',parked:'#64748b',done:'#22c55e'};
+  const hRows=projLive.map(p=>({p,h:(typeof projHealth==='function')?projHealth(p,today):{state:'ontrack'}}))
+    .sort((a,b)=>((typeof HEALTH_RANK!=='undefined')?(HEALTH_RANK[a.h.state]-HEALTH_RANK[b.h.state]):0)||String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
+  const atRisk=hRows.filter(x=>x.h.state==='late'||x.h.state==='behind').length;
+  const issues=((D.fleetio||{}).issues||[]);
+  // widgets
+  const stat=(n,lab,col)=>'<div class="st"><div class="n" style="color:'+col+'">'+n+'</div><div class="l">'+lab+'</div></div>';
+  const stats='<div class="stats">'+stat(openT,'OPEN TASKS','#3b82f6')+stat(odT,'OVERDUE',odT?'#ef4444':'#22c55e')+stat(inBays.length,'IN BAYS','#e5e7eb')+stat(projLive.length,'PROJECTS','#e5e7eb')+stat(atRisk,'AT RISK',atRisk?'#f59e0b':'#22c55e')+stat(issues.length,'OPEN ISSUES',issues.length?'#f59e0b':'#22c55e')+'</div>';
+  // bays widget
+  const byBay={}; inBays.forEach(j=>{ (byBay[j.bay]=byBay[j.bay]||[]).push(j); });
+  const baysHtml=Object.keys(byBay).sort().map(bay=>{ const js=byBay[bay];
+    return '<div class="row"><div><div class="lead">'+esc(bay)+'</div><div class="meta">'+js.map(j=>esc(j.project)+(j.jobNum?(' '+esc(j.jobNum)):'')).join(' · ')+'</div></div><div class="right"><span class="chip">'+js.reduce((a,j)=>a+((j.tasks||[]).filter(t=>!t.done).length),0)+' open</span></div></div>'; }).join('')||'<div class="empty">No trailers in bays.</div>';
+  // my tasks widget
+  const who=(typeof myWorkWho==='function'&&myWorkWho())||'Rich Miller';
+  const mw=(typeof myWorkFor==='function')?myWorkFor(who):{od:[],due:[]};
+  const mine=[].concat(mw.od||[],mw.due||[]).slice(0,7);
+  const myHtml=mine.length?mine.map(x=>{ const od=x.due&&x.due<today; return '<div class="row"><div><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+'</div><div class="meta">'+esc(x.where||'')+'</div></div><div class="right"><span class="chip '+(od?'red':'amber')+'">'+(x.due?((od?'overdue ':'due ')+fmt(x.due)):'')+'</span></div></div>'; }).join(''):'<div class="empty">Nothing due — nice.</div>';
+  // projects health widget
+  const projHtml=hRows.slice(0,8).map(x=>{ const p=x.p; const b=(typeof _pmtBehindBits==='function')?_pmtBehindBits(p,today):{odN:0};
+    return '<div class="row"><div><div class="lead"><span class="dot" style="background:'+(HC[x.h.state]||'#888')+'"></span>'+esc(p.name)+'</div><div class="meta">'+esc((p.pm||'—'))+(b.odN?(' · ⚠ '+b.odN+' past-due'):'')+'</div></div><div class="right"><span class="chip">'+(p.pct!=null?p.pct+'%':'')+'</span></div></div>'; }).join('')||'<div class="empty">No active projects.</div>';
+  // coming up (milestones next 14d)
+  const ms=[]; projLive.forEach(p=>(p.milestones||[]).forEach(m=>{ const d=m.dateISO||m.date; if(d&&d>=today&&d<=soon) ms.push({t:m.name||'Milestone',where:p.name,d}); }));
+  ms.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
+  const msHtml=ms.length?ms.slice(0,8).map(m=>'<div class="row"><div><div class="lead">◆ '+esc(m.t)+'</div><div class="meta">'+esc(m.where)+'</div></div><div class="right"><span class="chip">'+fmt(m.d)+'</span></div></div>').join(''):'<div class="empty">No milestones in the next 2 weeks.</div>';
+  // open issues
+  const issHtml=issues.slice(0,8).map(i=>'<div class="row"><div><div class="lead">'+(i.num?('#'+esc(String(i.num))+' '):'')+esc(i.summary||'Issue')+'</div><div class="meta">'+esc(i.asset||'')+'</div></div><div class="right">'+(i.overdue?'<span class="chip red">overdue</span>':'')+'</div></div>').join('')||'<div class="empty">No open issues 🎉</div>';
+  const navItems=[['🏠','Home',1],['🔧','Shop',0],['📋','Projects',0],['🛠','Maintenance',0],['🙋','My Tasks',0],['🧰','Tools',0],['📈','Sales',0]];
+  const nav=navItems.map(n=>'<div class="nav'+(n[2]?' on':'')+'">'+n[0]+' '+n[1]+'</div>').join('');
+  const dash=location.origin+location.pathname;
+  const card=(title,body,extra)=>'<div class="card'+(extra||'')+'"><h3>'+title+'</h3>'+body+'</div>';
+  const css='*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#0b0e13;color:#e5e7eb}'
+    +'.wrap{display:flex;min-height:100vh}'
+    +'.side{width:190px;flex:none;background:#0f141c;border-right:1px solid #1f2a37;padding:14px 10px}'
+    +'.brand{font-weight:900;font-size:15px;padding:6px 8px 12px;color:#fff}.brand small{display:block;color:#7b8794;font-weight:600;font-size:9.5px;letter-spacing:.5px}'
+    +'.nav{padding:9px 10px;border-radius:9px;color:#9fb0c4;font-size:13.5px;margin-bottom:3px;cursor:default}'
+    +'.nav.on{background:#e04826;color:#fff;font-weight:700}'
+    +'.main{flex:1;padding:16px 20px;min-width:0}'
+    +'.top{display:flex;align-items:center;gap:12px;margin-bottom:14px}.top h1{font-size:19px;margin:0}.pv{background:#3a2e12;color:#f5c451;font-size:10px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.5px}'
+    +'.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}.st{flex:1;min-width:96px;background:#161c26;border:1px solid #2a3543;border-radius:12px;padding:10px 13px}.st .n{font-size:24px;font-weight:900;line-height:1}.st .l{font-size:9px;letter-spacing:.6px;color:#7b8794;font-weight:700;margin-top:4px}'
+    +'.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}'
+    +'.card{background:#161c26;border:1px solid #2a3543;border-radius:14px;padding:14px 16px}.card.wide{grid-column:1/-1}'
+    +'.card h3{margin:0 0 8px;font-size:13px;color:#cbd5e1;border-bottom:1px solid #2a3543;padding-bottom:7px}'
+    +'.row{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #1c2530}.row:last-child{border-bottom:none}'
+    +'.lead{font-size:13px;font-weight:600}.meta{font-size:11px;color:#7b8794;margin-top:1px}.right{margin-left:auto;text-align:right;white-space:nowrap}'
+    +'.chip{font-size:10.5px;font-weight:700;color:#9fb0c4;background:#242c38;border-radius:6px;padding:2px 8px}.chip.red{background:#3a1414;color:#fca5a5}.chip.amber{background:#3a2e12;color:#f5c451}'
+    +'.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}.empty{color:#7b8794;font-style:italic;font-size:12px;padding:6px 0}'
+    +'.note{background:#161c26;border:1px dashed #2a3543;border-radius:10px;padding:10px 14px;color:#9fb0c4;font-size:12px;margin-bottom:14px}'
+    +'.note a{color:#7aa2d6}';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Command Center — Home (preview)</title><style>'+css+'</style></head><body>'
+    +'<div class="wrap"><div class="side"><div class="brand">MRA<small>COMMAND CENTER</small></div>'+nav+'</div>'
+    +'<div class="main"><div class="top"><h1>🏠 Home</h1><span class="pv">PREVIEW · Quintin’s layout</span></div>'
+    +'<div class="note">This is a <b>concept mock</b> of the redesigned home (left nav + at-a-glance widgets) using <b>live board data</b>. The side nav is just for show here. Back to the working board: <a href="'+escA(dash)+'">open the live dashboard →</a></div>'
+    +stats
+    +'<div class="grid">'
+    +card('🏭 In the Bays',baysHtml)
+    +card('🙋 My Tasks — '+esc(who),myHtml)
+    +card('📊 Projects — health',projHtml)
+    +card('🗓 Coming up — next 2 weeks',msHtml)
+    +card('⚠ Open Fleetio issues',issHtml)
+    +'</div></div></div></body></html>';
+}
 function openPMReport(){ if(typeof closeDrops==='function') closeDrops();
   const D=window.MRA_DATA||{}; const pms=[...new Set((D.projects||[]).map(p=>(p.pm||'').trim()).filter(v=>v&&!/^tbd$/i.test(v)))].sort();
   const sel=document.getElementById('pmrWho'); if(sel) sel.innerHTML=pms.map(p=>`<option>${esc(p)}</option>`).join('');
@@ -15648,6 +15723,7 @@ const _sheetSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('sh
 // in place — one per job, photos enlarged, print button. Used by the scheduled 7:15am email.
 const _recapQ=(()=>{ try{ const q=new URLSearchParams(location.search); return q.get('recap')?Math.max(1,+(q.get('days')||1)||1):null; }catch(e){ return null; } })();
 const _myworkQ=(()=>{ try{ return new URLSearchParams(location.search).get('mywork')||null; }catch(e){ return null; } })();
+const _homeQ=(()=>{ try{ return new URLSearchParams(location.search).get('home')?1:null; }catch(e){ return null; } })();   // ?home=1 → Command Center Home landing PREVIEW (Quintin's redesign)
 const _fixQ=(()=>{ try{ return new URLSearchParams(location.search).get('fix')?1:null; }catch(e){ return null; } })();
 const _punchQ=(()=>{ try{ return new URLSearchParams(location.search).get('punch'); }catch(e){ return null; } })();
 const _woSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('wo'); if(!q) return null;
@@ -15688,6 +15764,10 @@ if(_sheetSel){
   const _mw=buildMyWorkHtml(_myworkQ);
   document.documentElement.innerHTML=_mw.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
   document.title='My Work — '+_myworkQ;
+} else if(_homeQ){
+  const _h=buildHomePreviewHtml();
+  document.documentElement.innerHTML=_h.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
+  document.title='MRA Command Center — Home (preview)';
 } else if(_punchQ){
   const _digits=v=>String(v||'').replace(/[^0-9]/g,'');
   const _jobs=((window.MRA_DATA||{}).jobs)||[];
