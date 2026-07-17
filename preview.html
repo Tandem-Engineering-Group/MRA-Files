@@ -790,6 +790,26 @@
   .badge.green{background:#13331f; color:#86efac}
   .badge.blue{background:#142a44; color:#93c5fd}
   .badge.grey{background:#242c38; color:#9fb0c4}
+  /* ---------- My Work (rev 27.6): clickable + hover + expandable, matching the board standard ---------- */
+  #myworkView .mwtiles{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px}
+  #myworkView .mwtile{flex:1; min-width:96px; border:1px solid var(--line); border-left-width:4px; border-radius:11px; padding:9px 12px; background:var(--panel); cursor:pointer; transition:background .12s, border-color .12s, transform .06s}
+  #myworkView .mwtile:hover{background:var(--panel2); transform:translateY(-1px)}
+  #myworkView .mwtile .n{font-size:22px; font-weight:900; line-height:1}
+  #myworkView .mwtile .l{font-size:9px; letter-spacing:.5px; color:var(--muted); font-weight:700; margin-top:3px}
+  #myworkView .row.mw-click{cursor:pointer; border-radius:8px; margin-left:-8px; margin-right:-8px; padding-left:8px; padding-right:8px; transition:background .12s}
+  #myworkView .row.mw-click:hover{background:var(--panel2)}
+  #myworkView .row .mw-go{color:var(--muted); font-size:15px; margin-left:8px; opacity:.5; transition:opacity .12s}
+  #myworkView .row.mw-click:hover .mw-go{opacity:1; color:#7aa2d6}
+  #myworkView .mw-caret{display:inline-block; width:14px; color:var(--muted); font-size:12px}
+  #myworkView .mw-sub{margin:0 0 8px 0; border-left:2px solid var(--line); padding:2px 0}
+  #myworkView .mw-subrow{display:flex; align-items:flex-start; gap:8px; padding:6px 8px 6px 16px; cursor:pointer; border-radius:7px; transition:background .12s}
+  #myworkView .mw-subrow:hover{background:var(--panel2)}
+  #myworkView .mw-subrow .lead{font-size:12.5px; font-weight:600}
+  #myworkView .mw-subrow .meta{font-size:11px; color:var(--muted); margin-top:1px}
+  #myworkView .mwchip{display:inline-flex; align-items:center; gap:4px; background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:2px 5px 2px 10px; font-size:11px; margin:2px 5px 2px 0; transition:border-color .12s}
+  #myworkView .mwchip:hover{border-color:#7aa2d6}
+  #myworkView .mwchip .x{cursor:pointer; font-weight:800; color:var(--muted); padding:0 3px}
+  #myworkView .mwchip .x:hover{color:#ef4444}
   /* Floor cleanup (rev 24.3, Rich): these panels are HIDDEN, not deleted — one line brings any back. */
   #crewSchedPanel,#floorGanttPanel,#fl-flagged,#fl-returns{display:none!important}
   #fl-leave{grid-column:1 / -1}
@@ -3560,6 +3580,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"27.6", date:"2026-07-17", title:"\u{1F64B} MY WORK — clickable, expandable, hover, full detail", items:[
+    "Every row on the MY WORK page now <b>highlights on hover</b> and is <b>clickable</b>: a task opens its job (shop) or project (schedule); the <b>stat tiles</b> jump to their section.",
+    "<b>My Projects rows expand</b> — tap one to drop down its <b>actual past-due tasks</b> (who · due date · phase), each clickable straight into the project. The health line now also shows <b>what's behind and with whom</b> (e.g. <span class=\"k\">⚠ 31 past-due · with: MRA Design (17), MRA Shop (4)</span>) so the web matches the emailed report detail exactly.",
+    "Awaiting-sign-off, marked-ready, milestone and completed rows are all hover + click-through too. Consistent with the rest of the board." ] },
   { rev:"27.5", date:"2026-07-17", title:"\u{1F64B} MY WORK rebuilt — full report-quality page + daily email", items:[
     "The <b>MY WORK</b> page is now a real one-pager, same professional look as the PM reports: a <b>stat strip</b> (open · overdue · due this week · to verify · marked ready · my projects), then ✅ <b>Awaiting your sign-off</b> (PMs verify or send back right here), ⚠ Overdue, \u{1F4C5} Due this week, \u{1F7E1} tasks you marked ready that are with the PM, \u{1F4CA} <b>My Projects with health</b> (color, target date, past-due count, %), ◆ milestones (next 30 days), ✅ what you closed in the last 7 days, and everything else open.",
     "New <b>⚙ Customize</b>: pin any project to your page (“Follow”) and its health, milestones and past-due count show up even if it isn’t assigned to you.",
@@ -12514,10 +12538,10 @@ function myWorkFor(name){
   // --- open tasks assigned to me (shop + project) ---
   (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
     (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
-      if(_whoMatch(t.who,name)) items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, kind:'shop', files:t.files||null}); }); });
+      if(_whoMatch(t.who,name)) items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, kind:'shop', files:t.files||null, nav:{k:'shop',row:j.row}}); }); });
   (D.projects||[]).forEach(p=>{ (p.tasks||[]).forEach(t=>{ if(/yes/i.test(t.ml||'')) return;
       if(isDoneT(t) || projIsPendingVerify(t)) return;   // pending-verify shows in its own section
-      if(_whoMatch(t.who,name)) items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, st0:t.startISO||null, kind:'proj'}); }); });
+      if(_whoMatch(t.who,name)) items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, st0:t.startISO||null, kind:'proj', nav:{k:'proj',proj:p.name}}); }); });
   const od=items.filter(x=>x.due&&x.due<today).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const due=items.filter(x=>x.due&&x.due>=today&&x.due<=soon).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const later=items.filter(x=>!x.due||x.due>soon).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
@@ -12533,8 +12557,8 @@ function myWorkFor(name){
   awaitingMe.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
   // --- ✅ completed in the last 7 days (mine) ---
   const doneRecent=[];
-  (D.jobs||[]).forEach(j=>{ if(j.category==='leave') return; (j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut7&&!isSalesT(t)&&_whoMatch(t.who,name)) doneRecent.push({t:cleanTask(t.t,false), where:(j.project||''), d:t.cl, kind:'shop'}); }); });
-  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; if(isDoneT(t)&&fin&&fin>cut7&&fin<=today&&_whoMatch(t.who,name)) doneRecent.push({t:String(t.t||''), where:p.name, d:fin, kind:'proj'}); }));
+  (D.jobs||[]).forEach(j=>{ if(j.category==='leave') return; (j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut7&&!isSalesT(t)&&_whoMatch(t.who,name)) doneRecent.push({t:cleanTask(t.t,false), where:(j.project||''), d:t.cl, kind:'shop', nav:{k:'shop',row:j.row}}); }); });
+  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; if(isDoneT(t)&&fin&&fin>cut7&&fin<=today&&_whoMatch(t.who,name)) doneRecent.push({t:String(t.t||''), where:p.name, d:fin, kind:'proj', nav:{k:'proj',proj:p.name}}); }));
   doneRecent.sort((a,b)=>String(b.d).localeCompare(String(a.d)));
   // --- 📊 my projects (I'm PM) + any I follow ---
   const follow=mwGetFollow(name); const seen={}; const myProjects=[];
@@ -12547,11 +12571,22 @@ function myWorkFor(name){
   milestones.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
   return {od,due,later,pendingMine,awaitingMe,doneRecent,myProjects,milestones,follow,total:items.length,today};
 }
+// ---- click-through helpers: a My Work row takes you to the job (shop) or the project editor (project) ----
+let MW_PROJ_OPEN=new Set();   // which project rows are expanded to show their past-due detail
+function mwToggleProj(name){ if(MW_PROJ_OPEN.has(name)) MW_PROJ_OPEN.delete(name); else MW_PROJ_OPEN.add(name); try{ renderMyWork(); }catch(e){} }
+function mwTileGo(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function mwGoShop(row){ const r=(row!=null&&row!==''&&!isNaN(+row))?+row:row; if(typeof openEditJob==='function') openEditJob(r); }
+function mwGoProj(name){ if(typeof openProjectEditor==='function') openProjectEditor(name); }
+function _mwNavAttr(nav){ if(!nav) return {oc:'', tip:'', chevron:''};
+  if(nav.k==='shop') return {oc:' onclick="mwGoShop(\''+escJsAttr(String(nav.row))+'\')"', tip:' title="Open this job — bay, dates, tasks"', chevron:' <span class="mw-go">›</span>'};
+  if(nav.k==='proj') return {oc:' onclick="mwGoProj(\''+escJsAttr(nav.proj)+'\')"', tip:' title="Open '+escA(nav.proj)+' — full schedule"', chevron:' <span class="mw-go">›</span>'};
+  return {oc:'', tip:'', chevron:''}; }
 function _mwList(arr, today){ if(!arr.length) return '<div class="empty">— none —</div>';
   return arr.map(x=>{ const od=x.due&&x.due<today;
     const d=x.due?(' <span class="badge '+(od?'red':'amber')+'">'+(od?'overdue ':'due ')+esc(fmtMD(x.due))+'</span>'):'';
     const rng=(x.kind==='proj'&&(x.st0||x.due))?(' <span class="meta">▶ '+(x.st0?esc(fmtMD(x.st0)):'…')+' → '+(x.due?esc(fmtMD(x.due)):'…')+'</span>'):'';
-    return '<div class="row"><div><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+'</div><div class="meta">'+esc(x.where)+rng+'</div></div><div class="right">'+d+'</div></div>'; }).join(''); }
+    const nav=_mwNavAttr(x.nav);
+    return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+'</div><div class="meta">'+esc(x.where)+rng+'</div></div><div class="right">'+d+nav.chevron+'</div></div>'; }).join(''); }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
@@ -12563,49 +12598,58 @@ function renderMyWork(){
   }
   if(!who){ box.innerHTML='<div class="panel"><h2>🙋 My Work</h2><div class="empty">Sign in to see your tasks.</div></div>'; return; }
   const m=myWorkFor(who);
-  // ---- stat tiles ----
-  const stat=(n,lab,col,on)=>'<div style="flex:1;min-width:90px;border:1px solid var(--line);border-left:4px solid '+(on?col:'#64748b')+';border-radius:11px;padding:9px 12px;background:var(--panel)"><div style="font-size:22px;font-weight:900;line-height:1;color:'+(on?col:'var(--muted)')+'">'+n+'</div><div style="font-size:9px;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-top:3px">'+lab+'</div></div>';
-  let tiles='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">';
-  tiles+=stat(m.total,'OPEN ITEMS','#3b82f6',m.total);
-  tiles+=stat(m.od.length,'OVERDUE','#ef4444',m.od.length);
-  tiles+=stat(m.due.length,'DUE THIS WK','#f59e0b',m.due.length);
-  if(m.awaitingMe.length) tiles+=stat(m.awaitingMe.length,'TO VERIFY','#a855f7',1);
-  if(m.pendingMine.length) tiles+=stat(m.pendingMine.length,'MARKED READY','#eab308',1);
-  if(m.myProjects.length) tiles+=stat(m.myProjects.length,'MY PROJECTS','#22c55e',1);
+  // ---- stat tiles (clickable → scroll to that section, hover-highlight) ----
+  const stat=(n,lab,col,on,go)=>'<div class="mwtile" style="border-left-color:'+(on?col:'#64748b')+'"'+(go?(' onclick="mwTileGo(\''+go+'\')" title="Jump to '+lab.toLowerCase()+'"'):'')+'><div class="n" style="color:'+(on?col:'var(--muted)')+'">'+n+'</div><div class="l">'+lab+'</div></div>';
+  let tiles='<div class="mwtiles">';
+  tiles+=stat(m.total,'OPEN ITEMS','#3b82f6',m.total,'mwsec-od');
+  tiles+=stat(m.od.length,'OVERDUE','#ef4444',m.od.length,'mwsec-od');
+  tiles+=stat(m.due.length,'DUE THIS WK','#f59e0b',m.due.length,'mwsec-due');
+  if(m.awaitingMe.length) tiles+=stat(m.awaitingMe.length,'TO VERIFY','#a855f7',1,'mwsec-verify');
+  if(m.pendingMine.length) tiles+=stat(m.pendingMine.length,'MARKED READY','#eab308',1,'mwsec-pend');
+  if(m.myProjects.length) tiles+=stat(m.myProjects.length,'MY PROJECTS','#22c55e',1,'mwsec-proj');
   tiles+='</div>';
-  // ---- ✅ awaiting my sign-off (PM action — Verify / Send back inline) ----
+  // ---- ✅ awaiting my sign-off (PM action — Verify / Send back inline; click the task to jump to it) ----
   const btn='padding:4px 10px;border-radius:7px;border:1px solid var(--line);font-size:11px;font-weight:700;cursor:pointer';
-  const awaitHtml=m.awaitingMe.length?('<div class="panel"><h2>✅ Awaiting your sign-off <span class="count">'+m.awaitingMe.length+'</span></h2>'+m.awaitingMe.map(x=>{
+  const awaitHtml=m.awaitingMe.length?('<div class="panel" id="mwsec-verify"><h2>✅ Awaiting your sign-off <span class="count">'+m.awaitingMe.length+'</span></h2>'+m.awaitingMe.map(x=>{
       const od=x.due&&x.due<m.today;
-      return '<div class="row"><div onclick="gotoVerifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" style="cursor:pointer;flex:1;min-width:0"><div class="lead">🟡 '+esc(x.t)+'</div><div class="meta">'+esc(x.where)+(x.who?(' · marked by '+esc(x.who)):'')+(x.due?(' · '+(od?'due ':'')+esc(fmtMD(x.due))+(od?' ⚠':'')):'')+'</div></div>'+
-        '<div class="right"><button onclick="verifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" style="'+btn+';background:#16a34a;color:#fff;border-color:#16a34a">✓ Verify</button> <button onclick="sendBackTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" style="'+btn+';background:var(--panel);color:var(--txt)">↩ Back</button></div></div>'; }).join('')+'</div>'):'';
+      return '<div class="row mw-click" onclick="gotoVerifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" title="Jump to this task on the Gantt"><div style="min-width:0"><div class="lead">🟡 '+esc(x.t)+'</div><div class="meta">'+esc(x.where)+(x.who?(' · marked by '+esc(x.who)):'')+(x.due?(' · '+(od?'due ':'')+esc(fmtMD(x.due))+(od?' ⚠':'')):'')+'</div></div>'+
+        '<div class="right"><button onclick="event.stopPropagation();verifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" style="'+btn+';background:#16a34a;color:#fff;border-color:#16a34a">✓ Verify</button> <button onclick="event.stopPropagation();sendBackTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" style="'+btn+';background:var(--panel);color:var(--txt)">↩ Back</button></div></div>'; }).join('')+'</div>'):'';
   // ---- 🟡 tasks I marked ready, waiting on the PM ----
-  const pendHtml=m.pendingMine.length?('<div class="panel"><h2>🟡 Marked ready — awaiting PM <span class="count">'+m.pendingMine.length+'</span></h2>'+m.pendingMine.map(x=>'<div class="row" onclick="gotoVerifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" style="cursor:pointer"><div><div class="lead">🟡 '+esc(x.t)+'</div><div class="meta">'+esc(x.where)+(x.pm?(' · PM '+esc(x.pm)):'')+'</div></div><div class="right"><span class="badge amber">pending</span></div></div>').join('')+'</div>'):'';
-  // ---- 📊 my projects (health) ----
+  const pendHtml=m.pendingMine.length?('<div class="panel" id="mwsec-pend"><h2>🟡 Marked ready — awaiting PM <span class="count">'+m.pendingMine.length+'</span></h2>'+m.pendingMine.map(x=>'<div class="row mw-click" onclick="gotoVerifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" title="Jump to this task"><div style="min-width:0"><div class="lead">🟡 '+esc(x.t)+'</div><div class="meta">'+esc(x.where)+(x.pm?(' · PM '+esc(x.pm)):'')+'</div></div><div class="right"><span class="badge amber">pending</span><span class="mw-go">›</span></div></div>').join('')+'</div>'):'';
+  // ---- 📊 my projects (health) — click a row to EXPAND its past-due detail; each task jumps to the project ----
   const HC={late:'#ef4444',behind:'#f59e0b',ontrack:'#22c55e',upcoming:'#3b82f6',parked:'#64748b'};
-  const projHtml=m.myProjects.length?('<div class="panel"><h2>📊 My Projects <span class="count">'+m.myProjects.length+'</span></h2>'+m.myProjects.map(x=>{
+  const projHtml=m.myProjects.length?('<div class="panel" id="mwsec-proj"><h2>📊 My Projects <span class="count">'+m.myProjects.length+'</span></h2>'+m.myProjects.map(x=>{
       const p=x.p; const h=(typeof projHealth==='function')?projHealth(p,m.today):{state:''};
       const c=HC[h.state]||'#666'; const lab=(typeof PMT_LAB!=='undefined'&&PMT_LAB[h.state])?PMT_LAB[h.state]:'';
-      const b=(typeof _pmtBehindBits==='function')?_pmtBehindBits(p,m.today):{odN:0};
+      const b=(typeof _pmtBehindBits==='function')?_pmtBehindBits(p,m.today):{odN:0,od:[],whoTxt:''};
       const tgt=p.finishISO?fmtMD(p.finishISO):'TBD';
-      return '<div class="row" onclick="openProjectEditor(\''+escJsAttr(p.name)+'\')" style="cursor:pointer"><div><div class="lead"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c+';margin-right:7px"></span>'+esc(p.name)+(x.follow?' <span class="badge grey" style="font-size:9px">following</span>':'')+'</div><div class="meta">'+esc(lab)+' · target '+esc(tgt)+(b.odN?(' · <span style="color:#ef4444;font-weight:700">⚠ '+b.odN+' past-due</span>'):'')+'</div></div><div class="right"><span class="badge grey">'+(p.pct!=null?p.pct+'%':'')+'</span></div></div>'; }).join('')+'</div>'):'';
-  // ---- ◆ milestones next 30d ----
-  const msHtml=m.milestones.length?('<div class="panel"><h2>◆ Milestones — next 30 days <span class="count">'+m.milestones.length+'</span></h2>'+m.milestones.map(x=>'<div class="row"><div><div class="lead">◆ '+esc(x.txt)+'</div><div class="meta">'+esc(x.where)+'</div></div><div class="right"><span class="badge grey">'+esc(fmtMD(x.d))+'</span></div></div>').join('')+'</div>'):'';
-  // ---- ✅ completed last 7 days ----
-  const doneHtml=m.doneRecent.length?('<div class="panel"><h2>✅ Completed — last 7 days <span class="count">'+m.doneRecent.length+'</span></h2>'+m.doneRecent.slice(0,40).map(x=>'<div class="row"><div><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+'</div><div class="meta">'+esc(x.where)+'</div></div><div class="right"><span class="badge green">'+esc(fmtMD(x.d))+'</span></div></div>').join('')+(m.doneRecent.length>40?'<div class="empty" style="padding-top:6px">+ '+(m.doneRecent.length-40)+' more…</div>':'')+'</div>'):'';
+      const open=MW_PROJ_OPEN.has(p.name);
+      const meta=esc(lab)+' · target '+esc(tgt)+(b.odN?(' · <span style="color:#ef4444;font-weight:700">⚠ '+b.odN+' past-due</span>'+(b.whoTxt?(' <span style="color:var(--muted)">· with: '+esc(b.whoTxt)+'</span>'):'')):' · on track');
+      const row='<div class="row mw-click" onclick="mwToggleProj(\''+escJsAttr(p.name)+'\')" title="'+(open?'Hide':'Show')+' this project’s past-due tasks"><div style="min-width:0"><div class="lead"><span class="mw-caret">'+(open?'▾':'▸')+'</span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c+';margin:0 7px 0 2px"></span>'+esc(p.name)+(x.follow?' <span class="badge grey" style="font-size:9px">following</span>':'')+'</div><div class="meta" style="margin-left:16px">'+meta+'</div></div><div class="right"><span class="badge grey">'+(p.pct!=null?p.pct+'%':'')+'</span></div></div>';
+      let sub='';
+      if(open){
+        const rows=(b.od||[]).slice(0,50).map(t=>'<div class="mw-subrow" onclick="mwGoProj(\''+escJsAttr(p.name)+'\')" title="Open '+escA(p.name)+'"><div style="min-width:0"><div class="lead">📋 '+esc(t.t||'(task)')+'</div><div class="meta">'+(t.who?esc(String(t.who).split('/')[0].trim())+' · ':'')+'due '+esc(fmtMD(t.finISO))+((t.phase||'').trim()?(' · '+esc(t.phase)):'')+'</div></div><div class="right"><span class="badge red">overdue '+esc(fmtMD(t.finISO))+'</span></div></div>').join('');
+        sub='<div class="mw-sub">'+(rows||'<div class="empty" style="padding:6px 16px">No past-due tasks — on track. 🎉</div>')+((b.od&&b.od.length>50)?('<div class="empty" style="padding:4px 16px">+ '+(b.od.length-50)+' more past-due…</div>'):'')+'<div class="mw-subrow" onclick="mwGoProj(\''+escJsAttr(p.name)+'\')" style="color:#7aa2d6;font-weight:700">✎ Open '+esc(p.name)+' editor →</div></div>';
+      }
+      return row+sub; }).join('')+'</div>'):'';
+  // ---- ◆ milestones next 30d (click → project) ----
+  const msHtml=m.milestones.length?('<div class="panel"><h2>◆ Milestones — next 30 days <span class="count">'+m.milestones.length+'</span></h2>'+m.milestones.map(x=>'<div class="row mw-click" onclick="mwGoProj(\''+escJsAttr(x.where)+'\')" title="Open '+escA(x.where)+'"><div style="min-width:0"><div class="lead">◆ '+esc(x.txt)+'</div><div class="meta">'+esc(x.where)+'</div></div><div class="right"><span class="badge grey">'+esc(fmtMD(x.d))+'</span><span class="mw-go">›</span></div></div>').join('')+'</div>'):'';
+  // ---- ✅ completed last 7 days (click → job / project) ----
+  const doneHtml=m.doneRecent.length?('<div class="panel"><h2>✅ Completed — last 7 days <span class="count">'+m.doneRecent.length+'</span></h2>'+m.doneRecent.slice(0,40).map(x=>{ const nav=_mwNavAttr(x.nav);
+      return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+'</div><div class="meta">'+esc(x.where)+'</div></div><div class="right"><span class="badge green">'+esc(fmtMD(x.d))+'</span>'+nav.chevron+'</div></div>'; }).join('')+(m.doneRecent.length>40?'<div class="empty" style="padding-top:6px">+ '+(m.doneRecent.length-40)+' more…</div>':'')+'</div>'):'';
   // ---- ⚙ customize / follow projects ----
   const allProj=[...new Set(((window.MRA_DATA||{}).projects||[]).map(p=>p.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const followChips=m.follow.length?m.follow.map(f=>'<span style="display:inline-flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:2px 5px 2px 10px;font-size:11px;margin:2px 5px 2px 0">➕ '+esc(f)+' <span onclick="mwToggleFollow(\''+escJsAttr(f)+'\')" title="Stop following" style="cursor:pointer;font-weight:800;color:var(--muted);padding:0 3px">✕</span></span>').join(''):'<span class="empty" style="font-size:11px">not following any extra projects yet</span>';
+  const followChips=m.follow.length?m.follow.map(f=>'<span class="mwchip">➕ '+esc(f)+' <span class="x" onclick="mwToggleFollow(\''+escJsAttr(f)+'\')" title="Stop following">✕</span></span>').join(''):'<span class="empty" style="font-size:11px">not following any extra projects yet</span>';
   const followOpts=allProj.filter(p=>m.follow.indexOf(p)<0).map(p=>'<option>'+esc(p)+'</option>').join('');
   const customize='<div class="panel"><h2>⚙ Customize</h2>'+
-    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Pin any project to your page — its health, milestones and past-due count show here even if it isn’t assigned to you. (Saved on this device.)</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Pin any project to your page — its health, milestones and past-due detail show here even if it isn’t assigned to you. (Saved on this device.)</div>'+
     '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px"><div style="flex:1;min-width:200px">'+followChips+'</div>'+
     '<label style="font-size:12px;color:var(--muted)">➕ Follow: <select onchange="mwPickFollow(this)" style="font-size:12px;padding:3px 7px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt)"><option value="">— pick a project —</option>'+followOpts+'</select></label></div></div>';
   box.innerHTML=
     '<div class="panel"><h2>🙋 My Work — '+esc(who)+' <span class="count">'+m.total+' open</span>'+picker+'</h2>'+tiles+'</div>'+
     awaitHtml+
-    '<div class="panel"><h2>⚠ Overdue <span class="count">'+m.od.length+'</span></h2>'+_mwList(m.od,m.today)+'</div>'+
-    '<div class="panel"><h2>📅 Due this week <span class="count">'+m.due.length+'</span></h2>'+_mwList(m.due,m.today)+'</div>'+
+    '<div class="panel" id="mwsec-od"><h2>⚠ Overdue <span class="count">'+m.od.length+'</span></h2>'+_mwList(m.od,m.today)+'</div>'+
+    '<div class="panel" id="mwsec-due"><h2>📅 Due this week <span class="count">'+m.due.length+'</span></h2>'+_mwList(m.due,m.today)+'</div>'+
     pendHtml+
     projHtml+
     msHtml+
