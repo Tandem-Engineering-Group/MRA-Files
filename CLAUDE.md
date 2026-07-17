@@ -390,6 +390,19 @@ exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
   design-board parent note, unassigned finder ctx). Verified headless: stamp/skip-Shop/no-dup/strip/extract all pass;
   board shows "added by" 3×, My Work + email show it, **zero raw `[by:` in any visible text** (the innerHTML "leak" was
   my own `<script>` source comment — innerText clean). ⚠️ Only NEW tasks get it; no record of who created older ones.
+- **rev 28.0 — RESCHEDULE with a paper trail (Rich 2026-07-17: "extend the due date but don't make the old one
+  disappear — hash through it; for projects push it out OR slide the whole start→finish range; sometimes slide the
+  entire schedule").** Original due kept as a hidden **`[due0:YYYY-MM-DD]` comment tag** (same rides-comments pattern as
+  `[by:]`/`[repeat:]` — no list/flow change). Shown **struck through before the current due** (`~~old~~ → new`) on board
+  task lines (both `odue` sites: bay + crew), My Work tab (`_mwRow`) + email (`li`), via `_due0Strike(cm,curISO)` / item
+  `due0:_taskDue0(t.cm)`. **Auto-capture:** on save, if the new due/finish is LATER than the old and no `[due0:]` yet,
+  stamp the old one (shop `submitEditTask` uses `window._etDue0/_etDueOld`; project `submitProjTask` uses `_ptDue0/_ptFinOld`);
+  preserved across edits; `_mwCleanCm` + both editor comment-boxes strip `due0`. **Controls:** shop editor ⏩ Push due
+  (+1wk/+2wks/+1mo/N days = `etPushDue`); project editor ⏩ Push finish (`ptPushFinish`, finish only) / Slide range
+  (`ptSlideRange`, start+finish together); project-editor modal ⏩ **Shift schedule** (`projShiftAllBtn`) = slides EVERY
+  dated task's start+finish by N days (+later/−earlier), each keeping old finish struck, via bulk `editProjectTask` writes.
+  Helpers `_taskDue0/stripDue0/_withDue0/_isoAddDays`. Validated headless: push/slide/shift math, 12-task shift fired 12
+  ops with new dates + due0, struck display in tab/email/board, no raw `[due0:` leak, zero pageerrors.
 
 ## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
 
