@@ -363,6 +363,20 @@ exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
   name-fallback + Rich = shown; Cindy(shopedit)/Tony(exec)/Quintin(admin-not-listed)/anon = hidden; tab element
   hides/shows correctly. **Add someone later = append their email to `MYWORK_EMAILS` (+ name to `MYWORK_NAMES`).**
   NOTE: the `?mywork=Name` email/deep-link page is NOT gated by this (daily email recipients follow the routing table).
+- **rev 27.8 — MY WORK shows every task's FULL detail (Rich 2026-07-17: crew need "fleteo pictures + all fleteo info +
+  all comments"; design/PM need "the subproject, comments, and any other information for every task").** `myWorkFor`
+  now stamps each item with `cm` (comments, machine-tags stripped by `_mwCleanCm`), `fnum` (Fleetio # from `🔧 #NNN` in
+  the task text), and for project tasks `phase`/`ptype`/`parent` (walks back to the previous non-sub task) + `files`.
+  Tab (`_mwRow`): reuses the board's own `fioDetHtml(fnum)` (clamped Fleetio description) + `mediaHtml(_taskMedia(files,
+  fnum))` (photo/file thumbs w/ hover-zoom) + a `🔧 #NNN` badge + a 📝 comments line + project `↳ parent · phase · type`.
+  Email (`buildMyWorkHtml` → shared `detailOf(x)`): Fleetio # + asset + description, 📝 comments, up to 4 photo thumbs +
+  file links, and the project subproject/phase/type — on li/pli/ali. Verified live-data headless: Sal 13 Fleetio+16
+  comments+photos, Doug 16 Fleetio+19 comments, Sarah 5 parent+17 phase, Al 21 phase — email renders Fleetio/comments/
+  photos; screenshots eyeballed (Sal crew + Mark design). Deployed before the 6 AM email so today's send carries it.
+  **DAILY EMAIL FLOW IS BUILT + LIVE** (Rich built it 2026-07-16 night): "MRA Daily My Work Emails" — Recurrence (Mon-Fri
+  6 AM Eastern) → Initialize variable `Recipiants` (Array, the 12-recipient JSON) → Apply to each → Compose `EmailBody`
+  (concat HTML w/ `encodeUriComponent(items('Apply_to_each')?['name'])` link) → Send email V2 (To=`items('Apply_to_each')
+  ?['to']`, CC rmiller@gomra.com, Body=EmailBody Outputs). Add/remove a person = edit the Recipiants array.
 
 ## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
 
