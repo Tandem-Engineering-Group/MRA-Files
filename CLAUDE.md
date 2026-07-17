@@ -353,6 +353,16 @@ exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
   Verified headless (38 mw-click rows, tiles, "with:" present, Cisco expands to 19 past-due subrows + open-editor link,
   zero pageerrors) + screenshot eyeballed. **Sent Rich sample emails** (Al/PM, Sarah/design, Sal+Doug/crew, +a PM demo
   with the ✅ sign-off section populated) since live data has 0 Pending-Verification right now.
+- **rev 27.7 — MY WORK tab limited to a per-person allowlist (Rich 2026-07-17: "only show for Megan, Al, Luciana,
+  Brandon, Mark, Sarah, Sal, Jeff, Josh and Doug/Stephanie. Don't need it for anyone else").** New `mwTabAllowed()` +
+  `MYWORK_EMAILS`/`MYWORK_NAMES` (matched by email OR `_nmKey` display name); `applyRoleUI` hides the `.tab[data-view=
+  "mywork"]` + redirects off it if the current view is mywork, and only auto-lands allowed non-admins on it. Rich
+  (super-admin) always keeps it (person-picker). Anon shop TV never shows it; **fail-open unchanged** off-host/preview.
+  The mywork tab was previously NEVER role-gated (in every role's `tabs`), so this is the first gate on it — the per-role
+  `tabs` arrays still list mywork; the allowlist is the finer gate layered on top. Verified headless: allowlist people +
+  name-fallback + Rich = shown; Cindy(shopedit)/Tony(exec)/Quintin(admin-not-listed)/anon = hidden; tab element
+  hides/shows correctly. **Add someone later = append their email to `MYWORK_EMAILS` (+ name to `MYWORK_NAMES`).**
+  NOTE: the `?mywork=Name` email/deep-link page is NOT gated by this (daily email recipients follow the routing table).
 
 ## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
 
