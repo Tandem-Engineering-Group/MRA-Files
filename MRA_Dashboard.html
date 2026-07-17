@@ -3199,6 +3199,8 @@ const PALETTE = ['#3b82f6','#22c55e','#f59e0b','#a78bfa','#2dd4bf','#ef4444',
 let RANGE = 'all';           // projects gantt range (months or 'all')
 let VIEW = 'floor';
 try{ VIEW = localStorage.getItem('mra_view')||'floor'; RANGE = JSON.parse(localStorage.getItem('mra_range'))||3; }catch(e){ RANGE=3; }
+// Deep-link a tab: ...?view=mywork opens the live board on that tab (used by the daily-email "log in to close" button).
+try{ const _vq=new URLSearchParams(location.search).get('view'); if(_vq && ['floor','projects','fleetio','assets','mywork'].indexOf(_vq)>=0) VIEW=_vq; }catch(e){}
 let GWIN_DAYS=null; try{ const _gw=parseInt(localStorage.getItem('mra_gwin'),10); if(_gw>=7&&_gw<=365) GWIN_DAYS=_gw; }catch(e){}  // gantt zoom: continuous window length (days); overrides RANGE presets when set
 let PFILTER='';   // projects tab: filter by project name / PM / job # (matches task text)
 let PROJ_SORT='start'; try{ const _ps=localStorage.getItem('mra_proj_sort'); if(_ps) PROJ_SORT=_ps; }catch(e){}  // projects Gantt row order
@@ -3632,6 +3634,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"28.6", date:"2026-07-17", title:"✅ Close your tasks from the daily email (after sign-in)", items:[
+    "The daily My Work email now has a <b>🔒 Log in to close / update your tasks</b> button. Tap it → the live board opens on your <b>My Work</b> tab → sign in with your @gomra.com account → a <b>✓ close</b> appears on each of your tasks (right there in My Work). So the crew can close straight from the email link — but only after logging in, and only their own tasks." ] },
   { rev:"28.5", date:"2026-07-17", title:"🦺 Safety upload is LIVE", items:[
     "The 🦺 Safety <b>📤 upload</b> is switched on — pick a folder (Safety Talk, Eyewash PM, PMHV Safety and License, Standards…), choose your file, Upload, and it lands on the OSHA Safety SharePoint site. Upload Safety Talks &amp; Eyewash PMs straight from the floor." ] },
   { rev:"28.4", date:"2026-07-17", title:"🦺 Safety upload — files into your safety folders", items:[
@@ -12751,7 +12755,7 @@ function myWorkFor(name){
   (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
     (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
       if(_whoMatch(t.who,name)){ const fm=String(t.t||'').match(/🔧\s*#(\d+)/);
-        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, due0:_taskDue0(t.cm), kind:'shop', files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row}}); } }); });
+        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, due0:_taskDue0(t.cm), kind:'shop', proj:j.project, raw:t.t, files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row}}); } }); });
   (D.projects||[]).forEach(p=>{ const ts=p.tasks||[]; ts.forEach((t,i)=>{ if(/yes/i.test(t.ml||'')) return;
       if(isDoneT(t) || projIsPendingVerify(t)) return;   // pending-verify shows in its own section
       if(_whoMatch(t.who,name)){ let parent=''; if(t.sub){ for(let k=i-1;k>=0;k--){ if(!ts[k].sub){ parent=ts[k].t||''; break; } } }
@@ -12797,6 +12801,12 @@ function _mwNavAttr(nav){ if(!nav) return {oc:'', tip:'', chevron:''};
   return {oc:'', tip:'', chevron:''}; }
 function _mwList(arr, today){ if(!arr.length) return '<div class="empty">— none —</div>';
   return arr.map(x=>_mwRow(x,today)).join(''); }
+// Can the SIGNED-IN person close this shop task from My Work? Closer → only their own; editor/shared-pin → any; else no.
+function _mwCanClose(proj, raw){ if(!raw) return false;
+  if(typeof ssoIsCloser==='function' && ssoIsCloser()) return (typeof _canCloseHere==='function') ? _canCloseHere(proj, raw) : false;
+  return !!CLOSE_PIN; }
+// Close a shop task from the My Work list, then refresh the list.
+function mwCloseTask(proj, raw){ if(typeof closeTaskByName==='function') closeTaskByName(proj, raw); setTimeout(()=>{ try{ renderMyWork(); }catch(e){} }, 120); }
 // One rich task row: task + where + dates, then the full detail — subproject/phase (project),
 // Fleetio # + description (shop), comments, and photo/file thumbnails.
 function _mwRow(x, today){
@@ -12812,7 +12822,10 @@ function _mwRow(x, today){
   if(x.by) det+='<div class="meta">🧑 added by '+esc(x.by)+'</div>';
   const fio=(x.kind==='shop'&&x.fnum&&typeof fioDetHtml==='function')?fioDetHtml(x.fnum):'';
   const media=(typeof mediaHtml==='function'&&typeof _taskMedia==='function')?mediaHtml(_taskMedia(x.files, x.kind==='shop'?x.fnum:null)):'';
-  return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+fnumline+'</div><div class="meta">'+esc(x.where)+rng+'</div>'+det+fio+(media?('<div style="margin-top:4px">'+media+'</div>'):'')+'</div><div class="right">'+d+nav.chevron+'</div></div>'; }
+  // ✓ close (shop tasks only) — shows once you're signed in with the right to close it
+  const canClose=(x.kind==='shop' && _mwCanClose(x.proj, x.raw));
+  const closeBtn=canClose?(' <button onclick="event.stopPropagation();mwCloseTask(\''+escJsAttr(x.proj)+'\',\''+escJsAttr(x.raw)+'\')" style="padding:3px 9px;border-radius:7px;border:1px solid #16a34a;background:#16a34a;color:#fff;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px" title="Mark this task done">✓ close</button>'):'';
+  return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+fnumline+'</div><div class="meta">'+esc(x.where)+rng+'</div>'+det+fio+(media?('<div style="margin-top:4px">'+media+'</div>'):'')+'</div><div class="right" style="white-space:nowrap">'+d+closeBtn+nav.chevron+'</div></div>'; }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
@@ -12943,6 +12956,7 @@ function buildMyWorkHtml(name){
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My Work — '+esc(name)+' — '+rDate+'</title><style>'+REPORT_CSS+'</style></head><body>'
     +'<div class="printbar"><button onclick="window.print()">🖨 Print / Save PDF</button><span style="color:#aeb6c2">My Work · '+esc(name)+' · refresh for live data</span></div>'
     +'<div class="wrap"><h1><span class="mra">MRA</span> My Work — '+esc(name)+'</h1><div class="sub">'+rDate+' · '+m.total+' open item'+(m.total===1?'':'s')+' · board data as of '+esc(D.generatedText||'')+'</div>'
+    +'<div style="margin:2px 0 12px"><a href="'+escA(dash)+'?view=mywork" style="background:#e04826;color:#fff;text-decoration:none;font-weight:800;padding:11px 20px;border-radius:8px;display:inline-block;font-size:14px">🔒 Log in to close / update your tasks →</a><div style="font-size:10.5px;color:#7b8794;margin-top:5px">Opens the live board — sign in with your @gomra.com account, then your ✓ close buttons appear on your tasks.</div></div>'
     +tiles+body
     +'<div class="foot">MRA Command Center · your personalized work list · <a href="'+escA(dash)+'" style="color:#1a56db">open the live dashboard</a> to update tasks'+(m.awaitingMe.length?' &amp; verify sign-offs':'')+'</div></div></body></html>';
 }
