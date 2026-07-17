@@ -9,10 +9,11 @@
       <div class="fjnum">${j.jobNum?esc(j.jobNum):''}${j.client?' · '+esc(j.client):''} · ${esc(j.status||'')}</div>
       <div class="ftasks">${open.map(t=>`<div>• ${esc(_mwCleanCm(t.t)||t.t)}${t.who?` <span class="who">${esc(t.who)}</span>`:''}</div>`).join('')||'<div class="fmore">no open tasks</div>'}${openTasksOf(j).length>6?`<div class="fmore">+${openTasksOf(j).length-6} more</div>`:''}</div></div>`;
   }
+  function posSlots(arr, pos){ if(!arr||!arr.length) return (pos==='Middle')?'':fslot(pos,null); return arr.map(j=>fslot(pos,j)).join(''); }
   function render(){
     const grid=bayGridModel();
     const bays=document.getElementById('floorBays');
-    if(bays) bays.innerHTML=grid.map(b=>`<div class="floorbay"><h2>Bay ${b.bay}</h2>${fslot('Front',b.Front)}${b.Middle?fslot('Middle',b.Middle):''}${fslot('Back',b.Back)}</div>`).join('')||'<div class="floorslot empty">No jobs in bays</div>';
+    if(bays) bays.innerHTML=grid.map(b=>`<div class="floorbay"><h2>Bay ${b.bay}</h2>${posSlots(b.Front,'Front')}${posSlots(b.Middle,'Middle')}${posSlots(b.Back,'Back')}</div>`).join('')||'<div class="floorslot empty">No jobs in bays</div>';
     // crew columns: the six print crews + MRA Shop, open tasks on active lanes
     const CREWS=['Sal','Doug','Wrap Team','Electricians','Josh','Jeff'];
     const byCrew={}; CREWS.forEach(c=>byCrew[c]=[]);

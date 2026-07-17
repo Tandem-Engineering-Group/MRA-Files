@@ -36,6 +36,7 @@
       <div class="muted mwrow-sub">${esc(where)}${x.kind==='proj'&&t.phase?' · '+esc(t.phase):''}${x.kind==='proj'&&x.t.startISO?' · ▶ '+esc(fmtMD(x.t.startISO)):''}</div>`;
     const det=fnum?fioDetHtml(fnum):''; if(det) h+=det; const media=x.kind==='shop'?mediaHtml(_taskMedia(t.files,fnum)):''; if(media) h+=media;
     h+=_byLine(t.cm); if(cm) h+=`<div class="ccm">📝 ${esc(cm)}</div>`; h+='</div>';
+    if(x.kind==='shop' && !t.done && typeof WALL!=='undefined' && !WALL){ h+='<span class="mwclose" onclick="event.stopPropagation()">'+closeHandle(x.job.project, x.t.t)+'</span>'; }
     h+='<span class="chev">›</span>'; return h; }
 
   function section(id,title,items,extra){ if(!items.length) return ''; return `<div class="card" id="${id}"><div class="cardhead"><h2>${title}</h2><span class="crewtag">${items.length}</span></div>${items.map(itemRow).join('')}${extra||''}</div>`; }
@@ -47,6 +48,7 @@
     (D().users||[]).forEach(u=>{ if(u.name) names.add(u.name); });
     // When SSO is enforcing, non-super-admins see only their OWN work (no picker); Rich + previews get the picker.
     const locked=(ssoEnforcing() && SSO.user && !isSuperAdmin());
+    if(!WHO && window.MW_DEEPLINK){ WHO=window.MW_DEEPLINK; window.MW_DEEPLINK=null; }   // ?mywork=<Name> daily-email link
     const person=locked?(boardNameFor()||CURRENT_USER||'Sal'):(WHO||CURRENT_USER||[...names][0]||'Sal');
     const w=myWorkFor(person);
     const openN=w.od.length+w.due.length+w.later.length;

@@ -3,15 +3,15 @@
   function goShopJob(row){ showPage('shop'); setTimeout(()=>{ const el=document.getElementById('job-'+row); if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),1400); } },80); }
   window.goShopJob=goShopJob;
 
-  function slot(pos, j, i){
-    if(!j) return `<div class="slot ${i?'back':''}"><div class="pos">${pos}</div><div class="job muted">Available</div></div>`;
-    const k=kindOf(j), open=openTasksOf(j).length, pct=jobPct(j);
-    return `<div class="slot click ${i?'back':''}" onclick="goShopJob('${escA(j.row)}')" title="Open ${escA(j.project)} on Shop">
-      <div class="between"><span class="pos">${pos}</span><span class="tag ${k}">${KIND_LABEL[k]}</span></div>
+  function card(pos, j, back){ const k=kindOf(j), open=openTasksOf(j).length, pct=jobPct(j);
+    return `<div class="slot click ${back?'back':''}" onclick="goShopJob('${escA(j.row)}')" title="Open ${escA(j.project)} on Shop">
+      <div class="between"><span class="pos">${esc(pos)}</span><span class="tag ${k}">${KIND_LABEL[k]}</span></div>
       <div class="job">${esc(j.project)}${j.jobNum?` <span class="fnum">${esc(j.jobNum)}</span>`:''}</div>
       <div class="pctline"><span>${esc(j.pm||'—')}</span><span>${open} open</span></div>
-      <div class="progress"><span style="width:${pct}%"></span></div></div>`;
-  }
+      <div class="progress"><span style="width:${pct}%"></span></div></div>`; }
+  function empty(pos, back){ return `<div class="slot ${back?'back':''}"><div class="pos">${esc(pos)}</div><div class="job muted">Available</div></div>`; }
+  // Render every job in a position (a bay position can hold several trailers); Front/Back show Available when empty.
+  function posCards(arr, pos, back){ if(!arr||!arr.length) return (pos==='Middle')?'':empty(pos,back); return arr.map(j=>card(pos,j,back)).join(''); }
 
   function render(){
     const sec=document.getElementById('home'); if(!sec) return;
@@ -35,7 +35,7 @@
     sec.innerHTML=`<div class="head"><div><h1>${greet}${esc(name)}</h1><div class="muted">Live bay occupancy, this week's overlap and what's coming due.</div></div><span class="pill">● Systems Operational · ${esc(D().generatedText||'')}</span></div>
     <div class="grid homegrid">
       <div class="card overview"><div class="cardhead"><h2>Bay Overview</h2><span class="muted">Bays 2–5 · Front and Back</span></div>
-        <div class="baygrid">${grid.map(b=>`<div class="baycol"><div class="bayname">Bay ${b.bay}</div>${slot('Front',b.Front,0)}${b.Middle?slot('Middle',b.Middle,0):''}${slot('Back',b.Back,1)}</div>`).join('')||'<div class="emptystate">No jobs in bays.</div>'}</div>
+        <div class="baygrid">${grid.map(b=>`<div class="baycol"><div class="bayname">Bay ${b.bay}</div>${posCards(b.Front,'Front',0)}${posCards(b.Middle,'Middle',0)}${posCards(b.Back,'Back',1)}</div>`).join('')||'<div class="emptystate">No jobs in bays.</div>'}</div>
         <div class="note">Middle positions appear only when occupied. Click a bay to open it on Shop.</div></div>
       <div class="card"><div class="cardhead"><h2>Weekly Task Overlap</h2><span class="muted">Active bay & parking jobs</span></div>
         <div class="gantt" id="homeGantt"></div></div>

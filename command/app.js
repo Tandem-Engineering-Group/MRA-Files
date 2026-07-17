@@ -183,7 +183,7 @@ function projHealth(p, today){ today=today||todayISO();
   if(behindBy!=null && behindBy>=15) return {state:'behind', expectedPct:exp, behindBy};
   return {state:'ontrack', expectedPct:exp, behindBy}; }
 const HEALTH_RANK={late:0, behind:1, ontrack:2, upcoming:3, parked:4, done:9};
-const HEALTH_COLOR={late:'#e34b59', behind:'#f59e0b', ontrack:'#18a875', upcoming:'#2166f3', parked:'#64748b', done:'#18a875'};
+const HEALTH_COLOR={late:'#ef4444', behind:'#f59e0b', ontrack:'#22c55e', upcoming:'#3b82f6', parked:'#64748b', done:'#22c55e'};
 const HEALTH_LABEL={late:'Late', behind:'Behind', ontrack:'On track', upcoming:'Upcoming', parked:'Parked', done:'Complete'};
 function nextGate(p, today){ today=today||todayISO(); return (p.milestones||[]).filter(m=>!m.done && m.dateISO>=today).sort((a,b)=>a.dateISO.localeCompare(b.dateISO))[0]||null; }
 function _pmtBehindBits(p, today){ today=today||todayISO();
@@ -202,7 +202,7 @@ const PROJ_VERIFY_STATUS='Pending Verification';
 function _projJobsFor(pname){ const p=(D().projects||[]).find(x=>x.name===pname); if(!p) return [];
   const dig=s=>String(s||'').toUpperCase().replace(/[^0-9]/g,''); const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   const pj=dig(p.jobNum), pn=norm(pname);
-  return (D().jobs||[]).filter(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return false;
+  return (D().jobs||[]).filter(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped'||isOrphan(j)) return false;
     if(pj) return dig(j.jobNum)===pj; const jn=norm(j.project); if(!jn||!pn) return false; return jn.indexOf(pn)>=0 || pn.indexOf(jn)>=0; }); }
 function _projMainJob(pname){ const list=_projJobsFor(pname); if(!list.length) return null;
   const rank=j=>{ const b=String(j.bay||''); if(bayIsHeld(b)) return 3; if(/parking|next\s*up/i.test(b)) return 2; return jobIsSub(j)?1:0; };
@@ -237,11 +237,10 @@ function _projTasksForJob(j){ if(!window._PJBYROW) _pjRebuild(); return (window.
 function bayNumOf(b){ const m=String(b||'').match(/bay\s*(\d+)/i); return m?+m[1]:null; }
 function bayPosOf(b){ if(/front/i.test(b)) return 'Front'; if(/middle/i.test(b)) return 'Middle'; if(/back|loading/i.test(b)) return 'Back'; return ''; }
 function bayGridModel(){ const bays={};
-  (D().jobs||[]).forEach(j=>{ if(!isLive(j)) return; const n=bayNumOf(j.bay); if(n==null) return; const pos=bayPosOf(j.bay)||'Front';
-    const B=(bays[n]=bays[n]||{bay:n,Front:null,Middle:null,Back:null});
-    if(!B[pos]) B[pos]=j; else if(!B.Back) B.Back=j; else if(!B.Middle) B.Middle=j; });
+  (D().jobs||[]).forEach(j=>{ if(!isLive(j)||isOrphan(j)) return; const n=bayNumOf(j.bay); if(n==null) return; const pos=bayPosOf(j.bay)||'Front';
+    const B=(bays[n]=bays[n]||{bay:n,Front:[],Middle:[],Back:[]}); B[pos].push(j); });
   return Object.keys(bays).map(Number).sort((a,b)=>a-b).map(n=>bays[n]); }
-function jobsInBay(pred){ return (D().jobs||[]).filter(j=>isLive(j) && pred(j.bay)); }
+function jobsInBay(pred){ return (D().jobs||[]).filter(j=>isLive(j) && !isOrphan(j) && pred(j.bay)); }
 function openTasksOf(j){ return (j.tasks||[]).filter(t=>!t.done && !isSnzRep(t)); }
 function jobPct(j){ const d=(j.tasks||[]).filter(t=>t.done).length, o=openTasksOf(j).length; const tot=d+o; return tot?Math.round(d/tot*100):0; }
 function kindOf(j){ const s=(j.status||'')+' '+(j.project||''); const b=j.bay||'';
@@ -550,9 +549,12 @@ function taskLineHtml(t, job, opts){ opts=opts||{}; const proj=job.project, raw=
   h+='</div>';
   h+='<div class="ctask-side">';
   const who=t.who||''; if(who) h+='<span class="crewtag" title="Assigned to '+escA(who)+'">'+esc(who)+'</span>';
-  if(canQ) h+=' <span class="qa" onclick="qaLine(this,event)" data-proj="'+escA(proj)+'" data-task="'+escA(raw)+'" title="Assign / re-assign">👤</span>';
+  if(canQ){ h+=' <span class="qa editaff" onclick="qaLine(this,event)" data-proj="'+escA(proj)+'" data-task="'+escA(raw)+'" title="Assign / re-assign">👤</span>';
+    h+=' <span class="qa editaff" onclick="editTaskFor(this,event)" data-proj="'+escA(proj)+'" data-task="'+escA(raw)+'" title="Edit / delete task">✎</span>'; }
   h+='</div></div>';
   return h; }
+function editTaskFor(el, ev){ if(ev) ev.stopPropagation(); const proj=el.dataset.proj, raw=el.dataset.task;
+  const j=oJob(proj); const t=j&&(j.tasks||[]).find(x=>x.t===raw); if(j&&t) openEditTaskModal(j,t); }
 
 /* ---------- gantt (mockup helper kept verbatim + a dated builder) ---------- */
 function gantt(el,rows,labels,cls){ if(!el) return; cls=cls||'';
@@ -580,7 +582,7 @@ function ganttDates(el, items, opts){ opts=opts||{}; if(!el) return;
     const ms=(x.milestones||[]).filter(m=>m.dateISO).map(m=>`<span class="gdmile" style="left:${(frac(parseISO(m.dateISO).getTime())*100).toFixed(2)}%" title="◆ ${escA(m.name+' · '+fmtMDY(m.dateISO))}"></span>`).join('');
     return `<div class="gdrow ${x.cls||''}"><div class="gdlabel" title="${escA(x.label)}">${esc(x.label)}${x.sub?`<span class="gdsub">${esc(x.sub)}</span>`:''}</div>`
       +`<div class="gdtrack"><span class="gdtoday" style="left:${(frac(Date.parse(today))*100).toFixed(2)}%"></span>${ms}`
-      +`<div class="gdbar" style="left:${left}%;width:${w}%;background:${x.color||'#2166f3'}" ${x.onclick?`onclick="${x.onclick}"`:''} title="${escA(x.title||(x.label+' · '+fmtMDY(x.startISO)+' → '+fmtMDY(x.endISO)))}">${esc(x.barLabel||'')}</div></div></div>`; });
+      +`<div class="gdbar" style="left:${left}%;width:${w}%;background:${x.color||'#e04826'}" ${x.onclick?`onclick="${x.onclick}"`:''} title="${escA(x.title||(x.label+' · '+fmtMDY(x.startISO)+' → '+fmtMDY(x.endISO)))}">${esc(x.barLabel||'')}</div></div></div>`; });
   el.innerHTML=head+rows.join(''); }
 
 /* ---------- quick-assign popover ---------- */
@@ -726,9 +728,17 @@ function initCC(){
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(document.getElementById('floor')&&document.getElementById('floor').classList.contains('open')) closeFloor(); document.querySelectorAll('.modal.open').forEach(m=>m.classList.remove('open')); } });
   ['mousemove','keydown','click','touchstart'].forEach(ev=>document.addEventListener(ev,_resetIdle,{passive:true}));
   syncAuthUI();
-  // deep-link ?view=
-  let start='home'; try{ const v=new URL(location.href).searchParams.get('view'); if(v && window.MRA_PAGES[v]) start=v; }catch(e){}
+  // deep-link ?view= (aliases: mywork->tasks, fleetio->maintenance, floor opens the wall overlay)
+  let start='home', wantFloor=false, wantMyWork=null;
+  try{ const q=new URL(location.href).searchParams; let v=q.get('view')||'';
+    const ALIAS={mywork:'tasks', fleetio:'maintenance', assets:'maintenance', projects:'projects', shop:'shop', home:'home', sales:'sales', tools:'tools'};
+    if(v==='floor'){ wantFloor=true; v='shop'; }
+    if(ALIAS[v]) start=ALIAS[v]; else if(window.MRA_PAGES[v]) start=v;
+    const mw=q.get('mywork'); if(mw){ start='tasks'; wantMyWork=mw; }   // ?mywork=<Name> daily-email deep-link
+  }catch(e){}
+  if(wantMyWork!=null){ try{ window.MW_DEEPLINK=wantMyWork; }catch(e){} }
   showPage(start);
+  if(wantFloor) try{ openFloor(); }catch(e){}
   try{ if(SSO.active()) _ccLock('Checking access…', false); }catch(e){}   // live host: hide the app until SSO proves it's Rich (no flash for others)
   try{ SSO.init(); }catch(e){}   // Microsoft sign-in + role gating (fail-open off the live host)
   setInterval(pollData, 60000);

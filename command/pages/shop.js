@@ -89,7 +89,7 @@
       <a class="btn" href="../MRA_Dashboard.html?wo=all" target="_blank" rel="noopener">🖨 Work orders ↗</a></div>
     <div class="grid shopgrid">
       <div class="card full"><div class="cardhead"><h2>Bay Overview</h2><span class="muted">Click a card to open the job editor</span></div>
-        <div class="baygrid detailgrid">${grid.map(b=>`<div class="baycol"><div class="bayname">Bay ${b.bay}</div>${b.Front?bayCard(b.Front,'Front'):emptySlot('Front')}${b.Middle?bayCard(b.Middle,'Middle'):''}${b.Back?bayCard(b.Back,'Back'):emptySlot('Back')}</div>`).join('')||'<div class="emptystate">No jobs in bays.</div>'}</div>
+        <div class="baygrid detailgrid">${grid.map(b=>`<div class="baycol"><div class="bayname">Bay ${b.bay}</div>${posCards(b.Front,'Front')}${posCards(b.Middle,'Middle')}${posCards(b.Back,'Back')}</div>`).join('')||'<div class="emptystate">No jobs in bays.</div>'}</div>
         ${parts.length?`<div class="cardhead" style="margin-top:18px"><h2>Off Site / Parts</h2><span class="muted">Away — but we're building parts</span></div><div class="parkinggrid">${parts.map(parkCard).join('')}</div>`:''}
         <div class="cardhead" style="margin-top:18px"><h2>Parking Lot</h2><span class="muted">⏭ ${parking.length} on the lot</span></div>
         <div class="parkinggrid">${parking.map(parkCard).join('')||'<div class="emptystate">Empty.</div>'}</div>
@@ -106,5 +106,7 @@
     drawCal();
   }
   function emptySlot(pos){ return `<div class="slot detail ${pos==='Back'?'back':''}"><div class="pos">${pos}</div><div class="job muted">Available</div></div>`; }
+  // A bay position can hold several trailers — render them all; Front/Back show Available when empty.
+  function posCards(arr, pos){ if(!arr||!arr.length) return (pos==='Middle')?'':emptySlot(pos); return arr.map(j=>bayCard(j,pos)).join(''); }
   window.MRA_PAGES.shop={render:render};
 })();
