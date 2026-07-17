@@ -153,6 +153,40 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
       with no TaskID (flow leaves `field_2` blank — text-matched edits still work); (4) Predecessor/Duration are
       Number columns and not written.
     - Gotchas + the full design are in `LISTS-WRITE-DESIGN.md`.
+## 🧭 COMMAND CENTER (Quintin layout) — state as of 2026-07-17 late (READ THIS FIRST next session)
+
+- **LIVE at `/command/index.html`, LOCKED TO RICH ONLY** (preview): classic header shows a 🧭 button
+  only for super-admin; the page itself full-screen-locks on the live host unless the signed-in MSAL
+  user is Rich (`ccAccessOK` in `command/app.js` — delete its superadmin gate to open it up). Off-host
+  previews stay unlocked for dev/testing.
+- **⚠ THE BIG PIVOT (Rich, blunt — screenshots of a mess on iPad):** my rebuilt Shop board + Projects
+  gantts were "a complete shit show / unreadable / piss poor". His call: **"leave it how we had it and
+  just move the menu."** SO: **Shop / Projects / Maintenance pages now EMBED the real `MRA_Dashboard.html`**
+  (iframes: bare / `?view=projects` / `?view=fleetio`) inside Quintin's left-nav shell — every classic
+  bell + ALL admin functions work via the embed, zero duplication. Guards: only one `.ccframe` alive at
+  a time (`showPage` removes hidden ones — iPad memory), render guards stop the 60s poll reloading it,
+  classic hides its 🧭 button when `window.self!==window.top`. **DO NOT resume rebuilding those three
+  pages from scratch** — Rich is extremely concerned about money burned on the rebuild attempt; reuse first.
+- **Still new-format (Rich OK'd colors = MRA orange `--brand:#e04826`, Block 9 in styles.css):** Home
+  (bay canvas + weekly overlap + coming due), My Work (tasks.js, mirrors the classic engine incl. verify/
+  close/expand), Tools, Sales, + a Floor View overlay (floor.js). `command/app.js` carries a full port of
+  the edit engine (same `_LF`/`shopWrite`/by-id retry queue), the SSO+role system (same rules as classic,
+  fail-open off-host), and `ganttDates`. All 16 adversarial-audit findings in `command/CC_FOLLOWUPS.md`
+  were fixed BEFORE the pivot (bay-grid drops, dead range buttons, etc.) — most now moot for the three
+  embedded pages but the fixes live on in Home/My Work/app.js.
+- **📁 gomra MIGRATION — TIM RAN PHASE 1 (2026-07-17 evening, VERIFIED):** `Migrate-Data-To-Lists.ps1
+  -Fresh` against `https://gomra.sharepoint.com/sites/MRADashboard` → **96 jobs (exact match to live),
+  384 shop tasks (live 385), 567 project tasks (live 564 — same-day drift), 0 users (by design)**.
+  Lists exist + loaded; NOTHING switched — live board still reads/writes Tandem. REMAINING before cutover:
+  (1) **MRA Users** on gomra is EMPTY — 12 users must be re-entered (old list stores hashed codes `h`,
+  no plaintext → re-enter by hand w/ Name/Code/Role/Active, or issue new codes); (2) repoint the 4 flows
+  (MRA Lists to JSON / MRA Lists Write 2 / MRA Email / MRA Daily My Work Emails) → gomra site + gomra
+  connections — do this WITH Rich, GUI, one at a time, Tandem stays live as rollback; (3) Tim still owes
+  admin consent for the "M365 MCP Client for Claude" app so I can read gomra sites directly.
+- **Pipeline incident (resolved, 2026-07-17 ~16:00Z):** "MRA Lists to JSON" hung on Create blob (V2) —
+  two runs stuck 3+ hrs, listsAsOf frozen 45 min. Fix = cancel stuck runs + Recurrence 2→3 min + manual
+  run. Diagnostic tell: `listsAsOf` stale while `generatedAt` ticks = that flow hung on the blob step.
+
 ## 🔜 NEXT SESSION RUNBOOK — locked in 2026-06-25 (Rich wants all of this "tomorrow")
 
 **A. Cutover follow-ups (post-flip cleanup — board is LIVE on Lists, see Step 3):**
