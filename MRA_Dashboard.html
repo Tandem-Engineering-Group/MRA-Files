@@ -1667,6 +1667,7 @@
         <a class="mi" href="catalogue/index.html" target="_blank" rel="noopener" onclick="closeDrops()" title="Open the MRA Product Catalogue in a new tab">📖 Product Catalogue</a>
       <a class="mi" data-perm="builder" href="builder/index.html" target="_blank" rel="noopener" onclick="closeDrops()" title="InfoWheels 3D configurator — spin the van, pick wrap colors, floors and cabinets, screenshot or share a config link (Rev 1 placeholder model)">🚚 InfoWheels 3D Builder</a>
         <a class="mi" href="library/index.html" target="_blank" rel="noopener" onclick="closeDrops()" title="Search every project schedule (moved off Smartsheets) — by project, client, job #, PM, or any task">📚 Project Library</a>
+        <a class="mi" href="?floor2=1" onclick="closeDrops()" title="Preview of a new-format shop floor (bay stations + crew kanban) — the live floor is unchanged">🧪 Shop Floor v2 (test)</a>
         <button class="mi" data-perm="safety" onclick="closeDrops(); openSafety()" title="MRA Safety (OSHA) — open the safety site or upload a safety file (owners + edit/admin)">🦺 Safety</button>
         <button class="mi" onclick="closeDrops(); openDesignTeam()" title="The design / CAD team board — what Sarah, Mark &amp; Brandon are working on, with notes + a printable one-pager each">🎨 Design Team board</button>
         <button class="mi" onclick="closeDrops(); openProdMeeting()" title="Run the Monday 10am production status meeting from the dash - PM report-out (green one-liners, yellow/red expanded), park items to discuss, tracked action items">🏭 Production Meeting</button>
@@ -3641,6 +3642,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"29.0", date:"2026-07-17", title:"🧪 Shop Floor v2 — new-format preview (test)", items:[
+    "New <b>☰ Menu → 🧪 Shop Floor v2 (test)</b> — a cleaner, glanceable take on the floor: <b>bay “stations”</b> (each bay's trailer, status color, open-task peek) + a <b>crew kanban board</b>. It's a <b>preview to try out</b>; the live FLOOR is completely unchanged. Feedback welcome — it'll evolve." ] },
   { rev:"28.9", date:"2026-07-17", title:"✓ Completed-only filter on the detailed project view (Al)", items:[
     "The detailed project view's task filter is now 3-way: <b>All</b> · <b>Open only</b> (hides completed) · <b>✓ Completed only</b> (shows just what's finished) — so you can review everything that's been knocked out, not only what's left." ] },
   { rev:"28.8", date:"2026-07-17", title:"🩺 Health status on the detailed project view (Al's ask)", items:[
@@ -13048,6 +13051,73 @@ function buildHomePreviewHtml(){
     +card('⚠ Open Fleetio issues',issHtml)
     +'</div></div></div></body></html>';
 }
+// ============================ 🔧 SHOP FLOOR v2 — new-format PREVIEW (?floor2=1) ============================
+// Leaves the live FLOOR untouched. A cleaner, glanceable take: bay "stations" grid + crew kanban board.
+// Standalone page (like ?home=1) so it's fully isolated; hidden under ☰ Menu for testing.
+function buildFloor2Html(){
+  const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+  const active=(D.jobs||[]).filter(j=>j.category!=='leave' && (j.status||'').toLowerCase()!=='shipped' && String(j.row||'').indexOf('orphan:')!==0);
+  const isRealBay=b=>{ b=String(b||''); return b && !/parking|next\s*up|on\s*hold|off.?site|general|leave/i.test(b); };
+  const isHold=b=>/parking|next\s*up|on\s*hold|off.?site/i.test(String(b||''));
+  const fmt=iso=>{ if(!iso) return ''; const p=String(iso).split('-'); return (+p[1])+'/'+(+p[2])+'/'+p[0]; };
+  const openOf=j=>(j.tasks||[]).filter(t=>!t.done && !(typeof isSalesT==='function'&&isSalesT(t)) && !(typeof isSnzRep==='function'&&isSnzRep(t)));
+  const whoOf=t=>{ try{ return (typeof shopWho==='function')?(shopWho(t)||t.who||''):(t.who||''); }catch(e){ return t.who||''; } };
+  const statusCol=j=>{ const s=(j.status||'').toLowerCase(); const od=openOf(j).some(t=>t.due&&t.due<today);
+    if(od) return '#ef4444'; if(s==='active') return '#22c55e'; if(/hold/.test(s)) return '#f59e0b'; return '#3b82f6'; };
+  // ---- stats ----
+  let openT=0, odT=0; active.forEach(j=>openOf(j).forEach(t=>{ openT++; if(t.due&&t.due<today) odT++; }));
+  const bayJobs=active.filter(j=>isRealBay(j.bay));
+  const holdJobs=active.filter(j=>isHold(j.bay));
+  const stat=(n,lab,col)=>'<div class="st"><div class="n" style="color:'+col+'">'+n+'</div><div class="l">'+lab+'</div></div>';
+  const stats='<div class="stats">'+stat(bayJobs.length,'IN BAYS','#e5e7eb')+stat(openT,'OPEN TASKS','#3b82f6')+stat(odT,'OVERDUE',odT?'#ef4444':'#22c55e')+stat(holdJobs.length,'LOT / HOLD','#e5e7eb')+'</div>';
+  // ---- bay stations ----
+  const bays=[...new Set(bayJobs.map(j=>j.bay))].sort((a,b)=>String(a).localeCompare(b,undefined,{numeric:true}));
+  const taskPeek=j=>openOf(j).slice(0,4).map(t=>{ const od=t.due&&t.due<today;
+    return '<div class="tk"><span class="tkt">'+esc(cleanTask(t.t,false))+'</span>'+(t.due?('<span class="tkd'+(od?' od':'')+'">'+fmt(t.due)+'</span>'):'')+'<div class="tkw">'+esc(whoOf(t)||'—')+'</div></div>'; }).join('');
+  const bayCard=j=>{ const oc=openOf(j).length; const c=statusCol(j);
+    return '<div class="station"><div class="sh"><span class="dot" style="background:'+c+'"></span><span class="snm">'+esc(j.project||'')+'</span>'+(j.jobNum?('<span class="sjn">'+esc(j.jobNum)+'</span>'):'')+'<span class="soc">'+oc+' open</span></div>'
+      +(oc?('<div class="tks">'+taskPeek(j)+(oc>4?('<div class="tkmore">+ '+(oc-4)+' more</div>'):'')+'</div>'):'<div class="empty">no open tasks</div>')+'</div>'; };
+  const stationsHtml=bays.map(bay=>{ const js=bayJobs.filter(j=>j.bay===bay);
+    return '<div class="baywrap"><div class="bayhd">'+esc(bay)+'</div>'+js.map(bayCard).join('')+'</div>'; }).join('')||'<div class="empty">No trailers in bays.</div>';
+  // ---- holding lanes ----
+  const holdHtml=holdJobs.length?('<div class="holds">'+holdJobs.map(j=>{ const oc=openOf(j).length; const c=statusCol(j);
+    return '<div class="holdc"><span class="dot" style="background:'+c+'"></span><b>'+esc(j.project||'')+'</b>'+(j.jobNum?(' <span class="sjn">'+esc(j.jobNum)+'</span>'):'')+'<div class="holdm">'+esc(j.bay||'')+' · '+oc+' open</div></div>'; }).join('')+'</div>'):'';
+  // ---- crew kanban ----
+  const crews=['Sal','Wrap Team','Electricians','Doug','Josh','Jeff'];
+  const crewMatch=(t,cr)=>{ const w=String(whoOf(t)||'').toLowerCase(); const c=cr.toLowerCase();
+    return w.split(/\s*\/\s*/).some(seg=>seg.trim()===c) || w.indexOf(c)>=0; };
+  const colFor=cr=>{ const tasks=[]; active.forEach(j=>{ if(isHold(j.bay)&&!/parts/i.test(j.bay||'')) return; openOf(j).forEach(t=>{ if(crewMatch(t,cr)) tasks.push({t,j}); }); });
+    tasks.sort((a,b)=>String(a.t.due||'9999').localeCompare(String(b.t.due||'9999')));
+    const od=tasks.filter(x=>x.t.due&&x.t.due<today).length;
+    const cards=tasks.slice(0,14).map(x=>{ const t=x.t,j=x.j, o=t.due&&t.due<today;
+      return '<div class="kc"><div class="kct">'+esc(cleanTask(t.t,false))+'</div><div class="kcm">'+esc(j.project||'')+(j.jobNum?(' '+esc(j.jobNum)):'')+(t.due?(' · <span class="'+(o?'od':'')+'">'+fmt(t.due)+'</span>'):'')+'</div></div>'; }).join('')||'<div class="empty">clear ✓</div>';
+    return '<div class="kcol"><div class="kh">'+esc(cr)+' <span class="kn">'+tasks.length+(od?(' · '+od+' od'):'')+'</span></div><div class="kbody">'+cards+(tasks.length>14?('<div class="tkmore">+ '+(tasks.length-14)+' more</div>'):'')+'</div></div>'; };
+  const kanban='<div class="kanban">'+crews.map(colFor).join('')+'</div>';
+  const dash=location.origin+location.pathname;
+  const css='*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#0b0e13;color:#e5e7eb}'
+    +'.top{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid #1f2a37}.top h1{font-size:19px;margin:0}.pv{background:#3a2e12;color:#f5c451;font-size:10px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.5px}.top a{margin-left:auto;color:#7aa2d6;font-size:12px}'
+    +'.main{padding:16px 20px}'
+    +'.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}.st{flex:1;min-width:110px;background:#161c26;border:1px solid #2a3543;border-radius:12px;padding:10px 13px}.st .n{font-size:24px;font-weight:900;line-height:1}.st .l{font-size:9px;letter-spacing:.6px;color:#7b8794;font-weight:700;margin-top:4px}'
+    +'h2{font-size:13px;color:#9fb0c4;letter-spacing:.5px;margin:18px 0 10px;text-transform:uppercase}'
+    +'.stations{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}'
+    +'.baywrap{background:#0f141c;border:1px solid #1f2a37;border-radius:12px;padding:8px}.bayhd{font-size:11px;font-weight:800;color:#7b8794;letter-spacing:.5px;padding:3px 6px 8px;text-transform:uppercase}'
+    +'.station{background:#161c26;border:1px solid #2a3543;border-radius:10px;padding:10px 12px;margin-bottom:8px}.station:last-child{margin-bottom:0}'
+    +'.sh{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.snm{font-weight:700;font-size:14px}.sjn{font-size:11px;color:#7b8794}.soc{margin-left:auto;font-size:10.5px;font-weight:700;color:#9fb0c4;background:#242c38;border-radius:6px;padding:2px 8px}'
+    +'.tks{margin-top:8px}.tk{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:5px 0;border-top:1px solid #1c2530}.tkt{flex:1;min-width:0;font-size:12.5px}.tkd{font-size:10.5px;color:#9fb0c4;white-space:nowrap}.tkd.od{color:#fca5a5;font-weight:700}.tkw{width:100%;font-size:10px;color:#7b8794}'
+    +'.tkmore{font-size:10.5px;color:#7b8794;padding-top:4px}.empty{color:#7b8794;font-style:italic;font-size:11.5px;padding:4px 0}'
+    +'.holds{display:flex;gap:10px;flex-wrap:wrap}.holdc{background:#12171f;border:1px solid #232f3d;border-radius:10px;padding:8px 12px;min-width:180px}.holdc b{font-size:13px}.holdm{font-size:10.5px;color:#7b8794;margin-top:2px}'
+    +'.dot{display:inline-block;width:10px;height:10px;border-radius:50%}'
+    +'.kanban{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}'
+    +'.kcol{background:#0f141c;border:1px solid #1f2a37;border-radius:12px;padding:8px}.kh{font-size:12px;font-weight:800;color:#cbd5e1;padding:4px 6px 8px}.kn{color:#7b8794;font-weight:600;font-size:10.5px}'
+    +'.kc{background:#161c26;border:1px solid #2a3543;border-radius:9px;padding:8px 10px;margin-bottom:7px}.kct{font-size:12.5px;font-weight:600}.kcm{font-size:10.5px;color:#7b8794;margin-top:3px}.kcm .od{color:#fca5a5;font-weight:700}';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shop Floor v2 (preview)</title><style>'+css+'</style></head><body>'
+    +'<div class="top"><h1>🔧 Shop Floor <span style="color:#7b8794">v2</span></h1><span class="pv">PREVIEW · new format</span><a href="'+escA(dash)+'">← back to the live board</a></div>'
+    +'<div class="main">'+stats
+    +'<h2>🏭 Bays</h2><div class="stations">'+stationsHtml+'</div>'
+    +(holdHtml?('<h2>🅿️ Parking lot / on hold / off-site</h2>'+holdHtml):'')
+    +'<h2>🧰 Crew board</h2>'+kanban
+    +'</div></body></html>';
+}
 function openPMReport(){ if(typeof closeDrops==='function') closeDrops();
   const D=window.MRA_DATA||{}; const pms=[...new Set((D.projects||[]).map(p=>(p.pm||'').trim()).filter(v=>v&&!/^tbd$/i.test(v)))].sort();
   const sel=document.getElementById('pmrWho'); if(sel) sel.innerHTML=pms.map(p=>`<option>${esc(p)}</option>`).join('');
@@ -15736,6 +15806,7 @@ const _sheetSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('sh
 const _recapQ=(()=>{ try{ const q=new URLSearchParams(location.search); return q.get('recap')?Math.max(1,+(q.get('days')||1)||1):null; }catch(e){ return null; } })();
 const _myworkQ=(()=>{ try{ return new URLSearchParams(location.search).get('mywork')||null; }catch(e){ return null; } })();
 const _homeQ=(()=>{ try{ return new URLSearchParams(location.search).get('home')?1:null; }catch(e){ return null; } })();   // ?home=1 → Command Center Home landing PREVIEW (Quintin's redesign)
+const _floor2Q=(()=>{ try{ return new URLSearchParams(location.search).get('floor2')?1:null; }catch(e){ return null; } })();   // ?floor2=1 → Shop Floor v2 new-format PREVIEW
 const _fixQ=(()=>{ try{ return new URLSearchParams(location.search).get('fix')?1:null; }catch(e){ return null; } })();
 const _punchQ=(()=>{ try{ return new URLSearchParams(location.search).get('punch'); }catch(e){ return null; } })();
 const _woSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('wo'); if(!q) return null;
@@ -15780,6 +15851,10 @@ if(_sheetSel){
   const _h=buildHomePreviewHtml();
   document.documentElement.innerHTML=_h.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
   document.title='MRA Command Center — Home (preview)';
+} else if(_floor2Q){
+  const _f2=buildFloor2Html();
+  document.documentElement.innerHTML=_f2.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
+  document.title='Shop Floor v2 (preview)';
 } else if(_punchQ){
   const _digits=v=>String(v||'').replace(/[^0-9]/g,'');
   const _jobs=((window.MRA_DATA||{}).jobs)||[];
