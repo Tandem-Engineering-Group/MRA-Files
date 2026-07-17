@@ -420,6 +420,40 @@ exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
   items (decide fields w/ Rich). (2) 📁 MOVE THE CLAUDE FILES Tandem→gomra SharePoint (the big pipeline migration in the
   runbook — repoint every flow's Site Address + re-auth as gomra, likely recreate the Lists; Tim creates the site first).**
 
+## Shipped 2026-07-17 (late) — Safety upload LIVE · email-close · Jeff closer · migration teed up (rev 28.2 → 28.7)
+- **🦺 SAFETY LIVE (rev 28.2–28.5).** ☰ Menu **🦺 Safety** (data-perm="safety" — shown to design/editor/exec-owners/admin,
+  hidden from anon/staff/shopedit/closer) opens a panel: 🔗 open the OSHASafety site + **📤 upload a file** (folder picker =
+  Safety Talk / Eyewash PM / PMHV Safety and License / Standards / Inspections / Incidents / Training / Other · date · note).
+  `SAFETY_UPLOAD_URL` set to the **"MRA Safety Upload"** flow; base64 no-cors POST like EOTM; `pin:CLOSE_PIN||'1974'` so
+  view-only owners can upload. **Flow (Rich built):** HTTP trigger → Create file (SharePoint). ⚠️ **GOTCHAS hit + fixed:**
+  (1) body arrives **text/plain** (no-cors) → must parse with **`json(triggerBody())?['x']`**, NOT `triggerBody()?['x']`
+  (that returned empty → Condition False → Create file skipped; 202 but no file). We ended up neutralizing the pin Condition
+  (compare `1`=`1`) since it wasn't needed. (2) SharePoint **cross-tenant**: the Site Address dropdown only shows the
+  connection's tenant — must **Change connection → sign in as rmiller@gomra.com** (first-party SharePoint connector = no
+  admin consent needed, unlike the MCP app). (3) Final bug: Site Address was set to **MRA Dashboard** site, not **OSHASafety**
+  → files landed on the wrong gomra site; fixed to OSHASafety. Create file expressions: Folder Path
+  `concat('/Shared Documents/', replace(json(triggerBody())?['category'],'/','-'))`, File Name `concat(json(triggerBody())
+  ?['date'],' - ',json(triggerBody())?['fileName'])`, File Content `base64ToBinary(json(triggerBody())?['fileB64'])`.
+- **rev 28.6 — close a task FROM the daily email after sign-in (Rich: "click it, then he has to log in").** Email gets a
+  **🔒 Log in to close** button → `?view=mywork` deep-link (new `?view=<tab>` support in the initial-view logic) opens the
+  LIVE board on My Work → SSO login gate → then **✓ close on each own task** in My Work. `_mwCanClose(proj,raw)`
+  (closer→own via `_canCloseHere`, editor/shared-pin→any, view-only→none) + `mwCloseTask()`; shop items now carry `proj`+`raw`.
+- **rev 28.7 — Jeff Sellers close-only (same as Josh).** Added `jsellers@gomra.com` + name to the `closer` role (uses the
+  existing closer path + `BOARD_NAME_BY_EMAIL` jsellers→Jeff). To add more closers: append email to ROLE_BY_EMAIL:'closer'
+  + name to ROLE_BY_NAME closer[].
+- **🔐 Connecting Claude's M365 MCP to gomra = BLOCKED on Tim.** Trying to reconnect the "M365 MCP Client for Claude" app
+  as rmiller@gomra.com hit **"Need admin approval"** (gomra tenant requires admin consent for the 3rd-party app). Tim grants
+  it once (Entra → Enterprise apps → grant admin consent, OR the "Have an admin account?" link on the consent screen). Until
+  then my M365 read is Tandem-only (can't see gomra sites to verify). Not blocking — migration data comes from public data.js.
+- **📁 MIGRATION PLAN (Lists + flows Tandem→gomra `MRADashboard`), teed up, NOT yet run.** Site URL isn't in repo code (it's
+  in the flows). **Phase 1 (Tim, PnP PowerShell, one-time):** `./Provision-MRA-Lists.ps1 -SiteUrl ".../sites/MRADashboard"`
+  then `./Migrate-Data-To-Lists.ps1 -SiteUrl ".../sites/MRADashboard"` (creates the 5 Lists — Users/Jobs/Shop Tasks/Project
+  Tasks/Holidays — with exact internal names, then fills from data.js). **Phase 2 (Rich+Claude, GUI, like Safety):** repoint
+  4 flows to gomra (Change connection→gomra + Site Address→MRADashboard): **MRA Lists to JSON** (read→data.js), **MRA Lists
+  Write 2** (write←dash), **MRA Email** + **MRA Daily My Work Emails** (read MRA Users + Project Tasks trigger). Azure/blob
+  flows (EOTM/Fleetio/Design/export) need NO change. Workbook shuttle + fleet path stay on Tandem for now (separate cleanup).
+  Tandem stays live as rollback until gomra verified.
+
 ## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
 
 - **🔐 Microsoft 365 sign-in LIVE on the board.** MSAL.js browser (public client, PKCE — NO secret; tenant
