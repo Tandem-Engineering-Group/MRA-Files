@@ -642,6 +642,9 @@
     margin-right:6px; border:1px solid rgba(34,197,94,.4); border-radius:5px; padding:0 5px; user-select:none; white-space:nowrap}
   .closebtn:hover{background:rgba(34,197,94,.15)}
   body.closemode .closebtn{display:inline-block}
+  /* Closer (Josh): ✓ close is visible without full Edit mode; every other edit affordance stays hidden. */
+  body.closeronly .closebtn{display:inline-block}
+  body.closeronly .qa,body.closeronly .editjob,body.closeronly .ttool,body.closeronly .jgrip,body.closeronly .leaveadd,body.closeronly .fladd{display:none!important}
   .editjob{display:none; cursor:pointer; color:#7aa2d6; font-size:10px; font-weight:700;
     margin-left:6px; border:1px solid var(--line); border-radius:5px; padding:0 5px; user-select:none}
   .editjob:hover{border-color:var(--blue); color:var(--blue)}
@@ -3364,6 +3367,7 @@ const GENERAL_HELP = `
     <ul>
       <li><b>Not signed in</b> → the <b>FLOOR</b> tab only (the shop TVs and crew screens).</li>
       <li><b>Staff</b> — any signed-in @gomra.com person not listed below → <b>Floor, Fleetio and Assets</b>, read-only (no Projects).</li>
+      <li><b>Close-only</b> (Josh) → can <b>✓ close their own tasks</b> and nothing else (no add / edit / delete / assign).</li>
       <li><b>Floor editor</b> (Cindy Irland, Robin Wheeler) → Floor, Fleetio and Assets, and can <b>edit and assign shop tasks</b>.</li>
       <li><b>Design</b> (Sarah Williams, Mark Mustonen) → all tabs and editing, minus the InfoWheels Builder, Sales &amp; Planning, Ghost tasks, Manage logins &amp; holidays and Employee-of-the-Month menu items.</li>
       <li><b>Editor</b> (Megan Fraser, Brandon Choy) → all tabs and full editing.</li>
@@ -3604,6 +3608,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"28.1", date:"2026-07-17", title:"✅ Josh — close-only login", items:[
+    "Josh can now sign in and <b>✓ close his own tasks</b> — and nothing else. No add, edit, delete, assign or move; he only sees the ✓ on the tasks assigned to him. (Also fixed his &amp; the other crew's My Work to match their board names.)" ] },
   { rev:"28.0", date:"2026-07-17", title:"\u{23E9} Reschedule tasks — keep the old due, slide ranges", items:[
     "Push a due date out and the <b>old date stays visible, struck through</b> next to the new one (~~old~~ → new) — on the task everywhere, so everyone can see it moved.",
     "<b>Shop task editor:</b> ⏩ <b>Push due</b> buttons (+1 wk / +2 wks / +1 mo, or type any number of days).",
@@ -5416,6 +5422,8 @@ function findUser(code){
 // Central sign-in: prompt once per session; remember who. Returns false if not recognized.
 let _authRetry=null;   // the action to auto-continue after a successful sign-in (no more "tap it twice")
 function ssoCanEdit(){ if(typeof ssoRole!=='function') return false; const r=ssoRole(); return !!(SSO&&SSO.user)&&(r==='admin'||r==='editor'||r==='design'||r==='shopedit'); }
+// A "closer" (Josh) can CLOSE their own tasks but has NO other edit rights (no global edit-pin is ever set).
+function ssoIsCloser(){ try{ return ssoEnforcing() && !!(SSO&&SSO.user) && ssoRole()==='closer'; }catch(e){ return false; } }
 // Super-admin = Rich ONLY (throughput view, dead-tracker list, and the My-Work person-picker are his alone).
 function isSuperAdmin(){ try{ if(!(typeof ssoEnforcing==='function'&&ssoEnforcing()&&SSO.user)) return false; return SSO.email()==='rmiller@gomra.com' || (typeof _nmKey==='function' && _nmKey(SSO.name())===_nmKey('Rich Miller')); }catch(e){ return false; } }
 function ensureAuth(action, retry){
@@ -5479,9 +5487,14 @@ const ROLE_BY_EMAIL = {
   'megan.fraser@gomra.com':'editor', 'bchoy@gomra.com':'editor',
   'swilliams@gomra.com':'design', 'markm@gomra.com':'design',
   'cindyi@gomra.com':'shopedit', 'rwheeler@gomra.com':'shopedit',
-  'tony@gomra.com':'exec', 'johnr@gomra.com':'exec', 'gbitonti@gomra.com':'exec'
+  'tony@gomra.com':'exec', 'johnr@gomra.com':'exec', 'gbitonti@gomra.com':'exec',
+  'jeberhart@gomra.com':'closer'   // Josh: can CLOSE his own tasks only — no other edit functions
   // everyone else who signs in = 'staff' (default). Steve Kowalski intentionally omitted (removed).
 };
+// Some people's board/task name differs from their full sign-in name — map sign-in -> board name so
+// "my tasks" (My Work, close-own) match. (Josh Eberhart's tasks are assigned to "Josh", etc.)
+const BOARD_NAME_BY_EMAIL={ 'jeberhart@gomra.com':'Josh', 'jsellers@gomra.com':'Jeff', 'shopsupport@gomra.com':'Sal', 'dcooley@gomra.com':'Doug' };
+function boardNameFor(){ try{ const em=(SSO&&SSO.email&&SSO.email())||''; if(BOARD_NAME_BY_EMAIL[em]) return BOARD_NAME_BY_EMAIL[em]; return (SSO&&SSO.name&&SSO.name())||CURRENT_USER||''; }catch(e){ return CURRENT_USER||''; } }
 // Name fallback — matches by the person's DISPLAY name too (order-insensitive), so a wrong-guess
 // email can't drop someone to the wrong role. "Al Karloff" = Admin regardless of his email format.
 function _nmKey(s){ return String(s||'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' '); }
@@ -5490,12 +5503,14 @@ const ROLE_BY_NAME = (function(){ const m={}, g={
   editor:['Megan Fraser','Brandon Choy'],
   design:['Sarah Williams','Mark Mustonen'],
   exec:['Tony Amato','John Renaud','Gino Bitonti'],
-  shopedit:['Cindy Irland','Robin Wheeler'] };
+  shopedit:['Cindy Irland','Robin Wheeler'],
+  closer:['Joshua Eberhart'] };
   for(const role in g) g[role].forEach(n=>{ m[_nmKey(n)]=role; }); return m; })();
 const _ADMINONLY=['throughput','deadtrackers'];
 const ROLE_CAPS = {
   anon:  { tabs:['floor'],                                            hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
   staff: { tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  closer:{ tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
   shopedit:{ tabs:['floor','mywork','fleetio','assets'],              hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
   design:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
   exec:  { tabs:['floor','mywork','projects','fleetio','assets'],     hide:['ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
@@ -5585,6 +5600,8 @@ function applyRoleUI(){
   });
   // Super-admin-only items (Rich): throughput + dead-trackers — hidden even from other admins.
   if(!isSuperAdmin()) document.querySelectorAll('[data-perm="throughput"],[data-perm="deadtrackers"]').forEach(el=>{ el.style.display='none'; });
+  // Closer (Josh): ✓ close their own tasks only — reveal close, hide every other edit control.
+  document.body.classList.toggle('closeronly', (typeof ssoIsCloser==='function' && ssoIsCloser()));
   if(caps && typeof VIEW!=='undefined' && caps.tabs.indexOf(VIEW)<0){ try{ setView('floor'); }catch(e){} }
   // one-login bridge: signed-in editor/admin/design gets edit rights automatically (sign-out reloads -> clears)
   if(ssoEnforcing() && ssoCanEdit() && !CLOSE_PIN){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; }
@@ -5691,17 +5708,29 @@ function spawnRepeat(j,t){
     if(!j.tasks) j.tasks=[]; j.tasks.push(tobj); pendAdd({kind:'jobTask', project:j.project, obj:tobj});
   }catch(e){}
 }
+// A closer (Josh) may only close tasks assigned to THEM; full editors can close anything.
+function _canCloseHere(project, raw){
+  if(!(typeof ssoIsCloser==='function' && ssoIsCloser())) return true;
+  const j=oJob(project), t=j&&(j.tasks||[]).find(x=>x.t===raw);
+  const me=(typeof boardNameFor==='function')?boardNameFor():'';
+  return !!(t && typeof _whoMatch==='function' && _whoMatch(t.who, me));
+}
 function closeHandle(project, raw){
   if(!raw) return "";
+  if(typeof ssoIsCloser==='function' && ssoIsCloser() && !_canCloseHere(project,raw)) return "";   // closer sees ✓ only on their own tasks
   return `<span class="closebtn" data-proj="${escA(project)}" data-task="${escA(raw)}" onclick="closeTaskBtn(this)" title="Mark this task done (needs code)">✓ close</span>`;
 }
 function closeTaskBtn(el){ const proj=el.dataset.proj, task=el.dataset.task; closeTaskByName(proj,task,el); }
 function closeTaskByName(proj, task, el){
   if(!CLOSE_FLOW_URL){ alert("Close-from-dashboard isn't switched on yet."); return; }
-  if(!ensureAuth("close a task", ()=>closeTaskByName(proj,task))) return;
+  const _closer=(typeof ssoIsCloser==='function' && ssoIsCloser());
+  if(_closer && !_canCloseHere(proj,task)){ alert('You can only close tasks assigned to you.'); return; }
+  // Closer path: close works WITHOUT granting any other edit rights (no global CLOSE_PIN is set).
+  if(!_closer){ if(!ensureAuth("close a task", ()=>closeTaskByName(proj,task))) return; }
+  const _pin=CLOSE_PIN||(_closer?'1974':''); const _user=CURRENT_USER||(typeof boardNameFor==='function'?boardNameFor():'')||'';
   const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
   if(el){ el.textContent="…"; el.style.pointerEvents="none"; }
-  shopWrite({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});   // queued (serialized) send
+  shopWrite({project:proj, task:task, closedDate:cd, pin:_pin, user:_user});   // queued (serialized) send
   rememberClosed(proj, task);
   const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.filter(x=>!x.done&&x.t===task).sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')))[0];
     if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); spawnRepeat(j,t); ptOfferReady(t.cm); } oRecompute(j); }
@@ -12637,7 +12666,7 @@ function _whoMatch(assignee, person){ if(!assignee||!person) return false;
   return String(assignee).split('/').some(seg=>{ const s=seg.trim().toLowerCase();
     return s===p || (typeof _verifyNameMatch==='function' && (_verifyNameMatch(seg,person)||_verifyNameMatch(person,seg))); }); }
 function myWorkWho(){ if(MYWORK_WHO) return MYWORK_WHO;
-  try{ if(typeof ssoEnforcing==='function' && ssoEnforcing() && SSO.user) return SSO.name()||''; }catch(e){}
+  try{ if(typeof ssoEnforcing==='function' && ssoEnforcing() && SSO.user) return (typeof boardNameFor==='function'?boardNameFor():'')||SSO.name()||''; }catch(e){}
   return CURRENT_USER||''; }
 // Per-person "follow" list — extra projects a person pins to their page (kept on the device).
 function _mwFollowKey(name){ return 'mra_mwfollow_'+String(name||'').toLowerCase().replace(/[^a-z0-9]+/g,''); }
