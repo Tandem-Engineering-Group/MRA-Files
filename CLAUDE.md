@@ -935,5 +935,6 @@ Rich CC'd on ALL. ⚠ TWO Jeffs: "Jeff" board column = Jeff Sellers (jsellers@go
 - **Wrap Team / MasterWraps** → masterwraps1@yahoo.com (Chad) + jeff@w2graphic.com (Jeff/W2) — copy both (external)
 - **Jeff** → jsellers@gomra.com (Jeff Sellers, shop floor, gomra acct → also My Work)
 - **Josh** → jeberhart@gomra.com (Joshua Eberhart, warehousing, gomra acct → also My Work)
+- Al Karloff = akarloff@gomra.com (real; NOT al.karloff) · Luciana = luciana.giglio@gomra.com (confirmed).
 - **PMs** Al/Megan/Luciana → project report; **Design** Sarah(swilliams)/Mark(markm)/Brandon(bchoy) → their task list.
 Content = the per-person "My Work" engine (PM report for PMs, task list for design/crews). Fire in the ~6AM batch with the deficiency email. Emails resolved via the MRA Users list Email column (flow "Get items → Email"), so assignee NAME on the board must match the Users list entry (Steve-K gotcha). Group-crew leads (Beyer/Chad/W2) added as literal recipients in the flow since they're not in the Users list.
