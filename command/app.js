@@ -431,8 +431,25 @@ function ensureAuth(action, retry){ if(CLOSE_PIN) return true;
     if(SSO.user){ alert('Your sign-in is view-only — ask Rich if you need edit access.'); return false; } }
   _authRetry=(typeof retry==='function')?retry:null; openSignIn(action||'edit'); return false; }
 
+/* 🔒 PREVIEW LOCK — while the Command Center is being built out it is restricted to
+   Rich only on the live host. Everyone else (any other signed-in user, or anon) gets
+   a lock screen. Off the live host (previews / dev) it stays open so it can be worked
+   on and validated. Lift this by deleting ccAccessOK's superadmin gate when ready. */
+function _ccLock(msg, showSignIn){ let el=document.getElementById('ccLock');
+  if(!el){ el=document.createElement('div'); el.id='ccLock'; el.className='cclock'; document.body.appendChild(el); }
+  el.innerHTML=`<div class="cclock-box"><div class="logo">M</div><h2>Command Center</h2><p class="muted">${esc(msg)}</p>${showSignIn?'<button class="btn primary" onclick="SSO.signIn()">🔐 Sign in with Microsoft</button>':''}</div>`;
+  el.style.display='grid'; }
+function _ccUnlock(){ const el=document.getElementById('ccLock'); if(el) el.style.display='none'; }
+function ccAccessOK(){
+  if(!SSO.active()) return true;                                   // off the live host / preview -> open
+  if(SSO.failed){ _ccLock('Sign-in is unavailable right now — refresh to try again.', false); return false; }
+  if(!SSO.ready){ _ccLock('Checking access…', false); return false; }
+  if(isSuperAdmin()){ _ccUnlock(); return true; }
+  _ccLock(SSO.user ? 'This is in preview and locked to Rich for now.' : 'Sign in with your @gomra.com account.', !SSO.user);
+  return false; }
+
 // Apply the role's page visibility + edit gating (no-op when not enforcing).
-function applyRoleUI(){ const enforce=ssoEnforcing();
+function applyRoleUI(){ if(!ccAccessOK()) return; const enforce=ssoEnforcing();
   document.querySelectorAll('.nav button').forEach(b=>{ b.style.display = pageAllowed(b.dataset.page) ? '' : 'none'; });
   if(enforce && ssoCanEdit() && !CLOSE_PIN){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; }
   document.body.classList.toggle('viewonly', enforce && !ssoCanEdit() && !ssoIsCloser());
@@ -712,6 +729,7 @@ function initCC(){
   // deep-link ?view=
   let start='home'; try{ const v=new URL(location.href).searchParams.get('view'); if(v && window.MRA_PAGES[v]) start=v; }catch(e){}
   showPage(start);
+  try{ if(SSO.active()) _ccLock('Checking access…', false); }catch(e){}   // live host: hide the app until SSO proves it's Rich (no flash for others)
   try{ SSO.init(); }catch(e){}   // Microsoft sign-in + role gating (fail-open off the live host)
   setInterval(pollData, 60000);
 }
