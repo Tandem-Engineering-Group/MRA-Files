@@ -3546,6 +3546,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"27.1", date:"2026-07-16", title:"\u23f3 Bay-aging chip — stuck jobs jump out", items:[
+    "A bay card now shows a <b>\u23f3 N days in bay</b> chip when a trailer has sat in a real bay <b>14+ days</b> with open work (amber 14+, red 30+) — so long-stuck jobs (Pod 1086, SWC FL1\u2026) stand out instead of blending in. Parking Lot / On Hold / Off-Site aren't flagged (being there a while is normal)." ] },
   { rev:"27.0", date:"2026-07-16", title:"\u{1F64B} MY WORK — your own page when you sign in", items:[
     "New <b>MY WORK</b> tab: sign in and you land on <b>your</b> stuff — your overdue, what's due this week, everything else open (shop + project tasks), and (for PMs) your projects' health. Built from your sign-in, so there's nothing to set up. <b>Admins get a person-picker</b> to view anyone's page. The same engine powers the daily per-person email (a standalone page at <span class=\"k\">?mywork=Name</span>)." ] },
   { rev:"26.9", date:"2026-07-16", title:"\u{1F4D6} Help guide (?) fully rewritten for how the board works now", items:[
@@ -9107,6 +9109,11 @@ function renderFloor(D){
     }
     if(c.overdue) pills+=`<span class="pill due">${Math.abs(c.daysLeft)}d overdue</span>`;
     else if(c.dueSoon) pills+=`<span class="pill soon">due ${c.daysLeft}d</span>`;
+    // ⏳ bay-aging: a trailer parked in a REAL bay a long time with open work = stuck-job signal
+    if(typeof isParkingBay==='function' && !isParkingBay(j.bay) && !bayIsHeld(j.bay) && !bayIsParts(j.bay) && j.startISO && (j.openCount||0)>0){
+      const _tISO=(window.MRA_DATA||{}).todayISO||localISO(Date.now()); const _din=daysBetween(_tISO,j.startISO);
+      if(_din!=null && _din>=14) pills+=`<span class="pill ${_din>=30?'due':'soon'}" title="In ${escA(j.bay)} for ${_din} days with open work — a stuck-job signal. Ship it, move it, or check what's blocking.">⏳ ${_din}d in bay</span>`;
+    }
     // Normal view: open by default (tasks visible up top); wall view: collapsed (count-only).
     const jOpen = (WALL||defColl) ? expandedJobs.has(j.row) : !collapsedJobs.has(j.row);
     const _trk=new Set((j.tasks||[]).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
