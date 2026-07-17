@@ -3368,7 +3368,7 @@ const GENERAL_HELP = `
     <p>When you sign in you land on <span class="k">MY WORK</span> — a one-page snapshot of <b>your</b> stuff, the same clean look as the reports we email out. Up top is a <b>stat strip</b> (open items · overdue · due this week · to verify · marked ready · my projects), then, in order:</p>
     <ul>
       <li><b>✅ Awaiting your sign-off</b> — if you're a PM, the design/shop work that's been <b>marked ready</b> on your projects. <b>✓ Verify</b> closes it; <b>↩ Back</b> sends it to In Progress. (This is the same queue as the Projects tab, right on your page.)</li>
-      <li><b>⚠ Overdue</b> and <b>📅 Due this week</b> — your shop <b>and</b> project tasks, soonest first, with photos where a task has them.</li>
+      <li><b>⚠ Overdue</b> and <b>📅 Due this week</b> — your shop <b>and</b> project tasks, soonest first, each with its <b>full detail</b>: crew tasks show the <b>Fleetio issue #, description, asset and photos</b>; project tasks show the <b>subproject/phase and type</b> — plus any <b>comments</b> on every line.</li>
       <li><b>🟡 Marked ready — awaiting PM</b> — work you flagged done that's waiting for a PM to sign off.</li>
       <li><b>📊 My Projects</b> — each project you run (or follow) with its <b>health color, target date, past-due count and %</b>; tap to open its editor.</li>
       <li><b>◆ Milestones (next 30 days)</b>, <b>✅ Completed (last 7 days)</b>, and <b>🗂 Everything else open</b>.</li>
@@ -3581,6 +3581,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"27.8", date:"2026-07-17", title:"\u{1F64B} MY WORK now shows every task's full detail", items:[
+    "Each task on the MY WORK page and daily email now carries its <b>full detail</b> — no more bare one-liners. <b>Shop/crew tasks</b> (Sal, Doug, Josh, Jeff…) show the <b>Fleetio issue #, the description, the asset, and the photos</b>, plus any comments. <b>Project tasks</b> (Mark, Sarah, the PMs…) show the <b>subproject/parent, phase, type and comments</b> for every line. Photos and file attachments come through as thumbnails you can tap." ] },
   { rev:"27.7", date:"2026-07-17", title:"\u{1F64B} MY WORK tab limited to the people who need it", items:[
     "The <b>MY WORK</b> tab now shows only for the group that uses it — <b>Megan, Al, Luciana, Brandon, Mark, Sarah, Sal, Jeff, Josh, Doug &amp; Stephanie</b> (plus Rich, who can view anyone's). Everyone else who signs in keeps their other tabs but no longer sees My Work. Easy to add more people any time." ] },
   { rev:"27.6", date:"2026-07-17", title:"\u{1F64B} MY WORK — clickable, expandable, hover, full detail", items:[
@@ -12546,6 +12548,8 @@ function mwGetFollow(name){ try{ const a=JSON.parse(localStorage.getItem(_mwFoll
 function mwSetFollow(name, arr){ try{ localStorage.setItem(_mwFollowKey(name), JSON.stringify(arr||[])); }catch(e){} }
 function mwToggleFollow(proj){ const who=myWorkWho(); if(!who||!proj) return; const cur=mwGetFollow(who); const i=cur.indexOf(proj); if(i>=0) cur.splice(i,1); else cur.push(proj); mwSetFollow(who,cur); try{ renderMyWork(); }catch(e){} }
 function mwPickFollow(sel){ const v=sel&&sel.value; if(v) mwToggleFollow(v); if(sel) sel.value=''; }
+// Clean a task's comments for display: drop the machine tags ([repeat:…], [pt:…], [sales]…, [subjob], [mtg]).
+function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
 function myWorkFor(name){
   const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
   const soon=localISO(Date.parse(today)+7*86400000);
@@ -12553,13 +12557,15 @@ function myWorkFor(name){
   const cut7=localISO(Date.parse(today)-7*86400000);
   const isDoneT=t=>t.done===true||/complete/i.test(t.st||t.status||'');
   const items=[];
-  // --- open tasks assigned to me (shop + project) ---
+  // --- open tasks assigned to me (shop + project), WITH full detail (comments, Fleetio info+photos, subproject) ---
   (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
     (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
-      if(_whoMatch(t.who,name)) items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, kind:'shop', files:t.files||null, nav:{k:'shop',row:j.row}}); }); });
-  (D.projects||[]).forEach(p=>{ (p.tasks||[]).forEach(t=>{ if(/yes/i.test(t.ml||'')) return;
+      if(_whoMatch(t.who,name)){ const fm=String(t.t||'').match(/🔧\s*#(\d+)/);
+        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, kind:'shop', files:t.files||null, cm:_mwCleanCm(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row}}); } }); });
+  (D.projects||[]).forEach(p=>{ const ts=p.tasks||[]; ts.forEach((t,i)=>{ if(/yes/i.test(t.ml||'')) return;
       if(isDoneT(t) || projIsPendingVerify(t)) return;   // pending-verify shows in its own section
-      if(_whoMatch(t.who,name)) items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, st0:t.startISO||null, kind:'proj', nav:{k:'proj',proj:p.name}}); }); });
+      if(_whoMatch(t.who,name)){ let parent=''; if(t.sub){ for(let k=i-1;k>=0;k--){ if(!ts[k].sub){ parent=ts[k].t||''; break; } } }
+        items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name}}); } }); });
   const od=items.filter(x=>x.due&&x.due<today).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const due=items.filter(x=>x.due&&x.due>=today&&x.due<=soon).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const later=items.filter(x=>!x.due||x.due>soon).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
@@ -12570,8 +12576,8 @@ function myWorkFor(name){
   const pendingMine=[], awaitingMe=[];
   (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(!projIsPendingVerify(t)) return;
       const h=(typeof projTaskHandle==='function')?projTaskHandle(t):String(t.id||t.t||'');
-      if(_whoMatch(t.who,name)) pendingMine.push({t:String(t.t||''), where:p.name, pm:p.pm||'', handle:h, kind:'proj'});
-      if(pmMatch(p.pm)||iAmAdmin) awaitingMe.push({t:String(t.t||''), where:p.name, who:t.who||'', due:t.finISO||t.startISO||'', handle:h, kind:'proj'}); }));
+      if(_whoMatch(t.who,name)) pendingMine.push({t:String(t.t||''), where:p.name, pm:p.pm||'', handle:h, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim()});
+      if(pmMatch(p.pm)||iAmAdmin) awaitingMe.push({t:String(t.t||''), where:p.name, who:t.who||'', due:t.finISO||t.startISO||'', handle:h, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim()}); }));
   awaitingMe.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
   // --- ✅ completed in the last 7 days (mine) ---
   const doneRecent=[];
@@ -12600,11 +12606,21 @@ function _mwNavAttr(nav){ if(!nav) return {oc:'', tip:'', chevron:''};
   if(nav.k==='proj') return {oc:' onclick="mwGoProj(\''+escJsAttr(nav.proj)+'\')"', tip:' title="Open '+escA(nav.proj)+' — full schedule"', chevron:' <span class="mw-go">›</span>'};
   return {oc:'', tip:'', chevron:''}; }
 function _mwList(arr, today){ if(!arr.length) return '<div class="empty">— none —</div>';
-  return arr.map(x=>{ const od=x.due&&x.due<today;
-    const d=x.due?(' <span class="badge '+(od?'red':'amber')+'">'+(od?'overdue ':'due ')+esc(fmtMD(x.due))+'</span>'):'';
-    const rng=(x.kind==='proj'&&(x.st0||x.due))?(' <span class="meta">▶ '+(x.st0?esc(fmtMD(x.st0)):'…')+' → '+(x.due?esc(fmtMD(x.due)):'…')+'</span>'):'';
-    const nav=_mwNavAttr(x.nav);
-    return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+'</div><div class="meta">'+esc(x.where)+rng+'</div></div><div class="right">'+d+nav.chevron+'</div></div>'; }).join(''); }
+  return arr.map(x=>_mwRow(x,today)).join(''); }
+// One rich task row: task + where + dates, then the full detail — subproject/phase (project),
+// Fleetio # + description (shop), comments, and photo/file thumbnails.
+function _mwRow(x, today){
+  const od=x.due&&x.due<today;
+  const d=x.due?(' <span class="badge '+(od?'red':'amber')+'">'+(od?'overdue ':'due ')+esc(fmtMD(x.due))+'</span>'):'';
+  const rng=(x.kind==='proj'&&(x.st0||x.due))?(' <span class="meta">▶ '+(x.st0?esc(fmtMD(x.st0)):'…')+' → '+(x.due?esc(fmtMD(x.due)):'…')+'</span>'):'';
+  const nav=_mwNavAttr(x.nav);
+  const fnumline=(x.kind==='shop'&&x.fnum)?(' <span class="badge grey" style="font-size:9px">🔧 #'+esc(x.fnum)+'</span>'):'';
+  let det='';
+  if(x.kind==='proj'){ const ctx=[(x.parent?('↳ '+x.parent):''),x.phase,x.ptype].filter(Boolean).join(' · '); if(ctx) det+='<div class="meta" style="font-style:italic">'+esc(ctx)+'</div>'; }
+  if(x.cm) det+='<div class="meta">📝 '+esc(x.cm)+'</div>';
+  const fio=(x.kind==='shop'&&x.fnum&&typeof fioDetHtml==='function')?fioDetHtml(x.fnum):'';
+  const media=(typeof mediaHtml==='function'&&typeof _taskMedia==='function')?mediaHtml(_taskMedia(x.files, x.kind==='shop'?x.fnum:null)):'';
+  return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+fnumline+'</div><div class="meta">'+esc(x.where)+rng+'</div>'+det+fio+(media?('<div style="margin-top:4px">'+media+'</div>'):'')+'</div><div class="right">'+d+nav.chevron+'</div></div>'; }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
@@ -12630,10 +12646,11 @@ function renderMyWork(){
   const btn='padding:4px 10px;border-radius:7px;border:1px solid var(--line);font-size:11px;font-weight:700;cursor:pointer';
   const awaitHtml=m.awaitingMe.length?('<div class="panel" id="mwsec-verify"><h2>✅ Awaiting your sign-off <span class="count">'+m.awaitingMe.length+'</span></h2>'+m.awaitingMe.map(x=>{
       const od=x.due&&x.due<m.today;
-      return '<div class="row mw-click" onclick="gotoVerifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" title="Jump to this task on the Gantt"><div style="min-width:0"><div class="lead">🟡 '+esc(x.t)+'</div><div class="meta">'+esc(x.where)+(x.who?(' · marked by '+esc(x.who)):'')+(x.due?(' · '+(od?'due ':'')+esc(fmtMD(x.due))+(od?' ⚠':'')):'')+'</div></div>'+
+      const ctx=[(x.phase||''), (x.cm?('📝 '+x.cm):'')].filter(Boolean).map(s=>'<div class="meta">'+esc(s)+'</div>').join('');
+      return '<div class="row mw-click" onclick="gotoVerifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" title="Jump to this task on the Gantt"><div style="min-width:0"><div class="lead">🟡 '+esc(x.t)+'</div><div class="meta">'+esc(x.where)+(x.who?(' · marked by '+esc(x.who)):'')+(x.due?(' · '+(od?'due ':'')+esc(fmtMD(x.due))+(od?' ⚠':'')):'')+'</div>'+ctx+'</div>'+
         '<div class="right"><button onclick="event.stopPropagation();verifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" style="'+btn+';background:#16a34a;color:#fff;border-color:#16a34a">✓ Verify</button> <button onclick="event.stopPropagation();sendBackTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" style="'+btn+';background:var(--panel);color:var(--txt)">↩ Back</button></div></div>'; }).join('')+'</div>'):'';
   // ---- 🟡 tasks I marked ready, waiting on the PM ----
-  const pendHtml=m.pendingMine.length?('<div class="panel" id="mwsec-pend"><h2>🟡 Marked ready — awaiting PM <span class="count">'+m.pendingMine.length+'</span></h2>'+m.pendingMine.map(x=>'<div class="row mw-click" onclick="gotoVerifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" title="Jump to this task"><div style="min-width:0"><div class="lead">🟡 '+esc(x.t)+'</div><div class="meta">'+esc(x.where)+(x.pm?(' · PM '+esc(x.pm)):'')+'</div></div><div class="right"><span class="badge amber">pending</span><span class="mw-go">›</span></div></div>').join('')+'</div>'):'';
+  const pendHtml=m.pendingMine.length?('<div class="panel" id="mwsec-pend"><h2>🟡 Marked ready — awaiting PM <span class="count">'+m.pendingMine.length+'</span></h2>'+m.pendingMine.map(x=>'<div class="row mw-click" onclick="gotoVerifyTask(\''+escJsAttr(x.where)+'\',\''+escJsAttr(x.handle)+'\')" title="Jump to this task"><div style="min-width:0"><div class="lead">🟡 '+esc(x.t)+'</div><div class="meta">'+esc(x.where)+(x.pm?(' · PM '+esc(x.pm)):'')+'</div>'+(x.cm?('<div class="meta">📝 '+esc(x.cm)+'</div>'):'')+'</div><div class="right"><span class="badge amber">pending</span><span class="mw-go">›</span></div></div>').join('')+'</div>'):'';
   // ---- 📊 my projects (health) — click a row to EXPAND its past-due detail; each task jumps to the project ----
   const HC={late:'#ef4444',behind:'#f59e0b',ontrack:'#22c55e',upcoming:'#3b82f6',parked:'#64748b'};
   const projHtml=m.myProjects.length?('<div class="panel" id="mwsec-proj"><h2>📊 My Projects <span class="count">'+m.myProjects.length+'</span></h2>'+m.myProjects.map(x=>{
@@ -12682,15 +12699,28 @@ function buildMyWorkHtml(name){
   const now=new Date(); const rDate=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
   const fmt=iso=>{ if(!iso) return ""; const p=String(iso).split("-"); return (+p[1])+"/"+(+p[2])+"/"+p[0]; };
   const tile=(n,lab,col)=>'<div class="st" style="border-left-color:'+col+'"><div class="n" style="color:'+col+'">'+n+'</div><div class="l">'+lab+'</div></div>';
-  // open-task line (overdue / due / everything else) — with photo thumbnails if a shop task has any
+  // Shared detail block: subproject/phase (project), Fleetio # + description + asset (shop), comments, photos/files.
+  const detailOf=x=>{
+    let h='';
+    if(x.kind==='proj'){ const ctx=[(x.parent?('↳ '+x.parent):''),x.phase,x.ptype].filter(Boolean).join(' · '); if(ctx) h+='<div class="ctx">'+esc(ctx)+'</div>'; }
+    if(x.kind==='shop'&&x.fnum){ const it=(typeof fioIssue==='function')?fioIssue(x.fnum):null;
+      h+='<div class="ctx"><b>Fleetio #'+esc(x.fnum)+'</b>'+((it&&it.asset)?(' · '+esc(it.asset)):'')+((it&&it.detail)?(' — '+esc(String(it.detail).trim())):'')+'</div>'; }
+    if(x.cm) h+='<div class="ctx">\u{1F4DD} '+esc(x.cm)+'</div>';
+    const media=(typeof _taskMedia==='function')?_taskMedia(x.files, x.kind==='shop'?x.fnum:null):(x.files||[]);
+    const imgs=(media||[]).filter(f=>/^image\//i.test(f.mime||'')).slice(0,4).map(f=>'<a href="'+escA(f.url)+'" target="_blank" rel="noopener"><img class="rimg" src="'+escA(f.url)+'" alt="photo"></a>').join('');
+    const docs=(media||[]).filter(f=>!/^image\//i.test(f.mime||'')).slice(0,4).map(f=>'<a href="'+escA(f.url)+'" target="_blank" rel="noopener" style="color:#1a56db;font-size:10px;margin-right:8px">\u{1F4CE} '+esc(String(f.n||'file').slice(0,40))+'</a>').join('');
+    if(imgs) h+='<div class="rimgs">'+imgs+'</div>';
+    if(docs) h+='<div class="ctx">'+docs+'</div>';
+    return h;
+  };
+  // open-task line (overdue / due / everything else) — full detail
   const li=x=>{ const od=x.due&&x.due<m.today;
     const badge=x.due?(od?'<span class="od">OVERDUE '+fmt(x.due)+'</span>':'<span class="dt">'+fmt(x.due)+'</span>'):'';
-    const imgs=((x.files)||[]).filter(f=>/^image\//i.test(f.mime||'')).map(f=>'<a href="'+escA(f.url)+'" target="_blank" rel="noopener"><img class="rimg" src="'+escA(f.url)+'" alt="photo"></a>').join('');
     const rng=(x.kind==='proj'&&x.st0)?('<div class="ctx">▶ '+fmt(x.st0)+' → '+(x.due?fmt(x.due):'…')+'</div>'):'';
-    return '<li'+(od?' class="hot"':'')+'>'+(x.kind==='proj'?'📋 ':'🔧 ')+'<b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span> '+badge+rng+(imgs?'<div class="rimgs">'+imgs+'</div>':'')+'</li>'; };
+    return '<li'+(od?' class="hot"':'')+'>'+(x.kind==='proj'?'📋 ':'🔧 ')+'<b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span> '+badge+rng+detailOf(x)+'</li>'; };
   const dli=x=>'<li>'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+' <span class="src">'+esc(x.where)+'</span> <span class="dt">'+fmt(x.d)+'</span></li>';
-  const pli=x=>'<li>🟡 <b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span>'+(x.pm?(' <span class="who">PM '+esc(x.pm)+'</span>'):'')+' <span class="pend">pending PM</span></li>';
-  const ali=x=>{ const od=x.due&&x.due<m.today; return '<li>🟡 <b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span>'+(x.who?(' <span class="who">marked by '+esc(x.who)+'</span>'):'')+(x.due?(od?' <span class="od">due '+fmt(x.due)+'</span>':' <span class="dt">due '+fmt(x.due)+'</span>'):'')+' <span class="pv">verify</span></li>'; };
+  const pli=x=>'<li>🟡 <b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span>'+(x.pm?(' <span class="who">PM '+esc(x.pm)+'</span>'):'')+' <span class="pend">pending PM</span>'+detailOf(x)+'</li>';
+  const ali=x=>{ const od=x.due&&x.due<m.today; return '<li>🟡 <b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span>'+(x.who?(' <span class="who">marked by '+esc(x.who)+'</span>'):'')+(x.due?(od?' <span class="od">due '+fmt(x.due)+'</span>':' <span class="dt">due '+fmt(x.due)+'</span>'):'')+' <span class="pv">verify</span>'+detailOf(x)+'</li>'; };
   const HC={late:'#c81e1e',behind:'#b45309',ontrack:'#15803d',upcoming:'#1d4ed8',parked:'#475569',done:'#475569'};
   const projLi=x=>{ const p=x.p; const h=(typeof projHealth==='function')?projHealth(p,m.today):{state:''};
     const lab=(typeof PMT_LAB!=='undefined'&&PMT_LAB[h.state])?PMT_LAB[h.state]:'';
