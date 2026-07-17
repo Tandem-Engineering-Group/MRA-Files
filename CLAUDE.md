@@ -341,6 +341,18 @@ exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
     non-PM + PM-report regression + verify-button path + follow flow) — zero pageerrors; screenshots eyeballed.
   - ⏭ **Daily-email Power Automate flow still to build with Rich** (Recurrence → per-person Send-email of the
     `?mywork=<Name>` link, CC rmiller@gomra.com; routing table below). Trigger with "let's build the email flow".
+- **rev 27.6 — MY WORK web made interactive (Rich, blunt: "web has no hover / not clickable / doesn't say what the 31
+  past-due ARE / follow our standard").** Fixed the web tab to the board standard: **every row hover-highlights**
+  (`var(--panel2)`, `.row.mw-click:hover` scoped to `#myworkView`) and is **click-through** (`mwGoShop`→`openEditJob(row)`,
+  `mwGoProj`→`openProjectEditor(name)`); **stat tiles** are clickable → `mwTileGo` scrolls to that section (ids
+  `mwsec-od/due/verify/pend/proj`). **My Projects rows EXPAND** (`MW_PROJ_OPEN` Set + `mwToggleProj`) to list the actual
+  **past-due tasks** (`_pmtBehindBits(p).od`: who/due/phase, each → project editor) + an "✎ Open … editor →" link; the
+  collapsed health line now carries the SAME **"⚠ N past-due · with: X (n), Y (n)"** breakdown as the emailed report
+  (parity — his "the 2 are not the same" complaint). Data engine stamps a `nav:{k,row|proj}` on every item; `_mwNavAttr`
+  builds the onclick + a › chevron affordance. Milestone/completed/awaiting/marked-ready rows all hover+click too.
+  Verified headless (38 mw-click rows, tiles, "with:" present, Cisco expands to 19 past-due subrows + open-editor link,
+  zero pageerrors) + screenshot eyeballed. **Sent Rich sample emails** (Al/PM, Sarah/design, Sal+Doug/crew, +a PM demo
+  with the ✅ sign-off section populated) since live data has 0 Pending-Verification right now.
 
 ## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
 
