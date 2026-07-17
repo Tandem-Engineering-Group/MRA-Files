@@ -2370,6 +2370,7 @@
       <button class="gfs-theme" id="gfsThemeBtn" onclick="event.stopPropagation(); toggleTheme(this)" title="Switch this view (and the whole dashboard) light / dark — remembered on this device">☀️ Light</button>
       <button class="gfs-close" onclick="closeGantt()" style="margin-left:8px" title="Close (Esc)">✕</button>
     </div>
+    <div id="gfsHealth" style="display:none"></div>
     <div class="gfs-body">
       <div id="gfsCap"></div>
       <div class="gantt" id="gfsGantt"></div>
@@ -3634,6 +3635,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"28.8", date:"2026-07-17", title:"🩺 Health status on the detailed project view (Al's ask)", items:[
+    "Open a project's detailed view (click its Gantt bar / ⛶ Expand) and there's now a <b>health banner</b> across the top: 🟢/🟡/🔴 <b>ON TRACK / BEHIND / LATE</b>, <b>% complete vs where it should be</b>, <b>target date</b>, <b>⚠ past-due count (and who's holding them)</b>, and the <b>next milestone</b> — so you can read the project's status at a glance right where you're working." ] },
   { rev:"28.7", date:"2026-07-17", title:"✅ Jeff — close-only login (same as Josh)", items:[
     "Jeff Sellers now has the same close-only login as Josh — he can sign in and <b>✓ close his own tasks</b> (from My Work or the daily-email link), and nothing else." ] },
   { rev:"28.6", date:"2026-07-17", title:"✅ Close your tasks from the daily email (after sign-in)", items:[
@@ -15032,6 +15035,7 @@ function renderGanttFS(){
   const cont=document.getElementById('gfsGantt'), legEl=document.getElementById('gfsLegend');
   const rangeEl=document.getElementById('gfsRange'), levelEl=document.getElementById('gfsLevel'), capEl=document.getElementById('gfsCap');
   warnEl.textContent=''; levelEl.innerHTML=''; capEl.innerHTML='';
+  { const hb=document.getElementById('gfsHealth'); if(hb){ hb.style.display='none'; hb.innerHTML=''; } }   // health banner: project view only
   { const hp=document.getElementById('gfsHolPick'); if(hp) hp.innerHTML=holPickerHtml(); }   // US/CA holiday picker in the expand view
   { const ww=document.getElementById('gfsWhoWrap'); if(ww) ww.innerHTML=(GFS==='project'||GFS==='projects')?projWhoSelHtml('gfsWhoSel'):''; }   // assignee filter (project views only)
   Object.keys(BARPOP).forEach(k=>delete BARPOP[k]); Object.keys(GFS_PKEY).forEach(k=>delete GFS_PKEY[k]);
@@ -15041,6 +15045,27 @@ function renderGanttFS(){
     // sorted by full date, colored by status, milestones flagged ◆.
     const p=(D.projects||[]).find(x=>x.name===GFS_PROJECT);
     titleEl.textContent=(p?projLabel(p.name):'Project')+' — Detailed';   /* #5: prefix the linked trailer's Job # → "J1557 · Project — Detailed" */
+    // 🩺 Health banner (Al's ask): at-a-glance status of THIS project on its detailed view.
+    { const hb=document.getElementById('gfsHealth');
+      if(hb && p){
+        const h=(typeof projHealth==='function')?projHealth(p,today):{state:'ontrack'};
+        const HC={late:'#ef4444',behind:'#f59e0b',ontrack:'#22c55e',upcoming:'#3b82f6',parked:'#64748b',done:'#22c55e'};
+        const lab=(typeof PMT_LAB!=='undefined'&&PMT_LAB[h.state])?PMT_LAB[h.state]:h.state;
+        const c=HC[h.state]||'#888';
+        const b=(typeof _pmtBehindBits==='function')?_pmtBehindBits(p,today):{odN:0,whoTxt:''};
+        const gate=(typeof nextGate==='function')?nextGate(p,today):null;
+        const fD=iso=>{ if(!iso) return 'TBD'; const q=String(iso).split('-'); return (+q[1])+'/'+(+q[2])+'/'+q[0]; };
+        const pctTxt=(p.pct!=null?p.pct+'%':'—')+(h.expectedPct!=null?(' <span style="color:var(--muted);font-weight:400">(should be ~'+h.expectedPct+'%)</span>'):'');
+        hb.innerHTML='<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 16px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:13px">'
+          +'<span style="display:inline-flex;align-items:center;gap:7px;font-weight:800"><span style="width:13px;height:13px;border-radius:50%;background:'+c+';display:inline-block"></span>'+esc(String(lab).toUpperCase())+'</span>'
+          +'<span title="Percent complete vs where the timeline says it should be">📊 '+pctTxt+'</span>'
+          +'<span>🎯 target '+fD(p.finishISO)+'</span>'
+          +(b.odN?('<span style="color:#ef4444;font-weight:700">⚠ '+b.odN+' past-due'+(b.whoTxt?(' <span style="color:var(--muted);font-weight:400">· with: '+esc(b.whoTxt)+'</span>'):'')+'</span>'):'<span style="color:#22c55e;font-weight:700">✓ nothing past-due</span>')
+          +(gate?('<span>◆ next: <b>'+esc(gate.name||'milestone')+'</b> '+fD(gate.dateISO||gate.date)+'</span>'):'')
+          +'</div>';
+        hb.style.display='';
+      }
+    }
     // 📊 Detail slider: 0=Summary (one rollup bar) → 1=Milestones → 2=Phases (+ milestones) → 3=Tasks. Mirrors the inline Gantt slider.
     { const sl=document.getElementById('gfsLodSlider'), lab=document.getElementById('gfsLodLab'), lw=document.getElementById('gfsLodWrap');
       if(sl){ sl.min=0; sl.max=3; if(document.activeElement!==sl) sl.value=PD_LOD; }
