@@ -1667,7 +1667,7 @@
         <a class="mi" href="catalogue/index.html" target="_blank" rel="noopener" onclick="closeDrops()" title="Open the MRA Product Catalogue in a new tab">📖 Product Catalogue</a>
       <a class="mi" data-perm="builder" href="builder/index.html" target="_blank" rel="noopener" onclick="closeDrops()" title="InfoWheels 3D configurator — spin the van, pick wrap colors, floors and cabinets, screenshot or share a config link (Rev 1 placeholder model)">🚚 InfoWheels 3D Builder</a>
         <a class="mi" href="library/index.html" target="_blank" rel="noopener" onclick="closeDrops()" title="Search every project schedule (moved off Smartsheets) — by project, client, job #, PM, or any task">📚 Project Library</a>
-        <a class="mi" href="https://gomra.sharepoint.com/sites/OSHASafety" target="_blank" rel="noopener" onclick="closeDrops()" title="MRA Safety (OSHA) — the SharePoint site for safety files, records and documents">🦺 Safety</a>
+        <button class="mi" data-perm="safety" onclick="closeDrops(); openSafety()" title="MRA Safety (OSHA) — open the safety site or upload a safety file (owners + edit/admin)">🦺 Safety</button>
         <button class="mi" onclick="closeDrops(); openDesignTeam()" title="The design / CAD team board — what Sarah, Mark &amp; Brandon are working on, with notes + a printable one-pager each">🎨 Design Team board</button>
         <button class="mi" onclick="closeDrops(); openProdMeeting()" title="Run the Monday 10am production status meeting from the dash - PM report-out (green one-liners, yellow/red expanded), park items to discuss, tracked action items">🏭 Production Meeting</button>
         <button class="mi" data-perm="sales" onclick="closeDrops(); openSalesPlan()" title="The simple sales/planning timeline - the committed board as solid bars, potential new projects overlaid as purple hatched bars (name, vehicle, scope, dates, probability), plus PM capacity">📈 Sales &amp; Planning</button>
@@ -3093,6 +3093,29 @@
     </div>
   </div>
 
+  <!-- 🦺 Safety (opened from ☰ Menu — owners + edit/admin) -->
+  <div class="modal-overlay" id="safetyModal" onclick="closeSafety(event)">
+    <div class="modal" style="max-width:480px">
+      <button class="modal-close" onclick="closeSafety()" title="Close">×</button>
+      <h3>🦺 MRA Safety (OSHA)</h3>
+      <div class="msub">Upload a safety file here — it's stored on the <b>MRA OSHA Safety</b> SharePoint site. Or open the site to browse everything.</div>
+      <div style="margin:12px 0 4px"><a class="btn-ghost" href="https://gomra.sharepoint.com/sites/OSHASafety" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">🔗 Open the Safety SharePoint site</a></div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+      <div style="font-weight:700;margin-bottom:8px">📤 Upload a safety file</div>
+      <div class="addrow2">
+        <div><label>Category</label><select id="sfCat"><option>Incident</option><option>Near-miss</option><option>Inspection</option><option>Training</option><option>SDS / Chemical</option><option>Policy / Procedure</option><option>Other</option></select></div>
+        <div><label>Date</label><input id="sfDate" type="date"></div>
+      </div>
+      <div style="margin-top:10px"><label>Note <span style="color:var(--faint);font-weight:400">(optional)</span></label><input id="sfNote" autocomplete="off" placeholder="e.g. forklift inspection — Bay 4"></div>
+      <div style="margin-top:10px"><label>File</label><input id="sfFile" type="file"></div>
+      <div id="sfMsg" style="font-size:12px;min-height:16px;margin-top:8px"></div>
+      <div class="addbtns">
+        <button class="btn-ghost" onclick="closeSafety()">Cancel</button>
+        <button class="btn-primary" id="sfSubmit" onclick="safetyUpload()">📤 Upload</button>
+      </div>
+    </div>
+  </div>
+
   <div id="eotmBadge" class="eotm-badge" title="Employee of the Month">
     <img id="eotmBadgeImg" alt="" onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src='eotm.jpg?v=20260618';}else{this.style.display='none';}">
     <div class="eb-tx"><span class="eb-t">🏆 Employee of the Month</span><span class="eb-n" id="eotmBadgeName"></span></div>
@@ -3609,6 +3632,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"28.3", date:"2026-07-17", title:"🦺 Safety — upload files to the OSHA site", items:[
+    "☰ Menu → <b>🦺 Safety</b> (owners + edit/admin only) opens a panel to <b>open the OSHA Safety SharePoint site</b> or <b>📤 upload a safety file</b> right from the dashboard (category, date, note). Uploads switch on once the one-time Safety flow is built. A safety dashboard with graphs is the next phase." ] },
   { rev:"28.2", date:"2026-07-17", title:"🦺 Safety link in the menu", items:[
     "Added a <b>🦺 Safety</b> link to the ☰ Menu — opens the new <b>MRA OSHA Safety</b> SharePoint site for safety files &amp; records. (Upload-from-the-dashboard and a safety dashboard with graphs are next.)" ] },
   { rev:"28.1", date:"2026-07-17", title:"✅ Josh — close-only login", items:[
@@ -5511,10 +5536,10 @@ const ROLE_BY_NAME = (function(){ const m={}, g={
   for(const role in g) g[role].forEach(n=>{ m[_nmKey(n)]=role; }); return m; })();
 const _ADMINONLY=['throughput','deadtrackers'];
 const ROLE_CAPS = {
-  anon:  { tabs:['floor'],                                            hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
-  staff: { tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
-  closer:{ tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
-  shopedit:{ tabs:['floor','mywork','fleetio','assets'],              hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  anon:  { tabs:['floor'],                                            hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
+  staff: { tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
+  closer:{ tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
+  shopedit:{ tabs:['floor','mywork','fleetio','assets'],              hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
   design:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
   exec:  { tabs:['floor','mywork','projects','fleetio','assets'],     hide:['ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
   editor:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['logins'].concat(_ADMINONLY) },
@@ -7460,6 +7485,38 @@ function submitEotmEdit(){
     msg.style.color='var(--green)'; msg.textContent='✓ Saved — live on the board in ~a minute.'; btn.textContent='Save';
     setTimeout(()=>document.getElementById('eotmEditModal').classList.remove('show'),1200);
   }).catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent='Save'; btn.disabled=false; });
+}
+/* ---------- 🦺 Safety: open the site + upload a file to the OSHA Safety SharePoint (owners + edit/admin) ----------
+   Upload rides a Power Automate HTTP flow "MRA Safety Upload" (Create file in the OSHASafety doc library),
+   same no-cors base64 pattern as EOTM. Set SAFETY_UPLOAD_URL once the flow is built. */
+const SAFETY_UPLOAD_URL = "";   // <- paste the "MRA Safety Upload" flow URL here to switch uploads on
+function openSafety(){
+  // No edit-gate: the ☰ menu item is already restricted to owners + edit/admin, and owners (exec) are view-only.
+  const d=document.getElementById('sfDate'); if(d) d.value=(window.MRA_DATA||{}).todayISO||localISO(Date.now());
+  const f=document.getElementById('sfFile'); if(f) f.value=''; const nt=document.getElementById('sfNote'); if(nt) nt.value='';
+  const m=document.getElementById('sfMsg'); if(m) m.textContent=SAFETY_UPLOAD_URL?'':'ⓘ File upload turns on once the one-time Safety flow is built (steps are in the chat). The 🔗 site link works now.';
+  const b=document.getElementById('sfSubmit'); if(b){ b.disabled=false; b.textContent='📤 Upload'; }
+  document.getElementById('safetyModal').classList.add('show');
+}
+function closeSafety(e){ if(!e || e.target.id==='safetyModal' || (e.target.classList&&e.target.classList.contains('modal-close'))) document.getElementById('safetyModal').classList.remove('show'); }
+function safetyUpload(){
+  const msg=document.getElementById('sfMsg');
+  if(!SAFETY_UPLOAD_URL){ if(msg){ msg.style.color='var(--amber)'; msg.textContent='The Safety upload flow isn’t switched on yet — finish the one-time Power Automate setup first (steps are in the chat). The 🔗 site link works now.'; } return; }
+  const f=(document.getElementById('sfFile').files||[])[0];
+  if(!f){ msg.style.color='var(--red)'; msg.textContent='Pick a file first.'; return; }
+  if(f.size>15*1024*1024){ msg.style.color='var(--red)'; msg.textContent='File too big — keep it under 15 MB.'; return; }
+  const cat=document.getElementById('sfCat').value||'Other', date=document.getElementById('sfDate').value||'', note=document.getElementById('sfNote').value.trim();
+  const btn=document.getElementById('sfSubmit'); btn.disabled=true; btn.textContent='Uploading…'; msg.style.color='var(--muted)'; msg.textContent='Uploading…';
+  const rd=new FileReader();
+  rd.onload=()=>{ const b64=String(rd.result).split(',')[1]||'';
+    const _user=CURRENT_USER||(typeof boardNameFor==='function'?boardNameFor():'')||((SSO&&SSO.name)?SSO.name():'');
+    const payload={ action:'safetyUpload', category:cat, date:date, note:note, fileName:f.name, contentType:(f.type||'application/octet-stream'), fileB64:b64, pin:(CLOSE_PIN||'1974'), user:_user };
+    fetch(SAFETY_UPLOAD_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(payload)})
+      .then(()=>{ msg.style.color='var(--green)'; msg.textContent='✓ Uploaded to the Safety site.'; btn.textContent='📤 Upload';
+        setTimeout(()=>document.getElementById('safetyModal').classList.remove('show'),1200); })
+      .catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.textContent='📤 Upload'; btn.disabled=false; }); };
+  rd.onerror=()=>{ msg.style.color='var(--red)'; msg.textContent='Could not read the file — try again.'; btn.textContent='📤 Upload'; btn.disabled=false; };
+  rd.readAsDataURL(f);
 }
 let US_ROWS=[];
 function openUsers(){
