@@ -1651,8 +1651,8 @@
         <button class="mi" data-perm="logins" onclick="closeDrops(); openUsers()" title="Add / edit / remove who can log in to edit, and set their codes (admin only)">👥 Manage logins</button>
         <button class="mi" data-perm="holidays" onclick="closeDrops(); openHolidays()" title="Add or remove company holidays flagged on every schedule (admin only)">📅 Manage holidays</button>
         <button class="mi" data-perm="eotm" onclick="closeDrops(); openEotmEdit()" title="Change the Employee of the Month name + photo (admin only)">🏆 Employee of the Month</button>
-        <button class="mi" data-perm="throughput" onclick="closeDrops(); openThroughput()" title="Owner view: shipped-per-week, average days in bay, bay occupancy + the oldest jobs in bays (admin only for now)">📈 Throughput / Cycle time</button>
-        <button class="mi" data-perm="deadtrackers" onclick="closeDrops(); openDeadTrackers()" title="Units whose GPS tracker has gone quiet (stale/dead) — a fix-list for Doug/Samsara (admin only for now)">📡 Dead trackers</button>
+        <button class="mi" data-perm="throughput" onclick="closeDrops(); openThroughput()" title="Owner view: shipped-per-week, average days in bay, bay occupancy + the oldest jobs in bays (just you for now)">📈 Throughput / Cycle time</button>
+        <button class="mi" data-perm="deadtrackers" onclick="closeDrops(); openDeadTrackers()" title="Units whose GPS tracker has gone quiet (stale/dead) — a fix-list for Doug/Samsara (just you for now)">📡 Dead trackers</button>
         <div class="mi-div">Quick links</div>
         <div id="linksPop"></div>
       </div>
@@ -3548,6 +3548,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"27.3", date:"2026-07-16", title:"\u{1F511} Throughput, dead-trackers &amp; the My-Work picker are Rich-only", items:[
+    "Scoped the \u{1F4C8} Throughput view, \u{1F4E1} Dead-tracker list, and the My-Work <b>person-picker</b> to <b>Rich only</b> (a super-admin check on the sign-in), not all admins \u2014 so Al / Luciana / Quintin see their own My Work but not everyone\u2019s. Opens up to more people whenever you say." ] },
   { rev:"27.2", date:"2026-07-16", title:"\u{1F4C8} Owner throughput view + \u{1F4E1} dead-tracker fix-list (admin)", items:[
     "Two new \u2630 Menu tools, <b>admin-only for now</b>: <b>\u{1F4C8} Throughput / Cycle time</b> \u2014 shipped-per-week, average days in bay, bay occupancy, average build time, and the oldest jobs sitting in bays; and <b>\u{1F4E1} Dead trackers</b> \u2014 every unit whose GPS has gone quiet (60+ days dead / 14\u201360 stale), a fix-list for Doug &amp; Samsara. Review them, then we can open the throughput one to the execs." ] },
   { rev:"27.1", date:"2026-07-16", title:"\u23f3 Bay-aging chip — stuck jobs jump out", items:[
@@ -5337,6 +5339,8 @@ function findUser(code){
 // Central sign-in: prompt once per session; remember who. Returns false if not recognized.
 let _authRetry=null;   // the action to auto-continue after a successful sign-in (no more "tap it twice")
 function ssoCanEdit(){ if(typeof ssoRole!=='function') return false; const r=ssoRole(); return !!(SSO&&SSO.user)&&(r==='admin'||r==='editor'||r==='design'||r==='shopedit'); }
+// Super-admin = Rich ONLY (throughput view, dead-tracker list, and the My-Work person-picker are his alone).
+function isSuperAdmin(){ try{ if(!(typeof ssoEnforcing==='function'&&ssoEnforcing()&&SSO.user)) return false; return SSO.email()==='rmiller@gomra.com' || (typeof _nmKey==='function' && _nmKey(SSO.name())===_nmKey('Rich Miller')); }catch(e){ return false; } }
 function ensureAuth(action, retry){
   if(CLOSE_PIN) return true;
   // 🔐 One login: a signed-in @gomra.com user whose role can edit needs NO number code.
@@ -5487,6 +5491,8 @@ function applyRoleUI(){
   document.querySelectorAll('[data-perm]').forEach(el=>{
     el.style.display = (hide.indexOf(el.getAttribute('data-perm'))>=0) ? 'none' : '';
   });
+  // Super-admin-only items (Rich): throughput + dead-trackers — hidden even from other admins.
+  if(!isSuperAdmin()) document.querySelectorAll('[data-perm="throughput"],[data-perm="deadtrackers"]').forEach(el=>{ el.style.display='none'; });
   if(caps && typeof VIEW!=='undefined' && caps.tabs.indexOf(VIEW)<0){ try{ setView('floor'); }catch(e){} }
   // one-login bridge: signed-in editor/admin/design gets edit rights automatically (sign-out reloads -> clears)
   if(ssoEnforcing() && ssoCanEdit() && !CLOSE_PIN){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; }
@@ -12491,7 +12497,7 @@ function _mwList(arr, today){ if(!arr.length) return '<div class="empty">— non
     return '<div class="row"><div><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+'</div><div class="meta">'+esc(x.where)+rng+'</div></div><div class="right">'+d+'</div></div>'; }).join(''); }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
-  const isAdmin=(typeof ssoRole==='function' && ssoRole()==='admin');
+  const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
   const who=myWorkWho();
   let picker='';
   if(isAdmin){
