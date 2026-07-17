@@ -926,3 +926,14 @@ that CHANGELOG. This logs the 2026-07-09 session's features + the gotchas worth 
 - **`MRA-Sync.ts`** = the merged Office Script (shop-floor actions + 5 project-task actions:
   add/edit/delete/close/reopen ProjectTask). Matches rows by Project + Task ID, falls back to task text.
 
+
+## 📧 Daily task-email routing (Rich confirmed 2026-07-16) — wire when building the per-person email step
+Rich CC'd on ALL. ⚠ TWO Jeffs: "Jeff" board column = Jeff Sellers (jsellers@gomra.com); Wrap Team's Jeff = W2 Graphic (jeff@w2graphic.com) — keep separate.
+- **Sal** → shopsupport@gomra.com
+- **Doug / Maintenance** → dcooley@gomra.com + spearce@gomra.com (Stephanie Pearce, maint coordinator — copied)
+- **Electricians** → bec@beyerelectric.com (Chris Beyer, owner, external — email only, no login)
+- **Wrap Team / MasterWraps** → masterwraps1@yahoo.com (Chad) + jeff@w2graphic.com (Jeff/W2) — copy both (external)
+- **Jeff** → jsellers@gomra.com (Jeff Sellers, shop floor, gomra acct → also My Work)
+- **Josh** → jeberhart@gomra.com (Joshua Eberhart, warehousing, gomra acct → also My Work)
+- **PMs** Al/Megan/Luciana → project report; **Design** Sarah(swilliams)/Mark(markm)/Brandon(bchoy) → their task list.
+Content = the per-person "My Work" engine (PM report for PMs, task list for design/crews). Fire in the ~6AM batch with the deficiency email. Emails resolved via the MRA Users list Email column (flow "Get items → Email"), so assignee NAME on the board must match the Users list entry (Steve-K gotcha). Group-crew leads (Beyer/Chad/W2) added as literal recipients in the flow since they're not in the Users list.
