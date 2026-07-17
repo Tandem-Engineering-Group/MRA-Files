@@ -2618,6 +2618,14 @@
           <div><label>Milestone?</label><select id="etMilestone"><option value="">No</option><option value="Yes">Yes</option></select></div>
           <div><label>Due date</label><input id="etDue" type="date"></div>
         </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 0 2px">⏩ Push due:
+          <button type="button" class="rb" onclick="etPushDue(7)">+1 wk</button>
+          <button type="button" class="rb" onclick="etPushDue(14)">+2 wks</button>
+          <button type="button" class="rb" onclick="etPushDue(30)">+1 mo</button>
+          <input id="etPushN" type="number" step="1" inputmode="numeric" placeholder="days" style="width:64px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:4px 7px;font-size:12px">
+          <button type="button" class="rb" onclick="etPushDue()">Push →</button>
+          <span style="color:var(--faint)">the old date stays, struck through</span>
+        </div>
         <div class="addrow2">
           <div><label>🔁 Repeat <span class="muted-note">(closing it auto-creates the next one)</span></label><select id="etRepeat"><option value="">No repeat</option><option value="daily">Daily</option><option value="weekly:1">Weekly - Monday</option><option value="weekly:2">Weekly - Tuesday</option><option value="weekly:3">Weekly - Wednesday</option><option value="weekly:4">Weekly - Thursday</option><option value="weekly:5">Weekly - Friday</option><option value="weekly:6">Weekly - Saturday</option><option value="weekly:0">Weekly - Sunday</option><option value="monthly">Monthly</option></select></div>
           <div></div>
@@ -2667,6 +2675,7 @@
         <button class="btn-ghost" id="peNonOffBtn" onclick="toggleProjNonOfficial()" title="Flag this as a NON-OFFICIAL project — informal work on someone's plate (e.g. JFSD Trailer Weight). It still shows on the Gantt, Progress and PM Load, just tagged so everyone knows it isn't a formal job.">🏷 Non-official</button>
         <button class="btn-ghost" id="peParkBtn" onclick="toggleProjParked()" title="⏸ PARK this project — freeze / put it on hold. It stays on the Gantt (dimmed, tagged ⏸) but stops counting as At-Risk and drops out of Needs Attention. Task statuses are untouched, so un-parking restores it exactly. There's a '⏸ Hide parked' toggle on the Gantt toolbar too.">⏸ Park</button>
         <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
+        <button class="btn-ghost" onclick="projShiftAllBtn()" title="⏩ Slide the WHOLE schedule — move every task's start AND finish by the same number of days (e.g. +10 to push the project 10 days later because it slipped). Each task keeps its old due struck through.">⏩ Shift schedule</button>
         <button class="btn-ghost" onclick="peOpenDetail()" title="Open this project's full-screen Gantt (detailed view)">⛶ Gantt view</button>
         <button class="btn-ghost" onclick="deleteProjectBtn()" title="Delete this ENTIRE project — all its tasks + the matching floor job (can't be undone; re-upload the template to restore)" style="border-color:rgba(239,68,68,.5); color:#fca5a5">🗑 Delete project</button>
         <span id="peCount" style="color:var(--muted); font-size:12px"></span>
@@ -2825,6 +2834,12 @@
         <div class="addrow2">
           <div><label>Start date</label><input id="ptStart" type="date" onchange="ptDurFromDates()"></div>
           <div><label>Finish date</label><input id="ptFinish" type="date" onchange="ptDurFromDates()"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 0 4px">⏩ Reschedule
+          <input id="ptPushN" type="number" step="1" inputmode="numeric" placeholder="days" style="width:64px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:4px 7px;font-size:12px">
+          <button type="button" class="rb" onclick="ptPushFinish()" title="Move only the FINISH (due) date out — keeps the start. The old finish stays, struck through.">Push finish →</button>
+          <button type="button" class="rb" onclick="ptSlideRange()" title="Move BOTH the start and finish by the same amount — slides the whole task without changing its length.">Slide range →</button>
+          <span style="color:var(--faint)">+days out · −days in</span>
         </div>
         <div class="addrow2">
           <div><label>Duration <span style="color:var(--muted); font-weight:400; font-size:10.5px">(work days — skips weekends &amp; holidays; sets Finish)</span></label>
@@ -3377,6 +3392,14 @@ const GENERAL_HELP = `
     <p>The <b>daily email</b> everyone gets is this exact page — a link to your live My Work (<span class="k">?mywork=Your Name</span>) that always opens fresh. <b>Rich (admin)</b> gets a <b>View person</b> picker to open anyone's page.</p>
     <p><i>The MY WORK tab currently shows for the group that uses it — the PMs, design team and shop crew (Megan, Al, Luciana, Brandon, Mark, Sarah, Sal, Jeff, Josh, Doug &amp; Stephanie), plus Rich. Ask Rich to add anyone else.</i></p></div>
 
+  <div class="hsec"><h4>②ʳ ⏩ Pushing &amp; sliding due dates</h4>
+    <p>When a task slips, you can push it out and <b>the old date stays visible, struck through</b>, next to the new one (<span class="k"><s>7/14</s> → 7/24</span>) — on the task everywhere, so everyone can see it moved.</p>
+    <ul>
+      <li><b>Shop task</b> (✎ edit): an <b>⏩ Push due</b> row — <span class="k">+1 wk</span> / <span class="k">+2 wks</span> / <span class="k">+1 mo</span>, or type any number of days and hit <b>Push →</b>. (Or just type a later Due date — the old one is kept either way.)</li>
+      <li><b>Project task</b> (✎ edit): <b>Push finish →</b> moves only the due out and keeps the start; <b>Slide range →</b> moves the start <b>and</b> finish together (same length, later date). Enter days first (+ later, − earlier).</li>
+      <li><b>Whole project</b>: ☰ project editor → <b>⏩ Shift schedule</b> slides <b>every</b> task's start &amp; finish by the days you enter — one click when the whole schedule moves. Each task keeps its old due struck through.</li>
+    </ul></div>
+
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
     <p>Each tile shows the job's name, client / PM, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). Tasks list <b>due-soonest first</b> (undated last, 🔥 hot pinned on top) with their 📅 due dates shown — the <b>sort picker</b> in the Bay Status header switches to 🆕 Recently added or 📜 List order (remembered per device). The <b>trailers</b> on a tile list earliest-start first too — or <b>drag a trailer's ⠿ grip onto another trailer's card</b> to hand-order them (saved for everyone). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. <b>📦 Off Site / Parts tile:</b> for a unit that <b>isn't here</b> but the shop is building parts for (build &amp; ship) — set the job's Bay to <span class="k">Off Site / Parts</span> (✎ edit / ➕ Add job) or drag its card onto the tile, and it appears <b>under the General tile</b> (auto-hides when empty). Unlike On Hold / Off-Site, its tasks <b>DO feed the crew queues</b> — the parts work is real shop work. <b>🧩 Sub-jobs:</b> when several jobs share one J# (the trailer + a parts build), tick <span class="k">🧩 Sub-job</span> on ➕ Add job / ✎ edit for the side build — it shows a 🧩 pill and carries <b>no Fleetio</b> (dates, issues, GPS follow the MAIN job only); adding a job whose J# already exists asks you which one you mean. Per-tile collapse state is remembered on this device. When a trailer's Fleetio issue carries <b>Back-to-MRA / Leaving-MRA dates</b>, the card shows a <span class="k">🗓 Fleetio MRA: 7/1/26 → 7/31/26</span> line (same line appears on the 🗓 Meeting view and 🚦 What's Next). <b>📋 Project schedule lines</b> that belong to a trailer (matched by <b>Job #</b>) show right on its bay card behind a <span class="k">📋</span> pill — tap the <span class="k">⚒</span> on a line to break it into real, assignable shop tasks on that job (see ④). <b>📍 GPS on the holding lanes:</b> Parking-Lot cards flag <span class="k">⚠ GPS: (place)</span> when Samsara says the unit is NOT really in our lot (quiet 📍 at MRA when it is); Next Up / On Hold cards show a muted 📍 location; 📡 no GPS = no tracker. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. Below the lot sits a <b>General</b> tile for jobs assigned to bay "General" (equipment-only work with no floor space) — same behavior, and its tasks feed the crew lists like any active job. <span class="k">☰ Actions ▸ 🖨 Print…</span> opens the print picker: the <b>whole board</b>, or <b>any mix of crews</b> (tick Sal + Electricians, etc.) as one handout with a section per crew — grouped by trailer, with Fleetio descriptions, <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files. <b>🧾 Whole-job punch list:</b> ✎ edit a job → <span class="k">🧾 Punch list</span> = one document with <b>every crew's</b> open tasks on that job grouped by crew (photos, notes box, signature) — digital first, print from there; deep-linkable via <span class="k">?punch=J####</span> — and every item has an <span class="k">⚠ Issue</span> button: the crew types what's wrong + their name and a new ⚠ ISSUE task lands on that job <b>assigned to the PM</b> (original task untouched). <b>📧 Floor recap:</b> ☰ Actions → <span class="k">📧 Floor recap — last 24h</span> = what closed (who + photos) and what's still open per job; the <span class="k">?recap=1</span> link is built for a scheduled daily email (add <span class="k">&amp;days=7</span> for a weekly view).</p></div>
 
@@ -3581,6 +3604,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"28.0", date:"2026-07-17", title:"\u{23E9} Reschedule tasks — keep the old due, slide ranges", items:[
+    "Push a due date out and the <b>old date stays visible, struck through</b> next to the new one (~~old~~ → new) — on the task everywhere, so everyone can see it moved.",
+    "<b>Shop task editor:</b> ⏩ <b>Push due</b> buttons (+1 wk / +2 wks / +1 mo, or type any number of days).",
+    "<b>Project task editor:</b> ⏩ <b>Push finish</b> (move just the due out, keep the start) or ⏩ <b>Slide range</b> (move start AND finish together — same length, later date).",
+    "<b>Whole project:</b> ☰ project editor → ⏩ <b>Shift schedule</b> slides <b>every</b> task's start &amp; finish by the number of days you enter (+ later / − earlier) — one click when the whole schedule moves. Each task keeps its old due struck through." ] },
   { rev:"27.9", date:"2026-07-17", title:"\u{1F9D1} Tasks now show who added them", items:[
     "When someone adds a task on the board, it's now stamped with <b>🧑 added by (their name)</b> — shown on the task on the crew columns, the bay cards, and in the MY WORK page &amp; daily email. So if a crew member has a question about a task (especially the general ones), they can see who put it in and go ask. (It shows on tasks added from here on out — we don't have a record of who created older ones.)" ] },
   { rev:"27.8", date:"2026-07-17", title:"\u{1F64B} MY WORK now shows every task's full detail", items:[
@@ -5618,6 +5646,28 @@ function _taskBy(cm){ const m=String(cm||'').match(/\[by:([^\]]+)\]/i); return m
 function stripBy(cm){ return String(cm||'').replace(/\s*\[by:[^\]]*\]/ig,'').trim(); }
 function _withBy(cm,by){ cm=stripBy(cm); if(by){ cm=(cm?cm+' ':'')+'[by:'+String(by).replace(/[\]]/g,'').trim()+']'; } return cm; }
 function _byLine(cm){ const b=_taskBy(cm); return b?('<div style="font-size:10px;color:var(--faint);margin:1px 0 2px" title="Who added this task — ask them if you have questions">\u{1F9D1} added by '+esc(b)+'</div>'):''; }
+// ORIGINAL due date — kept when a due is pushed out, so the old date stays visible (struck through) next to the new one.
+// Rides the comments column as a hidden [due0:YYYY-MM-DD] tag. Set once (the first push); preserved through edits.
+function _taskDue0(cm){ const m=String(cm||'').match(/\[due0:(\d{4}-\d{2}-\d{2})\]/i); return m?m[1]:''; }
+function stripDue0(cm){ return String(cm||'').replace(/\s*\[due0:[^\]]*\]/ig,'').trim(); }
+function _withDue0(cm,iso){ cm=stripDue0(cm); if(/^\d{4}-\d{2}-\d{2}$/.test(String(iso||''))){ cm=(cm?cm+' ':'')+'[due0:'+iso+']'; } return cm; }
+// Struck-through original due to PREPEND before a task's current due, when it was pushed to a later date.
+function _due0Strike(cm, curISO){ const o=_taskDue0(cm); if(!o||!curISO||o===String(curISO)) return '';
+  return '<span style="text-decoration:line-through;opacity:.6;font-weight:400" title="Original due date — pushed out">'+esc(fmtMD(o))+'</span> → '; }
+// Add/remove days to an ISO date -> ISO (used by the reschedule / slide controls).
+function _isoAddDays(iso,days){ const d=parseISO(iso); if(!d) return iso; return localISO(d.getTime()+(+days||0)*86400000); }
+// Shop editor: push the due date out N days (keeps the old date — it saves struck through).
+function etPushDue(days){ const el=document.getElementById('etDue'); if(!el) return;
+  const n=(days!=null)?days:(+((document.getElementById('etPushN')||{}).value||0)); if(!n) return;
+  const base=el.value||((window.MRA_DATA||{}).todayISO)||localISO(Date.now()); el.value=_isoAddDays(base,n);
+  if(document.getElementById('etPushN')) document.getElementById('etPushN').value=''; }
+// Project editor: push only the finish out, or slide the whole range (start+finish) by N days.
+function ptPushFinish(){ const f=document.getElementById('ptFinish'); if(!f) return; const n=+((document.getElementById('ptPushN')||{}).value||0); if(!n) return;
+  const base=f.value||document.getElementById('ptStart').value||((window.MRA_DATA||{}).todayISO)||localISO(Date.now()); f.value=_isoAddDays(base,n);
+  document.getElementById('ptPushN').value=''; try{ ptDurFromDates(); }catch(e){} }
+function ptSlideRange(){ const s=document.getElementById('ptStart'), f=document.getElementById('ptFinish'); const n=+((document.getElementById('ptPushN')||{}).value||0); if(!n) return;
+  if(s&&s.value) s.value=_isoAddDays(s.value,n); if(f&&f.value) f.value=_isoAddDays(f.value,n);
+  document.getElementById('ptPushN').value=''; try{ ptDurFromDates(); }catch(e){} }
 function _withRepeat(cm,val){ cm=stripRepeat(cm); if(val){ const p=String(val).split(':'); const tag='[repeat:'+p[0]+(p[0]==='weekly'?(':'+(p[1]!=null?p[1]:1)):'')+']'; cm=(cm?cm+' ':'')+tag; } return cm; }
 function _repVal(cm){ const r=repeatOf(cm); if(!r) return ''; return r.kind==='weekly'?('weekly:'+(r.dow!=null?r.dow:1)):r.kind; }
 function nextRepeatISO(rep, fromISO){
@@ -6292,8 +6342,9 @@ function openEditTask(proj, raw){
   document.getElementById('etStatus').value=(t&&t.st)||"Open";
   document.getElementById('etMilestone').value=(t&&/yes/i.test(t.ml||""))?"Yes":"";
   { const dd=document.getElementById('etDue'); if(dd) dd.value=(t&&t.due)?String(t.due).slice(0,10):""; }
-  document.getElementById('etComments').value=stripBy(stripRepeat((t&&t.cm)||""));
+  document.getElementById('etComments').value=stripDue0(stripBy(stripRepeat((t&&t.cm)||"")));
   window._etBy=_taskBy((t&&t.cm)||"");   // preserve who-added through the edit
+  window._etDue0=_taskDue0((t&&t.cm)||""); window._etDueOld=(t&&t.due)?String(t.due).slice(0,10):"";   // keep the original due when it's pushed out
   { const rs=document.getElementById('etRepeat'); if(rs) rs.value=_repVal((t&&t.cm)||""); }
   ATT_STAGE.et=(t&&t.files)?t.files.slice():[]; window._etFilesOrig=JSON.stringify(ATT_STAGE.et); attRender('et');
   { const sel=document.getElementById('etMoveDest'), mr=document.getElementById('etMoveRow');
@@ -6312,10 +6363,13 @@ function submitEditTask(){
   const task=_applyHot(document.getElementById('etTask').value.trim(), !!((document.getElementById('etHot')||{}).checked));
   const msg=document.getElementById('etMsg');
   if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
+  const _newDue=(document.getElementById('etDue')?document.getElementById('etDue').value:'');
+  let _keepD0=window._etDue0||'';   // preserve an existing original-due; else capture the old due when it's pushed LATER
+  if(!_keepD0 && _newDue && window._etDueOld && _newDue>window._etDueOld) _keepD0=window._etDueOld;
   const payload={ action:"editTask", project:window._etProj, taskOld:window._etOld, task:task,
     assigned:_combineAssignees(document.getElementById('etAssigned').value, document.getElementById('etAssigned2').value), status:document.getElementById('etStatus').value,
-    milestone:document.getElementById('etMilestone').value, comments:_withBy(_withRepeat(document.getElementById('etComments').value.trim(), (document.getElementById('etRepeat')||{}).value||''), window._etBy||''),
-    due:(document.getElementById('etDue')?document.getElementById('etDue').value:''),
+    milestone:document.getElementById('etMilestone').value, comments:_withDue0(_withBy(_withRepeat(document.getElementById('etComments').value.trim(), (document.getElementById('etRepeat')||{}).value||''), window._etBy||''), _keepD0),
+    due:_newDue,
     pin:CLOSE_PIN, user:CURRENT_USER };
   const btn=document.getElementById('etSubmit'); btn.disabled=true; btn.textContent="Saving…";
   msg.style.color='var(--muted)'; msg.textContent='Saving…';
@@ -7132,6 +7186,30 @@ function renameProjectBtn(){
   if(typeof renderAll==='function') renderAll();
   openProjectEditor(nn);   // reopen on the renamed project
 }
+// ⏩ Slide the WHOLE project schedule: move every dated task's start AND finish by N days (schedule slipped/pulled in).
+// Each task keeps its original finish struck through (the [due0:] tag) when it's pushed later.
+function projShiftAllBtn(){
+  const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('shift the whole schedule')) return;
+  const p=oProj(name); const dated=((p&&p.tasks)||[]).filter(t=>t.startISO||t.finISO);
+  if(!dated.length){ alert('No dated tasks to shift on this project.'); return; }
+  const raw=prompt('Slide the WHOLE "'+name+'" schedule by how many days?\n\n  + = later (the schedule slipped)\n  − = earlier (pulled in)\n\nEvery task’s start AND finish moves by this amount; each keeps its old due struck through.','');
+  if(raw==null) return; const n=parseInt(raw,10); if(!n){ if(raw.trim()!=='') alert('Enter a whole number of days (e.g. 10 or -5).'); return; }
+  if(!confirm('Move all '+dated.length+' dated task'+(dated.length===1?'':'s')+' in “'+name+'” by '+(n>0?'+':'')+n+' day'+(Math.abs(n)===1?'':'s')+'?')) return;
+  dated.forEach(t=>{
+    const ns=t.startISO?_isoAddDays(t.startISO,n):''; const nf=t.finISO?_isoAddDays(t.finISO,n):'';
+    const existing0=_taskDue0(t.cm||''); const keep0=existing0 || ((t.finISO&&nf&&nf>t.finISO)?t.finISO:'');
+    const cm=_withDue0(t.cm||'', keep0);
+    shopWrite({ action:'editProjectTask', project:name, pin:CLOSE_PIN||'1974', user:CURRENT_USER||'',
+      id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
+      assigned:t.who||'', status:t.st||'', start:ns, finish:nf, pred:t.pred||'', milestone:t.ml||'',
+      parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''), budget:(t.bud!=null?t.bud:''), comments:cm });
+    if(ns) t.startISO=ns; if(nf) t.finISO=nf; t.cm=cm;
+  });
+  try{ oRecomputeProject(p); }catch(e){} try{ if(typeof markPending==='function') markPending(); }catch(e){}
+  oApply(); try{ renderProjTaskList(); }catch(e){}
+  alert('✓ Shifted '+dated.length+' task'+(dated.length===1?'':'s')+' by '+(n>0?'+':'')+n+' days.\nYour screen is updated; everyone else sees it on the next sync (~2-3 min).');
+}
 // Set the Program Development lead for the whole project — applies to all its tasks + the matching floor job.
 function setProjectPMBtn(){
   const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
@@ -7704,7 +7782,7 @@ function openProjTaskNew(){
   document.getElementById('ptStart').value=""; document.getElementById('ptFinish').value="";
   document.getElementById('ptPred').value=""; document.getElementById('ptMilestone').value="";
   document.getElementById('ptEstDays').value=""; document.getElementById('ptEstHours').value=""; document.getElementById('ptBudget').value="";
-  document.getElementById('ptComments').value=""; window._ptBy='';
+  document.getElementById('ptComments').value=""; window._ptBy=''; window._ptDue0=''; window._ptFinOld='';
   document.getElementById('ptDelete').style.display='none';
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Add task";
   try{ ptDurFromDates(); }catch(e){}
@@ -7737,7 +7815,8 @@ function openProjTaskEdit(id, projOverride){
   document.getElementById('ptEstDays').value=(t.eD!=null?t.eD:"");
   document.getElementById('ptEstHours').value=(t.eH!=null?t.eH:"");
   document.getElementById('ptBudget').value=(t.bud!=null?t.bud:"");
-  document.getElementById('ptComments').value=stripBy(t.cm||""); window._ptBy=_taskBy(t.cm||"");
+  document.getElementById('ptComments').value=stripDue0(stripBy(t.cm||"")); window._ptBy=_taskBy(t.cm||"");
+  window._ptDue0=_taskDue0(t.cm||""); window._ptFinOld=t.finISO||"";   // keep the original finish when it's pushed out
   document.getElementById('ptDelete').style.display=(t.id!=null&&t.id!=='')?'':'none';
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Save";
   try{ ptDurFromDates(); }catch(e){}
@@ -7774,7 +7853,10 @@ function submitProjTask(){
     parentId:_parent,
     estDays:document.getElementById('ptEstDays').value, estHours:document.getElementById('ptEstHours').value,
     budget:document.getElementById('ptBudget').value,
-    comments:_withBy(document.getElementById('ptComments').value.trim(), (window._ptId!=null?(window._ptBy||''):'')) };
+    comments:(function(){ const _nf=document.getElementById('ptFinish').value;
+      let _kd0=(window._ptId!=null?(window._ptDue0||''):'');
+      if(window._ptId!=null && !_kd0 && _nf && window._ptFinOld && _nf>window._ptFinOld) _kd0=window._ptFinOld;
+      return _withDue0(_withBy(document.getElementById('ptComments').value.trim(), (window._ptId!=null?(window._ptBy||''):'')), _kd0); })() };
   f.nonOfficial = !!(p && p.nonOfficial);   // #2: a task added to a non-official project inherits the flag
   const editing=(window._ptId!=null);
   const _oldEdit=editing?projTaskByAnyId(p,window._ptId):null;   // resolve by real TaskID or "s<_id>" handle
@@ -9230,7 +9312,7 @@ function renderFloor(D){
         const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
         const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
           const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
-          const odue=o.due?` <span class="duedate${(o.due<today)?' od':''}">📅 ${esc(fmtMD(o.due))}</span>`:'';
+          const odue=o.due?` <span class="duedate${(o.due<today)?' od':''}">📅 ${_due0Strike(o.cm,o.due)}${esc(fmtMD(o.due))}</span>`:'';
           const orep=repeatOf(o.cm)?' <span title="Repeats — closing it auto-creates the next one">🔁</span>':'';
           return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}${(!pend&&isHotTask(o.raw||o.disp))?" hot":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${odue}${orep}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}${_byLine(o.cm)}`; };
         let inner="";
@@ -9908,7 +9990,7 @@ function _ynTasksHtml(it,today){
   const onlyUn = gkeys.length===1 && gkeys[0]==='';
   const taskHtml=o=>{ const pend=isPendingClosed(proj,o.raw);
     const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
-    const odue=o.due?` <span class="duedate${(o.due<today)?' od':''}">📅 ${esc(fmtMD(o.due))}</span>`:'';
+    const odue=o.due?` <span class="duedate${(o.due<today)?' od':''}">📅 ${_due0Strike(o.cm,o.due)}${esc(fmtMD(o.due))}</span>`:'';
           const orep=repeatOf(o.cm)?' <span title="Repeats — closing it auto-creates the next one">🔁</span>':'';
     const handles = editable ? (pend?'✓ ':(closeHandle(proj,o.raw)+taskTools(proj,o.raw,false)+qaChip(proj,o.raw))) : '';
     return `<div class="taskline${o.sal?' sal':''}${pend?' done':''}${(!pend&&isHotTask(o.raw||o.disp))?' hot':''}">${handles}${esc(o.disp)}${odue}${orep}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':''}</div>`; };
@@ -12564,7 +12646,7 @@ function mwSetFollow(name, arr){ try{ localStorage.setItem(_mwFollowKey(name), J
 function mwToggleFollow(proj){ const who=myWorkWho(); if(!who||!proj) return; const cur=mwGetFollow(who); const i=cur.indexOf(proj); if(i>=0) cur.splice(i,1); else cur.push(proj); mwSetFollow(who,cur); try{ renderMyWork(); }catch(e){} }
 function mwPickFollow(sel){ const v=sel&&sel.value; if(v) mwToggleFollow(v); if(sel) sel.value=''; }
 // Clean a task's comments for display: drop the machine tags ([repeat:…], [pt:…], [sales]…, [subjob], [mtg]).
-function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub|by)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
+function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub|by|due0)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
 function myWorkFor(name){
   const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
   const soon=localISO(Date.parse(today)+7*86400000);
@@ -12576,11 +12658,11 @@ function myWorkFor(name){
   (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
     (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
       if(_whoMatch(t.who,name)){ const fm=String(t.t||'').match(/🔧\s*#(\d+)/);
-        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, kind:'shop', files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row}}); } }); });
+        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, due0:_taskDue0(t.cm), kind:'shop', files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row}}); } }); });
   (D.projects||[]).forEach(p=>{ const ts=p.tasks||[]; ts.forEach((t,i)=>{ if(/yes/i.test(t.ml||'')) return;
       if(isDoneT(t) || projIsPendingVerify(t)) return;   // pending-verify shows in its own section
       if(_whoMatch(t.who,name)){ let parent=''; if(t.sub){ for(let k=i-1;k>=0;k--){ if(!ts[k].sub){ parent=ts[k].t||''; break; } } }
-        items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name}}); } }); });
+        items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, due0:_taskDue0(t.cm), st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name}}); } }); });
   const od=items.filter(x=>x.due&&x.due<today).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const due=items.filter(x=>x.due&&x.due>=today&&x.due<=soon).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const later=items.filter(x=>!x.due||x.due>soon).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
@@ -12626,7 +12708,8 @@ function _mwList(arr, today){ if(!arr.length) return '<div class="empty">— non
 // Fleetio # + description (shop), comments, and photo/file thumbnails.
 function _mwRow(x, today){
   const od=x.due&&x.due<today;
-  const d=x.due?(' <span class="badge '+(od?'red':'amber')+'">'+(od?'overdue ':'due ')+esc(fmtMD(x.due))+'</span>'):'';
+  const strk=(x.due0&&x.due&&x.due0!==x.due)?('<span style="text-decoration:line-through;opacity:.6;font-weight:400;font-size:10px">'+esc(fmtMD(x.due0))+'</span> → '):'';
+  const d=x.due?(' <span class="badge '+(od?'red':'amber')+'">'+strk+(od?'overdue ':'due ')+esc(fmtMD(x.due))+'</span>'):'';
   const rng=(x.kind==='proj'&&(x.st0||x.due))?(' <span class="meta">▶ '+(x.st0?esc(fmtMD(x.st0)):'…')+' → '+(x.due?esc(fmtMD(x.due)):'…')+'</span>'):'';
   const nav=_mwNavAttr(x.nav);
   const fnumline=(x.kind==='shop'&&x.fnum)?(' <span class="badge grey" style="font-size:9px">🔧 #'+esc(x.fnum)+'</span>'):'';
@@ -12732,7 +12815,8 @@ function buildMyWorkHtml(name){
   };
   // open-task line (overdue / due / everything else) — full detail
   const li=x=>{ const od=x.due&&x.due<m.today;
-    const badge=x.due?(od?'<span class="od">OVERDUE '+fmt(x.due)+'</span>':'<span class="dt">'+fmt(x.due)+'</span>'):'';
+    const strk=(x.due0&&x.due&&x.due0!==x.due)?('<span style="text-decoration:line-through;opacity:.6">'+fmt(x.due0)+'</span> → '):'';
+    const badge=x.due?(od?'<span class="od">'+strk+'OVERDUE '+fmt(x.due)+'</span>':'<span class="dt">'+strk+fmt(x.due)+'</span>'):'';
     const rng=(x.kind==='proj'&&x.st0)?('<div class="ctx">▶ '+fmt(x.st0)+' → '+(x.due?fmt(x.due):'…')+'</div>'):'';
     return '<li'+(od?' class="hot"':'')+'>'+(x.kind==='proj'?'📋 ':'🔧 ')+'<b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span> '+badge+rng+detailOf(x)+'</li>'; };
   const dli=x=>'<li>'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+' <span class="src">'+esc(x.where)+'</span> <span class="dt">'+fmt(x.d)+'</span></li>';
