@@ -377,6 +377,19 @@ exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
   6 AM Eastern) → Initialize variable `Recipiants` (Array, the 12-recipient JSON) → Apply to each → Compose `EmailBody`
   (concat HTML w/ `encodeUriComponent(items('Apply_to_each')?['name'])` link) → Send email V2 (To=`items('Apply_to_each')
   ?['to']`, CC rmiller@gomra.com, Body=EmailBody Outputs). Add/remove a person = edit the Recipiants array.
+- **rev 27.9 — tasks show WHO added them (Rich 2026-07-17: "for the general tasks ... put their name for the guys ...
+  in case they have questions ... part of everything").** No creator field existed in the data (task keys: t/who/op/
+  due/cm/st/done/ml/files/_id) and the ActivityLog Who is blank (known bug), so the creator now rides the **comments
+  column as a hidden `[by:Name]` tag** (same pattern as `[repeat:]`/`[pt:]` — zero SharePoint/flow change). Helpers
+  `_taskBy`/`stripBy`/`_withBy`/`_byLine` by stripRepeat. **Stamp:** central in `shopWrite` on `addTask`/`addProjectTask`
+  (skips user 'Shop'/'Design Team'; won't dup). **Preserve through edits:** shop editor loads `stripBy(stripRepeat(cm))`
+  + `window._etBy`, saves `_withBy(_withRepeat(...),_etBy)`; project editor same with `window._ptBy` (reset '' on add).
+  **Display "🧑 added by X":** crew-column + bay-card task lines (`_byLine(o.cm)`), daily letter, and MY WORK tab
+  (`_mwRow`) + email (`detailOf`) via `by:_taskBy(t.cm)` on items. **Strip the raw tag everywhere** a comment shows:
+  `_mwCleanCm` now includes `by`; fixed all raw-cm sites (crew sheet + work orders `_mwCleanCm(o.cm)`, daily letter,
+  design-board parent note, unassigned finder ctx). Verified headless: stamp/skip-Shop/no-dup/strip/extract all pass;
+  board shows "added by" 3×, My Work + email show it, **zero raw `[by:` in any visible text** (the innerHTML "leak" was
+  my own `<script>` source comment — innerText clean). ⚠️ Only NEW tasks get it; no record of who created older ones.
 
 ## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
 
