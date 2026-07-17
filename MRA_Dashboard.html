@@ -3240,7 +3240,7 @@ function togglePhasePS(proj,ph){ const k='__PS__|'+proj+'|'+ph; if(PHASE_OPEN.ha
 function pdPhasesForCurrent(){
   const D=window.MRA_DATA; if(!D||typeof GFS==='undefined'||GFS!=='project') return [];
   const p=(D.projects||[]).find(x=>x.name===GFS_PROJECT); if(!p) return [];
-  const tl=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>!(PD_HIDEDONE&&projIsDone(t)));
+  const tl=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>pdTaskPass(t));
   const seen=new Set(), out=[];
   tl.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!seen.has(ph)){ seen.add(ph); out.push(ph); } });
   return out;
@@ -3347,7 +3347,13 @@ const PD_COLLAPSED=new Set();   // collapsed milestone sections in the project-d
 let PD_UNDO=[], PD_REDO=[], PD_UNDO_PROJ=null;   // undo/redo stacks for drag-reschedule (per project)
 let PD_WIN_DAYS=null;   // project-detail Gantt zoom (window length in days); null = fit the whole project
 let PD_HIDEDONE=false; try{ PD_HIDEDONE=localStorage.getItem('mra_pd_hidedone')==='1'; }catch(e){}   // detailed Gantt: hide completed tasks
-function pdToggleHideDone(){ PD_HIDEDONE=!PD_HIDEDONE; try{localStorage.setItem('mra_pd_hidedone',PD_HIDEDONE?'1':'0');}catch(e){} if(typeof renderGanttFS==='function') renderGanttFS(); }
+// Detailed-view task filter (Al): All → Hide completed → Completed only. 'done'-only shows just what's finished.
+let PD_TASKVIEW='all'; try{ PD_TASKVIEW=localStorage.getItem('mra_pd_taskview')|| (PD_HIDEDONE?'open':'all'); }catch(e){ PD_TASKVIEW=PD_HIDEDONE?'open':'all'; }
+function pdSetTaskView(v){ PD_TASKVIEW=v; PD_HIDEDONE=(v==='open'); try{ localStorage.setItem('mra_pd_taskview',v); localStorage.setItem('mra_pd_hidedone',PD_HIDEDONE?'1':'0'); }catch(e){} if(typeof renderGanttFS==='function') renderGanttFS(); }
+function pdCycleTaskView(){ pdSetTaskView(PD_TASKVIEW==='all'?'open':PD_TASKVIEW==='open'?'done':'all'); }
+// True if a task passes the current detailed-view filter.
+function pdTaskPass(t){ if(PD_TASKVIEW==='open') return !projIsDone(t); if(PD_TASKVIEW==='done') return projIsDone(t); return true; }
+function pdToggleHideDone(){ pdCycleTaskView(); }   // legacy entry point → now cycles the 3-way filter
 let PD_SORT='date'; try{ const _s=localStorage.getItem('mra_pd_sort'); if(_s==='manual'||_s==='date') PD_SORT=_s; }catch(e){}   // detailed Gantt order: by date, or keep the list/entry order
 function setPdSort(v){ PD_SORT=(v==='manual')?'manual':'date'; try{localStorage.setItem('mra_pd_sort',PD_SORT);}catch(e){} if(GFS==='project'&&typeof renderGanttFS==='function') renderGanttFS(); }
 let PD_PAN=null;        // project-detail horizontal scroll 0..100; null = anchored at the span start
@@ -3635,6 +3641,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"28.9", date:"2026-07-17", title:"✓ Completed-only filter on the detailed project view (Al)", items:[
+    "The detailed project view's task filter is now 3-way: <b>All</b> · <b>Open only</b> (hides completed) · <b>✓ Completed only</b> (shows just what's finished) — so you can review everything that's been knocked out, not only what's left." ] },
   { rev:"28.8", date:"2026-07-17", title:"🩺 Health status on the detailed project view (Al's ask)", items:[
     "Open a project's detailed view (click its Gantt bar / ⛶ Expand) and there's now a <b>health banner</b> across the top: 🟢/🟡/🔴 <b>ON TRACK / BEHIND / LATE</b>, <b>% complete vs where it should be</b>, <b>target date</b>, <b>⚠ past-due count (and who's holding them)</b>, and the <b>next milestone</b> — so you can read the project's status at a glance right where you're working." ] },
   { rev:"28.7", date:"2026-07-17", title:"✅ Jeff — close-only login (same as Josh)", items:[
@@ -15156,7 +15164,11 @@ function renderGanttFS(){
         + `<div class="rb${PD_REDO.length?'':' rbdim'}" onclick="pdRedo()" title="Redo">↷ Redo${PD_REDO.length?(' ('+PD_REDO.length+')'):''}</div>`
         + `<div class="rb" onclick="pdResetOrder()" title="Clear any manual up/down ordering — go back to pure date order">↺ Reset order</div>`
       : `<div class="rb" onclick="pdEnterEdit()" title="Enter your code to drag task bars, add and edit tasks">🔒 Edit / add tasks</div>`)
-      + `<div class="rb${PD_HIDEDONE?' active':''}" onclick="pdToggleHideDone()" title="Hide completed tasks in this detailed view">✓ Hide completed</div>`
+      + `<span class="rb-group" title="Which tasks to show in this view">`
+        + `<div class="rb${PD_TASKVIEW==='all'?' active':''}" onclick="pdSetTaskView('all')" title="Show all tasks">All</div>`
+        + `<div class="rb${PD_TASKVIEW==='open'?' active':''}" onclick="pdSetTaskView('open')" title="Hide completed — just what's left">Open only</div>`
+        + `<div class="rb${PD_TASKVIEW==='done'?' active':''}" onclick="pdSetTaskView('done')" title="Show ONLY completed tasks">✓ Completed only</div>`
+      + `</span>`
       + `<div class="rb${PD_SORT==='date'?' active':''}" onclick="setPdSort('date')" title="Order tasks by date">📅 By date</div>`
       + `<div class="rb${PD_SORT==='manual'?' active':''}" onclick="setPdSort('manual')" title="Keep the list's own order (don't auto-sort by date)">▦ List order</div>`;
     if(!p || !(p.tasks||[]).length){
@@ -15218,7 +15230,7 @@ function renderGanttFS(){
     };
     // #8 (Al): a milestone is a ◆ POINT at its date — NOT a collapsible gate that groups tasks.
     // Every task renders in order; milestone tasks show as a diamond (no bar), the rest as bars.
-    const _plist=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>!(PD_HIDEDONE&&projIsDone(t)));
+    const _plist=(PROJ_WHO?(p.tasks||[]).filter(t=>taskWhoMatch(t,PROJ_WHO)):(p.tasks||[])).filter(t=>pdTaskPass(t));
     const _pix=new Map(_plist.map((t,i)=>[t,i]));
     const sorted=_plist.slice().sort((a,b)=> PD_SORT==='manual' ? (_pix.get(a)-_pix.get(b)) : ((projOrdKey(a)-projOrdKey(b)) || dkey(a).localeCompare(dkey(b))));
     const rows=[], mlines=[];
