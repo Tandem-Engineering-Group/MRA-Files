@@ -403,6 +403,22 @@ exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
   dated task's start+finish by N days (+later/−earlier), each keeping old finish struck, via bulk `editProjectTask` writes.
   Helpers `_taskDue0/stripDue0/_withDue0/_isoAddDays`. Validated headless: push/slide/shift math, 12-task shift fired 12
   ops with new dates + due0, struck display in tab/email/board, no raw `[due0:` leak, zero pageerrors.
+- **rev 28.1 — Josh CLOSE-ONLY login (Rich 2026-07-17).** New role **`closer`** (`jeberhart@gomra.com` + name Joshua
+  Eberhart): can **✓ close his OWN tasks and nothing else**. Built so **no global CLOSE_PIN is ever set** → every other
+  write stays blocked exactly like a view-only role. `ssoIsCloser()`; `ensureAuth` still returns view-only for closer;
+  `closeTaskByName` has a closer branch that closes with a LOCAL `'1974'` pin (not the global) + `_canCloseHere` own-task
+  guard; `closeHandle` renders the ✓ only on the closer's own tasks. `body.closeronly` CSS reveals `.closebtn`, hides
+  `.qa/.ttool/.editjob/.jgrip/.leaveadd/.fladd`. Also added **`BOARD_NAME_BY_EMAIL` + `boardNameFor()`** (jeberhart→Josh,
+  jsellers→Jeff, shopsupport→Sal, dcooley→Doug) and pointed `myWorkWho()` at it — fixes the signed-in **My Work** match for
+  Josh/Jeff/Sal/Doug (their board name ≠ full sign-in name). Validated headless: own-task ✓ only, close fires as "Josh"
+  pin 1974, others' close + all edits blocked, global pin stays null, zero pageerrors. ⏭ Josh will need to actually be a
+  gomra login (he is) — role resolves by email OR name.
+- **🔜 OPEN (Rich 2026-07-17): (1) 🦺 SAFETY — new OSHA safety SharePoint site `gomra.sharepoint.com/sites/OSHASafety`;
+  wants a ☰ Safety link + a dashboard UPLOAD that stores files there + eventually a safety dashboard (graphs). Plan:
+  Menu link now; upload = a Power Automate "MRA Safety Upload" flow (HTTP trigger → Create file in the OSHASafety doc
+  library, pin-gated, base64 like EOTM) + a dashboard upload modal; graphs = phase 2 off a SharePoint List of safety
+  items (decide fields w/ Rich). (2) 📁 MOVE THE CLAUDE FILES Tandem→gomra SharePoint (the big pipeline migration in the
+  runbook — repoint every flow's Site Address + re-auth as gomra, likely recreate the Lists; Tim creates the site first).**
 
 ## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
 
