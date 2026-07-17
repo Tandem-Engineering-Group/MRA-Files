@@ -7,7 +7,7 @@
 
   function issueRow(it){ const age=_fioAge(it); const asg=fAsg(it);
     return `<div class="issue click" onclick="mtTicket('${escA(String(it.num))}')" title="Open detail">
-      <div><b><span class="fionum">#${esc(it.num)}</span> ${esc(it.summary||'Issue')}</b>${_fioIsNew(it)?' <span class="badge">🆕 new</span>':''}${it.overdue?' <span class="danger">overdue</span>':''}
+      <div><b><span class="fionum">#${esc(it.num)}</span> ${esc(it.summary||'Issue')}</b>${_fioIsNew(it)?' <span class="badge">🆕 new</span>':''}${it.overdue?' <span class="danger">overdue</span>':''}${age!=null?' '+ageBadge(age):''}
         <div class="muted" style="font-size:11px">${esc(it.asset||'')}${it.jobNum?' · '+esc(it.jobNum):''}</div></div>
       <span>${esc(it.priority||'')}</span>
       <span class="${asg.length?'pill':'tag danger'}">${asg.length?esc(asg.join(', ')):'Unassigned'}</span></div>`; }

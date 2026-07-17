@@ -41,8 +41,19 @@
   window.prjToggle=function(name){ if(OPEN.has(name)) OPEN.delete(name); else OPEN.add(name); render(); };
   window.prjLod=function(name,v){ LOD[name]=v; render(); };
 
+  const PF={nonoff:true, parked:false, archived:false};   // hide non-official (default); show parked; hide completed
+  window.prjFilter=function(k){ PF[k]=!PF[k]; render(); };
   function render(){ const sec=document.getElementById('projects'); if(!sec) return;
-    const projs=(D().projects||[]).filter(p=>!p.nonOfficial).slice().sort((a,b)=>HEALTH_RANK[projHealth(a).state]-HEALTH_RANK[projHealth(b).state]||String(a.finishISO||'9999').localeCompare(String(b.finishISO||'9999')));
+    const all=(D().projects||[]).slice();
+    const nonoffN=all.filter(p=>p.nonOfficial).length, parkedN=all.filter(p=>p.parked).length, doneN=all.filter(p=>projHealth(p).state==='done').length;
+    let projs=all;
+    if(PF.nonoff) projs=projs.filter(p=>!p.nonOfficial);
+    if(!PF.parked) { /* show parked by default */ }
+    if(!PF.archived) projs=projs.filter(p=>projHealth(p).state!=='done');
+    projs=projs.sort((a,b)=>HEALTH_RANK[projHealth(a).state]-HEALTH_RANK[projHealth(b).state]||String(a.finishISO||'9999').localeCompare(String(b.finishISO||'9999')));
+    const filterBar=`<div class="selrow">
+      <button class="btn ${PF.nonoff?'active':''}" onclick="prjFilter('nonoff')" title="Hide 🏷 non-official / pipeline projects">🏷 ${PF.nonoff?'Non-official hidden':'Non-official shown'} (${nonoffN})</button>
+      <button class="btn ${PF.archived?'active':''}" onclick="prjFilter('archived')" title="Show completed projects">🗄 ${PF.archived?'Completed shown':'Completed hidden'} (${doneN})</button></div>`;
     if(!started){ projs.slice(0,3).forEach(p=>OPEN.add(p.name)); started=true; }
     // awaiting verification
     const pend=[]; projs.forEach(p=>(p.tasks||[]).forEach(t=>{ if(projIsPendingVerify(t)) pend.push({p,t}); }));
@@ -52,6 +63,7 @@
         <button class="btn editaff" onclick="sendBackTask('${escJsAttr(x.p.name)}','${escJsAttr(projTaskHandle(x.t))}')">↩ Back</button></div>`).join('')}</div>`:'';
 
     sec.innerHTML=`<div class="head"><div><h1>Projects</h1><div class="muted">Portfolio, per-project schedules and sign-off.</div></div><a class="btn" href="../MRA_Dashboard.html#projects" target="_blank" rel="noopener">Classic Projects ↗</a></div>
+    ${filterBar}
     ${pendHtml}
     <div class="projecttabs">${projs.map(p=>`<button class="projecttab" onclick="prjToggle('${escJsAttr(p.name)}')" title="${escA(p.name)}">${healthChip(p)}<b>${esc(p.jobNum||p.name)}</b><div class="muted">${esc(p.name)}</div><div class="progress" style="margin-top:9px"><span style="width:${p.pct}%"></span></div></button>`).join('')}</div>
     <div id="projectPanels">${projs.filter(p=>OPEN.has(p.name)).map(panelHtml).join('')||'<div class="emptystate">Click a project above to open it.</div>'}</div>

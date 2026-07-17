@@ -5,6 +5,8 @@
   window.mwSetWho=function(v){ WHO=v; render(); };
   window.mwGo=function(kind,ref){ if(kind==='shop') goShopJob(ref); else if(kind==='proj') openProjectEditor(ref); };
   window.mwTile=function(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); };
+  window.MW_PROJ_OPEN=window.MW_PROJ_OPEN||new Set();
+  window.mwToggleProj=function(name){ if(MW_PROJ_OPEN.has(name)) MW_PROJ_OPEN.delete(name); else MW_PROJ_OPEN.add(name); render(); };
 
   function nmKey(s){ return String(s||'').toLowerCase().replace(/[^a-z]/g,''); }
   function whoMatch(who, name){ if(!who||!name) return false; const parts=crewWhoList(who).map(nmKey); const n=nmKey(name), f=nmKey(name.split(' ')[0]);
@@ -60,9 +62,13 @@
         <button class="btn primary" onclick="verifyTask('${escJsAttr(x.p.name)}','${escJsAttr(projTaskHandle(x.t))}')">✓ Verify</button>
         <button class="btn" onclick="sendBackTask('${escJsAttr(x.p.name)}','${escJsAttr(projTaskHandle(x.t))}')">↩ Back</button></div>`).join('')}</div>`:'';
     const projHtml = w.myProjects.length?`<div class="card" id="mwsec-proj"><div class="cardhead"><h2>📊 My Projects</h2><span class="crewtag">${w.myProjects.length}</span></div>
-      ${w.myProjects.map(p=>{ const h=projHealth(p), b=_pmtBehindBits(p); const c=HEALTH_COLOR[h.state];
-        return `<div class="mwrow click" onclick="mwGo('proj','${escJsAttr(p.name)}')"><div class="mwrow-main"><div class="mwrow-top"><span class="hchip" style="background:${c}22;color:${c}">${HEALTH_LABEL[h.state]}</span><b>${esc(p.name)}</b><span class="crewtag">${p.pct}%</span></div>
-        <div class="muted mwrow-sub">${p.finishISO?'target '+esc(fmtMDY(p.finishISO)):''}${b.odN?' · ⚠ '+b.odN+' past-due'+(b.whoTxt?' (with '+esc(b.whoTxt)+')':''):''}</div></div><span class="chev">›</span></div>`; }).join('')}</div>`:'';
+      ${w.myProjects.map(p=>{ const h=projHealth(p), b=_pmtBehindBits(p); const c=HEALTH_COLOR[h.state]; const op=MW_PROJ_OPEN.has(p.name);
+        return `<div class="mwrow${op?' exp-open':''}"><div class="mwrow-main"><div class="mwrow-top">
+          ${b.odN?`<span class="caret" onclick="event.stopPropagation();mwToggleProj('${escJsAttr(p.name)}')">▸</span>`:'<span class="caret" style="visibility:hidden">▸</span>'}
+          <span class="hchip" style="background:${c}22;color:${c}">${HEALTH_LABEL[h.state]}</span><b class="mwlink" onclick="mwGo('proj','${escJsAttr(p.name)}')">${esc(p.name)}</b><span class="crewtag">${p.pct}%</span></div>
+        <div class="muted mwrow-sub">${p.finishISO?'target '+esc(fmtMDY(p.finishISO)):''}${b.odN?' · ⚠ '+b.odN+' past-due'+(b.whoTxt?' (with '+esc(b.whoTxt)+')':''):''}</div>
+        ${op?`<div class="subwrap open">${b.od.map(t=>`<div class="subline" onclick="mwGo('proj','${escJsAttr(p.name)}')"><span>${esc(_mwCleanCm(t.t)||t.t)}</span><span class="who">${esc((t.who||'—').split('/')[0].trim())}${t.finISO?' · '+esc(fmtMD(t.finISO)):''}${t.phase?' · '+esc(t.phase):''}</span></div>`).join('')||'<div class="muted" style="font-size:11px;padding:4px 0">No dated past-due tasks.</div>'}<div class="subline"><a class="mwlink" onclick="mwGo('proj','${escJsAttr(p.name)}')" style="color:var(--brand)">✎ Open ${esc(p.name)} editor →</a></div></div>`:''}
+        </div></div>`; }).join('')}</div>`:'';
     const msHtml = w.ms.length?`<div class="card"><div class="cardhead"><h2>◆ Milestones (30d)</h2><span class="crewtag">${w.ms.length}</span></div>
       ${w.ms.map(x=>`<div class="taskrow"><div><b>◆ ${esc(x.m.name)}</b><div class="muted">${esc(x.p.name)}</div></div><span class="duebadge">${esc(fmtMD(x.m.dateISO))}</span></div>`).join('')}</div>`:'';
 

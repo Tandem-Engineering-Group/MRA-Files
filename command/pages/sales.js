@@ -31,7 +31,7 @@
       <div class="card"><div class="cardhead"><h2>Prospects</h2></div>${pros.length?pros.map(p=>`<div class="pmrow"><div><b>${esc(p.name)}</b><div class="muted">${esc(p.vehicle||'')}${p.scope?' · '+esc(p.scope):''}</div></div><span class="badge">${p.prob?p.prob+'%':'—'}</span></div>`).join(''):'<div class="emptystate">No prospects logged. Add them on the classic board\'s Sales tab.</div>'}</div>
       <div class="card full"><div class="cardhead"><h2>Portfolio Gantt</h2><div><button class="btn salesrange ${MONTHS_N===3?'active':''}" onclick="salesRange(3)">3 Months</button> <button class="btn salesrange ${MONTHS_N===6?'active':''}" onclick="salesRange(6)">6 Months</button> <button class="btn salesrange ${MONTHS_N===12?'active':''}" onclick="salesRange(12)">12 Months</button></div></div>
         <div class="gantt" id="salesGantt"></div></div></div>`;
-    ganttDates(document.getElementById('salesGantt'), items, {labelW:200});
+    ganttDates(document.getElementById('salesGantt'), items, {labelW:200, months:MONTHS_N});
   }
   window.MRA_PAGES.sales={render:render};
 })();

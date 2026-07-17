@@ -98,7 +98,9 @@ function jobIsSub(j){ return /\[subjob\]/i.test((j&&j.notesRaw)||''); }
 function isOrphan(j){ return !!j && (String(j.row||'').indexOf('orphan:')===0 || j.category==='pipeline'); }
 
 const CREW_ALIAS = { 'masterwraps':'Wrap Team','master wraps':'Wrap Team','wraps':'Wrap Team','wrap team':'Wrap Team',
-  'electrician':'Electricians','electricians':'Electricians','maintenance':'Maintenance','mra design':'MRA Design' };
+  'electrician':'Electricians','electricians':'Electricians',
+  'maintenance':'Doug','doug cooley':'Doug','doug':'Doug',   // Doug = the maintenance crew column on the floor
+  'mra design':'MRA Design','steve k':'MRA Design' };
 const CREW_GROUPS = ['MRA Design','MRA Shop','Electricians','Wrap Team','Maintenance'];
 function crewCanon(part){ const k=(part||'').trim().toLowerCase(); return CREW_ALIAS[k] || (part||'').trim(); }
 function crewWhoList(who){ who=(who||'').trim(); if(!who) return [];
@@ -568,7 +570,8 @@ function ganttDates(el, items, opts){ opts=opts||{}; if(!el) return;
   items=(items||[]).filter(x=>x&&x.startISO&&x.endISO);
   if(!items.length){ el.innerHTML='<div class="emptystate">Nothing dated to chart.</div>'; return; }
   const today=todayISO(); let lo=Date.parse(today)-7*DAY, hi=Date.parse(today)+30*DAY;
-  items.forEach(x=>{ const s=parseISO(x.startISO), f=parseISO(x.endISO); if(s&&s.getTime()<lo) lo=s.getTime(); if(f&&f.getTime()>hi) hi=f.getTime(); });
+  if(opts.months){ lo=Date.parse(today)-3*DAY; hi=Date.parse(today)+opts.months*30*DAY; }   // fixed horizon from the range picker
+  else items.forEach(x=>{ const s=parseISO(x.startISO), f=parseISO(x.endISO); if(s&&s.getTime()<lo) lo=s.getTime(); if(f&&f.getTime()>hi) hi=f.getTime(); });
   const span=Math.max(DAY*14, hi-lo); const LABELW=opts.labelW||170;
   // month tick columns across the header
   const ticks=[]; let d=new Date(lo); d.setDate(1);

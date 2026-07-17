@@ -1,3 +1,5 @@
+> ✅ ALL 16 RESOLVED 2026-07-17 — colors→MRA orange, bay-grid drops, shop edit/delete, My Work close + expand, deep-links, dead range buttons, clickable bay name, General tile, crew alias, Fleetio-on-cards, age badge, home hover, project filters, collapse controls. Kept below for reference.
+
 # Command Center — audit follow-ups (paused 2026-07-17)
 
 The new modular board (`command/`) is LIVE but **locked to Rich only** (preview) while these are worked.

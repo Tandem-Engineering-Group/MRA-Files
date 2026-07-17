@@ -12,18 +12,39 @@
         ${(r.st0||r.fin)?`<span class="duebadge ${od?'od':''}">${r.st0?'▶ '+esc(fmtMD(r.st0)):''}${r.fin?' → '+esc(fmtMD(r.fin)):''}</span>`:''}</div></div>
       <div class="ctask-side"><span class="crewtag">${esc(r.who)}</span></div></div>`; }
 
+  function bayFio(j){ const jn=String(j.jobNum||'').toUpperCase().replace(/[^0-9]/g,''); if(!jn) return '';
+    const issues=((D().fleetio&&D().fleetio.issues)||[]).filter(i=>String(i.jobNum||'').toUpperCase().replace(/[^0-9]/g,'')===jn);
+    if(!issues.length) return ''; const have=new Set((j.tasks||[]).map(t=>_taskFnum(t)).filter(Boolean));
+    const openI=issues.filter(i=>!have.has(String(i.num))); if(!openI.length) return '';
+    return `<div class="jobfio"><div class="jobfio-h">🔧 ${openI.length} open Fleetio issue${openI.length>1?'s':''}</div>`+
+      openI.slice(0,6).map(i=>`<div class="ctask"><div class="ctask-main"><div class="ctask-top">${fioTitle('issue',i.num,i.summary||'Issue')}${i.overdue?' <span class="danger">overdue</span>':''}${_fioIsNew(i)?' <span class="badge">🆕</span>':''}</div>${fioDetHtml(i.num)}</div>`+
+        `<div class="ctask-side"><span class="qa editaff" onclick="event.stopPropagation();fioAddToJob('${escA(j.row)}','${escA(String(i.num))}')" title="Add as a shop task">➕</span></div></div>`).join('')+
+      (openI.length>6?`<div class="muted" style="font-size:11px;padding:4px 6px">+${openI.length-6} more…</div>`:'')+`</div>`; }
+  window.fioAddToJob=function(row,num){ const j=(D().jobs||[]).find(x=>String(x.row)===String(row)); const it=fioIssue(num); if(!j||!it) return;
+    if(!ensureAuth('add this issue', ()=>fioAddToJob(row,num))) return; const task='🔧 #'+it.num+' '+(it.summary||'Issue');
+    shopWrite({action:'addTask', project:j.project, jobNum:j.jobNum||'', bay:j.bay||'', task:task, assigned:'', milestone:'', comments:'Fleetio issue #'+it.num, due:'', pin:CLOSE_PIN||'1974', user:CURRENT_USER});
+    if(!j.tasks) j.tasks=[]; j.tasks.push({t:task, who:'', op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:'', cm:'Fleetio issue #'+it.num, due:null, files:null});
+    oRecompute(j); oApply(); };
+
+  window.CC_JOBCOLL=window.CC_JOBCOLL||(function(){ try{ return new Set(JSON.parse(localStorage.getItem('cc_jobcoll')||'[]')); }catch(e){ return new Set(); } })();
+  function _saveColl(){ try{ localStorage.setItem('cc_jobcoll', JSON.stringify([...CC_JOBCOLL])); }catch(e){} }
+  window.ccToggleJob=function(row){ row=String(row); if(CC_JOBCOLL.has(row)) CC_JOBCOLL.delete(row); else CC_JOBCOLL.add(row); _saveColl(); render(); };
+  window.ccCollapseAll=function(){ const rows=[]; bayGridModel().forEach(b=>['Front','Middle','Back'].forEach(p=>(b[p]||[]).forEach(j=>rows.push(String(j.row)))));
+    jobsInBay(bayIsParts).concat(jobsInBay(isGeneralBay)).forEach(j=>rows.push(String(j.row)));
+    const anyOpen=rows.some(r=>!CC_JOBCOLL.has(r)); if(anyOpen) rows.forEach(r=>CC_JOBCOLL.add(r)); else rows.forEach(r=>CC_JOBCOLL.delete(r)); _saveColl(); render(); };
   function bayCard(j, pos){
-    const k=kindOf(j), pct=jobPct(j), open=openTasksOf(j), mra=fioMraRange(j);
+    const k=kindOf(j), pct=jobPct(j), open=openTasksOf(j), mra=fioMraRange(j); const coll=CC_JOBCOLL.has(String(j.row));
     const tasks=open.map(t=>taskLineHtml(t, j)).join('');
     const sched=_projTasksForJob(j).map(schedLine).join('');
+    const fio=bayFio(j);
     const done=(j.tasks||[]).filter(t=>t.done).length;
     return `<div class="slot detail click ${pos==='Back'?'back':''}" id="job-${escA(j.row)}">
       <div class="between"><span class="pos">${esc(pos)}</span><span class="tag ${k}">${KIND_LABEL[k]}</span></div>
-      <div class="job">${esc(j.project)}${j.jobNum?` <span class="fnum">${esc(j.jobNum)}</span>`:''}${jobIsSub(j)?' <span class="badge" title="Sub-job — shares a J#">🧩</span>':''}</div>
+      <div class="job"><span class="caret jcaret" onclick="event.stopPropagation();ccToggleJob('${escA(j.row)}')" title="Collapse / expand tasks">${coll?'▸':'▾'}</span> <span class="click" onclick="event.stopPropagation();openJobEditor('${escA(j.row)}')" title="Open job editor">${esc(j.project)}${j.jobNum?` <span class="fnum">${esc(j.jobNum)}</span>`:''}${jobIsSub(j)?' <span class="badge" title="Sub-job — shares a J#">🧩</span>':''}</span></div>
       <div class="pctline"><span>${esc(j.client||'')}${j.pm?' · PM '+esc(j.pm):''}</span><span>${open.length} open · ${done} done</span></div>
       ${mra||locChip(j)?`<div class="chips">${mra?`<span class="pill" title="Fleetio: back to MRA → leaving">${esc(mra)}</span>`:''}${locChip(j)}</div>`:''}
       <div class="progress"><span style="width:${pct}%"></span></div>
-      <div class="ctasks">${tasks||'<div class="muted" style="padding:6px 0;font-size:12px">No open tasks.</div>'}${sched}</div>
+      <div class="ctasks" ${coll?'style="display:none"':''}>${tasks||'<div class="muted" style="padding:6px 0;font-size:12px">No open tasks.</div>'}${sched}${fio}</div>
       <div class="actions"><button class="btn" onclick="event.stopPropagation();openJobEditor('${escA(j.row)}')">✎ Edit job</button>
         <button class="btn" onclick="event.stopPropagation();addTaskTo('${escA(j.row)}')">➕ Task</button></div></div>`;
   }
@@ -57,7 +78,7 @@
     const jobs=(D().jobs||[]).filter(j=>jobIsActiveLane(j)&&j.startISO&&j.completionISO);
     const items=jobs.map(j=>({label:(bayNumOf(j.bay)?'Bay '+bayNumOf(j.bay)+' · ':'')+j.project, sub:j.jobNum||'', startISO:j.startISO, endISO:j.completionISO,
       color:HEALTH_COLOR[projHealthForJob(j)]||'#2166f3', onclick:`goShopJob('${escA(j.row)}')`, title:j.project+' · '+fmtMDY(j.startISO)+' → '+fmtMDY(j.completionISO)}));
-    ganttDates(el, items, {labelW:180});
+    ganttDates(el, items, {labelW:180, months: CAL==='quarter'?3:1});
     document.querySelectorAll('#shop .range').forEach(b=>b.classList.toggle('active', b.dataset.range===CAL));
   }
   function projHealthForJob(j){ const c=String(j.completionISO||''); if(c&&c<todayISO()) return 'late'; return 'ontrack'; }
@@ -88,9 +109,10 @@
       <button class="btn" onclick="openFloor()">Floor View</button>
       <a class="btn" href="../MRA_Dashboard.html?wo=all" target="_blank" rel="noopener">🖨 Work orders ↗</a></div>
     <div class="grid shopgrid">
-      <div class="card full"><div class="cardhead"><h2>Bay Overview</h2><span class="muted">Click a card to open the job editor</span></div>
+      <div class="card full"><div class="cardhead"><h2>Bay Overview</h2><button class="btn" onclick="ccCollapseAll()" title="Collapse / expand every job's tasks">⊟ Collapse tasks</button></div>
         <div class="baygrid detailgrid">${grid.map(b=>`<div class="baycol"><div class="bayname">Bay ${b.bay}</div>${posCards(b.Front,'Front')}${posCards(b.Middle,'Middle')}${posCards(b.Back,'Back')}</div>`).join('')||'<div class="emptystate">No jobs in bays.</div>'}</div>
         ${parts.length?`<div class="cardhead" style="margin-top:18px"><h2>Off Site / Parts</h2><span class="muted">Away — but we're building parts</span></div><div class="parkinggrid">${parts.map(parkCard).join('')}</div>`:''}
+        ${(function(){ const gen=jobsInBay(isGeneralBay); return gen.length?`<div class="cardhead" style="margin-top:18px"><h2>General</h2><span class="muted">Equipment work · no bay</span></div><div class="baygrid detailgrid">${gen.map(j=>bayCard(j,'General')).join('')}</div>`:''; })()}
         <div class="cardhead" style="margin-top:18px"><h2>Parking Lot</h2><span class="muted">⏭ ${parking.length} on the lot</span></div>
         <div class="parkinggrid">${parking.map(parkCard).join('')||'<div class="emptystate">Empty.</div>'}</div>
         <button class="btn expand" onclick="this.nextElementSibling.classList.toggle('open')"><span>On Hold / Next Up</span><span>⏸ ${held.length} held ▾</span></button>
