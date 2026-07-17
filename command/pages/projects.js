@@ -44,6 +44,10 @@
   const PF={nonoff:true, parked:false, archived:false};   // hide non-official (default); show parked; hide completed
   window.prjFilter=function(k){ PF[k]=!PF[k]; render(); };
   function render(){ const sec=document.getElementById('projects'); if(!sec) return;
+    // PIVOT (Rich): unreadable rebuilt gantts -> embed the real Projects tab (full gantt engine).
+    if(sec.querySelector('.ccframe')) return;   // already embedded — don't reload on poll
+    sec.innerHTML='<iframe class="ccframe" src="../MRA_Dashboard.html?view=projects" title="MRA projects"></iframe>';
+    return;
     const all=(D().projects||[]).slice();
     const nonoffN=all.filter(p=>p.nonOfficial).length, parkedN=all.filter(p=>p.parked).length, doneN=all.filter(p=>projHealth(p).state==='done').length;
     let projs=all;

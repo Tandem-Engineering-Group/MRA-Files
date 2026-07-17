@@ -34,6 +34,10 @@
     oRecompute(j); closeModal('mtModal'); alert('Added to '+j.project+'.'); oApply(); };
 
   function render(){ const sec=document.getElementById('maintenance'); if(!sec) return;
+    // PIVOT (Rich): embed the real FLEETIO tab rather than the rebuilt lite version.
+    if(sec.querySelector('.ccframe')) return;   // already embedded — don't reload on poll
+    sec.innerHTML='<iframe class="ccframe" src="../MRA_Dashboard.html?view=fleetio" title="MRA maintenance"></iframe>';
+    return;
     const fl=D().fleetio||{}; let issues=(fl.issues||[]).slice();
     const openN=issues.length, odN=issues.filter(i=>i.overdue).length;
     const svc=(fl.service||[]); const svcDue=svc.length, svcOd=svc.filter(s=>s.overdue).length||0;

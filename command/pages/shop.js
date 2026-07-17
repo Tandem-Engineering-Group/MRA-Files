@@ -85,6 +85,11 @@
 
   function render(){
     const sec=document.getElementById('shop'); if(!sec) return;
+    // PIVOT (Rich 2026-07-17): the rebuilt shop board missed too much — embed the REAL
+    // classic board (every bell intact) inside the Command Center shell instead.
+    if(sec.querySelector('.ccframe')) return;   // already embedded — don't reload on poll
+    sec.innerHTML='<iframe class="ccframe" src="../MRA_Dashboard.html" title="MRA shop board"></iframe>';
+    return;
     _pjRebuild();
     const grid=bayGridModel();
     const parking=jobsInBay(isParkingBay), held=jobsInBay(bayIsHeld), parts=jobsInBay(bayIsParts);

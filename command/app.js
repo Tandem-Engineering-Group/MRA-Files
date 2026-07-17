@@ -708,6 +708,8 @@ function showPage(name){ if(!window.MRA_PAGES[name]) name='home';
   document.querySelectorAll('.page').forEach(s=>s.classList.toggle('active', s.id===name));
   const cr=document.querySelector('.crumb'); if(cr){ const b=document.querySelector('.nav button[data-page="'+name+'"]'); cr.textContent=b?b.textContent.trim():name; }
   document.body.classList.toggle('home-mode', name==='home');
+  // Only ONE embedded classic board at a time — three live copies would eat iPad memory.
+  document.querySelectorAll('.page:not(.active) .ccframe').forEach(f=>f.remove());
   try{ const u=new URL(location.href); u.searchParams.set('view',name); history.replaceState(null,'',u); }catch(e){}
   window.scrollTo(0,0); renderCurrent(); }
 
