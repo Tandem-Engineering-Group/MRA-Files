@@ -1626,6 +1626,7 @@
     </div>
     <div class="tabs">
       <div class="tab active" data-view="floor" onclick="setView('floor')">FLOOR</div>
+      <div class="tab" data-view="mywork" onclick="setView('mywork')">MY WORK</div>
       <div class="tab" data-view="projects" onclick="setView('projects')">PROJECTS</div>
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
       <div class="tab" data-view="assets" onclick="setView('assets')">ASSETS</div>
@@ -2108,6 +2109,9 @@
       <div class="teamgrid fscroll" id="team"></div>
     </div>
   </div>
+
+  <!-- ===================== MY WORK VIEW ===================== -->
+  <div id="myworkView" class="hidden"></div>
 
   <!-- ===================== FLEETIO VIEW ===================== -->
   <div id="fleetioView" class="hidden">
@@ -3542,6 +3546,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"27.0", date:"2026-07-16", title:"\u{1F64B} MY WORK — your own page when you sign in", items:[
+    "New <b>MY WORK</b> tab: sign in and you land on <b>your</b> stuff — your overdue, what's due this week, everything else open (shop + project tasks), and (for PMs) your projects' health. Built from your sign-in, so there's nothing to set up. <b>Admins get a person-picker</b> to view anyone's page. The same engine powers the daily per-person email (a standalone page at <span class=\"k\">?mywork=Name</span>)." ] },
   { rev:"26.9", date:"2026-07-16", title:"\u{1F4D6} Help guide (?) fully rewritten for how the board works now", items:[
     "The in-app <b>?</b> guide got a top-to-bottom overhaul: a new <b>\u{1F510} Sign in &amp; who-sees-what</b> section, everything now correctly says edits save to <b>SharePoint Lists</b> (no spreadsheets) and reach everyone in <b>~2-3 minutes</b>, and it documents the current features — one-login editing, \u{1F4CB} project tasks on the crew columns, the \u2692 break-into-shop-tasks \u2192 PM-verify loop, the dead-tracker GPS fallback, and the full \u2630 Menu toolset. All the old Excel/workbook/15-min wording is gone." ] },
   { rev:"26.8", date:"2026-07-16", title:"\u{1F9F9} Housekeeping: stale tooltips + old \u201cworkbook/15-min\u201d wording", items:[
@@ -5400,13 +5406,13 @@ const ROLE_BY_NAME = (function(){ const m={}, g={
   shopedit:['Cindy Irland','Robin Wheeler'] };
   for(const role in g) g[role].forEach(n=>{ m[_nmKey(n)]=role; }); return m; })();
 const ROLE_CAPS = {
-  anon:  { tabs:['floor'],                                  hide:['builder','sales','ghost','logins','holidays','eotm'] },
-  staff: { tabs:['floor','fleetio','assets'],               hide:['builder','sales','ghost','logins','holidays','eotm'] },
-  shopedit:{ tabs:['floor','fleetio','assets'],             hide:['builder','sales','ghost','logins','holidays','eotm'] },   // can EDIT/assign on the floor; no Projects, no admin menu
-  design:{ tabs:['floor','projects','fleetio','assets'],    hide:['builder','sales','ghost','logins','holidays','eotm'] },
-  exec:  { tabs:['floor','projects','fleetio','assets'],    hide:['ghost','logins','holidays','eotm'] },   // owner/VP/controller: see all incl. builder+sales, read-only
-  editor:{ tabs:['floor','projects','fleetio','assets'],    hide:['logins'] },                             // manage-logins is Admin-only
-  admin: { tabs:['floor','projects','fleetio','assets'],    hide:[] }
+  anon:  { tabs:['floor'],                                            hide:['builder','sales','ghost','logins','holidays','eotm'] },
+  staff: { tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm'] },
+  shopedit:{ tabs:['floor','mywork','fleetio','assets'],              hide:['builder','sales','ghost','logins','holidays','eotm'] },
+  design:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['builder','sales','ghost','logins','holidays','eotm'] },
+  exec:  { tabs:['floor','mywork','projects','fleetio','assets'],     hide:['ghost','logins','holidays','eotm'] },
+  editor:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['logins'] },
+  admin: { tabs:['floor','mywork','projects','fleetio','assets'],     hide:[] }
 };
 const SSO = (function(){
   const TENANT='1dc2dfee-5d93-4f0c-aa97-2344b72fe6b0';
@@ -5477,6 +5483,10 @@ function applyRoleUI(){
   if(caps && typeof VIEW!=='undefined' && caps.tabs.indexOf(VIEW)<0){ try{ setView('floor'); }catch(e){} }
   // one-login bridge: signed-in editor/admin/design gets edit rights automatically (sign-out reloads -> clears)
   if(ssoEnforcing() && ssoCanEdit() && !CLOSE_PIN){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; }
+  // First load after a non-admin signs in: land them on their My Work page (Rich: PMs/crew see their stuff on login).
+  if(ssoEnforcing() && SSO.user && !window._myworkLanded){ const _r=ssoRole();
+    if(_r && _r!=='admin' && _r!=='anon'){ window._myworkLanded=true; try{ setView('mywork'); }catch(e){} }
+    else if(_r==='admin'){ window._myworkLanded=true; } }
   syncSsoPill(); try{ syncAuthUI(); }catch(e){}
 }
 function syncSsoPill(){
@@ -12435,6 +12445,69 @@ li.hot{background:#fff8e6;border-left:3px solid #f59e0b;padding:3px 6px;border-r
     +(ms.length?('<h2>\u25C6 Milestones \u2014 next 30 days</h2><ul>'+ms.map(m=>'<li>\u25C6 <b>'+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span> <span class="dt">'+fmt(m.d)+'</span></li>').join('')+'</ul>'):'')
     +'<div class="foot">MRA Command Center \u00b7 auto-generated \u00b7 open the dashboard for live detail</div></div></body></html>';
 }
+// ============================ MY WORK — personalized per-person view (rev 27.0) ============================
+// One engine feeds both the MY WORK tab (on login) and the daily per-person email (?mywork=Name).
+let MYWORK_WHO=null;   // admin-picker override; null = the signed-in person
+function mwSetPerson(v){ MYWORK_WHO=v||null; try{ renderMyWork(); }catch(e){} }
+function _whoMatch(assignee, person){ if(!assignee||!person) return false;
+  const p=String(person).toLowerCase().trim();
+  return String(assignee).split('/').some(seg=>{ const s=seg.trim().toLowerCase();
+    return s===p || (typeof _verifyNameMatch==='function' && (_verifyNameMatch(seg,person)||_verifyNameMatch(person,seg))); }); }
+function myWorkWho(){ if(MYWORK_WHO) return MYWORK_WHO;
+  try{ if(typeof ssoEnforcing==='function' && ssoEnforcing() && SSO.user) return SSO.name()||''; }catch(e){}
+  return CURRENT_USER||''; }
+function myWorkFor(name){
+  const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+  const soon=localISO(Date.parse(today)+7*86400000); const items=[];
+  (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
+    (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
+      if(_whoMatch(t.who,name)) items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, kind:'shop'}); }); });
+  (D.projects||[]).forEach(p=>{ (p.tasks||[]).forEach(t=>{ if(t.done||/complete/i.test(t.st||'')) return; if(/yes/i.test(t.ml||'')) return;
+      if(_whoMatch(t.who,name)) items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, st0:t.startISO||null, kind:'proj'}); }); });
+  const od=items.filter(x=>x.due&&x.due<today).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
+  const due=items.filter(x=>x.due&&x.due>=today&&x.due<=soon).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
+  const later=items.filter(x=>!x.due||x.due>soon).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
+  const q=String(name).toLowerCase();
+  const pmMatch=v=>{ const sv=String(v||'').toLowerCase(); return sv===q||sv.startsWith(q+' ')||sv.split(/[\s\/]+/).some(w=>w===q); };
+  const myProjects=(D.projects||[]).filter(p=>pmMatch(p.pm)&&(typeof projStatus!=='function'||projStatus(p,today)!=='done'));
+  return {od,due,later,myProjects,total:items.length,today};
+}
+function _mwList(arr, today){ if(!arr.length) return '<div class="empty">— none —</div>';
+  return arr.map(x=>{ const od=x.due&&x.due<today;
+    const d=x.due?(' <span class="badge '+(od?'red':'amber')+'">'+(od?'overdue ':'due ')+esc(fmtMD(x.due))+'</span>'):'';
+    const rng=(x.kind==='proj'&&(x.st0||x.due))?(' <span class="meta">▶ '+(x.st0?esc(fmtMD(x.st0)):'…')+' → '+(x.due?esc(fmtMD(x.due)):'…')+'</span>'):'';
+    return '<div class="row"><div><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+'</div><div class="meta">'+esc(x.where)+rng+'</div></div><div class="right">'+d+'</div></div>'; }).join(''); }
+function renderMyWork(){
+  const box=document.getElementById('myworkView'); if(!box) return;
+  const isAdmin=(typeof ssoRole==='function' && ssoRole()==='admin');
+  const who=myWorkWho();
+  let picker='';
+  if(isAdmin){
+    const ppl=[...new Set([].concat((typeof projPeople==='function'?projPeople():[]), (typeof KNOWN_CREW!=='undefined'?KNOWN_CREW.map(c=>c[0]):[]), ['Josh','Jeff']))].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+    picker='<label style="font-size:12px;color:var(--muted);margin-left:auto">View person: <select onchange="mwSetPerson(this.value)" style="font-size:12px;padding:3px 7px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt)"><option value="">'+esc(who||'(me)')+'</option>'+ppl.map(p=>'<option'+(p===who?' selected':'')+'>'+esc(p)+'</option>').join('')+'</select></label>';
+  }
+  if(!who){ box.innerHTML='<div class="panel"><h2>🙋 My Work</h2><div class="empty">Sign in to see your tasks.</div></div>'; return; }
+  const m=myWorkFor(who);
+  const projHtml=m.myProjects.length?('<div class="panel"><h2>📊 My Projects <span class="count">'+m.myProjects.length+'</span></h2>'+m.myProjects.map(p=>{
+      const h=(typeof projHealth==='function')?projHealth(p,m.today):{state:''};
+      const c={late:'#c81e1e',behind:'#b45309',ontrack:'#15803d',upcoming:'#1d4ed8',parked:'#475569'}[h.state]||'#666';
+      return '<div class="row"><div><div class="lead"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c+';margin-right:7px"></span>'+esc(p.name)+'</div></div><div class="right"><span class="badge grey">'+(p.pct!=null?p.pct+'%':'')+'</span></div></div>'; }).join('')+'</div>'):'';
+  box.innerHTML=
+    '<div class="panel"><h2>🙋 My Work — '+esc(who)+' <span class="count">'+m.total+' open</span>'+picker+'</h2></div>'+
+    '<div class="panel"><h2>⚠ Overdue <span class="count">'+m.od.length+'</span></h2>'+_mwList(m.od,m.today)+'</div>'+
+    '<div class="panel"><h2>📅 Due this week <span class="count">'+m.due.length+'</span></h2>'+_mwList(m.due,m.today)+'</div>'+
+    projHtml+
+    '<div class="panel"><h2>🗂 Everything else open <span class="count">'+m.later.length+'</span></h2>'+_mwList(m.later,m.today)+'</div>';
+}
+// Standalone page for the daily email / deep link (?mywork=Name)
+function buildMyWorkHtml(name){
+  const m=myWorkFor(name); const now=new Date(); const stamp=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
+  const sec=(title,arr)=>'<h2>'+title+' ('+arr.length+')</h2>'+(arr.length?('<ul>'+arr.map(x=>{ const od=x.due&&x.due<m.today;
+      return '<li>'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+' — <span style="color:#666">'+esc(x.where)+'</span>'+(x.due?(' <b style="color:'+(od?'#b91c1c':'#b45309')+'">'+(od?'OVERDUE ':'due ')+esc(fmtMD(x.due))+'</b>'):'')+'</li>'; }).join('')+'</ul>'):'<p style="color:#999">— none —</p>');
+  const proj=m.myProjects.length?('<h2>📊 My Projects ('+m.myProjects.length+')</h2><ul>'+m.myProjects.map(p=>'<li>'+esc(p.name)+(p.pct!=null?(' — '+p.pct+'%'):'')+'</li>').join('')+'</ul>'):'';
+  const css='body{font-family:Segoe UI,Arial,sans-serif;color:#111;max-width:760px;margin:0 auto;padding:24px}h1{color:#e04826;margin:0}h2{border-bottom:2px solid #e04826;font-size:15px;padding-bottom:3px;margin-top:20px}ul{margin:4px 0 0 2px;padding:0;list-style:none}li{font-size:13px;margin-bottom:4px;line-height:1.35}';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My Work — '+esc(name)+'</title><style>'+css+'</style></head><body><h1>My Work — '+esc(name)+'</h1><p style="color:#666;margin:4px 0 0">'+stamp+' · '+m.total+' open item'+(m.total===1?'':'s')+'</p>'+sec('⚠ Overdue',m.od)+sec('📅 Due this week',m.due)+proj+sec('🗂 Everything else open',m.later)+'</body></html>';
+}
 function openPMReport(){ if(typeof closeDrops==='function') closeDrops();
   const D=window.MRA_DATA||{}; const pms=[...new Set((D.projects||[]).map(p=>(p.pm||'').trim()).filter(v=>v&&!/^tbd$/i.test(v)))].sort();
   const sel=document.getElementById('pmrWho'); if(sel) sel.innerHTML=pms.map(p=>`<option>${esc(p)}</option>`).join('');
@@ -13619,8 +13692,10 @@ function setView(v){
   document.getElementById('projectsView').classList.toggle('hidden',v!=='projects');
   document.getElementById('fleetioView').classList.toggle('hidden',v!=='fleetio');
   document.getElementById('assetsView').classList.toggle('hidden',v!=='assets');
+  { const _mw=document.getElementById('myworkView'); if(_mw) _mw.classList.toggle('hidden',v!=='mywork'); }
   document.getElementById('historyView').classList.toggle('hidden',v!=='history');
   if(v==='history') renderHistory();
+  if(v==='mywork') renderMyWork();
   if(v==='assets') setAssetLens(ASSET_LENS);   // show the right lens + render it
   if(_MINI_BY_VIEW[v]) setTimeout(()=>refreshMiniMap(v), 40);   // mount/refresh the unit map once the tab is visible
   if(typeof closeDrops==='function') closeDrops();              // close any open menu when switching tabs
@@ -14951,6 +15026,7 @@ function renderAll(){
   try{ if(PMT_OPEN) renderProdMeeting(); }catch(_){}
   try{ if(SP_OPEN && !SP_FORM) renderSalesPlan(); }catch(_){}   // 📈 sales/planning view live-syncs too (not while typing in the form)   // ⚠ unassigned-task finder chip + live list
   if(VIEW==='history') renderHistory();
+  if(VIEW==='mywork') try{ renderMyWork(); }catch(e){}
   if(GFS) renderGanttFS();
   { const ov=document.getElementById('dtbOverlay'); if(ov&&ov.classList.contains('show') && !(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)){
       if(dtbShared() && Date.now()-DTB_LASTWRITE>15000) dtbFetchRemote().then(r=>{ const o2=document.getElementById('dtbOverlay'); if(r&&o2&&o2.classList.contains('show')&&!(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)&&Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); renderDesignTeam(); } });
@@ -15040,6 +15116,7 @@ const _sheetSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('sh
 // 🧾 Work-order link: MRA_Dashboard.html?wo=doug (or ?wo=sal,doug) opens that crew's work orders
 // in place — one per job, photos enlarged, print button. Used by the scheduled 7:15am email.
 const _recapQ=(()=>{ try{ const q=new URLSearchParams(location.search); return q.get('recap')?Math.max(1,+(q.get('days')||1)||1):null; }catch(e){ return null; } })();
+const _myworkQ=(()=>{ try{ return new URLSearchParams(location.search).get('mywork')||null; }catch(e){ return null; } })();
 const _fixQ=(()=>{ try{ return new URLSearchParams(location.search).get('fix')?1:null; }catch(e){ return null; } })();
 const _punchQ=(()=>{ try{ return new URLSearchParams(location.search).get('punch'); }catch(e){ return null; } })();
 const _woSel=(()=>{ try{ const q=new URLSearchParams(location.search).get('wo'); if(!q) return null;
@@ -15076,6 +15153,10 @@ if(_sheetSel){
   const _r=_pmQ?buildPMReportHtml(_pmQ, new URLSearchParams(location.search).get('days')||7):buildFloorRecapHtml(_recapQ);
   document.documentElement.innerHTML=_r.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
   document.title='MRA — '+((new URLSearchParams(location.search).get('pm'))?'PM Report':'Floor Recap');
+} else if(_myworkQ){
+  const _mw=buildMyWorkHtml(_myworkQ);
+  document.documentElement.innerHTML=_mw.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
+  document.title='My Work — '+_myworkQ;
 } else if(_punchQ){
   const _digits=v=>String(v||'').replace(/[^0-9]/g,'');
   const _jobs=((window.MRA_DATA||{}).jobs)||[];
