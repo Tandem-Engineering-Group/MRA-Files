@@ -19,7 +19,7 @@
     const hr=new Date().getHours(); const greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
     const name=(CURRENT_USER? (' '+(CURRENT_USER.split(' ')[0])) : '');
     // upcoming tasks across active jobs
-    const up=[]; (D().jobs||[]).forEach(j=>{ if(!jobIsActiveLane(j)) return; openTasksOf(j).forEach(t=>{ if(t.due) up.push({j,t}); }); });
+    const up=[]; (D().jobs||[]).forEach(j=>{ if(!jobIsActiveLane(j)) return; openTasksOf(j).forEach(t=>{ if(isSalesT(t)) return; if(t.due) up.push({j,t}); }); });
     up.sort((a,b)=>String(a.t.due).localeCompare(String(b.t.due)));
     const today=todayISO();
     const taskRows = up.slice(0,7).map(x=>{ const od=String(x.t.due)<today;

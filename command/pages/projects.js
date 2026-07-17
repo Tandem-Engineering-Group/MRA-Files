@@ -18,7 +18,7 @@
       <div class="paneltop"><div class="cardhead"><div><h2>${esc(p.name)}${p.jobNum?' · '+esc(p.jobNum):''} ${healthChip(p)}</h2>
         <span class="muted">${esc(p.pm||'—')} · ${p.pct}%${p.finishISO?' · target '+esc(fmtMDY(p.finishISO)):''}${gate?' · next ◆ '+esc(gate.name)+' '+esc(fmtMD(gate.dateISO)):''}${bits.odN?' · ⚠ '+bits.odN+' past-due'+(bits.whoTxt?' (with '+esc(bits.whoTxt)+')':''):''}</span></div>
         <div><select class="btn" onchange="prjLod('${escJsAttr(p.name)}',this.value)"><option value="tasks"${lod==='tasks'?' selected':''}>All tasks</option><option value="phases"${lod==='phases'?' selected':''}>Phases</option><option value="milestones"${lod==='milestones'?' selected':''}>Milestones</option></select>
-        <button class="btn" onclick="openProjectEditor('${escJsAttr(p.name)}')">✎ Edit</button>
+        <button class="btn editaff" onclick="openProjectEditor('${escJsAttr(p.name)}')">✎ Edit</button>
         <button class="btn" onclick="prjToggle('${escJsAttr(p.name)}')">Close</button></div></div></div>
       <div class="projectbody"><div class="module"><h3>Task List</h3>${taskRows||'<div class="emptystate">No tasks.</div>'}</div>
         <div class="module"><h3>Detailed Gantt</h3><div class="gantt projectgantt" id="pg-${cssId(p.name)}"></div></div></div></article>`; }
@@ -48,8 +48,8 @@
     const pend=[]; projs.forEach(p=>(p.tasks||[]).forEach(t=>{ if(projIsPendingVerify(t)) pend.push({p,t}); }));
     const pendHtml = pend.length?`<div class="card"><div class="cardhead"><h2>🟡 Awaiting verification</h2><span class="crewtag">${pend.length}</span></div>
       ${pend.map(x=>`<div class="highlight"><div><b>${esc(x.t.t)}</b><div class="muted">${esc(x.p.name)} · PM ${esc(x.p.pm||'—')}${_taskBy(x.t.cm)?' · marked by '+esc(_taskBy(x.t.cm)):''}</div></div>
-        <button class="btn primary" onclick="verifyTask('${escJsAttr(x.p.name)}','${escJsAttr(projTaskHandle(x.t))}')">✓ Verify</button>
-        <button class="btn" onclick="sendBackTask('${escJsAttr(x.p.name)}','${escJsAttr(projTaskHandle(x.t))}')">↩ Back</button></div>`).join('')}</div>`:'';
+        <button class="btn primary editaff" onclick="verifyTask('${escJsAttr(x.p.name)}','${escJsAttr(projTaskHandle(x.t))}')">✓ Verify</button>
+        <button class="btn editaff" onclick="sendBackTask('${escJsAttr(x.p.name)}','${escJsAttr(projTaskHandle(x.t))}')">↩ Back</button></div>`).join('')}</div>`:'';
 
     sec.innerHTML=`<div class="head"><div><h1>Projects</h1><div class="muted">Portfolio, per-project schedules and sign-off.</div></div><a class="btn" href="../MRA_Dashboard.html#projects" target="_blank" rel="noopener">Classic Projects ↗</a></div>
     ${pendHtml}

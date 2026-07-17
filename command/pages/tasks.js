@@ -18,6 +18,7 @@
       if(t.due&&t.due<today) od.push(item); else if(t.due&&t.due<=wk) due.push(item); else later.push(item); }); });
     (D().projects||[]).forEach(p=>{ (p.tasks||[]).forEach(t=>{
       if(projIsPendingVerify(t)){ if(canVerify(p.name)) awaitingMe.push({p,t}); if(whoMatch(t.who,name)) pendingMine.push({p,t}); return; }
+      if(/yes/i.test(t.ml||'')) return;   // milestone rows aren't ordinary work
       if(!whoMatch(t.who,name)) return; const item={kind:'proj', ref:p.name, t:t, proj:p, who:t.who, due:t.finISO, text:t.t};
       if(t.done){ if(t.finISO&&t.finISO>=ago7) doneRecent.push(item); return; }
       if(t.finISO&&t.finISO<today) od.push(item); else if(t.finISO&&t.finISO<=wk) due.push(item); else later.push(item); }); });
@@ -44,7 +45,9 @@
     const names=new Set(); if(CURRENT_USER) names.add(CURRENT_USER); ASSIGNEE_OPTIONS.forEach(n=>names.add(n));
     (D().projects||[]).forEach(p=>{ if(p.pm) names.add(p.pm); });
     (D().users||[]).forEach(u=>{ if(u.name) names.add(u.name); });
-    const person=WHO||CURRENT_USER||[...names][0]||'Sal';
+    // When SSO is enforcing, non-super-admins see only their OWN work (no picker); Rich + previews get the picker.
+    const locked=(ssoEnforcing() && SSO.user && !isSuperAdmin());
+    const person=locked?(boardNameFor()||CURRENT_USER||'Sal'):(WHO||CURRENT_USER||[...names][0]||'Sal');
     const w=myWorkFor(person);
     const openN=w.od.length+w.due.length+w.later.length;
     const tiles=[['mwsec-od','Overdue',w.od.length,'danger'],['mwsec-due','Due this week',w.due.length,''],['mwsec-verify','To verify',w.awaitingMe.length,''],['mwsec-pend','Marked ready',w.pendingMine.length,''],['mwsec-proj','My projects',w.myProjects.length,''],['','Open',openN,'']];
@@ -68,7 +71,7 @@
     const maxL=Math.max(1,...team.map(c=>load[c]));
 
     sec.innerHTML=`<div class="head"><div><h1>My Work</h1><div class="muted">Everything on ${esc(person)}'s plate.</div></div>
-      <select class="btn" onchange="mwSetWho(this.value)">${pickOpts}</select></div>
+      ${locked?'':`<select class="btn" onchange="mwSetWho(this.value)">${pickOpts}</select>`}</div>
     <div class="grid kpis" style="grid-template-columns:repeat(6,1fr)">${tiles.map(t=>`<div class="card click" ${t[0]?`onclick="mwTile('${t[0]}')"`:''}><span class="muted">${t[1]}</span><div class="num ${t[3]}">${t[2]}</div></div>`).join('')}</div>
     ${awaitingHtml}
     ${section('mwsec-od','⚠ Overdue',w.od)}

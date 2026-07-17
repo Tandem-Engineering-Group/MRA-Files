@@ -37,7 +37,9 @@ async function pollData(){
     try{ incoming=(new Function('var window={};'+txt+';return window.MRA_DATA;'))(); }catch(e){ return; }
     if(!incoming) return;
     if(EDIT_PENDING){ if(!listsCaughtUp(incoming)) return; EDIT_PENDING=false; }
-    window.MRA_DATA=incoming; window._PJBYROW=null; window._PTCOV=null; renderCurrent();
+    window.MRA_DATA=incoming; window._PJBYROW=null; window._PTCOV=null;
+    try{ prwRetry(); }catch(e){}   // fire any stranded by-id edits now that rows may have synced
+    renderCurrent();
   }catch(e){}
 }
 
@@ -89,7 +91,7 @@ function isGeneralBay(b){ return /^\s*general\s*$/i.test(b||''); }
 const MIDDLE_BAYS=['Bay 3 Middle','Bay 4 Middle'];
 // A task counts toward crew load / open work only when its job is on an active bay
 // (a real bay, the Parking Lot, or Off Site / Parts). Held-bay work is latent.
-function jobIsActiveLane(j){ return isLive(j) && !bayIsHeld(j.bay); }
+function jobIsActiveLane(j){ return isLive(j) && !isOrphan(j) && !bayIsHeld(j.bay); }
 function isSalesT(t){ const s=(t&&(t.t!=null?t.t:t))||''; return /^\s*\[sales\]/i.test(String(s)); }
 function projIsPendingVerify(t){ return /pending verification/i.test((t&&t.st)||''); }
 function jobIsSub(j){ return /\[subjob\]/i.test((j&&j.notesRaw)||''); }
@@ -302,12 +304,33 @@ function _listOps(p){ const raw=_listOpsRaw(p); if(!raw) return null; const out=
     if(o.set){ const b={}; for(const k in o.set){ if(lf.cols[k]) b[lf.cols[k]]=o.set[k]; } r.body=b; }
     let id=null; if((o.verb==='update'||o.verb==='delete')) id=_findId(o.list,o.match);
     if(id!=null){ r.verb=(o.verb==='delete')?'deleteById':'mergeById'; r.id=id; }
-    else if(o.match){ const unsafe=Object.keys(o.match).some(k=>{ const col=lf.cols[k]||k; return !(col==='Id'||col==='ID') && !_odSafe(o.match[k]); });
-      if(unsafe && (o.verb==='update'||o.verb==='delete')) continue;   // doomed OData filter — skip (needs an id)
+    else if(o.match){
+      const canQueue=(o.list==='ShopTasks'||o.list==='ProjectTasks') && o.match.Task!=null;
+      const unsafe=Object.keys(o.match).some(k=>{ const col=lf.cols[k]||k; return !(col==='Id'||col==='ID') && !_odSafe(o.match[k]); });
+      // Row has no _id yet (just added, not synced back) => queue a by-id retry so the edit isn't lost.
+      if(o.verb==='update' && canQueue && r.body && Object.keys(r.body).length) pendRewrite(o.list, o.match.Project, o.match.Task, r.body);
+      if(canQueue && unsafe){ if(o.verb==='delete') pendDelete(o.list, o.match.Project, o.match.Task); if(o.verb==='update'||o.verb==='delete') continue; }  // emoji/#/&/– break OData -> only the by-id retry can land it
       r.filter=Object.keys(o.match).map(k=>{ const col=lf.cols[k]||k; const v=o.match[k];
         return (col==='Id'||col==='ID')?(col+' eq '+v):(col+" eq '"+_odEsc(v)+"'"); }).join(' and '); }
     out.push(r); }
   return out; }
+
+/* Pending by-id retry queue — an edit/delete on a task whose SharePoint _id isn't in
+   data.js yet (just added, not synced) can't match by OData (emoji/# break it). Stash it;
+   re-fire by id the moment the row appears with an _id (on the next poll + on sign-in). */
+const PRW_KEY='cc_pending_rewrite_v1';
+function _prwLoad(){ try{ return JSON.parse(localStorage.getItem(PRW_KEY)||'[]'); }catch(e){ return []; } }
+function _prwSave(a){ try{ localStorage.setItem(PRW_KEY, JSON.stringify(a)); }catch(e){} }
+function pendRewrite(listKey, project, task, body){ const a=_prwLoad(); a.push({v:'merge', listKey, project, task, body, ts:Date.now()}); _prwSave(a); }
+function pendDelete(listKey, project, task){ const a=_prwLoad(); a.push({v:'del', listKey, project, task, ts:Date.now()}); _prwSave(a); }
+function prwRetry(){ let a=_prwLoad(); if(!a.length) return; const keep=[];
+  for(const e of a){ if(Date.now()-(e.ts||0) > 3*86400000) continue;   // give up after 3 days
+    const id=_findId(e.listKey, {Project:e.project, Task:e.task});
+    if(id==null){ keep.push(e); continue; }                            // row still not synced -> keep waiting
+    const list=(_LF[e.listKey]||{}).list; if(!list){ continue; }
+    if(e.v==='del') _wq.push({op:{verb:'deleteById', list, id}, pin:CLOSE_PIN||'1974', user:CURRENT_USER});
+    else _wq.push({op:{verb:'mergeById', list, id, body:e.body}, pin:CLOSE_PIN||'1974', user:CURRENT_USER}); }
+  _prwSave(keep); if(keep.length<a.length) _wqDrain(); }
 
 const WRITE_GAP_MS=1500; let _wq=[], _wqBusy=false;
 function _wqDrain(){ if(_wqBusy) return; _wqBusy=true; (async()=>{ while(_wq.length){ const payload=_wq.shift();
@@ -321,17 +344,108 @@ function shopWrite(payload){
   if(USE_LISTS_WRITE){ const ops=_listOps(payload); if(ops && ops.length){ ops.forEach(op=>_wq.push({op:op, pin:payload.pin, user:payload.user})); _wqDrain(); return Promise.resolve(); } }
   _wq.push(payload); _wqDrain(); return Promise.resolve(); }
 
-/* ---------- auth (code sign-in; SSO layers on later, same as the board fallback) ---------- */
+/* ============================================================================
+   AUTH — SAME rules as the classic board: Microsoft (@gomra.com) sign-in + roles,
+   FAIL-OPEN off the live host (previews/sandbox behave un-gated), code fallback
+   for shared shop screens. Ported verbatim from MRA_Dashboard.html so the two
+   boards gate login + viewing identically.
+   ============================================================================ */
 let CLOSE_PIN=null, CURRENT_USER='';
 const CLOSE_PIN_HASH=1516293;
 function pinHash(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))>>>0; } return h; }
 function findUser(code){ const us=(D().users)||[]; const h=pinHash(code);
-  if(us.length){ const u=us.find(x=>x.h===h); if(u) return u.name||''; } return (h===CLOSE_PIN_HASH)?'Shop':null; }
+  if(us.length){ const u=us.find(x=>x.h===h); if(u) return u.name||''; } return (h===CLOSE_PIN_HASH)?'':null; }
 let _authRetry=null;
-function ensureAuth(action, retry){ if(CLOSE_PIN) return true; _authRetry=(typeof retry==='function')?retry:null; openSignIn(action||'edit'); return false; }
-function syncAuthUI(){ const b=document.getElementById('userBtn'); if(b) b.textContent=(CLOSE_PIN?(initials(CURRENT_USER)+' · '+(CURRENT_USER||'Signed in')):'Sign in')+' ▾'; }
-function initials(n){ return String(n||'?').split(/\s+/).map(x=>x[0]||'').slice(0,2).join('').toUpperCase(); }
-function signOut(){ CLOSE_PIN=null; CURRENT_USER=''; syncAuthUI(); renderCurrent(); }
+function _nmKey(s){ return String(s||'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' '); }
+function _whoMatch(who,name){ if(!who||!name) return false; const n=_nmKey(name), f=String(name).toLowerCase().split(/\s+/)[0];
+  return crewWhoList(who).some(p=>{ const pk=_nmKey(p), pf=String(p).toLowerCase().split(/\s+/)[0]; return pk===n||pf===f||(pk&&n&&(pk.indexOf(n)>=0||n.indexOf(pk)>=0)); }); }
+
+const ROLE_BY_EMAIL = {
+  'rmiller@gomra.com':'admin','akarloff@gomra.com':'admin','luciana.giglio@gomra.com':'admin','qolivito@gomra.com':'admin',
+  'megan.fraser@gomra.com':'editor','bchoy@gomra.com':'editor',
+  'swilliams@gomra.com':'design','markm@gomra.com':'design',
+  'cindyi@gomra.com':'shopedit','rwheeler@gomra.com':'shopedit',
+  'tony@gomra.com':'exec','johnr@gomra.com':'exec','gbitonti@gomra.com':'exec',
+  'jeberhart@gomra.com':'closer','jsellers@gomra.com':'closer'
+};
+const BOARD_NAME_BY_EMAIL={ 'jeberhart@gomra.com':'Josh','jsellers@gomra.com':'Jeff','shopsupport@gomra.com':'Sal','dcooley@gomra.com':'Doug' };
+function boardNameFor(){ try{ const em=(SSO&&SSO.email&&SSO.email())||''; if(BOARD_NAME_BY_EMAIL[em]) return BOARD_NAME_BY_EMAIL[em]; return (SSO&&SSO.name&&SSO.name())||CURRENT_USER||''; }catch(e){ return CURRENT_USER||''; } }
+const ROLE_BY_NAME = (function(){ const m={}, g={
+  admin:['Rich Miller','Al Karloff','Luciana Giglio','Quintin Olivito'], editor:['Megan Fraser','Brandon Choy'],
+  design:['Sarah Williams','Mark Mustonen'], exec:['Tony Amato','John Renaud','Gino Bitonti'],
+  shopedit:['Cindy Irland','Robin Wheeler'], closer:['Joshua Eberhart','Jeff Sellers'] };
+  for(const role in g) g[role].forEach(n=>{ m[_nmKey(n)]=role; }); return m; })();
+// CC page visibility per role (maps the classic tabs: floor->home/shop, fleetio->maintenance, mywork->tasks).
+const CC_PAGES_BY_ROLE = {
+  anon:    ['home','shop'],
+  staff:   ['home','shop','tasks','maintenance','tools'],
+  closer:  ['home','shop','tasks','maintenance','tools'],
+  shopedit:['home','shop','tasks','maintenance','tools'],
+  design:  ['home','shop','projects','tasks','maintenance','tools'],
+  exec:    ['home','shop','projects','tasks','maintenance','tools','sales'],
+  editor:  ['home','shop','projects','tasks','maintenance','tools','sales'],
+  admin:   ['home','shop','projects','tasks','maintenance','tools','sales']
+};
+const MYWORK_EMAILS=['megan.fraser@gomra.com','akarloff@gomra.com','luciana.giglio@gomra.com','bchoy@gomra.com','markm@gomra.com','swilliams@gomra.com','shopsupport@gomra.com','jsellers@gomra.com','jeberhart@gomra.com','dcooley@gomra.com','spearce@gomra.com'];
+const MYWORK_NAMES=['Megan Fraser','Al Karloff','Luciana Giglio','Brandon Choy','Mark Mustonen','Sarah Williams','Sal','Jeff Sellers','Joshua Eberhart','Doug Cooley','Stephanie Pearce'].map(_nmKey);
+function mwTabAllowed(){ if(!ssoEnforcing()) return true; if(!SSO.user) return false; if(isSuperAdmin()) return true;
+  const em=SSO.email(); if(MYWORK_EMAILS.indexOf(em)>=0) return true; return MYWORK_NAMES.indexOf(_nmKey(SSO.name()))>=0; }
+
+const SSO = (function(){
+  const TENANT='1dc2dfee-5d93-4f0c-aa97-2344b72fe6b0';
+  const CLIENT='fad6a2aa-2dab-4c46-ad3a-29e7040036ae';
+  const HOSTS=['mrashopdash.z13.web.core.windows.net'];
+  let pca=null, user=null, ready=false, failed=false;
+  function active(){ return HOSTS.indexOf(location.hostname)>=0; }
+  function domainOK(e){ return /@gomra\.com$/i.test(String(e||'')); }
+  function done(){ ready=true; try{ applyRoleUI(); }catch(e){} try{ renderCurrent(); }catch(e){} }
+  function loadMsal(cb){ if(window.msal) return cb();
+    const urls=['https://alcdn.msftauth.net/browser/2.38.1/js/msal-browser.min.js','https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js'];
+    let i=0; const tryNext=()=>{ if(i>=urls.length){ cb(new Error('msal')); return; } const s=document.createElement('script'); s.async=true; s.src=urls[i++];
+      s.onload=()=>{ window.msal?cb():tryNext(); }; s.onerror=tryNext; document.head.appendChild(s); }; tryNext(); }
+  function init(){ if(!active()){ done(); return; } let settled=false; const finish=(f)=>{ if(settled) return; settled=true; if(f) failed=true; done(); };
+    setTimeout(()=>finish(true), 6000);
+    loadMsal(err=>{ if(err || !window.msal){ finish(true); return; }
+      try{ pca=new msal.PublicClientApplication({ auth:{ clientId:CLIENT, authority:'https://login.microsoftonline.com/'+TENANT, redirectUri: location.origin+location.pathname }, cache:{ cacheLocation:'localStorage' } });
+        pca.handleRedirectPromise().then(resp=>{ if(resp && resp.account) pca.setActiveAccount(resp.account);
+          const a=pca.getActiveAccount()||(pca.getAllAccounts()[0]||null);
+          if(a){ if(domainOK(a.username)) user=a; else { finish(false); pca.logoutRedirect({account:a}); return; } } finish(false);
+        }).catch(()=>finish(false));
+      }catch(e){ finish(true); } }); }
+  function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; }
+    try{ pca.loginRedirect({ scopes:['openid','profile','email'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
+  function ssoSignOut(){ if(!pca){ return; } const a=pca.getActiveAccount(); user=null; try{ pca.logoutRedirect(a?{account:a}:{}); }catch(e){ try{ applyRoleUI(); }catch(_){} } }
+  return { init, signIn, signOut:ssoSignOut, active, email:()=>user?String(user.username||'').toLowerCase():'', name:()=>user?(user.name||user.username||''):'', get user(){return user;}, get ready(){return ready;}, get failed(){return failed;} };
+})();
+function ssoEnforcing(){ return SSO.active() && SSO.ready && !SSO.failed; }
+function ssoRole(){ if(!SSO.active() || SSO.failed) return null; if(!SSO.ready) return 'anon'; if(!SSO.user) return 'anon';
+  const em=SSO.email(); if(ROLE_BY_EMAIL[em]) return ROLE_BY_EMAIL[em]; const nk=_nmKey(SSO.name()); if(ROLE_BY_NAME[nk]) return ROLE_BY_NAME[nk]; return 'staff'; }
+function ssoCanEdit(){ const r=ssoRole(); return !!(SSO&&SSO.user)&&(r==='admin'||r==='editor'||r==='design'||r==='shopedit'); }
+function ssoIsCloser(){ try{ return ssoEnforcing() && !!(SSO&&SSO.user) && ssoRole()==='closer'; }catch(e){ return false; } }
+function isSuperAdmin(){ try{ if(!(ssoEnforcing()&&SSO.user)) return false; return SSO.email()==='rmiller@gomra.com' || _nmKey(SSO.name())===_nmKey('Rich Miller'); }catch(e){ return false; } }
+function ccAllowedPages(){ const r=ssoRole(); return r?CC_PAGES_BY_ROLE[r]||CC_PAGES_BY_ROLE.staff:null; }
+function pageAllowed(name){ if(name==='tasks' && !mwTabAllowed()) return false; const a=ccAllowedPages(); return !a || a.indexOf(name)>=0; }
+
+function ensureAuth(action, retry){ if(CLOSE_PIN) return true;
+  if(ssoEnforcing()){ if(ssoCanEdit()){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; syncAuthUI(); _resetIdle(); return true; }
+    if(SSO.user){ alert('Your sign-in is view-only — ask Rich if you need edit access.'); return false; } }
+  _authRetry=(typeof retry==='function')?retry:null; openSignIn(action||'edit'); return false; }
+
+// Apply the role's page visibility + edit gating (no-op when not enforcing).
+function applyRoleUI(){ const enforce=ssoEnforcing();
+  document.querySelectorAll('.nav button').forEach(b=>{ b.style.display = pageAllowed(b.dataset.page) ? '' : 'none'; });
+  if(enforce && ssoCanEdit() && !CLOSE_PIN){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; }
+  document.body.classList.toggle('viewonly', enforce && !ssoCanEdit() && !ssoIsCloser());
+  document.body.classList.toggle('closeronly', ssoIsCloser());
+  if(!pageAllowed(ACTIVE_PAGE)){ const a=ccAllowedPages()||['home']; showPage(a[0]||'home'); return; }
+  syncAuthUI();
+}
+function syncAuthUI(){ const b=document.getElementById('userBtn'); if(!b) return;
+  if(ssoEnforcing()){ if(SSO.user) b.textContent='👤 '+(SSO.name()||'Signed in')+' ▾'; else b.textContent='🔐 Sign in'; return; }
+  b.textContent=(CLOSE_PIN?('👤 '+(CURRENT_USER||'Signed in')+' ▾'):'Sign in'); }
+let _idleT=null;
+function _resetIdle(){ if(_idleT){ clearTimeout(_idleT); _idleT=null; } if(CLOSE_PIN && !ssoEnforcing()) _idleT=setTimeout(()=>{ if(CLOSE_PIN) signOut(); }, 5*60*1000); }
+function signOut(){ if(ssoEnforcing() && SSO.user){ SSO.signOut(); return; } CLOSE_PIN=null; CURRENT_USER=''; if(_idleT){ clearTimeout(_idleT); _idleT=null; } syncAuthUI(); renderCurrent(); }
 
 /* ---------- optimistic + reconcile ---------- */
 function oJob(proj){ return (D().jobs||[]).find(j=>j.project===proj)||null; }
@@ -344,17 +458,35 @@ function oApply(){ markPending(); window._PJBYROW=null; window._PTCOV=null; rend
 const _closedMem={}; function rememberClosed(proj,task){ _closedMem[proj+'|'+task]=Date.now(); }
 
 /* ---------- action call sites ---------- */
+// Recurring shop task: closing one spawns the next occurrence (ported from the board).
+function nextRepeatISO(rep, fromISO){ const b=parseISO(fromISO)||new Date(); const d=new Date(b.getFullYear(),b.getMonth(),b.getDate());
+  if(rep.kind==='daily'){ d.setDate(d.getDate()+1); }
+  else if(rep.kind==='weekly'){ const want=(rep.dow!=null?rep.dow:1); do{ d.setDate(d.getDate()+1); }while(d.getDay()!==want); }
+  else if(rep.kind==='monthly'){ const dom=d.getDate(); d.setMonth(d.getMonth()+1); if(d.getDate()!==dom) d.setDate(0); }
+  else return ''; return localISO(d); }
+function spawnRepeat(j,t){ try{ const rep=repeatOf(t&&t.cm); if(!rep||!j||!t) return; const today=todayISO();
+  const from=(t.due&&t.due>today)?t.due:today; const nextISO=nextRepeatISO(rep,from); if(!nextISO) return;
+  if((j.tasks||[]).some(x=>!x.done && x!==t && x.t===t.t)) return;   // an open copy already exists — never stack
+  shopWrite({action:'addTask', project:j.project, jobNum:j.jobNum||'', bay:j.bay||'', task:t.t, assigned:t.who||'', milestone:'', comments:t.cm||'', due:nextISO, pin:CLOSE_PIN||'1974', user:CURRENT_USER});
+  if(!j.tasks) j.tasks=[]; j.tasks.push({t:t.t, who:t.who||'', op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:'', cm:t.cm||'', due:nextISO, files:null});
+  }catch(e){} }
+function _canCloseHere(project, raw){ if(!ssoIsCloser()) return true; const j=oJob(project), t=j&&(j.tasks||[]).find(x=>x.t===raw);
+  return !!(t && _whoMatch(t.who, boardNameFor())); }
 function closeHandle(project, raw){ if(!raw) return ''; if(WALL) return '';
-  return `<span class="closebtn" data-proj="${escA(project)}" data-task="${escA(raw)}" onclick="closeTaskBtn(this)" title="Mark this task done (needs code)">✓ close</span>`; }
+  if(ssoIsCloser() && !_canCloseHere(project,raw)) return '';   // closer sees ✓ only on their own tasks
+  return `<span class="closebtn" data-proj="${escA(project)}" data-task="${escA(raw)}" onclick="closeTaskBtn(this)" title="Mark this task done">✓ close</span>`; }
 function closeTaskBtn(el){ closeTaskByName(el.dataset.proj, el.dataset.task, el); }
 function closeTaskByName(proj, task, el){
-  if(!ensureAuth("close a task", ()=>closeTaskByName(proj,task))) return;
+  const _closer=ssoIsCloser();
+  if(_closer && !_canCloseHere(proj,task)){ alert('You can only close tasks assigned to you.'); return; }
+  if(!_closer){ if(!ensureAuth("close a task", ()=>closeTaskByName(proj,task))) return; }
+  const _pin=CLOSE_PIN||(_closer?'1974':''); const _user=CURRENT_USER||boardNameFor()||'';
   const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
   if(el){ el.textContent='…'; el.style.pointerEvents='none'; }
-  shopWrite({project:proj, task:task, closedDate:cd, pin:CLOSE_PIN||'1974', user:CURRENT_USER});
+  shopWrite({project:proj, task:task, closedDate:cd, pin:_pin, user:_user});
   rememberClosed(proj, task);
   const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.filter(x=>!x.done&&x.t===task).sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')))[0];
-    if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); } oRecompute(j); }
+    if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); spawnRepeat(j,t); } oRecompute(j); }
   oApply(); }
 
 function qaReassign(proj, raw, who){ if(!ensureAuth('re-assign a task', ()=>qaReassign(proj,raw,who))) return;
@@ -457,16 +589,21 @@ function qaGoOther(){ const v=(document.getElementById('qaOther')||{}).value||''
 function _modal(id){ let m=document.getElementById(id); if(!m){ m=document.createElement('div'); m.id=id; m.className='modal'; document.body.appendChild(m); } return m; }
 function closeModal(id){ const m=document.getElementById(id); if(m) m.classList.remove('open'); }
 
-function openSignIn(action){ const m=_modal('signInModal');
+function openSignIn(action){ const m=_modal('signInModal'); const enforce=ssoEnforcing();
   m.innerHTML=`<div class="modalbox"><div class="cardhead"><h2>Sign in</h2><button class="btn" onclick="closeModal('signInModal')">Close</button></div>
-    <p class="muted">Enter your code to ${esc(action||'make changes')}.</p>
+    ${enforce?`<p class="muted">Sign in with your @gomra.com account to ${esc(action||'edit')}. (Shared shop screens can use the code below.)</p>
+      <button class="btn primary" style="width:100%;background:#1a56db;border-color:#1a56db" onclick="SSO.signIn()">🔐 Sign in with Microsoft</button>
+      <div style="text-align:center;color:var(--muted);margin:10px 0;font-size:12px">— or shared-screen code —</div>`
+      :`<p class="muted">Enter your code to ${esc(action||'make changes')}.</p>`}
     <input id="siCode" type="password" inputmode="numeric" placeholder="Code" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:9px;font-size:18px;letter-spacing:3px" onkeydown="if(event.key==='Enter')siSubmit()">
     <div id="siErr" class="muted" style="color:var(--red);min-height:18px;margin:6px 2px"></div>
-    <button class="btn primary" style="width:100%" onclick="siSubmit()">Sign in</button></div>`;
+    <button class="btn primary" style="width:100%" onclick="siSubmit()">Sign in with code</button></div>`;
   m.classList.add('open'); setTimeout(()=>{ const i=document.getElementById('siCode'); if(i) i.focus(); },60); }
-function siSubmit(){ const code=(document.getElementById('siCode')||{}).value||''; const name=findUser(code.trim());
+function siSubmit(){ const code=((document.getElementById('siCode')||{}).value||'').trim(); if(!code){ const e=document.getElementById('siErr'); if(e) e.textContent='Enter your code.'; return; }
+  const name=findUser(code);
   if(name==null){ const e=document.getElementById('siErr'); if(e) e.textContent='That code was not recognized.'; return; }
-  CLOSE_PIN='1974'; CURRENT_USER=name; syncAuthUI(); closeModal('signInModal');
+  CLOSE_PIN=code; CURRENT_USER=name; syncAuthUI(); _resetIdle(); closeModal('signInModal');
+  try{ prwRetry(); }catch(e){}   // flush stranded edits the moment someone authenticates
   const r=_authRetry; _authRetry=null; if(typeof r==='function'){ try{ r(); }catch(e){} } else renderCurrent(); }
 
 // Add / edit shop task modal (shared shell).
@@ -500,7 +637,7 @@ function submitTaskModal(){ const job=_etCtx.job; const task=(document.getElemen
     const tobj={t:task, who:who, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:ml, cm:_withBy(cm,CURRENT_USER), due:due||null, files:null};
     if(!job.tasks) job.tasks=[]; job.tasks.push(tobj); oRecompute(job);
   } else { const t=_etCtx.t; const status=(document.getElementById('etStatus')||{}).value||'Open';
-    const keepBy=_taskBy(t.cm)||CURRENT_USER; const keepD0=_taskDue0(t.cm) || ((t.due && due && due>t.due)?t.due:'');
+    const keepBy=_taskBy(t.cm); const keepD0=_taskDue0(t.cm) || ((t.due && due && due>t.due)?t.due:'');
     const cm=_withDue0(_withBy(_withRepeat(cmBox, rep), keepBy), keepD0);
     shopWrite({action:'editTask', project:job.project, taskOld:_etCtx.old, task:task, assigned:who, status:status, milestone:ml, comments:cm, due:due, pin:CLOSE_PIN||'1974', user:CURRENT_USER});
     t.t=task; t.who=who; t.st=status; t.ml=ml; t.cm=cm; t.due=due||null; if(_doneStatus(status)){ t.done=true; t.cl=localISO(Date.now()); } oRecompute(job); }
@@ -542,7 +679,9 @@ window.openJobEditor=openJobEditor;
    ============================================================================ */
 let WALL=false;
 function renderCurrent(){ const pg=window.MRA_PAGES[ACTIVE_PAGE]; if(pg && typeof pg.render==='function'){ try{ pg.render(); }catch(e){ console.error('page render failed',ACTIVE_PAGE,e); } } }
-function showPage(name){ if(!window.MRA_PAGES[name]) name='home'; ACTIVE_PAGE=name;
+function showPage(name){ if(!window.MRA_PAGES[name]) name='home';
+  if(!pageAllowed(name)){ const a=ccAllowedPages()||['home']; name=(a.indexOf(name)>=0)?name:(a[0]||'home'); }
+  ACTIVE_PAGE=name;
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.page===name));
   document.querySelectorAll('.page').forEach(s=>s.classList.toggle('active', s.id===name));
   const cr=document.querySelector('.crumb'); if(cr){ const b=document.querySelector('.nav button[data-page="'+name+'"]'); cr.textContent=b?b.textContent.trim():name; }
@@ -564,12 +703,16 @@ function initCC(){
   const q=document.getElementById('quick'); const qb=document.getElementById('quickBtn'); if(qb&&q) qb.onclick=()=>q.classList.toggle('open');
   const fo=document.getElementById('floorOpen'); if(fo) fo.onclick=openFloor;
   const fc=document.getElementById('floorClose'); if(fc) fc.onclick=closeFloor;
-  const ub=document.getElementById('userBtn'); if(ub) ub.onclick=()=>{ if(CLOSE_PIN){ if(confirm('Sign out '+(CURRENT_USER||'')+'?')) signOut(); } else openSignIn('sign in'); };
+  const ub=document.getElementById('userBtn'); if(ub) ub.onclick=()=>{
+    if(ssoEnforcing()){ if(SSO.user){ if(confirm('Sign out '+(SSO.name()||'')+'?')) SSO.signOut(); } else SSO.signIn(); return; }
+    if(CLOSE_PIN){ if(confirm('Sign out '+(CURRENT_USER||'')+'?')) signOut(); } else openSignIn('sign in'); };
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(document.getElementById('floor')&&document.getElementById('floor').classList.contains('open')) closeFloor(); document.querySelectorAll('.modal.open').forEach(m=>m.classList.remove('open')); } });
+  ['mousemove','keydown','click','touchstart'].forEach(ev=>document.addEventListener(ev,_resetIdle,{passive:true}));
   syncAuthUI();
   // deep-link ?view=
   let start='home'; try{ const v=new URL(location.href).searchParams.get('view'); if(v && window.MRA_PAGES[v]) start=v; }catch(e){}
   showPage(start);
+  try{ SSO.init(); }catch(e){}   // Microsoft sign-in + role gating (fail-open off the live host)
   setInterval(pollData, 60000);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initCC); else initCC();
