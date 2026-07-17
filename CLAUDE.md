@@ -318,6 +318,30 @@ no JS change needed. Test: J1559 On Cloud card shows 📍 after next export.
 Also in flight: SWA created?(await Rich URL+token) · Infowheels 3D builder awaiting Brandon/Mark OBJ
 exports (instructions given 7/15; Rev1 = shell+floors+cabinets at /builder/).
 
+## Shipped 2026-07-17 — 🙋 MY WORK rebuilt to report quality + pro daily email (rev 27.4 → 27.5)
+
+- **rev 27.4 deployed + live-verified** (Al Karloff email `al.karloff@`→`akarloff@gomra.com` in ROLE_BY_EMAIL).
+- **rev 27.5 — MY WORK page + daily email rebuilt (Rich: "weak / half-ass ... make it professional like the
+  reports we sent Al & Megan").** The bare panels are gone. Both the **MY WORK tab** and the **?mywork=Name**
+  daily-email page are now full one-pagers matching `buildPMReportHtml`:
+  - **Shared `REPORT_CSS`** const extracted (PM report + My Work email use the SAME stylesheet → identical look;
+    added `.pv`/`.pend`/`.fol`/`.hnote` classes). PM report now reads `const css=REPORT_CSS` (regression-tested).
+  - **`myWorkFor(name)` rebuilt** to gather: od/due/later (own shop+project tasks), **pendingMine** (tasks I marked
+    ready, awaiting PM), **awaitingMe** (Pending-Verification tasks where I'm the PM/admin — `projIsPendingVerify`),
+    **doneRecent** (closed last 7d), **myProjects** (PM'd OR followed, health-sorted), **milestones** (30d), **follow**.
+  - **Tab (`renderMyWork`, dark):** stat strip (open·overdue·due·to-verify·marked-ready·projects) + ✅ Awaiting
+    your sign-off (inline **✓ Verify / ↩ Back** via existing `verifyTask`/`sendBackTask`/`gotoVerifyTask`) + Overdue
+    + Due-this-week + 🟡 Marked-ready + 📊 My Projects (health color/target/past-due/%) + ◆ Milestones + ✅ Completed
+    7d + Everything else + **⚙ Customize (Follow any project)**.
+  - **Email (`buildMyWorkHtml`, light):** identical sections, printbar + MRA-orange title + stat tiles + badges +
+    photo thumbnails; footer links back to the live dashboard. It's the SAME page the daily flow links.
+  - **⚙ Follow** = per-person `localStorage` (`mra_mwfollow_<namekey>`) — pin any project (health/milestones/past-due
+    show even if not assigned). Helpers: `mwGetFollow/mwSetFollow/mwToggleFollow/mwPickFollow`.
+  - Help guide: new **②ᵐ 🙋 MY WORK** section. Validated: node --check PASS + **headless render** (tab + email + Sal
+    non-PM + PM-report regression + verify-button path + follow flow) — zero pageerrors; screenshots eyeballed.
+  - ⏭ **Daily-email Power Automate flow still to build with Rich** (Recurrence → per-person Send-email of the
+    `?mywork=<Name>` link, CC rmiller@gomra.com; routing table below). Trigger with "let's build the email flow".
+
 ## Shipped 2026-07-16 EVENING — 🔐 SSO LOGIN LIVE (rev 26.0 → 26.3) + live updates + Fleetio GPS fallback
 
 - **🔐 Microsoft 365 sign-in LIVE on the board.** MSAL.js browser (public client, PKCE — NO secret; tenant
