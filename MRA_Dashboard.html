@@ -3581,6 +3581,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"27.9", date:"2026-07-17", title:"\u{1F9D1} Tasks now show who added them", items:[
+    "When someone adds a task on the board, it's now stamped with <b>🧑 added by (their name)</b> — shown on the task on the crew columns, the bay cards, and in the MY WORK page &amp; daily email. So if a crew member has a question about a task (especially the general ones), they can see who put it in and go ask. (It shows on tasks added from here on out — we don't have a record of who created older ones.)" ] },
   { rev:"27.8", date:"2026-07-17", title:"\u{1F64B} MY WORK now shows every task's full detail", items:[
     "Each task on the MY WORK page and daily email now carries its <b>full detail</b> — no more bare one-liners. <b>Shop/crew tasks</b> (Sal, Doug, Josh, Jeff…) show the <b>Fleetio issue #, the description, the asset, and the photos</b>, plus any comments. <b>Project tasks</b> (Mark, Sarah, the PMs…) show the <b>subproject/parent, phase, type and comments</b> for every line. Photos and file attachments come through as thumbnails you can tap." ] },
   { rev:"27.7", date:"2026-07-17", title:"\u{1F64B} MY WORK tab limited to the people who need it", items:[
@@ -5610,6 +5612,12 @@ function isSnzRep(t){ try{ if(!t||t.done||!t.due) return false; if(!repeatOf(t.c
   const lim=localISO(parseISO(today).getTime()+3*86400000);
   return String(t.due)>lim; }catch(e){ return false; } }
 function stripRepeat(cm){ return String(cm||'').replace(/\s*\[repeat:[^\]]*\]/ig,'').trim(); }
+// WHO added a task — stored as a hidden [by:Name] tag in the comments (rides the existing comments column,
+// so no SharePoint/flow change). Set once on creation; carried through edits; shown as "added by Name".
+function _taskBy(cm){ const m=String(cm||'').match(/\[by:([^\]]+)\]/i); return m?m[1].trim():''; }
+function stripBy(cm){ return String(cm||'').replace(/\s*\[by:[^\]]*\]/ig,'').trim(); }
+function _withBy(cm,by){ cm=stripBy(cm); if(by){ cm=(cm?cm+' ':'')+'[by:'+String(by).replace(/[\]]/g,'').trim()+']'; } return cm; }
+function _byLine(cm){ const b=_taskBy(cm); return b?('<div style="font-size:10px;color:var(--faint);margin:1px 0 2px" title="Who added this task — ask them if you have questions">\u{1F9D1} added by '+esc(b)+'</div>'):''; }
 function _withRepeat(cm,val){ cm=stripRepeat(cm); if(val){ const p=String(val).split(':'); const tag='[repeat:'+p[0]+(p[0]==='weekly'?(':'+(p[1]!=null?p[1]:1)):'')+']'; cm=(cm?cm+' ':'')+tag; } return cm; }
 function _repVal(cm){ const r=repeatOf(cm); if(!r) return ''; return r.kind==='weekly'?('weekly:'+(r.dow!=null?r.dow:1)):r.kind; }
 function nextRepeatISO(rep, fromISO){
@@ -5855,6 +5863,12 @@ function _listOps(p){
   return out;
 }
 function shopWrite(payload){
+  // Stamp WHO added a task (hidden [by:Name] tag in the comments — so the crew can see who to ask).
+  try{
+    if(payload && /^(addTask|addProjectTask)$/.test(payload.action||'') && payload.user && !/^(shop|design team)$/i.test(String(payload.user).trim()) && !/\[by:/i.test(payload.comments||'')){
+      payload.comments=_withBy(payload.comments||'', payload.user);
+    }
+  }catch(e){}
   if(USE_LISTS_WRITE){
     const ops=_listOps(payload);
     if(ops && ops.length){
@@ -6278,7 +6292,8 @@ function openEditTask(proj, raw){
   document.getElementById('etStatus').value=(t&&t.st)||"Open";
   document.getElementById('etMilestone').value=(t&&/yes/i.test(t.ml||""))?"Yes":"";
   { const dd=document.getElementById('etDue'); if(dd) dd.value=(t&&t.due)?String(t.due).slice(0,10):""; }
-  document.getElementById('etComments').value=stripRepeat((t&&t.cm)||"");
+  document.getElementById('etComments').value=stripBy(stripRepeat((t&&t.cm)||""));
+  window._etBy=_taskBy((t&&t.cm)||"");   // preserve who-added through the edit
   { const rs=document.getElementById('etRepeat'); if(rs) rs.value=_repVal((t&&t.cm)||""); }
   ATT_STAGE.et=(t&&t.files)?t.files.slice():[]; window._etFilesOrig=JSON.stringify(ATT_STAGE.et); attRender('et');
   { const sel=document.getElementById('etMoveDest'), mr=document.getElementById('etMoveRow');
@@ -6299,7 +6314,7 @@ function submitEditTask(){
   if(!task){ msg.style.color='var(--red)'; msg.textContent='Task text is required.'; return; }
   const payload={ action:"editTask", project:window._etProj, taskOld:window._etOld, task:task,
     assigned:_combineAssignees(document.getElementById('etAssigned').value, document.getElementById('etAssigned2').value), status:document.getElementById('etStatus').value,
-    milestone:document.getElementById('etMilestone').value, comments:_withRepeat(document.getElementById('etComments').value.trim(), (document.getElementById('etRepeat')||{}).value||''),
+    milestone:document.getElementById('etMilestone').value, comments:_withBy(_withRepeat(document.getElementById('etComments').value.trim(), (document.getElementById('etRepeat')||{}).value||''), window._etBy||''),
     due:(document.getElementById('etDue')?document.getElementById('etDue').value:''),
     pin:CLOSE_PIN, user:CURRENT_USER };
   const btn=document.getElementById('etSubmit'); btn.disabled=true; btn.textContent="Saving…";
@@ -7689,7 +7704,7 @@ function openProjTaskNew(){
   document.getElementById('ptStart').value=""; document.getElementById('ptFinish').value="";
   document.getElementById('ptPred').value=""; document.getElementById('ptMilestone').value="";
   document.getElementById('ptEstDays').value=""; document.getElementById('ptEstHours').value=""; document.getElementById('ptBudget').value="";
-  document.getElementById('ptComments').value="";
+  document.getElementById('ptComments').value=""; window._ptBy='';
   document.getElementById('ptDelete').style.display='none';
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Add task";
   try{ ptDurFromDates(); }catch(e){}
@@ -7722,7 +7737,7 @@ function openProjTaskEdit(id, projOverride){
   document.getElementById('ptEstDays').value=(t.eD!=null?t.eD:"");
   document.getElementById('ptEstHours').value=(t.eH!=null?t.eH:"");
   document.getElementById('ptBudget').value=(t.bud!=null?t.bud:"");
-  document.getElementById('ptComments').value=t.cm||"";
+  document.getElementById('ptComments').value=stripBy(t.cm||""); window._ptBy=_taskBy(t.cm||"");
   document.getElementById('ptDelete').style.display=(t.id!=null&&t.id!=='')?'':'none';
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Save";
   try{ ptDurFromDates(); }catch(e){}
@@ -7759,7 +7774,7 @@ function submitProjTask(){
     parentId:_parent,
     estDays:document.getElementById('ptEstDays').value, estHours:document.getElementById('ptEstHours').value,
     budget:document.getElementById('ptBudget').value,
-    comments:document.getElementById('ptComments').value.trim() };
+    comments:_withBy(document.getElementById('ptComments').value.trim(), (window._ptId!=null?(window._ptBy||''):'')) };
   f.nonOfficial = !!(p && p.nonOfficial);   // #2: a task added to a non-official project inherits the flag
   const editing=(window._ptId!=null);
   const _oldEdit=editing?projTaskByAnyId(p,window._ptId):null;   // resolve by real TaskID or "s<_id>" handle
@@ -9217,7 +9232,7 @@ function renderFloor(D){
           const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
           const odue=o.due?` <span class="duedate${(o.due<today)?' od':''}">📅 ${esc(fmtMD(o.due))}</span>`:'';
           const orep=repeatOf(o.cm)?' <span title="Repeats — closing it auto-creates the next one">🔁</span>':'';
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}${(!pend&&isHotTask(o.raw||o.disp))?" hot":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${odue}${orep}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}`; };
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}${(!pend&&isHotTask(o.raw||o.disp))?" hot":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${odue}${orep}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}${_byLine(o.cm)}`; };
         let inner="";
         gkeys.forEach(k=>{
           if(!onlyUnassigned){
@@ -10549,7 +10564,7 @@ function renderGhosts(){
   { const c=document.getElementById('ghostCount'); if(c) c.textContent=gj.reduce((a,j)=>a+(j.tasks||[]).filter(t=>!t.done).length,0); }
   if(!gj.length){ box.innerHTML='<div style="color:var(--muted);font-style:italic;padding:16px 4px">✨ No ghost tasks — the Lists are clean.</div>'; return; }
   box.innerHTML=gj.map(j=>`<div style="margin-bottom:14px"><div style="font-weight:800;border-bottom:1px solid var(--line);padding-bottom:3px;margin-bottom:5px;display:flex;align-items:center;gap:8px"><span style="flex:1">${esc(j.project||'(unnamed)')} <span style="color:var(--faint);font-weight:400;font-size:11px">ghost — no floor job</span></span><button class="expandbtn" style="padding:2px 10px;border-color:#22c55e;color:#86efac" onclick="ghostRestore('${escJsAttr(j.project||'')}')" title="This is a REAL job that shouldn't be a ghost? Re-create its floor job: opens ➕ Add job pre-filled with this exact name — set the bay/status/dates and Save, and ALL of these tasks re-attach to it automatically (on your screen instantly, everywhere on the next sync).">🏭 Restore to board…</button></div>`
-    + (j.tasks||[]).filter(t=>!t.done).map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12.5px"><span style="flex:1">${esc(cleanTask(t.t,false))}${t.cm?`<div style="color:var(--faint);font-size:10.5px">${esc(String(t.cm).slice(0,120))}</div>`:''}</span>`
+    + (j.tasks||[]).filter(t=>!t.done).map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12.5px"><span style="flex:1">${esc(cleanTask(t.t,false))}${_mwCleanCm(t.cm)?`<div style="color:var(--faint);font-size:10.5px">${esc(_mwCleanCm(t.cm).slice(0,120))}</div>`:''}${_byLine(t.cm)}</span>`
       +`<button class="expandbtn" style="padding:2px 10px" onclick="ghostClose('${escJsAttr(j.project)}','${escJsAttr(t.t)}')" title="Mark it done (keeps the history)">✓ Close</button>`
       +`<button class="expandbtn" style="padding:2px 10px;border-color:#ef4444;color:#fca5a5" onclick="ghostDelete('${escJsAttr(j.project)}','${escJsAttr(t.t)}')" title="Delete the row entirely">🗑</button></div>`).join('')
     + `</div>`).join('');
@@ -10723,7 +10738,7 @@ function renderSal(D){
       const pend=isPendingClosed(s.project,o.raw);
       const hot=!pend && isHotTask(o.raw||o.disp);
       const drag=(!pend&&o.raw)?` draggable="true" ondragstart="ftDragStart(event,'${escJsAttr(s.project)}','${escJsAttr(o.raw)}')" title="Drag onto another crew's column to re-assign, or onto a job card up top to move it to that trailer (needs code)"`:'';
-      return `<li class="${pend?'done':''}${hot?' hot':''}"${drag}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}</li>`;}).join("")}</ol></div>`; };
+      return `<li class="${pend?'done':''}${hot?' hot':''}"${drag}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}${_byLine(o.cm)}</li>`;}).join("")}</ol></div>`; };
   // ⚠ overdue chip in the panel header — distinct open crew tasks whose due date has passed.
   { const chip=document.getElementById('salOverChip');
     if(chip){ let n=0;
@@ -12263,7 +12278,7 @@ function buildWorkOrders(sel, opts){
       const rows=open.map(o=>{
         const m=String(o.raw||'').match(/#(\d+)/), num=m?m[1]:null;
         const d=(num&&fdet[num])?String(fdet[num]).replace(/\s+/g,' ').trim():'';
-        const note=(o.cm&&!/^Fleetio issue #/i.test(o.cm))?stripRepeat(String(o.cm)):'';
+        const note=(o.cm&&!/^Fleetio issue #/i.test(o.cm))?_mwCleanCm(o.cm):'';
         const _docs=[...(o.files||[]), ...((num&&fdocs[num])||[])].filter((x,ix,ar)=>ar.findIndex(y=>y.url===x.url)===ix);
         const imgs=_docs.filter(x=>/^image\//i.test(x.mime||'')).map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener"><img class="wimg" src="${escA(x.url)}" alt="${escA(x.n||'photo')}"></a>`).join('');
         const files=_docs.filter(x=>!/^image\//i.test(x.mime||'')).map(x=>`<a class="wfile" href="${escA(x.url)}" target="_blank" rel="noopener">\u{1F4CE} ${esc((x.n||'attachment').slice(0,50))}</a>`).join(' ');
@@ -12323,7 +12338,7 @@ function buildJobPunch(j, opts){
   const row=o=>{
     const m=String(o.raw||'').match(/#(\d+)/), num=m?m[1]:null;
     const d=(num&&fdet[num])?String(fdet[num]).replace(/\s+/g,' ').trim():'';
-    const note=(o.cm&&!/^Fleetio issue #/i.test(o.cm))?stripRepeat(String(o.cm)):'';
+    const note=(o.cm&&!/^Fleetio issue #/i.test(o.cm))?_mwCleanCm(o.cm):'';
     const _docs=[...(o.files||[]), ...((num&&fdocs[num])||[])].filter((x,ix,ar)=>ar.findIndex(y=>y.url===x.url)===ix);
     const imgs=_docs.filter(x=>/^image\//i.test(x.mime||'')).map(x=>`<a href="${escA(x.url)}" target="_blank" rel="noopener"><img class="wimg" src="${escA(x.url)}" alt="${escA(x.n||'photo')}"></a>`).join('');
     const files=_docs.filter(x=>!/^image\//i.test(x.mime||'')).map(x=>`<a class="wfile" href="${escA(x.url)}" target="_blank" rel="noopener">\u{1F4CE} ${esc((x.n||'attachment').slice(0,50))}</a>`).join(' ');
@@ -12549,7 +12564,7 @@ function mwSetFollow(name, arr){ try{ localStorage.setItem(_mwFollowKey(name), J
 function mwToggleFollow(proj){ const who=myWorkWho(); if(!who||!proj) return; const cur=mwGetFollow(who); const i=cur.indexOf(proj); if(i>=0) cur.splice(i,1); else cur.push(proj); mwSetFollow(who,cur); try{ renderMyWork(); }catch(e){} }
 function mwPickFollow(sel){ const v=sel&&sel.value; if(v) mwToggleFollow(v); if(sel) sel.value=''; }
 // Clean a task's comments for display: drop the machine tags ([repeat:…], [pt:…], [sales]…, [subjob], [mtg]).
-function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
+function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub|by)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
 function myWorkFor(name){
   const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
   const soon=localISO(Date.parse(today)+7*86400000);
@@ -12561,11 +12576,11 @@ function myWorkFor(name){
   (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
     (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
       if(_whoMatch(t.who,name)){ const fm=String(t.t||'').match(/🔧\s*#(\d+)/);
-        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, kind:'shop', files:t.files||null, cm:_mwCleanCm(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row}}); } }); });
+        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, kind:'shop', files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row}}); } }); });
   (D.projects||[]).forEach(p=>{ const ts=p.tasks||[]; ts.forEach((t,i)=>{ if(/yes/i.test(t.ml||'')) return;
       if(isDoneT(t) || projIsPendingVerify(t)) return;   // pending-verify shows in its own section
       if(_whoMatch(t.who,name)){ let parent=''; if(t.sub){ for(let k=i-1;k>=0;k--){ if(!ts[k].sub){ parent=ts[k].t||''; break; } } }
-        items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name}}); } }); });
+        items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name}}); } }); });
   const od=items.filter(x=>x.due&&x.due<today).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const due=items.filter(x=>x.due&&x.due>=today&&x.due<=soon).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const later=items.filter(x=>!x.due||x.due>soon).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
@@ -12618,6 +12633,7 @@ function _mwRow(x, today){
   let det='';
   if(x.kind==='proj'){ const ctx=[(x.parent?('↳ '+x.parent):''),x.phase,x.ptype].filter(Boolean).join(' · '); if(ctx) det+='<div class="meta" style="font-style:italic">'+esc(ctx)+'</div>'; }
   if(x.cm) det+='<div class="meta">📝 '+esc(x.cm)+'</div>';
+  if(x.by) det+='<div class="meta">🧑 added by '+esc(x.by)+'</div>';
   const fio=(x.kind==='shop'&&x.fnum&&typeof fioDetHtml==='function')?fioDetHtml(x.fnum):'';
   const media=(typeof mediaHtml==='function'&&typeof _taskMedia==='function')?mediaHtml(_taskMedia(x.files, x.kind==='shop'?x.fnum:null)):'';
   return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+fnumline+'</div><div class="meta">'+esc(x.where)+rng+'</div>'+det+fio+(media?('<div style="margin-top:4px">'+media+'</div>'):'')+'</div><div class="right">'+d+nav.chevron+'</div></div>'; }
@@ -12706,6 +12722,7 @@ function buildMyWorkHtml(name){
     if(x.kind==='shop'&&x.fnum){ const it=(typeof fioIssue==='function')?fioIssue(x.fnum):null;
       h+='<div class="ctx"><b>Fleetio #'+esc(x.fnum)+'</b>'+((it&&it.asset)?(' · '+esc(it.asset)):'')+((it&&it.detail)?(' — '+esc(String(it.detail).trim())):'')+'</div>'; }
     if(x.cm) h+='<div class="ctx">\u{1F4DD} '+esc(x.cm)+'</div>';
+    if(x.by) h+='<div class="ctx">\u{1F9D1} added by '+esc(x.by)+'</div>';
     const media=(typeof _taskMedia==='function')?_taskMedia(x.files, x.kind==='shop'?x.fnum:null):(x.files||[]);
     const imgs=(media||[]).filter(f=>/^image\//i.test(f.mime||'')).slice(0,4).map(f=>'<a href="'+escA(f.url)+'" target="_blank" rel="noopener"><img class="rimg" src="'+escA(f.url)+'" alt="photo"></a>').join('');
     const docs=(media||[]).filter(f=>!/^image\//i.test(f.mime||'')).slice(0,4).map(f=>'<a href="'+escA(f.url)+'" target="_blank" rel="noopener" style="color:#1a56db;font-size:10px;margin-right:8px">\u{1F4CE} '+esc(String(f.n||'file').slice(0,40))+'</a>').join('');
@@ -13001,7 +13018,7 @@ function buildCrewSheetHtml(sel, opts){
               : `<a class="attlink" href="${escA(x.url)}" target="_blank" rel="noopener">\u{1F4CE} ${esc((x.n||'attachment').slice(0,42))}</a>`
             ).join('');
           const dueS=o.due?` <span class="due${o.due<todayISO?' od':''}">${o.due<todayISO?'OVERDUE ':'due '}${fmt(o.due)}</span>`:'';
-          const note=(o.cm&&!/^Fleetio issue #/i.test(o.cm))?`<div class="d">${esc(String(o.cm).slice(0,200))}${String(o.cm).length>200?'…':''}</div>`:'';
+          const _ncm=_mwCleanCm(o.cm); const note=(_ncm&&!/^Fleetio issue #/i.test(o.cm))?`<div class="d">${esc(_ncm.slice(0,200))}${_ncm.length>200?'…':''}</div>`:'';
           return `<li>${esc(o.disp)}${dueS}${d?`<div class="d">${esc(d.slice(0,240))}${d.length>240?'…':''}</div>`:''}${note}${att?`<div class="atts">${att}</div>`:''}</li>`;
         }).join("")
       + `</ul></div>`;
@@ -13435,7 +13452,7 @@ function dtbTaskHtml(x){
     +`${x.general?'<span class="dtb-addpin" title="Added on this board (not from a project file)">📌</span>':''}`
     +`<div class="dtb-title">${x.ms?'◆ ':''}${esc(x.title)}</div>`
     +((!x.general&&x.parent)?`<div class="dtb-parent" title="This is a SUBTASK of the task shown">↳ part of <b>${esc(x.parent)}</b></div>`:'')
-    +((!x.general&&x.cm)?`<div class="dtb-parent" title="${escA(x.cm)}">💬 ${esc(x.cm.slice(0,220))}${x.cm.length>220?'…':''}</div>`:'')
+    +((!x.general&&_mwCleanCm(x.cm))?`<div class="dtb-parent" title="${escA(_mwCleanCm(x.cm))}">💬 ${esc(_mwCleanCm(x.cm).slice(0,220))}${_mwCleanCm(x.cm).length>220?'…':''}</div>`:'')
     +`<div class="dtb-meta">${chips.join('')}</div>${noteHtml}${prog}${asgHtml}`
     +(asgOn?'':`<div class="dtb-tacts">${acts}</div>`)+`</div>`;
 }
@@ -15303,7 +15320,7 @@ function renderUnas(){
       ? ` <span class="unas-bay" title="These come from the PROJECT SCHEDULE — tasks assigned to the generic 'MRA Shop' bucket, meaning no crew has picked them up. Only ones starting or finishing within the NEXT 2 WEEKS (or overdue) show here. Tap 👤 to give one a crew — the project schedule updates too.">📋 project schedule · next 2 wks</span>`
       : (j0.bay?` <span class="unas-bay">${esc(j0.bay)}</span>`:'');
     return `<div class="unas-job"><div class="unas-jh">${esc(j0.proj)}${j0.jobNum?` <span class="unas-jn">${esc(j0.jobNum)}</span>`:''}${tag}</div>`
-      + arr.map(t=>{ const ctx=(t.kind==='proj')?[t.par?('\u21b3 '+t.par):'', t.ph, t.cm?t.cm.slice(0,180):''].filter(Boolean).join(' \u00b7 '):'';
+      + arr.map(t=>{ const ctx=(t.kind==='proj')?[t.par?('\u21b3 '+t.par):'', t.ph, _mwCleanCm(t.cm)?_mwCleanCm(t.cm).slice(0,180):''].filter(Boolean).join(' \u00b7 '):'';
         return `<div class="unas-t">${t.kind==='proj'?`<span class="qa" onclick="event.stopPropagation();unasProjAsg('${escA(t.proj)}','${escA(t.handle)}')" title="Assign this project-schedule task to a crew — writes the crew back to the project schedule">\u{1F464}</span><span class="qa" onclick="event.stopPropagation();ptbOpen('${escA(t.proj)}','${escA(t.handle)}')" title="⚒ Break this schedule line into real shop tasks on a trailer — each becomes its own closable task; closing the last one flags this line 🟡 for the PM to verify">⚒</span>`:qaChip(t.proj,t.raw)}<span class="unas-tx">${t.kind==='proj'?'📋 ':''}${esc(t.disp)}</span>${t.kind==='proj'?` <span class="unas-due${(today&&t.due&&t.due<today)?' od':''}" title="Start → finish from the project schedule. It's on this list because the START (or an overdue finish) falls inside the 2-week window — the finish can be later.">▶ ${esc(fmtMD(t.st0||t.due))}${(t.due&&t.due!==t.st0)?' → '+esc(fmtMD(t.due)):''}</span>`:(t.due?` <span class="unas-due${(today&&t.due<today)?' od':''}">📅 ${esc(fmtMD(t.due))}</span>`:'')}${ctx?`<div class="unas-ctx" title="${escA(ctx)}">${esc(ctx)}</div>`:''}</div>`; }).join('')
       + `</div>`;
   }).join('');
