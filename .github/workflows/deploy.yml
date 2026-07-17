@@ -326,6 +326,28 @@ jobs:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
+      # MRA Command Center (new, modular) — hosted in /command/ (thin index.html + styles.css +
+      # app.js + pages/*.js, all same-origin; reads ../data.js). Test build; linked from ☰ Menu.
+      # Loops over every file so adding/renaming modular files needs no deploy.yml change.
+      - name: Upload Command Center (/command/)
+        if: ${{ hashFiles('command/index.html') != '' }}
+        run: |
+            find command -type f | while read -r f; do
+              ct=text/plain
+              case "$f" in
+                *.html) ct=text/html;; *.css) ct=text/css;; *.js) ct=application/javascript;;
+                *.json) ct=application/json;; *.png) ct=image/png;; *.svg) ct=image/svg+xml;;
+                *.jpg|*.jpeg) ct=image/jpeg;;
+              esac
+              az storage blob upload --account-name mrashopdash --container-name '$web' \
+                --name "$f" --file "$f" --content-type "$ct" \
+                --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+            done
+            echo "Uploaded /command/ → https://mrashopdash.z13.web.core.windows.net/command/index.html"
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
       # Cleanup — delete the temporary preview.html blob from the live site.
       - name: Delete preview.html
         if: ${{ inputs.mode == 'cleanup' }}
