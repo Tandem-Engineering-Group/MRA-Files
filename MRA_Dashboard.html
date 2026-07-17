@@ -1651,6 +1651,8 @@
         <button class="mi" data-perm="logins" onclick="closeDrops(); openUsers()" title="Add / edit / remove who can log in to edit, and set their codes (admin only)">👥 Manage logins</button>
         <button class="mi" data-perm="holidays" onclick="closeDrops(); openHolidays()" title="Add or remove company holidays flagged on every schedule (admin only)">📅 Manage holidays</button>
         <button class="mi" data-perm="eotm" onclick="closeDrops(); openEotmEdit()" title="Change the Employee of the Month name + photo (admin only)">🏆 Employee of the Month</button>
+        <button class="mi" data-perm="throughput" onclick="closeDrops(); openThroughput()" title="Owner view: shipped-per-week, average days in bay, bay occupancy + the oldest jobs in bays (admin only for now)">📈 Throughput / Cycle time</button>
+        <button class="mi" data-perm="deadtrackers" onclick="closeDrops(); openDeadTrackers()" title="Units whose GPS tracker has gone quiet (stale/dead) — a fix-list for Doug/Samsara (admin only for now)">📡 Dead trackers</button>
         <div class="mi-div">Quick links</div>
         <div id="linksPop"></div>
       </div>
@@ -3546,6 +3548,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"27.2", date:"2026-07-16", title:"\u{1F4C8} Owner throughput view + \u{1F4E1} dead-tracker fix-list (admin)", items:[
+    "Two new \u2630 Menu tools, <b>admin-only for now</b>: <b>\u{1F4C8} Throughput / Cycle time</b> \u2014 shipped-per-week, average days in bay, bay occupancy, average build time, and the oldest jobs sitting in bays; and <b>\u{1F4E1} Dead trackers</b> \u2014 every unit whose GPS has gone quiet (60+ days dead / 14\u201360 stale), a fix-list for Doug &amp; Samsara. Review them, then we can open the throughput one to the execs." ] },
   { rev:"27.1", date:"2026-07-16", title:"\u23f3 Bay-aging chip — stuck jobs jump out", items:[
     "A bay card now shows a <b>\u23f3 N days in bay</b> chip when a trailer has sat in a real bay <b>14+ days</b> with open work (amber 14+, red 30+) — so long-stuck jobs (Pod 1086, SWC FL1\u2026) stand out instead of blending in. Parking Lot / On Hold / Off-Site aren't flagged (being there a while is normal)." ] },
   { rev:"27.0", date:"2026-07-16", title:"\u{1F64B} MY WORK — your own page when you sign in", items:[
@@ -5407,13 +5411,14 @@ const ROLE_BY_NAME = (function(){ const m={}, g={
   exec:['Tony Amato','John Renaud','Gino Bitonti'],
   shopedit:['Cindy Irland','Robin Wheeler'] };
   for(const role in g) g[role].forEach(n=>{ m[_nmKey(n)]=role; }); return m; })();
+const _ADMINONLY=['throughput','deadtrackers'];
 const ROLE_CAPS = {
-  anon:  { tabs:['floor'],                                            hide:['builder','sales','ghost','logins','holidays','eotm'] },
-  staff: { tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm'] },
-  shopedit:{ tabs:['floor','mywork','fleetio','assets'],              hide:['builder','sales','ghost','logins','holidays','eotm'] },
-  design:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['builder','sales','ghost','logins','holidays','eotm'] },
-  exec:  { tabs:['floor','mywork','projects','fleetio','assets'],     hide:['ghost','logins','holidays','eotm'] },
-  editor:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['logins'] },
+  anon:  { tabs:['floor'],                                            hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  staff: { tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  shopedit:{ tabs:['floor','mywork','fleetio','assets'],              hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  design:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  exec:  { tabs:['floor','mywork','projects','fleetio','assets'],     hide:['ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  editor:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['logins'].concat(_ADMINONLY) },
   admin: { tabs:['floor','mywork','projects','fleetio','assets'],     hide:[] }
 };
 const SSO = (function(){
@@ -12675,6 +12680,58 @@ function openDeficiency(pm){ if(typeof closeDrops==='function') closeDrops();
   const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap again.'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+// ============================ Owner throughput / cycle-time (admin) rev 27.2 ============================
+function buildThroughputHtml(){
+  const D=window.MRA_DATA||{}; const jobs=D.jobs||[]; const today=D.todayISO||localISO(Date.now());
+  const ago=n=>localISO(Date.parse(today)-n*86400000);
+  const shipped=jobs.filter(j=>(j.status||'').toLowerCase()==='shipped'&&j.completionISO);
+  const inRange=(a,b)=>shipped.filter(j=>j.completionISO>ago(a)&&j.completionISO<=ago(b)).length;
+  const wk=[{l:'This week',n:inRange(7,0)},{l:'Last week',n:inRange(14,7)},{l:'2 wks ago',n:inRange(21,14)},{l:'3 wks ago',n:inRange(28,21)}];
+  const isPark=b=>/parking|lot/i.test(b||''), isHeld=b=>/hold|next\s*up|off.?site|parts/i.test(b||'');
+  const cur=jobs.filter(j=>(j.status||'').toLowerCase()!=='shipped'&&j.category==='bay'&&!isPark(j.bay)&&!isHeld(j.bay));
+  const ages=cur.filter(j=>j.startISO).map(j=>daysBetween(today,j.startISO)).filter(x=>x!=null&&x>=0);
+  const avgAge=ages.length?Math.round(ages.reduce((a,c)=>a+c,0)/ages.length):0;
+  const phys=(D.physicalBays||[]).filter(b=>!isPark(b)&&!isHeld(b));
+  const occ=new Set(cur.map(j=>j.bay)).size, totalBays=phys.length||occ;
+  const recent=shipped.filter(j=>j.startISO&&j.completionISO>ago(60)).map(j=>daysBetween(j.completionISO,j.startISO)).filter(x=>x!=null&&x>=0);
+  const avgBuild=recent.length?Math.round(recent.reduce((a,c)=>a+c,0)/recent.length):0;
+  const oldest=cur.filter(j=>j.startISO).map(j=>({p:j.project,jn:j.jobNum,bay:j.bay,d:daysBetween(today,j.startISO),open:j.openCount||0})).sort((a,b)=>b.d-a.d).slice(0,10);
+  const now=new Date(), stamp=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
+  const maxW=Math.max(1,...wk.map(w=>w.n));
+  const tile=(n,l,c)=>'<div class="st" style="border-left-color:'+c+'"><div class="n" style="color:'+c+'">'+n+'</div><div class="l">'+l+'</div></div>';
+  const css='body{font-family:Segoe UI,Arial,sans-serif;color:#111;max-width:820px;margin:0 auto;padding:24px;background:#f2f3f5}h1{color:#e04826;margin:0}.sub{color:#666;font-size:12px;margin:4px 0 16px}.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}.st{flex:1;min-width:150px;background:#fff;border:1px solid #dfe5ec;border-left:4px solid #999;border-radius:10px;padding:12px 14px}.st .n{font-size:28px;font-weight:900;line-height:1}.st .l{font-size:10px;letter-spacing:.5px;color:#7b8794;font-weight:700;margin-top:4px}.card{background:#fff;border:1px solid #dfe5ec;border-radius:10px;padding:14px 16px;margin-bottom:16px}h2{font-size:14px;border-bottom:2px solid #e04826;padding-bottom:4px;margin:0 0 10px}.bar{height:22px;background:#e04826;border-radius:4px;min-width:2px}.brow{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:13px}.brow .bl{width:80px;color:#555}.brow .bn{font-weight:800;width:24px}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:5px 8px;border-bottom:1px solid #eee}th{color:#7b8794;font-size:10px;letter-spacing:.5px}';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Throughput</title><style>'+css+'</style></head><body>'
+    +'<h1>Shop Throughput</h1><div class="sub">'+stamp+' · owner view</div>'
+    +'<div class="stats">'+tile(wk[0].n,'SHIPPED THIS WEEK','#15803d')+tile(wk[1].n,'SHIPPED LAST WEEK','#1d4ed8')+tile(avgAge+'d','AVG DAYS IN BAY','#b45309')+tile(occ+' / '+totalBays,'BAYS OCCUPIED','#e04826')+tile(avgBuild+'d','AVG BUILD (ship−start, 60d)','#475569')+'</div>'
+    +'<div class="card"><h2>📦 Shipped — last 4 weeks</h2>'+wk.map(w=>'<div class="brow"><span class="bl">'+w.l+'</span><div class="bar" style="width:'+Math.round(w.n/maxW*380)+'px"></div><span class="bn">'+w.n+'</span></div>').join('')+'</div>'
+    +'<div class="card"><h2>⏳ Oldest jobs in a bay</h2><table><tr><th>PROJECT</th><th>JOB #</th><th>BAY</th><th>DAYS</th><th>OPEN</th></tr>'+(oldest.length?oldest.map(o=>'<tr><td>'+esc(o.p||'')+'</td><td>'+esc(o.jn||'')+'</td><td>'+esc(o.bay||'')+'</td><td><b style="color:'+(o.d>=30?'#b91c1c':o.d>=14?'#b45309':'#111')+'">'+o.d+'</b></td><td>'+o.open+'</td></tr>').join(''):'<tr><td colspan=5 style="color:#999">— none —</td></tr>')+'</table></div>'
+    +'</body></html>';
+}
+function openThroughput(){ if(typeof closeDrops==='function') closeDrops();
+  const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups, then tap again.'); return; }
+  w.document.open(); w.document.write(buildThroughputHtml()); w.document.close(); }
+// ============================ Dead-tracker fix-list (admin) ============================
+function buildDeadTrackersHtml(){
+  const D=window.MRA_DATA||{}; const locs=(D.fleetio&&D.fleetio.locations)||{}; const fleet=(D.fleetio&&D.fleetio.fleet)||[];
+  const nameOf=k=>{ const f=fleet.find(x=>String(x.f)===String(k)); return f?(f.nm||''):''; };
+  const now=Date.now(); const rows=[];
+  Object.keys(locs).forEach(k=>{ const v=locs[k]; if(!v||typeof v!=='object'||!v.atISO) return;
+    const t=new Date(v.atISO).getTime(); if(!t||isNaN(t)) return; const days=Math.round((now-t)/86400000);
+    if(days>=14) rows.push({unit:k,name:nameOf(k),place:String(v.yard||v.place||'?'),days,src:v.src||'samsara'}); });
+  rows.sort((a,b)=>b.days-a.days);
+  const dead=rows.filter(r=>r.days>60), stale=rows.filter(r=>r.days>=14&&r.days<=60);
+  const now2=new Date(), stamp=(now2.getMonth()+1)+'/'+now2.getDate()+'/'+now2.getFullYear();
+  const tbl=(arr)=>arr.length?('<table><tr><th>UNIT</th><th>NAME</th><th>LAST SEEN</th><th>DAYS QUIET</th><th>SRC</th></tr>'+arr.map(r=>'<tr><td><b>'+esc(r.unit)+'</b></td><td>'+esc(r.name.slice(0,40))+'</td><td>'+esc(r.place.slice(0,32))+'</td><td><b style="color:'+(r.days>60?'#b91c1c':'#b45309')+'">'+r.days+'d</b></td><td>'+esc(r.src)+'</td></tr>').join('')+'</table>'):'<p style="color:#999">— none —</p>';
+  const css='body{font-family:Segoe UI,Arial,sans-serif;color:#111;max-width:820px;margin:0 auto;padding:24px;background:#f2f3f5}h1{color:#e04826;margin:0}.sub{color:#666;font-size:12px;margin:4px 0 16px}.card{background:#fff;border:1px solid #dfe5ec;border-radius:10px;padding:14px 16px;margin-bottom:16px}h2{font-size:14px;border-bottom:2px solid #e04826;padding-bottom:4px;margin:0 0 10px}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:5px 8px;border-bottom:1px solid #eee}th{color:#7b8794;font-size:10px;letter-spacing:.5px}';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Dead Trackers</title><style>'+css+'</style></head><body>'
+    +'<h1>GPS Trackers to Fix</h1><div class="sub">'+stamp+' · '+dead.length+' dead · '+stale.length+' stale · a work-list for Doug / Samsara</div>'
+    +'<div class="card"><h2>🔴 Dead — no report in 60+ days ('+dead.length+')</h2>'+tbl(dead)+'</div>'
+    +'<div class="card"><h2>🟠 Stale — 14–60 days quiet ('+stale.length+')</h2>'+tbl(stale)+'</div>'
+    +'</body></html>';
+}
+function openDeadTrackers(){ if(typeof closeDrops==='function') closeDrops();
+  const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups, then tap again.'); return; }
+  w.document.open(); w.document.write(buildDeadTrackersHtml()); w.document.close(); }
 function woPrint(){
   const sel=[...document.querySelectorAll('#ppCrews input:checked')].map(x=>PRINT_CREWS[+x.dataset.i]);
   if(!sel.length){ alert('Tick at least one crew for their work orders.'); return; }
