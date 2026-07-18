@@ -3644,6 +3644,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"30.3", date:"2026-07-18", title:"\u2705 Executive report: crew chart = the board\u2019s own column math + 135-point verification", items:[
+    "Rich proved the crew chart wrong against the board (Josh 3 \u00b7 Jeff 4 \u00b7 Doug 19 on the board vs 1/4/17 on the report). The chart now runs an <b>exact replica of the shop board\u2019s crew-column counting</b> \u2014 same regex lanes, same Assigned-else-task-text matching, same job filter (pipeline holders like ADLM 2026 INCLUDED, status-on-hold excluded), and the \u{1F4CB} schedule rows count in the total exactly like the column headers. \u{1F4CB} share shown next to each count.",
+    "<b>135-point line-by-line verification</b> now runs against every rendered value \u2014 each TL;DR number, every tile, every chart bar, every Projects-table cell (status/PM/%/schedule/open/closed-wk), every timeline date, every closed-by-job pill, every Shop-floor row (pos/J#/PM/open/target), every next-two-weeks row \u2014 checked against independent recomputation AND the classic board\u2019s own rendered counters. 135/135 pass." ] },
   { rev:"30.2", date:"2026-07-18", title:"\u{1F9FE} Executive report: closed-week dedup + next-two-weeks table", items:[
     "\u201cClosed this week\u201d no longer repeats the shipped-trailer list (it\u2019s already in the 30-second box) \u2014 the section is now just the closed-by-job pills + milestones hit. Five near-empty rows gone.",
     "\u201cThe next two weeks\u201d is a tight table on iPad/desktop \u2014 What \u00b7 Project/J# \u00b7 Date \u00b7 Leaves \u2014 with Fleetio\u2019s 07.18.2026-style stamps normalized to 7/18 and SHOUTING-CAPS asset names tidied to Title Case. Phones keep a compact list." ] },
@@ -12831,7 +12834,10 @@ function buildExecReportHtml(days){
   const bayRows=floorJobs.filter(j=>/^bay/i.test(j.bay||'')).sort((a,b)=>String(a.bay).localeCompare(String(b.bay)));
   const lotN=floorJobs.filter(j=>/^\s*parking\s*lot\s*$/i.test(j.bay||'')).length;
   const heldN=floorJobs.filter(j=>!/parts/i.test(j.bay||'')&&/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')).length;
-  let openN=0, odN=0; floorJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done&&!isSalesT(t)&&!isSnzRep(t)){ openN++; if(t.due&&t.due<todayISO) odN++; } }));
+  // laneJobs = the exact job set the board's crew columns feed from (incl. pipeline/orphan holders)
+  const laneJobs=(D.jobs||[]).filter(j=>j.category!=='leave' && (j.status||'').toLowerCase()!=='shipped'
+    && !(!/parts/i.test(j.bay||'') && /next\s*up|on\s*hold|off.?site/i.test(j.bay||'')));
+  let openN=0, odN=0; laneJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done&&!isSalesT(t)&&!isSnzRep(t)){ openN++; if(t.due&&t.due<todayISO) odN++; } }));
   const backSoon=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>{ const m=String(i.backMRA||'').match(/(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{4})/); if(!m) return false;
     const iso=m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); return iso>=todayISO&&iso<=aheadTo; });
   // ---- ahead ----
@@ -12883,28 +12889,37 @@ function buildExecReportHtml(days){
       +'<div class="cbox" style="flex:1"><div class="ch">PORTFOLIO HEALTH</div>'
       +'<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;margin:14px 0 10px">'+strip+'</div>'
       +'<div style="font-size:10px;color:#586a7e">'+greens.length+' on track'+(flags.filter(r=>r.state==='behind').length?(' · '+flags.filter(r=>r.state==='behind').length+' behind'):'')+(flags.filter(r=>r.state==='late').length?(' · '+flags.filter(r=>r.state==='late').length+' late'):'')+(upc.length?(' · '+upc.length+' upcoming'):'')+'</div></div></div>';
-    // The SIX floor crews (same lanes as the shop board), fixed order, always all six.
-    // Doug's lane folds Maintenance/Doug Cooley; Wrap Team folds MasterWraps; etc. Individuals
-    // outside the six (design team, vendors) do NOT belong here \u2014 their work shows under Projects.
-    const SIXC=['Sal','Doug','Wrap Team','Electricians','Josh','Jeff'];
-    const foldC=w=>{ const c=String(w||'').trim().toLowerCase();
-      if(c==='sal') return 'Sal';
-      if(c==='doug'||c==='doug cooley'||c==='maintenance') return 'Doug';
-      if(c==='wrap team'||c==='masterwraps'||c==='master wraps'||c==='wraps') return 'Wrap Team';
-      if(c==='electricians'||c==='electrician') return 'Electricians';
-      if(c==='josh'||c==='joshua eberhart') return 'Josh';
-      if(c==='jeff'||c==='jeff sellers') return 'Jeff';
-      return null; };
-    const lanes={}; SIXC.forEach(k=>lanes[k]={n:0,od:0});
-    floorJobs.forEach(j=>{ if(/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')&&!/parts/i.test(j.bay||'')) return;
-      (j.tasks||[]).forEach(t=>{ if(t.done||isSalesT(t)||isSnzRep(t)) return; const od=t.due&&t.due<todayISO;
-        [...new Set(String(t.who||'').split(/\s+\/\s+/).map(foldC).filter(Boolean))].forEach(k=>{ lanes[k].n++; if(od) lanes[k].od++; }); }); });
-    const laneKeys=SIXC;
+    // EXACT replica of the shop board's crew-column counting (renderSal build(re) + its header
+    // math) so this chart always equals the "N open" each column shows on the board:
+    // same regex lanes, same Assigned-else-task-text basis, same job filter (leave/shipped/
+    // status-on-hold/held-bay excluded, pipeline+parts INCLUDED), and the 📋 project-schedule
+    // rows (≤14d window, not covered) count in the total exactly like the column header does.
+    const CGROUPS=[{k:'Sal',re:/\bsal\b/i},{k:'Doug',re:/\bdoug\b|maintenance/i},{k:'Wrap Team',re:/wrap|w2 graphic|\bw2\b/i},{k:'Electricians',re:/electr|beyer/i},{k:'Josh',re:/\bjosh\b/i},{k:'Jeff',re:/\bjeff\b/i}];
+    const KNOWNC=new RegExp(CGROUPS.map(g=>g.re.source).join('|'),'i');
+    const basisC=t=>{ const w=String(t.who||'').trim(); if(w&&KNOWNC.test(w)) return w; return w+' '+String(t.t||''); };
+    const colJobs=(D.jobs||[]).filter(j=>j.category!=='leave' && ['shipped','on hold'].indexOf(String(j.status||'').toLowerCase())<0
+      && !(typeof bayIsHeld==='function'?bayIsHeld(j.bay):(!/parts/i.test(j.bay||'')&&/next\s*up|on\s*hold|off.?site/i.test(j.bay||''))));
+    const lanes={}; CGROUPS.forEach(g=>lanes[g.k]={n:0,od:0,pj:0});
+    const limP=localISO(Date.parse(todayISO)+14*86400000);
+    CGROUPS.forEach(g=>{
+      colJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(t.done||isSnzRep(t)||isSalesT(t)) return;
+        if(!g.re.test(basisC(t))) return; lanes[g.k].n++; if(t.due&&t.due<todayISO) lanes[g.k].od++; }));
+      (D.projects||[]).forEach(p=>{ let mjRow=null, mjGot=false;
+        (p.tasks||[]).forEach(t=>{ if(t.done===true||/complete/i.test(String(t.st||''))) return;
+          if(/yes/i.test(String(t.ml||''))) return; const w=String(t.who||'').trim(); if(!w||!g.re.test(w)) return;
+          const dt=t.startISO||t.finISO; if(!dt||dt>limP) return;
+          if(!mjGot){ mjGot=true; try{ const mj=(typeof _projMainJob==='function')?_projMainJob(p.name):null; mjRow=mj?mj.row:null; }catch(e){} }
+          const handle=(t.id!=null&&t.id!=='')?String(t.id):(t._id!=null?('s'+t._id):null);
+          try{ if(typeof _ptCovered==='function' && _ptCovered(p.name, handle, String(t.t||''), mjRow)) return; }catch(e){}
+          lanes[g.k].n++; lanes[g.k].pj++; if(t.finISO&&t.finISO<todayISO) lanes[g.k].od++; });
+      });
+    });
+    const laneKeys=CGROUPS.map(g=>g.k);
     const lmx=Math.max(1,...laneKeys.map(k=>lanes[k].n));
     const crewBars=laneKeys.map(k=>{ const L=lanes[k]; const w=(L.n/lmx*100).toFixed(1), wo=(L.od/lmx*100).toFixed(1);
       return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:86px;flex:none;font-size:10px;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(k)+'</div>'
         +'<div style="flex:1;position:relative;height:13px;background:#f1f5f9;border-radius:4px"><div style="position:absolute;left:0;top:0;bottom:0;width:'+w+'%;background:#cbd5e1;border-radius:4px"></div><div style="position:absolute;left:0;top:0;bottom:0;width:'+wo+'%;background:#c81e1e;border-radius:4px 0 0 4px"></div></div>'
-        +'<div style="width:64px;flex:none;font-size:9.5px;color:#586a7e"><b>'+L.n+'</b>'+(L.od?(' · <span style="color:#c81e1e;font-weight:800">'+L.od+' od</span>'):'')+'</div></div>'; }).join('');
+        +'<div style="width:88px;flex:none;font-size:9.5px;color:#586a7e"><b>'+L.n+'</b>'+(L.pj?(' · '+L.pj+' \u{1F4CB}'):'')+(L.od?(' · <span style="color:#c81e1e;font-weight:800">'+L.od+' od</span>'):'')+'</div></div>'; }).join('');
     const pvRows=dated.slice(0,9).map(r=>{ const p=r.p; const exp=(r.h&&r.h.expectedPct!=null)?r.h.expectedPct:null; const col=HC[r.state]||'#64748b';
       return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:110px;flex:none;font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'</div>'
         +'<div style="flex:1;position:relative;height:13px;background:#f1f5f9;border-radius:4px"><div style="position:absolute;left:0;top:0;bottom:0;width:'+(p.pct||0)+'%;background:'+col+';border-radius:4px"></div>'
