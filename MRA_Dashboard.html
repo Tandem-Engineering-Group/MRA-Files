@@ -3644,6 +3644,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"30.4", date:"2026-07-18", title:"\u{1F4CB} Executive report: card-true floor counts, named milestones, progress-filled gantt", items:[
+    "Rich caught Medtronic reading \u201c1 open\u201d while its bay card shows \u201c1 task \u00b7 \u{1F4CB} 8 schedule\u201d. The Shop-floor table now shows BOTH, straight from the board\u2019s own schedule-surfacing code: <b>Open \u00b7 \u{1F4CB} sched</b> per trailer (Medtronic = 1 \u00b7 8 \u{1F4CB}).",
+    "The 30-second box no longer drops naked gate codes \u2014 milestones read <b>project first</b>: \u201cCisco milestone \u2018G2a \u2014 Drawing Review 2 / Design Approved\u2019 7/31\u201d.",
+    "<b>Program timeline bars are progress-filled</b>: solid fill to the exact % complete over a light track, with the % printed on the bar \u2014 SMC\u2019s 72% reads as a nearly-full bar, Trumpf\u2019s 20% as a short fill.",
+    "Verification suite extended to police all three (\u{1F4CB} counts vs the board\u2019s _PJBYROW map, bar fills vs pct, milestone naming): <b>144/144 checks pass</b>." ] },
   { rev:"30.3", date:"2026-07-18", title:"\u2705 Executive report: crew chart = the board\u2019s own column math + 135-point verification", items:[
     "Rich proved the crew chart wrong against the board (Josh 3 \u00b7 Jeff 4 \u00b7 Doug 19 on the board vs 1/4/17 on the report). The chart now runs an <b>exact replica of the shop board\u2019s crew-column counting</b> \u2014 same regex lanes, same Assigned-else-task-text matching, same job filter (pipeline holders like ADLM 2026 INCLUDED, status-on-hold excluded), and the \u{1F4CB} schedule rows count in the total exactly like the column headers. \u{1F4CB} share shown next to each count.",
     "<b>135-point line-by-line verification</b> now runs against every rendered value \u2014 each TL;DR number, every tile, every chart bar, every Projects-table cell (status/PM/%/schedule/open/closed-wk), every timeline date, every closed-by-job pill, every Shop-floor row (pos/J#/PM/open/target), every next-two-weeks row \u2014 checked against independent recomputation AND the classic board\u2019s own rendered counters. 135/135 pass." ] },
@@ -12864,7 +12869,10 @@ function buildExecReportHtml(days){
       +dated.map(r=>{ const p=r.p, st=pctf(Date.parse(p.startISO)), e=pctf(Date.parse(p.finishISO));
         return '<div class="gxr"><div class="gxl">'+esc(p.name)+'<small>'+esc((p.pm||'').split(' ')[0])+(p.pct!=null?(' · '+p.pct+'%'):'')+'</small></div>'
           +'<div class="gxt"><span class="gxnow" style="'+tl+'"></span>'
-          +'<div class="gxb" style="left:'+st.toFixed(1)+'%;width:'+Math.max(0.8,e-st).toFixed(1)+'%;background:'+(HC[r.state]||'#64748b')+'" title="'+escA(p.name+' '+fmt(p.startISO)+' → '+fmt(p.finishISO))+'"></div></div>'
+          +(function(){ const wPct=Math.max(0.8,e-st); const done=(p.pct!=null?Math.max(0,Math.min(100,p.pct)):0); const col=(HC[r.state]||'#64748b');
+            return '<div class="gxb" data-pct="'+done+'" style="left:'+st.toFixed(1)+'%;width:'+wPct.toFixed(1)+'%;background:'+col+'40" title="'+escA(p.name+' · '+done+'% done · '+fmt(p.startISO)+' → '+fmt(p.finishISO))+'">'
+              +'<div class="gxbf" style="width:'+done+'%;background:'+col+'"></div>'
+              +(wPct>=8?('<span class="gxpct">'+done+'%</span>'):'')+'</div></div>'; })()
           +'<div class="gxd">'+fmtMDs(p.startISO)+' →<br><b>'+fmt(p.finishISO)+'</b></div></div>'; }).join('')+'</div>';
   }
   // ---- weekly buckets (shared: charts + week-over-week deltas) ----
@@ -12938,7 +12946,7 @@ function buildExecReportHtml(days){
   tldr.push('\u{1F4CA} <b>'+greens.length+' of '+(greens.length+flags.length)+' active projects on track</b>'+(flags.length?(' — watching: '+flags.map(r=>'<b>'+esc(r.p.name)+'</b> ('+(r.state==='late'?'late':'behind')+(r.b.odN?(', '+r.b.odN+' past-due'):'')+', '+esc((r.p.pm||'—').split(' ')[0])+')').join(' · ')):' — nothing flagged'));
   tldr.push('\u{1F3ED} <b>Floor:</b> '+bayRows.length+' in bays · '+lotN+' in the lot · '+heldN+' on hold'+(backSoon.length?(' · '+backSoon.length+' returning ≤2 wks'):''));
   if(odN||fioOd) tldr.push('⚠ <b>'+odN+' shop tasks overdue</b>'+(fioOd?(' · '+fioOd+' fleet issues overdue'):''));
-  if(finAhead.length||msAhead.length) tldr.push('⏰ <b>Next 2 weeks:</b> '+finAhead.map(r=>esc(r.p.name)+' finishes '+fmtMDs(r.p.finishISO)).concat(msAhead.slice(0,3).map(m=>'◆ '+esc(m.txt)+' '+fmtMDs(m.d))).join(' · '));
+  if(finAhead.length||msAhead.length) tldr.push('⏰ <b>Next 2 weeks:</b> '+finAhead.map(r=>'<b>'+esc(r.p.name)+'</b> finishes '+fmtMDs(r.p.finishISO)).concat(msAhead.slice(0,3).map(m=>'<b>'+esc(m.src)+'</b> milestone \u201c'+esc(m.txt)+'\u201d '+fmtMDs(m.d))).join(' · '));
   const tile=(n,lab,col)=>'<div class="st" style="border-left-color:'+col+'"><div class="n" style="color:'+col+'">'+n+'</div><div class="l">'+lab+'</div></div>';
   // ---- project CARDS (separation Rich asked for; phone-friendly) ----
   const gateTxt=b=>(b&&b.gate)?('next: <b>'+esc(b.gate.name)+'</b> '+fmtMDs(b.gate.dateISO)):'';
@@ -12967,6 +12975,9 @@ function buildExecReportHtml(days){
   const rollup=doneTop.length?('<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">'+doneTop.slice(0,8).map(k=>'<span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px">'+esc(k)+' · '+doneBy[k]+'</span>').join('')+(doneTop.length>8?('<span style="color:#7b8794;font-size:11px;padding:3px 4px">+ '+doneTop.slice(8).reduce((a,k)=>a+doneBy[k],0)+' more on '+(doneTop.length-8)+' other jobs</span>'):'')+'</div>'):'<div class="empty">Nothing closed in the window.</div>';
   // ---- shop floor grouped BY BAY (the separation Rich asked for) ----
   let floorHtml='', floorTable='';
+  try{ if(typeof _pjRebuild==='function') _pjRebuild(); }catch(e){}
+  const _pjM=window._PJBYROW||{};
+  const pjN=j=>((_pjM[String(j.row)]||[]).length);
   { const byBay={}, order=[];
     bayRows.forEach(j=>{ const m=String(j.bay||'').match(/bay\s*(\d+)/i); const k=m?('BAY '+m[1]):String(j.bay||'').toUpperCase();
       if(!(k in byBay)){ byBay[k]=[]; order.push(k); } byBay[k].push(j); });
@@ -12975,14 +12986,14 @@ function buildExecReportHtml(days){
     floorHtml=order.length?order.map(k=>'<div class="bayh">\u{1F3ED} '+esc(k)+'</div>'
       +byBay[k].map(j=>{ const op=opN(j);
         return '<div class="bjob"><div><div class="bpos">'+posOf(j)+'</div><div class="bnm">'+esc(j.project)+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+'</div>'+(j.pm&&j.pm!=='N/A'?('<div style="font-size:10px;color:#7b8794">'+esc(j.pm)+'</div>'):'')+'</div>'
-          +'<div class="bmeta"><b>'+op+' open</b>'+(j.completionISO?('<br>target '+fmtMDs(j.completionISO)):'')+'</div></div>'; }).join('')).join('')
+          +'<div class="bmeta"><b>'+op+' open</b>'+(pjN(j)?('<br>'+pjN(j)+' \u{1F4CB} sched'):'')+(j.completionISO?('<br>target '+fmtMDs(j.completionISO)):'')+'</div></div>'; }).join('')).join('')
       :'<div class="empty">No trailers in bays.</div>';
-    floorTable=order.length?('<table class="xtab"><thead><tr><th>Pos</th><th>Trailer / Job</th><th>J#</th><th>PM</th><th>Open</th><th>Target</th></tr></thead><tbody>'
+    floorTable=order.length?('<table class="xtab"><thead><tr><th>Pos</th><th>Trailer / Job</th><th>J#</th><th>PM</th><th>Open \u00b7 \u{1F4CB} sched</th><th>Target</th></tr></thead><tbody>'
       +order.map(k=>'<tr class="xg"><td colspan="6">\u{1F3ED} '+esc(k)+'</td></tr>'
         +byBay[k].map(j=>'<tr><td style="font-size:9px;font-weight:800;color:#94a3b8">'+posOf(j)+'</td>'
           +'<td style="font-weight:700">'+esc(j.project)+'</td><td>'+(j.jobNum?'<span class="src">'+esc(j.jobNum)+'</span>':'\u2014')+'</td>'
           +'<td>'+((j.pm&&j.pm!=='N/A')?esc(j.pm):'\u2014')+'</td>'
-          +'<td class="num">'+opN(j)+'</td><td class="num">'+(j.completionISO?fmtMDs(j.completionISO):'\u2014')+'</td></tr>').join('')).join('')
+          +'<td class="num">'+opN(j)+(pjN(j)?(' \u00b7 '+pjN(j)+' \u{1F4CB}'):'')+'</td><td class="num">'+(j.completionISO?fmtMDs(j.completionISO):'\u2014')+'</td></tr>').join('')).join('')
       +'</tbody></table>'):'<div class="empty">No trailers in bays.</div>'; }
   // normalize Fleetio's 07.18.2026-style stamps to the report's M/D form
   const nDate=v=>{ const m=String(v||'').match(/(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{4})/); return m?((+m[1])+'/'+(+m[2])):String(v||''); };
@@ -13027,7 +13038,9 @@ function buildExecReportHtml(days){
     +'.gxl small{display:block;color:#7b8794;font-weight:400;font-size:8.5px}'
     +'.gxt{flex:1;position:relative;height:19px}.gxk{position:absolute;top:0;font-size:8px;color:#94a3b8;white-space:nowrap}'
     +'.gxnow{position:absolute;top:0;bottom:0;width:1px;background:#c81e1e;opacity:.45}'
-    +'.gxb{position:absolute;top:4px;height:11px;border-radius:4px}'
+    +'.gxb{position:absolute;top:3px;height:13px;border-radius:4px;overflow:hidden}'
+    +'.gxbf{position:absolute;left:0;top:0;bottom:0;border-radius:4px 0 0 4px}'
+    +'.gxpct{position:absolute;right:4px;top:0;font-size:8px;font-weight:900;color:#1e293b;line-height:13px;text-shadow:0 0 2px #fff}'
     +'.gxd{width:92px;flex:none;font-size:9px;color:#586a7e;font-weight:600;text-align:right;line-height:1.3}'
     +'.rhead{display:flex;align-items:center;gap:15px;border-bottom:3px solid #e04826;padding-bottom:12px;margin-bottom:14px}'
     +'.rlogo{height:48px;width:auto;border-radius:8px}'
