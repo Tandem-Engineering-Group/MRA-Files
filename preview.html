@@ -3644,6 +3644,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"30.5", date:"2026-07-18", title:"\u{1F517} Morning reports LOCKSTEP \u2014 exec \u00b7 PM \u00b7 floor recap count with ONE set of rules", items:[
+    "Rich: three reports sent the same morning can\u2019t each show different data. New shared \u201creport facts\u201d helpers (the board\u2019s own lane rules) now feed the Executive report, the PM report and the Floor recap \u2014 same job set, same open-task rule (no shipped/on-hold jobs, no held bays, no snoozed repeats, no sales placeholders) everywhere.",
+    "Fixes this caught: the Floor recap\u2019s \u201cSTILL OPEN floor-wide\u201d was counting leftover tasks on shipped jobs, held bays and snoozed repeat copies (116 vs the true 78) \u2014 now identical to the exec report and board lanes. The PM report\u2019s coming-due list no longer shows snoozed future repeat copies.",
+    "Verification grew to <b>149 checks incl. cross-report assertions</b> \u2014 recap closed == exec closed, recap still-open == exec open, PM past-due == exec past-due (Medtronic 26 == 26 == 26). All pass." ] },
   { rev:"30.4", date:"2026-07-18", title:"\u{1F4CB} Executive report: card-true floor counts, named milestones, progress-filled gantt", items:[
     "Rich caught Medtronic reading \u201c1 open\u201d while its bay card shows \u201c1 task \u00b7 \u{1F4CB} 8 schedule\u201d. The Shop-floor table now shows BOTH, straight from the board\u2019s own schedule-surfacing code: <b>Open \u00b7 \u{1F4CB} sched</b> per trailer (Medtronic = 1 \u00b7 8 \u{1F4CB}).",
     "The 30-second box no longer drops naked gate codes \u2014 milestones read <b>project first</b>: \u201cCisco milestone \u2018G2a \u2014 Drawing Review 2 / Design Approved\u2019 7/31\u201d.",
@@ -12639,6 +12643,18 @@ function openJobPunch(row){
 // ---------- 📧 DAILY FLOOR RECAP (production meeting ask — "that is my dream"): everything that
 // CLOSED on the floor in the last N days (who + photos) plus what's still open per job. Served at
 // ?recap=1 (&days=7 for a week) so a scheduled Power Automate email can just send the link.
+/* ---------- LOCKSTEP report facts ----------
+   Every morning report (Executive ?exec=1 · PM ?recap=1&pm= · Floor recap ?recap=1 ·
+   Deficiency ?fix=1) must count with THESE shared rules so three reports sent the same
+   morning can never disagree. The rules are the shop board's own lane rules. */
+function _rptLaneJobs(){ const D=window.MRA_DATA||{};
+  return (D.jobs||[]).filter(j=>j.category!=='leave'
+    && ['shipped','on hold'].indexOf(String(j.status||'').toLowerCase())<0
+    && !(typeof bayIsHeld==='function'?bayIsHeld(j.bay):(!/parts/i.test(j.bay||'')&&/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')))); }
+function _rptOpenT(t){ return !t.done && !isSalesT(t) && !isSnzRep(t); }
+function _rptOpenCounts(){ const today=((window.MRA_DATA||{}).todayISO)||localISO(Date.now());
+  let n=0, od=0; _rptLaneJobs().forEach(j=>(j.tasks||[]).forEach(t=>{ if(_rptOpenT(t)){ n++; if(t.due&&t.due<today) od++; } }));
+  return {n:n, od:od}; }
 function buildFloorRecapHtml(days){
   days=Math.max(1,+days||1);
   const D=window.MRA_DATA||{};
@@ -12648,12 +12664,12 @@ function buildFloorRecapHtml(days){
   const now=new Date(), rDate=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
   const order=(D.physicalBays||[]).slice(); const oIdx=b=>{const i=order.indexOf(b); return i<0?99:i;};
   const jobs=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0 && j.category!=='pipeline');
-  let closedN=0, openN=0;
+  let closedN=0;
+  const openN=_rptOpenCounts().n;   // LOCKSTEP: same "still open" the exec report + board lanes use
   const cards=[];
   jobs.forEach(j=>{
     const cl=(j.tasks||[]).filter(t=>t.done && t.cl && t.cl>cut && !isSalesT(t));
-    const op=(j.tasks||[]).filter(t=>!t.done && !isSalesT(t));
-    openN+=op.length;
+    const op=(j.tasks||[]).filter(t=>_rptOpenT(t));
     if(!cl.length) return;
     closedN+=cl.length;
     cards.push({j,cl,op});
@@ -12766,7 +12782,7 @@ function buildPMReportHtml(pmQ, days){
   // DUE: open items due/finishing within 14d (or overdue)
   const due=[];
   jobs.forEach(j=>{ if((j.status||'').toLowerCase()==='shipped') return;   // shipped jobs are done — nothing "coming due"
-    (j.tasks||[]).forEach(t=>{ if(!t.done&&t.due&&t.due<=dueTo&&!isSalesT(t)) due.push({src:j.project, txt:cleanTask(t.t,false), who:t.who||'', d:t.due, od:t.due<todayISO, files:t.files||null}); }); });
+    (j.tasks||[]).forEach(t=>{ if(!t.done&&t.due&&t.due<=dueTo&&!isSalesT(t)&&!isSnzRep(t)) due.push({src:j.project, txt:cleanTask(t.t,false), who:t.who||'', d:t.due, od:t.due<todayISO, files:t.files||null}); }); });
   projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const st=String(t.st||t.status||''); const fin=t.finISO||t.finishISO||'';
     const isDone=(t.done===true)||/complete/i.test(st);
     if(!isDone && fin && fin<=dueTo) due.push({src:p.name, txt:t.t||t.task||'', who:t.who||'', d:fin, od:fin<todayISO, ctx:ctxOf(p,t)}); }));
@@ -12777,7 +12793,7 @@ function buildPMReportHtml(pmQ, days){
   ms.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
   // unassigned on her jobs
   let unas=0; jobs.forEach(j=>{ if((j.status||'').toLowerCase()==='shipped') return;
-    (j.tasks||[]).forEach(t=>{ if(!t.done&&!isSalesT(t)&&!String((typeof shopWho==='function'?shopWho(t):t.who)||'').trim()) unas++; }); });
+    (j.tasks||[]).forEach(t=>{ if(_rptOpenT(t)&&!String((typeof shopWho==='function'?shopWho(t):t.who)||'').trim()) unas++; }); });
   const li=x=>{
     const imgs=((x.files)||[]).filter(f=>/^image\//i.test(f.mime||'')).map(f=>'<a href="'+escA(f.url)+'" target="_blank" rel="noopener"><img class="rimg" src="'+escA(f.url)+'" alt="photo"></a>').join('');
     return '<li'+(x.is24?' class="hot"':'')+'>'+(x.is24?'<span class="new">NEW</span> ':'')+'<span class="tx">'+esc(x.txt)+'</span> <span class="src">'+esc(x.src)+'</span>'+(x.who?' <span class="who">'+esc(x.who)+'</span>':'')+(x.od?' <span class="od">OVERDUE '+fmt(x.d)+'</span>':' <span class="dt">'+fmt(x.d)+'</span>')+(x.ctx?'<div class="ctx">'+esc(x.ctx)+'</div>':'')+(imgs?'<div class="rimgs">'+imgs+'</div>':'')+'</li>'; };
@@ -12839,10 +12855,8 @@ function buildExecReportHtml(days){
   const bayRows=floorJobs.filter(j=>/^bay/i.test(j.bay||'')).sort((a,b)=>String(a.bay).localeCompare(String(b.bay)));
   const lotN=floorJobs.filter(j=>/^\s*parking\s*lot\s*$/i.test(j.bay||'')).length;
   const heldN=floorJobs.filter(j=>!/parts/i.test(j.bay||'')&&/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')).length;
-  // laneJobs = the exact job set the board's crew columns feed from (incl. pipeline/orphan holders)
-  const laneJobs=(D.jobs||[]).filter(j=>j.category!=='leave' && (j.status||'').toLowerCase()!=='shipped'
-    && !(!/parts/i.test(j.bay||'') && /next\s*up|on\s*hold|off.?site/i.test(j.bay||'')));
-  let openN=0, odN=0; laneJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done&&!isSalesT(t)&&!isSnzRep(t)){ openN++; if(t.due&&t.due<todayISO) odN++; } }));
+  // LOCKSTEP: the shared lane rules every morning report uses (same as the board's columns)
+  const _oc=_rptOpenCounts(); const openN=_oc.n, odN=_oc.od;
   const backSoon=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>{ const m=String(i.backMRA||'').match(/(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{4})/); if(!m) return false;
     const iso=m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); return iso>=todayISO&&iso<=aheadTo; });
   // ---- ahead ----
