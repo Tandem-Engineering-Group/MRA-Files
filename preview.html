@@ -3644,6 +3644,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"30.1", date:"2026-07-18", title:"\u{1FA75} Executive report: official MRA letterhead + the six floor crews", items:[
+    "Rich: the red-text \u201cMRA\u201d wasn\u2019t the official logo, and the crew chart mixed random individuals (Sarah with 1 task) while missing Josh. Fixed both.",
+    "<b>Letterhead:</b> the official MRA badge (the same logo.png the board and work-orders use) tops the report with the title and the mobile.experiential wordmark over the orange rule; a matching branded footer closes it. Same pattern as the crew work-order sheets.",
+    "<b>Crew chart = the six floor crews, always, in board order:</b> Sal \u00b7 Doug (folds Maintenance) \u00b7 Wrap Team (folds MasterWraps) \u00b7 Electricians \u00b7 Josh \u00b7 Jeff \u2014 exactly the crew lanes the shop board uses. Individuals outside the six (design team, vendors) no longer appear there \u2014 design work is project-task work and lives in the Projects table." ] },
   { rev:"30.0", date:"2026-07-18", title:"\u{1F4D0} Executive report: professional layout (research-backed redesign)", items:[
     "Rich (iPad screenshots): the orphan OVERDUE tile sticking out, bay cards that were 90% empty space, big gaps everywhere \u2014 \u201cnot an executive owner level report.\u201d Researched dashboard-layout standards (NN/g data-table guidance, grid-alignment principles): <b>repeating records belong in tables on wide screens, and components must lock to a grid</b>.",
     "<b>Stat tiles</b> now sit on a true 6-column grid \u2014 one balanced row, no orphan ever stretches full-width (3\u00d72 on phones).",
@@ -12876,11 +12880,23 @@ function buildExecReportHtml(days){
       +'<div class="cbox" style="flex:1"><div class="ch">PORTFOLIO HEALTH</div>'
       +'<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;margin:14px 0 10px">'+strip+'</div>'
       +'<div style="font-size:10px;color:#586a7e">'+greens.length+' on track'+(flags.filter(r=>r.state==='behind').length?(' · '+flags.filter(r=>r.state==='behind').length+' behind'):'')+(flags.filter(r=>r.state==='late').length?(' · '+flags.filter(r=>r.state==='late').length+' late'):'')+(upc.length?(' · '+upc.length+' upcoming'):'')+'</div></div></div>';
-    const lanes={};
+    // The SIX floor crews (same lanes as the shop board), fixed order, always all six.
+    // Doug's lane folds Maintenance/Doug Cooley; Wrap Team folds MasterWraps; etc. Individuals
+    // outside the six (design team, vendors) do NOT belong here \u2014 their work shows under Projects.
+    const SIXC=['Sal','Doug','Wrap Team','Electricians','Josh','Jeff'];
+    const foldC=w=>{ const c=String(w||'').trim().toLowerCase();
+      if(c==='sal') return 'Sal';
+      if(c==='doug'||c==='doug cooley'||c==='maintenance') return 'Doug';
+      if(c==='wrap team'||c==='masterwraps'||c==='master wraps'||c==='wraps') return 'Wrap Team';
+      if(c==='electricians'||c==='electrician') return 'Electricians';
+      if(c==='josh'||c==='joshua eberhart') return 'Josh';
+      if(c==='jeff'||c==='jeff sellers') return 'Jeff';
+      return null; };
+    const lanes={}; SIXC.forEach(k=>lanes[k]={n:0,od:0});
     floorJobs.forEach(j=>{ if(/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')&&!/parts/i.test(j.bay||'')) return;
       (j.tasks||[]).forEach(t=>{ if(t.done||isSalesT(t)||isSnzRep(t)) return; const od=t.due&&t.due<todayISO;
-        crewWhoList(t.who).forEach(w=>{ const L=(lanes[w]=lanes[w]||{n:0,od:0}); L.n++; if(od) L.od++; }); }); });
-    const laneKeys=Object.keys(lanes).sort((a,b)=>lanes[b].n-lanes[a].n).slice(0,7);
+        [...new Set(String(t.who||'').split(/\s+\/\s+/).map(foldC).filter(Boolean))].forEach(k=>{ lanes[k].n++; if(od) lanes[k].od++; }); }); });
+    const laneKeys=SIXC;
     const lmx=Math.max(1,...laneKeys.map(k=>lanes[k].n));
     const crewBars=laneKeys.map(k=>{ const L=lanes[k]; const w=(L.n/lmx*100).toFixed(1), wo=(L.od/lmx*100).toFixed(1);
       return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:86px;flex:none;font-size:10px;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(k)+'</div>'
@@ -12892,7 +12908,7 @@ function buildExecReportHtml(days){
         +(exp!=null?('<div style="position:absolute;left:'+exp+'%;top:-2px;bottom:-2px;width:2px;background:#1e293b" title="Expected '+exp+'% by today"></div>'):'')+'</div>'
         +'<div style="width:86px;flex:none;font-size:9.5px;color:#586a7e"><b>'+(p.pct||0)+'%</b>'+(exp!=null?(' <span style="color:#94a3b8">/ exp '+exp+'%</span>'):'')+'</div></div>'; }).join('');
     chartRow2='<div class="crow">'
-      +'<div class="cbox" style="flex:1"><div class="ch">CREW LOAD — OPEN TASKS (red = overdue)</div>'+crewBars+'</div>'
+      +'<div class="cbox" style="flex:1"><div class="ch">CREW LOAD — OPEN SHOP TASKS BY CREW (red = overdue)</div>'+crewBars+'</div>'
       +'<div class="cbox" style="flex:1"><div class="ch">PROGRESS VS PLAN (black tick = where it should be today)</div>'+pvRows+'</div></div>';
   }catch(e){ }
   // ---- TL;DR ----
@@ -12987,10 +13003,17 @@ function buildExecReportHtml(days){
     +'.gxnow{position:absolute;top:0;bottom:0;width:1px;background:#c81e1e;opacity:.45}'
     +'.gxb{position:absolute;top:4px;height:11px;border-radius:4px}'
     +'.gxd{width:92px;flex:none;font-size:9px;color:#586a7e;font-weight:600;text-align:right;line-height:1.3}'
-    +'@media(max-width:640px){.gxl{width:98px;font-size:9px}.gxd{width:56px;font-size:7.5px}.tldr div{font-size:13px}.wrap{padding:.3in .28in}}'
+    +'.rhead{display:flex;align-items:center;gap:15px;border-bottom:3px solid #e04826;padding-bottom:12px;margin-bottom:14px}'
+    +'.rlogo{height:48px;width:auto;border-radius:8px}'
+    +'.rtitle{flex:1}.rtitle h1{font-size:20px}.rtitle .sub{margin:3px 0 0}'
+    +'.rbrand{font-size:10px;letter-spacing:2.5px;color:#9aa5b1;font-weight:600;text-transform:lowercase;white-space:nowrap}.rbrand span{color:#e04826;font-weight:900}'
+    +'.rfoot{display:flex;align-items:center;gap:9px}.rfoot img{height:18px;width:auto;border-radius:4px}'
+    +'@media(max-width:640px){.gxl{width:98px;font-size:9px}.gxd{width:56px;font-size:7.5px}.tldr div{font-size:13px}.wrap{padding:.3in .28in}.rbrand{display:none}.rlogo{height:38px}}'
     +'</style></head><body>'
     +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Weekly executive report · refresh for live data</span></div>'
-    +'<div class="wrap"><h1><span class="mra">MRA</span> Weekly Executive Report</h1><div class="sub">Monday '+rDate+' · covering the last '+days+' days · data as of '+esc(D.generatedText||'')+'</div>'
+    +'<div class="wrap"><header class="rhead"><img src="'+((location.origin&&location.origin.indexOf('http')===0)?(location.origin+'/logo.png'):'logo.png')+'" class="rlogo" alt="MRA" onerror="this.style.display=\'none\'">'
+    +'<div class="rtitle"><h1>Weekly Executive Report</h1><div class="sub">Monday '+rDate+' · covering the last '+days+' days · data as of '+esc(D.generatedText||'')+'</div></div>'
+    +'<div class="rbrand">mobile<span>.</span>experiential</div></header>'
     +(function(){ // \u26A0 integrity guard: never let a stale or partial feed present as truth (Rich hit one)
       let why=''; const la=D.listsAsOf?Date.parse(D.listsAsOf):null; const ageMin=la?Math.round((Date.now()-la)/60000):null;
       if(D.source!=='lists') why='it was built from the workbook fallback, not the live Lists';
@@ -13012,7 +13035,7 @@ function buildExecReportHtml(days){
     +'<h2>\u{1F3ED} Shop floor today</h2>'+'<div class="only-desk">'+floorTable+'</div><div class="only-mob">'+floorHtml+'</div>'
     +'<div class="hnote" style="margin-left:0">Plus '+lotN+' in the Parking Lot · '+heldN+' on hold / next up'+(backSoon.length?(' · '+backSoon.length+' unit'+(backSoon.length>1?'s':'')+' returning within 2 weeks'):'')+'</div>'
     +'<h2>⏰ The next two weeks</h2>'+aheadHtml
-    +'<div class="foot">MRA Command Center · prepared automatically every Monday · questions? the dashboard has full detail — or ask Rich</div></div></body></html>';
+    +'<div class="foot rfoot"><img src="'+((location.origin&&location.origin.indexOf('http')===0)?(location.origin+'/logo.png'):'logo.png')+'" alt="" onerror="this.style.display=\'none\'"><span><b>MRA</b> · mobile.experiential — prepared automatically every Monday by the MRA Command Center · questions? the dashboard has full detail, or ask Rich</span></div></div></body></html>';
 }
 function openExecReport(){ if(typeof closeDrops==='function') closeDrops();
   const html=buildExecReportHtml(7);
