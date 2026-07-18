@@ -3651,6 +3651,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"30.7", date:"2026-07-18", title:"\u{1F6A8} Bay-occupancy fix: pipeline holders in real bays show everywhere", items:[
+    "Rich caught Bay 4 Middle missing its trailer (On Running Airstream) on the Command Center Home. Root cause: it\u2019s a pipeline-category holder sitting in a REAL bay \u2014 the board\u2019s tiles show it, but the CC bay grid and the exec report\u2019s floor table filtered pipeline out. Board rule now everywhere: <b>a job in a real bay renders regardless of category</b>.",
+    "Audit hardened: the verification suite now cross-checks every bay job across the board\u2019s floor, the CC Home grid AND the exec floor table (174 checks, all passing)." ] },
   { rev:"30.6", date:"2026-07-18", title:"\u{1F517} Deficiency report joins the LOCKSTEP \u2014 all four morning reports, one truth", items:[
     "The Deficiency list (?fix=1) now counts its shop-side numbers (overdue \u00b7 undated \u00b7 unassigned) with the SAME shared lane rules as the Executive report, PM report and Floor recap \u2014 no more counting held-bay, on-hold or snoozed-repeat tasks the others exclude.",
     "Cross-check suite extended: deficiency past-due-per-project == exec == PM == raw data, and deficiency SHOP OVERDUE == the exec OVERDUE tile. All four reports + the board now provably show the same numbers, verified on every change." ] },
@@ -12865,7 +12868,10 @@ function buildExecReportHtml(days){
     if(iso && iso>cut && iso<=todayISO) shipped.push({j:j, iso:iso}); });
   shipped.sort((a,b)=>String(b.iso).localeCompare(String(a.iso)));
   // ---- floor ----
-  const bayRows=floorJobs.filter(j=>/^bay/i.test(j.bay||'')).sort((a,b)=>String(a.bay).localeCompare(String(b.bay)));
+  // Board rule: any non-leave, non-shipped job in a REAL bay shows on the floor — pipeline
+  // holders included (On Running Airstream · Bay 4 Middle sits on the board's tiles too).
+  const bayRows=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0
+    && (j.status||'').toLowerCase()!=='shipped' && /^bay/i.test(j.bay||'')).sort((a,b)=>String(a.bay).localeCompare(String(b.bay)));
   const lotN=floorJobs.filter(j=>/^\s*parking\s*lot\s*$/i.test(j.bay||'')).length;
   const heldN=floorJobs.filter(j=>!/parts/i.test(j.bay||'')&&/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')).length;
   // LOCKSTEP: the shared lane rules every morning report uses (same as the board's columns)

@@ -239,7 +239,10 @@ function _projTasksForJob(j){ if(!window._PJBYROW) _pjRebuild(); return (window.
 function bayNumOf(b){ const m=String(b||'').match(/bay\s*(\d+)/i); return m?+m[1]:null; }
 function bayPosOf(b){ if(/front/i.test(b)) return 'Front'; if(/middle/i.test(b)) return 'Middle'; if(/back|loading/i.test(b)) return 'Back'; return ''; }
 function bayGridModel(){ const bays={};
-  (D().jobs||[]).forEach(j=>{ if(!isLive(j)||isOrphan(j)) return; const n=bayNumOf(j.bay); if(n==null) return; const pos=bayPosOf(j.bay)||'Front';
+  // Board rule: a job sitting in a REAL bay renders in the grid regardless of category —
+  // pipeline holders like "On Running Airstream · Bay 4 Middle" are on the board's tiles too.
+  // (Orphan rows carry no bay number, so they naturally stay out.)
+  (D().jobs||[]).forEach(j=>{ if(!isLive(j)) return; const n=bayNumOf(j.bay); if(n==null) return; const pos=bayPosOf(j.bay)||'Front';
     const B=(bays[n]=bays[n]||{bay:n,Front:[],Middle:[],Back:[]}); B[pos].push(j); });
   return Object.keys(bays).map(Number).sort((a,b)=>a-b).map(n=>bays[n]); }
 function jobsInBay(pred){ return (D().jobs||[]).filter(j=>isLive(j) && !isOrphan(j) && pred(j.bay)); }
