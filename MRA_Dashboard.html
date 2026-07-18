@@ -3644,6 +3644,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"30.6", date:"2026-07-18", title:"\u{1F517} Deficiency report joins the LOCKSTEP \u2014 all four morning reports, one truth", items:[
+    "The Deficiency list (?fix=1) now counts its shop-side numbers (overdue \u00b7 undated \u00b7 unassigned) with the SAME shared lane rules as the Executive report, PM report and Floor recap \u2014 no more counting held-bay, on-hold or snoozed-repeat tasks the others exclude.",
+    "Cross-check suite extended: deficiency past-due-per-project == exec == PM == raw data, and deficiency SHOP OVERDUE == the exec OVERDUE tile. All four reports + the board now provably show the same numbers, verified on every change." ] },
   { rev:"30.5", date:"2026-07-18", title:"\u{1F517} Morning reports LOCKSTEP \u2014 exec \u00b7 PM \u00b7 floor recap count with ONE set of rules", items:[
     "Rich: three reports sent the same morning can\u2019t each show different data. New shared \u201creport facts\u201d helpers (the board\u2019s own lane rules) now feed the Executive report, the PM report and the Floor recap \u2014 same job set, same open-task rule (no shipped/on-hold jobs, no held bays, no snoozed repeats, no sales placeholders) everywhere.",
     "Fixes this caught: the Floor recap\u2019s \u201cSTILL OPEN floor-wide\u201d was counting leftover tasks on shipped jobs, held bays and snoozed repeat copies (116 vs the true 78) \u2014 now identical to the exec report and board lanes. The PM report\u2019s coming-due list no longer shows snoozed future repeat copies.",
@@ -13539,8 +13542,9 @@ function buildDeficiencyHtml(pmQ){
     const real=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0);
     const shipped=j=>(j.status||'').toLowerCase()==='shipped';
     const odL=[],nodL=[],unL=[];
-    real.forEach(j=>{ if(shipped(j)) return;
-      (j.tasks||[]).forEach(t=>{ if(t.done||isSalesT(t)) return;
+    // LOCKSTEP: same lane rules as the exec report / PM report / floor recap / board columns
+    _rptLaneJobs().forEach(j=>{
+      (j.tasks||[]).forEach(t=>{ if(!_rptOpenT(t)) return;
         if(t.due&&t.due<today) odL.push({j,t});
         if(!t.due) nodL.push({j,t});
         if(!String((typeof shopWho==='function'?shopWho(t):t.who)||'').trim()) unL.push({j,t}); }); });
