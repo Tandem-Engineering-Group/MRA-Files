@@ -205,6 +205,11 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
   (2) **Shipped-this-week** = scan ALL non-leave/non-orphan jobs (incl. pipeline category), take the LATEST of
   the 🚢 notes-tag date vs completionISO when Status=Shipped — the tag alone missed status-flip ships,
   re-ships w/ stale tags (Washtenaw), and pipeline builds (Sigenergy IW163, SWC IL2).
+- **🔗 LOCKSTEP (rev 30.5):** exec ?exec=1 · PM ?recap=1&pm= · Floor recap ?recap=1 all count via shared
+  `_rptLaneJobs/_rptOpenT/_rptOpenCounts` (board-lane rules). The 149-check verifier
+  (`scratchpad/verify_exec.mjs`, run against local serve/ of the LIVE files) includes cross-report
+  assertions — run it before ANY report change ships. Deficiency ?fix=1 shares the project-task math
+  but is not yet in the cross-check suite (Rich may ask).
 - The transient bad-snapshot mechanism (partial lists.json → statuses/closed dates missing) is the same flow
   fragility as the Create-blob hang — if it recurs often, harden "MRA Lists to JSON" (retry/validate step).
 
