@@ -707,7 +707,9 @@ function showPage(name){ if(!window.MRA_PAGES[name]) name='home';
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.page===name));
   document.querySelectorAll('.page').forEach(s=>s.classList.toggle('active', s.id===name));
   const cr=document.querySelector('.crumb'); if(cr){ const b=document.querySelector('.nav button[data-page="'+name+'"]'); cr.textContent=b?b.textContent.trim():name; }
-  document.body.classList.toggle('home-mode', name==='home');
+  // Home flows naturally (Quintin's fixed canvas stretched cards into dead space with real data).
+  // Embedded board pages collapse the shell to an icon rail + no top bar — one chrome, not three.
+  document.body.classList.toggle('railmode', ['shop','projects','maintenance'].indexOf(name)>=0);
   // Only ONE embedded classic board at a time — three live copies would eat iPad memory.
   document.querySelectorAll('.page:not(.active) .ccframe').forEach(f=>f.remove());
   try{ const u=new URL(location.href); u.searchParams.set('view',name); history.replaceState(null,'',u); }catch(e){}
