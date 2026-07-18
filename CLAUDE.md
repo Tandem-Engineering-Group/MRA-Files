@@ -187,6 +187,27 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
   two runs stuck 3+ hrs, listsAsOf frozen 45 min. Fix = cancel stuck runs + Recurrence 2→3 min + manual
   run. Diagnostic tell: `listsAsOf` stale while `generatedAt` ticks = that flow hung on the blob step.
 
+## 📧 WEEKLY EXECUTIVE REPORT (Tony) — built 2026-07-18, revs 29.1→29.9 (state)
+
+- **Lives at `?exec=1`** (+ ☰ Actions → 📧 Executive report (weekly)). **LOCKED TO RICH on the live host**
+  (the `_execQ` boot branch waits for MSAL, renders only for `isSuperAdmin()`; off-host renders ungated for
+  dev). ⚠ While locked, an emailed link shows Tony a lock screen — **"open it for Tony" = extend the gate
+  check** (allow tony@gomra.com), THEN Rich builds the Monday 6 AM Send-email-V2 flow (5 steps given in chat).
+- **Structure (research-backed, Rich-trimmed):** orange "WEEK IN 30 SECONDS" box (with ▲/▼ closed-vs-last-wk
+  delta) → 5-6 stat tiles → 4 charts (shop output/wk · health strip · crew load w/ overdue red · progress-vs-
+  plan w/ expected tick) → project CARDS (status chip, PM, % · ▶ start→finish · open · closed-this-wk; amber
+  past-due strip; greens one card each) → program timeline (capped month ticks + per-row dates) → closed-by-job
+  pills + 🚢 ships + ◆ milestones (NO task-level highlights — Rich killed them, "Tony doesn't care") → shop
+  floor GROUPED BY BAY (cards) → next two weeks. Mobile-first (media query <640px); phone-validated.
+- **Accuracy hardening (Rich hit a bad snapshot at 12:06 AM — shipped jobs in bays, 0 closed):**
+  (1) **⚠ DATA CHECK FAILED banner** — report refuses to present silently when source!=='lists' (workbook
+  fallback), listsAsOf missing/>60 min, or doneN===0 (implausible); names the reason + "refresh in ~5 min".
+  (2) **Shipped-this-week** = scan ALL non-leave/non-orphan jobs (incl. pipeline category), take the LATEST of
+  the 🚢 notes-tag date vs completionISO when Status=Shipped — the tag alone missed status-flip ships,
+  re-ships w/ stale tags (Washtenaw), and pipeline builds (Sigenergy IW163, SWC IL2).
+- The transient bad-snapshot mechanism (partial lists.json → statuses/closed dates missing) is the same flow
+  fragility as the Create-blob hang — if it recurs often, harden "MRA Lists to JSON" (retry/validate step).
+
 ## 🔜 NEXT SESSION RUNBOOK — locked in 2026-06-25 (Rich wants all of this "tomorrow")
 
 **A. Cutover follow-ups (post-flip cleanup — board is LIVE on Lists, see Step 3):**
