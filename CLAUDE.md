@@ -167,6 +167,13 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
   a time (`showPage` removes hidden ones — iPad memory), render guards stop the 60s poll reloading it,
   classic hides its 🧭 button when `window.self!==window.top`. **DO NOT resume rebuilding those three
   pages from scratch** — Rich is extremely concerned about money burned on the rebuild attempt; reuse first.
+- **ONE BOARD, ONE SKIN (2026-07-18, Rich: "Build it"):** the rail is now the ONLY nav. Board pages
+  (Shop→floor · Projects→projects · Maintenance→fleetio · Assets→assets · My Work→mywork) share ONE
+  persistent iframe (`#boardFrame` in `#boardhost`, never reloaded — `BOARD_VIEWS`/`boardSetView()` call
+  the board's own `setView` via contentWindow); the board hides its brand AND tab row under `.ccembed`;
+  shell collapses to a 60px icon rail + no top bar (`body.railmode`) on board pages; themes sync
+  (`syncBoardTheme`). Home flows naturally (home-mode canvas removed). CC pages left: Home/Tools/Sales
+  (tasks.js/shop.js etc. remain but unrouted).
 - **Still new-format (Rich OK'd colors = MRA orange `--brand:#e04826`, Block 9 in styles.css):** Home
   (bay canvas + weekly overlap + coming due), My Work (tasks.js, mirrors the classic engine incl. verify/
   close/expand), Tools, Sales, + a Floor View overlay (floor.js). `command/app.js` carries a full port of

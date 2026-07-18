@@ -379,13 +379,13 @@ const ROLE_BY_NAME = (function(){ const m={}, g={
 // CC page visibility per role (maps the classic tabs: floor->home/shop, fleetio->maintenance, mywork->tasks).
 const CC_PAGES_BY_ROLE = {
   anon:    ['home','shop'],
-  staff:   ['home','shop','tasks','maintenance','tools'],
-  closer:  ['home','shop','tasks','maintenance','tools'],
-  shopedit:['home','shop','tasks','maintenance','tools'],
-  design:  ['home','shop','projects','tasks','maintenance','tools'],
-  exec:    ['home','shop','projects','tasks','maintenance','tools','sales'],
-  editor:  ['home','shop','projects','tasks','maintenance','tools','sales'],
-  admin:   ['home','shop','projects','tasks','maintenance','tools','sales']
+  staff:   ['home','shop','tasks','maintenance','assets','tools'],
+  closer:  ['home','shop','tasks','maintenance','assets','tools'],
+  shopedit:['home','shop','tasks','maintenance','assets','tools'],
+  design:  ['home','shop','projects','tasks','maintenance','assets','tools'],
+  exec:    ['home','shop','projects','tasks','maintenance','assets','tools','sales'],
+  editor:  ['home','shop','projects','tasks','maintenance','assets','tools','sales'],
+  admin:   ['home','shop','projects','tasks','maintenance','assets','tools','sales']
 };
 const MYWORK_EMAILS=['megan.fraser@gomra.com','akarloff@gomra.com','luciana.giglio@gomra.com','bchoy@gomra.com','markm@gomra.com','swilliams@gomra.com','shopsupport@gomra.com','jsellers@gomra.com','jeberhart@gomra.com','dcooley@gomra.com','spearce@gomra.com'];
 const MYWORK_NAMES=['Megan Fraser','Al Karloff','Luciana Giglio','Brandon Choy','Mark Mustonen','Sarah Williams','Sal','Jeff Sellers','Joshua Eberhart','Doug Cooley','Stephanie Pearce'].map(_nmKey);
@@ -700,23 +700,42 @@ window.openJobEditor=openJobEditor;
    ROUTER + theme + floor + init
    ============================================================================ */
 let WALL=false;
-function renderCurrent(){ const pg=window.MRA_PAGES[ACTIVE_PAGE]; if(pg && typeof pg.render==='function'){ try{ pg.render(); }catch(e){ console.error('page render failed',ACTIVE_PAGE,e); } } }
-function showPage(name){ if(!window.MRA_PAGES[name]) name='home';
+/* ONE BOARD, ONE SKIN: the rail is the only navigation. Board pages all render inside a
+   single persistent iframe (never reloaded between taps) and the rail drives the board's
+   own setView — the board's tab row is hidden in embed mode, so there is exactly one nav. */
+const BOARD_VIEWS={shop:'floor', projects:'projects', maintenance:'fleetio', assets:'assets', tasks:'mywork'};
+function ensureBoard(){ let f=document.getElementById('boardFrame');
+  if(!f){ const host=document.getElementById('boardhost'); if(!host) return null;
+    host.innerHTML='<iframe id="boardFrame" class="ccframe" src="../MRA_Dashboard.html" title="MRA board"></iframe>';
+    f=document.getElementById('boardFrame'); }
+  return f; }
+function boardSetView(v){ const f=ensureBoard(); if(!f) return;
+  const go=()=>{ try{ if(f.contentWindow && typeof f.contentWindow.setView==='function'){ f.contentWindow.setView(v); return true; } }catch(e){} return false; };
+  if(!go()){ let n=0; const t=setInterval(()=>{ if(go()||++n>60) clearInterval(t); },250); } }
+function syncBoardTheme(){ try{ const f=document.getElementById('boardFrame'); if(!f||!f.contentWindow) return;
+  const light=!document.body.classList.contains('dark');
+  f.contentWindow.document.body.classList.toggle('light', light);
+  localStorage.setItem('mra_theme', light?'light':'dark'); }catch(e){} }
+function renderCurrent(){ if(BOARD_VIEWS[ACTIVE_PAGE]) return;   // the board refreshes itself
+  const pg=window.MRA_PAGES[ACTIVE_PAGE]; if(pg && typeof pg.render==='function'){ try{ pg.render(); }catch(e){ console.error('page render failed',ACTIVE_PAGE,e); } } }
+function showPage(name){ if(!window.MRA_PAGES[name] && !BOARD_VIEWS[name]) name='home';
   if(!pageAllowed(name)){ const a=ccAllowedPages()||['home']; name=(a.indexOf(name)>=0)?name:(a[0]||'home'); }
   ACTIVE_PAGE=name;
+  const isBoard=!!BOARD_VIEWS[name];
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.page===name));
-  document.querySelectorAll('.page').forEach(s=>s.classList.toggle('active', s.id===name));
+  document.querySelectorAll('.page').forEach(s=>s.classList.toggle('active', s.id===(isBoard?'boardhost':name)));
   const cr=document.querySelector('.crumb'); if(cr){ const b=document.querySelector('.nav button[data-page="'+name+'"]'); cr.textContent=b?b.textContent.trim():name; }
-  // Home flows naturally (Quintin's fixed canvas stretched cards into dead space with real data).
-  // Embedded board pages collapse the shell to an icon rail + no top bar — one chrome, not three.
-  document.body.classList.toggle('railmode', ['shop','projects','maintenance'].indexOf(name)>=0);
-  // Only ONE embedded classic board at a time — three live copies would eat iPad memory.
-  document.querySelectorAll('.page:not(.active) .ccframe').forEach(f=>f.remove());
+  // Board pages collapse the shell to an icon rail + no top bar — one chrome, one nav.
+  document.body.classList.toggle('railmode', isBoard);
+  // Legacy per-page frames (pre one-frame pivot) — clear if any linger.
+  document.querySelectorAll('.page .ccframe:not(#boardFrame)').forEach(f=>f.remove());
+  if(isBoard){ boardSetView(BOARD_VIEWS[name]); setTimeout(syncBoardTheme, 400); }
   try{ const u=new URL(location.href); u.searchParams.set('view',name); history.replaceState(null,'',u); }catch(e){}
   window.scrollTo(0,0); renderCurrent(); }
 
 function toggleTheme(){ const dark=document.body.classList.toggle('dark'); const b=document.getElementById('theme'); if(b) b.textContent=dark?'☀ Light':'☾ Dark';
-  try{ localStorage.setItem('cc_theme', dark?'dark':'light'); }catch(e){} }
+  try{ localStorage.setItem('cc_theme', dark?'dark':'light'); }catch(e){}
+  syncBoardTheme(); }
 function openFloor(){ const f=document.getElementById('floor'); if(!f) return; WALL=true; if(window.MRA_PAGES.floor) window.MRA_PAGES.floor.render(); f.classList.add('open'); }
 function closeFloor(){ const f=document.getElementById('floor'); if(f) f.classList.remove('open'); WALL=false; }
 
@@ -738,7 +757,7 @@ function initCC(){
   // deep-link ?view= (aliases: mywork->tasks, fleetio->maintenance, floor opens the wall overlay)
   let start='home', wantFloor=false, wantMyWork=null;
   try{ const q=new URL(location.href).searchParams; let v=q.get('view')||'';
-    const ALIAS={mywork:'tasks', fleetio:'maintenance', assets:'maintenance', projects:'projects', shop:'shop', home:'home', sales:'sales', tools:'tools'};
+    const ALIAS={mywork:'tasks', fleetio:'maintenance', assets:'assets', projects:'projects', shop:'shop', home:'home', sales:'sales', tools:'tools', floor:'shop'};
     if(v==='floor'){ wantFloor=true; v='shop'; }
     if(ALIAS[v]) start=ALIAS[v]; else if(window.MRA_PAGES[v]) start=v;
     const mw=q.get('mywork'); if(mw){ start='tasks'; wantMyWork=mw; }   // ?mywork=<Name> daily-email deep-link
