@@ -3644,6 +3644,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"29.9", date:"2026-07-18", title:"\u2705 Executive report: accuracy fixes + a data-integrity guard", items:[
+    "<b>Shipped-this-week fixed</b> \u2014 it only counted jobs with the \u{1F6A2} notes tag and missed ships done by flipping Status\u2192Shipped (and re-ships where an old tag hid the new date, and pipeline-category builds). Now all 5 of this week\u2019s ships show, each with its date.",
+    "<b>\u26A0 DATA CHECK banner</b> \u2014 Rich caught the report rendering a bad feed snapshot (shipped jobs in bays, zero closed). The report now refuses to present quietly when the feed is stale (>60 min), workbook-fallback, or implausibly empty \u2014 a red banner says exactly what\u2019s wrong and to refresh. An owner report should never lie silently." ] },
   { rev:"29.8", date:"2026-07-18", title:"\u{1F4C8} Executive report: week-over-week trend (research-backed)", items:[
     "Researched executive-report best practice (Rich\u2019s ask): the biggest gap was <b>trend context</b> \u2014 executives read change, not snapshots. The \u201ctasks closed\u201d line and tile now carry a <b>\u25B2/\u25BC vs-last-week delta</b>. The rest of the report already matched the guidance: lead with a summary, 5-7 KPIs, exception-based detail (only flagged projects expand), visuals over tables, one page, consistent structure." ] },
   { rev:"29.7", date:"2026-07-18", title:"\u{1F9F9} Executive report: dropped the task-level HIGHLIGHTS", items:[
@@ -12801,9 +12804,17 @@ function buildExecReportHtml(days){
   const doneTop=Object.keys(doneBy).sort((a,b)=>doneBy[b]-doneBy[a]);
   notable.sort((a,b)=>(b.w-a.w)||String(b.d).localeCompare(String(a.d)));
   const msHit=[]; projs.forEach(p=>(p.milestones||[]).forEach(m=>{ const d=m.dateISO||''; if(m.done&&d&&d>cut&&d<=todayISO) msHit.push({src:p.name,txt:m.name||'Milestone',d}); }));
-  const shipRe=/\u{1F6A2}\s*Shipped:\s*(\d{1,2})\/(\d{1,2})\/(\d{2})/u;
-  const shipped=liveJobs.filter(j=>{ const m=String(j.notesRaw||'').match(shipRe); if(!m) return false;
-    const iso='20'+m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); return iso>cut&&iso<=todayISO; });
+  // Shipped this week: the \u{1F6A2} notes tag when present, else Status=Shipped + completion date
+  // in the window (most ships are just the status flip \u2014 the tag alone missed them).
+  const shipRe=/\u{1F6A2}\s*Shipped:\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/u;
+  // include pipeline-category builds (real ships) and take the LATEST signal — an old \u{1F6A2} tag from a
+  // prior ship must not hide a re-ship (Washtenaw case).
+  const shipScan=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0);
+  const shipped=[]; shipScan.forEach(j=>{ let iso=null; const m=String(j.notesRaw||'').match(shipRe);
+    if(m){ const y=m[3].length===2?('20'+m[3]):m[3]; iso=y+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); }
+    if(String(j.status||'').toLowerCase()==='shipped' && j.completionISO && (!iso || j.completionISO>iso)) iso=j.completionISO;
+    if(iso && iso>cut && iso<=todayISO) shipped.push({j:j, iso:iso}); });
+  shipped.sort((a,b)=>String(b.iso).localeCompare(String(a.iso)));
   // ---- floor ----
   const bayRows=floorJobs.filter(j=>/^bay/i.test(j.bay||'')).sort((a,b)=>String(a.bay).localeCompare(String(b.bay)));
   const lotN=floorJobs.filter(j=>/^\s*parking\s*lot\s*$/i.test(j.bay||'')).length;
@@ -12881,7 +12892,7 @@ function buildExecReportHtml(days){
   }catch(e){ }
   // ---- TL;DR ----
   const tldr=[];
-  if(shipped.length) tldr.push('\u{1F6A2} <b>Shipped '+shipped.length+' trailer'+(shipped.length>1?'s':'')+':</b> '+shipped.map(j=>esc(j.project)).join(' · '));
+  if(shipped.length) tldr.push('\u{1F6A2} <b>Shipped '+shipped.length+' trailer'+(shipped.length>1?'s':'')+':</b> '+shipped.map(x=>esc(x.j.project)+' ('+fmtMDs(x.iso)+')').join(' · '));
   const wkDelta=(wkPrev!=null&&wkPrev>0)?(wk[wk.length-1].n-wkPrev):null;
   tldr.push('✅ <b>'+doneN+' tasks closed</b> this week'+(wkDelta!=null?(' ('+(wkDelta>=0?'<span style="color:#15803d;font-weight:700">▲ '+wkDelta:'<span style="color:#b45309;font-weight:700">▼ '+Math.abs(wkDelta))+' vs last wk</span>)'):'')+(doneTop.length?(' — most on '+esc(doneTop[0])+' ('+doneBy[doneTop[0]]+')'):''));
   if(msHit.length) tldr.push('◆ <b>Milestone'+(msHit.length>1?'s':'')+' hit:</b> '+msHit.map(m=>esc(m.txt)+' ('+esc(m.src)+')').join(' · '));
@@ -12944,6 +12955,14 @@ function buildExecReportHtml(days){
     +'</style></head><body>'
     +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Weekly executive report · refresh for live data</span></div>'
     +'<div class="wrap"><h1><span class="mra">MRA</span> Weekly Executive Report</h1><div class="sub">Monday '+rDate+' · covering the last '+days+' days · data as of '+esc(D.generatedText||'')+'</div>'
+    +(function(){ // \u26A0 integrity guard: never let a stale or partial feed present as truth (Rich hit one)
+      let why=''; const la=D.listsAsOf?Date.parse(D.listsAsOf):null; const ageMin=la?Math.round((Date.now()-la)/60000):null;
+      if(D.source!=='lists') why='it was built from the workbook fallback, not the live Lists';
+      else if(ageMin==null) why='it is missing its freshness stamp';
+      else if(ageMin>60) why='it is '+ageMin+' minutes old (should be under ~15)';
+      else if(doneN===0) why='it shows zero tasks closed in '+days+' days, which is not plausible \u2014 the feed is likely incomplete';
+      if(!why) return '';
+      return '<div style="background:#fee2e2;border:2px solid #b91c1c;color:#7f1d1d;border-radius:10px;padding:11px 14px;margin:0 0 12px;font-size:12.5px;font-weight:700">\u26A0 DATA CHECK FAILED \u2014 do not trust these numbers: '+why+'. Refresh in ~5 minutes. If it persists, the \u201cMRA Lists to JSON\u201d flow needs a kick (ask Rich).</div>'; })()
     +'<div class="tldr"><div class="tl-h">THE WEEK IN 30 SECONDS</div>'+tldr.map(t=>'<div>'+t+'</div>').join('')+'</div>'
     +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+((wkPrev!=null&&wkPrev>0)?('<div class="st" style="border-left-color:#15803d"><div class="n" style="color:#15803d">'+doneN+' <span style="font-size:11px;font-weight:800;color:'+((wk[wk.length-1].n-wkPrev)>=0?'#15803d':'#b45309')+'">'+((wk[wk.length-1].n-wkPrev)>=0?'▲':'▼')+Math.abs(wk[wk.length-1].n-wkPrev)+'</span></div><div class="l">CLOSED — '+days+'D (VS LAST WK)</div></div>'):tile(doneN,'CLOSED — '+days+'D','#15803d'))+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
     +chartRow
@@ -12951,7 +12970,7 @@ function buildExecReportHtml(days){
     +'<h2>\u{1F4CB} Projects</h2>'+upcLine+projCards
     +(gantt?('<h2>\u{1F4C5} Program timeline</h2>'+gantt):'')
     +'<h2>✅ Closed this week — by job</h2>'
-    +(shipped.length?('<ul class="seplist">'+shipped.map(j=>'<li>\u{1F6A2} <b>Shipped: '+esc(j.project)+'</b>'+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+'</li>').join('')+'</ul>'):'')
+    +(shipped.length?('<ul class="seplist">'+shipped.map(x=>'<li>\u{1F6A2} <b>Shipped: '+esc(x.j.project)+'</b>'+(x.j.jobNum?' <span class="src">'+esc(x.j.jobNum)+'</span>':'')+' <span class="dt">'+fmtMDs(x.iso)+'</span></li>').join('')+'</ul>'):'')
     +(msHit.length?('<ul class="seplist">'+msHit.map(m=>'<li>◆ <b>Milestone: '+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span></li>').join('')+'</ul>'):'')
     +rollup
     +'<h2>\u{1F3ED} Shop floor today</h2>'+floorHtml
