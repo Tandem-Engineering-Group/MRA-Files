@@ -3644,6 +3644,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"29.4", date:"2026-07-18", title:"\u{1F4CA} Executive report: gantt dates, more detail, 2 more charts", items:[
+    "The <b>Program timeline</b> now shows each project\u2019s <b>start \u2192 finish dates</b> on the row plus the PM and <b>% done</b> under the name.",
+    "Two new charts: <b>CREW LOAD</b> \u2014 open tasks per crew with the <b>overdue portion in red</b> (spot who\u2019s buried at a glance) \u2014 and <b>PROGRESS VS PLAN</b> \u2014 each project\u2019s % complete bar with a <b>black tick where it should be today</b> (behind = bar short of the tick).",
+    "More detail without the eye chart: every <b>on-track project gets its own compact line</b> (PM \u00b7 % \u2192 target \u00b7 next gate), a <b>HIGHLIGHTS</b> list of the week\u2019s notable completions (\u{1F525} hot \u00b7 \u25C6 milestone \u00b7 \u{1F527} fleet first), the floor lines carry the PM, and <b>\u23F0 The next two weeks</b> is back as its own section \u2014 finishes, milestones and \u{1F69B} units returning with back \u2192 leave dates." ] },
   { rev:"29.3", date:"2026-07-18", title:"\u{1F4CA} Executive report: charts", items:[
     "Two glance charts on Tony\u2019s Monday report: <b>Shop output</b> — tasks closed per week for the last 6 weeks (this week in MRA orange, so the trend is obvious) — and a <b>portfolio health strip</b> (green/amber/red/blue proportion bar). Pure HTML, prints and emails cleanly." ] },
   { rev:"29.2", date:"2026-07-18", title:"\u{1F4E7} Executive report made glanceable (Rich: \u201cno way he reads that eye chart\u201d)", items:[
@@ -12765,23 +12769,26 @@ function buildExecReportHtml(days){
   const cut=localISO(Date.parse(todayISO)-days*86400000);
   const aheadTo=localISO(Date.parse(todayISO)+14*86400000);
   const fmt=iso=>{ if(!iso) return ""; const p=String(iso).split("-"); return (+p[1])+"/"+(+p[2])+"/"+p[0]; };
+  const fmtMDs=iso=>{ if(!iso) return ""; const p=String(iso).split("-"); return (+p[1])+"/"+(+p[2]); };
   const now=new Date(), rDate=(now.getMonth()+1)+"/"+now.getDate()+"/"+now.getFullYear();
   const HC={late:'#c81e1e',behind:'#b45309',ontrack:'#15803d',upcoming:'#1d4ed8',parked:'#475569',done:'#475569'};
   const liveJobs=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0 && j.category!=='pipeline');
   const floorJobs=liveJobs.filter(j=>(j.status||'').toLowerCase()!=='shipped');
-  // ---- portfolio health ----
+  // ---- portfolio ----
   const projs=(D.projects||[]).filter(p=>!p.nonOfficial);
   const hRows=projs.filter(p=>projStatus(p,todayISO)!=='done' && !p.parked).map(p=>{
-    const h=projHealth(p,todayISO); const b=_pmtBehindBits(p,todayISO);
-    return {state:h.state, p:p, b:b};
+    const h=projHealth(p,todayISO); const b=_pmtBehindBits(p,todayISO); return {state:h.state, h:h, p:p, b:b};
   }).sort((a,b)=>HEALTH_RANK[a.state]-HEALTH_RANK[b.state]||String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
   const greens=hRows.filter(r=>r.state==='ontrack'), flags=hRows.filter(r=>r.state==='late'||r.state==='behind'), upc=hRows.filter(r=>r.state==='upcoming');
-  // ---- accomplished rollup ----
-  const doneBy={}; let doneN=0;
-  liveJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut&&!isSalesT(t)){ doneN++; doneBy[j.project]=(doneBy[j.project]||0)+1; } }));
-  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; const isDone=(t.done===true)||/complete/i.test(String(t.st||''));
-    if(isDone && fin && fin>cut && fin<=todayISO){ doneN++; doneBy[p.name]=(doneBy[p.name]||0)+1; } }));
+  // ---- accomplished ----
+  const doneBy={}; let doneN=0; const notable=[];
+  liveJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut&&!isSalesT(t)){ doneN++; doneBy[j.project]=(doneBy[j.project]||0)+1;
+    notable.push({src:j.project, txt:cleanTask(t.t,false), who:t.who||'', d:t.cl, w:(/\u{1F525}/u.test(t.t)?3:0)+(/yes/i.test(t.ml||'')?2:0)+(/\u{1F527}/u.test(t.t)?1:0)}); } }));
+  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; const isD=(t.done===true)||/complete/i.test(String(t.st||''));
+    if(isD && fin && fin>cut && fin<=todayISO){ doneN++; doneBy[p.name]=(doneBy[p.name]||0)+1;
+      notable.push({src:p.name, txt:t.t||'', who:t.who||'', d:fin, w:(/yes/i.test(t.ml||'')?2:0)}); } }));
   const doneTop=Object.keys(doneBy).sort((a,b)=>doneBy[b]-doneBy[a]);
+  notable.sort((a,b)=>(b.w-a.w)||String(b.d).localeCompare(String(a.d)));
   const msHit=[]; projs.forEach(p=>(p.milestones||[]).forEach(m=>{ const d=m.dateISO||''; if(m.done&&d&&d>cut&&d<=todayISO) msHit.push({src:p.name,txt:m.name||'Milestone',d}); }));
   const shipRe=/\u{1F6A2}\s*Shipped:\s*(\d{1,2})\/(\d{1,2})\/(\d{2})/u;
   const shipped=liveJobs.filter(j=>{ const m=String(j.notesRaw||'').match(shipRe); if(!m) return false;
@@ -12798,36 +12805,28 @@ function buildExecReportHtml(days){
   msAhead.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
   const finAhead=hRows.filter(r=>r.p.finishISO&&r.p.finishISO>=todayISO&&r.p.finishISO<=aheadTo);
   const fioOd=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>i.overdue).length;
-  // ---- program gantt (visual, no reading) ----
+  // ---- program gantt with DATES + % ----
   const dated=hRows.filter(r=>r.p.startISO&&r.p.finishISO);
   let gantt='';
   if(dated.length){
     let lo=Date.parse(todayISO)-7*86400000, hi=Date.parse(todayISO)+21*86400000;
     dated.forEach(r=>{ const s=Date.parse(r.p.startISO), f=Date.parse(r.p.finishISO); if(s<lo) lo=s; if(f>hi) hi=f; });
-    const span=hi-lo, pct=ms=>Math.max(0,Math.min(100,(ms-lo)/span*100));
+    const span=hi-lo, pctf=ms=>Math.max(0,Math.min(100,(ms-lo)/span*100));
     const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     let ticks=''; const td=new Date(lo); td.setDate(1);
-    while(td.getTime()<=hi){ ticks+='<span style="position:absolute;left:'+pct(td.getTime()).toFixed(1)+'%;top:0;font-size:8px;color:#94a3b8">'+MO[td.getMonth()]+'</span>'; td.setMonth(td.getMonth()+1); }
-    const tl='left:'+pct(Date.parse(todayISO)).toFixed(1)+'%';
-    gantt='<div style="position:relative;height:14px;margin:2px 0 2px 168px">'+ticks+'</div>'
-      +dated.map(r=>{ const p=r.p, s=pct(Date.parse(p.startISO)), e=pct(Date.parse(p.finishISO));
+    while(td.getTime()<=hi){ ticks+='<span style="position:absolute;left:'+pctf(td.getTime()).toFixed(1)+'%;top:0;font-size:8px;color:#94a3b8">'+MO[td.getMonth()]+'</span>'; td.setMonth(td.getMonth()+1); }
+    const tl='left:'+pctf(Date.parse(todayISO)).toFixed(1)+'%';
+    gantt='<div style="display:flex"><div style="width:158px;flex:none"></div><div style="flex:1;position:relative;height:13px">'+ticks+'</div><div style="width:96px;flex:none"></div></div>'
+      +dated.map(r=>{ const p=r.p, s=pctf(Date.parse(p.startISO)), e=pctf(Date.parse(p.finishISO));
         return '<div style="display:flex;align-items:center;border-top:1px solid #eef1f5">'
-          +'<div style="width:160px;flex:none;font-size:10px;font-weight:700;padding:4px 8px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'<span style="color:#7b8794;font-weight:400"> · '+esc((p.pm||'').split(' ')[0])+'</span></div>'
+          +'<div style="width:158px;flex:none;font-size:10px;font-weight:700;padding:4px 6px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'<div style="color:#7b8794;font-weight:400;font-size:8.5px">'+esc((p.pm||'').split(' ')[0])+(p.pct!=null?(' \u00b7 '+p.pct+'% done'):'')+'</div></div>'
           +'<div style="flex:1;position:relative;height:18px"><span style="position:absolute;top:0;bottom:0;width:1px;background:#c81e1e;opacity:.45;'+tl+'"></span>'
-          +'<div style="position:absolute;left:'+s.toFixed(1)+'%;width:'+Math.max(0.8,e-s).toFixed(1)+'%;top:4px;height:11px;border-radius:4px;background:'+(HC[r.state]||'#64748b')+'" title="'+escA(p.name+' '+fmt(p.startISO)+' → '+fmt(p.finishISO))+'"></div></div></div>'; }).join('');
+          +'<div style="position:absolute;left:'+s.toFixed(1)+'%;width:'+Math.max(0.8,e-s).toFixed(1)+'%;top:4px;height:11px;border-radius:4px;background:'+(HC[r.state]||'#64748b')+'" title="'+escA(p.name+' '+fmt(p.startISO)+' \u2192 '+fmt(p.finishISO))+'"></div></div>'
+          +'<div style="width:96px;flex:none;font-size:9px;color:#586a7e;font-weight:600;text-align:right">'+fmtMDs(p.startISO)+' \u2192 <b>'+fmt(p.finishISO)+'</b></div></div>'; }).join('');
     gantt='<div style="border:1px solid #dfe5ec;border-radius:9px;padding:8px 10px">'+gantt+'</div>';
   }
-  // ---- THE WEEK IN 30 SECONDS (auto-written plain English — the part Tony actually reads) ----
-  const tldr=[];
-  if(shipped.length) tldr.push('\u{1F6A2} <b>Shipped '+shipped.length+' trailer'+(shipped.length>1?'s':'')+':</b> '+shipped.map(j=>esc(j.project)).join(' · '));
-  tldr.push('\u2705 <b>'+doneN+' tasks closed</b> this week'+(doneTop.length?(' — most on '+esc(doneTop[0])+' ('+doneBy[doneTop[0]]+')'):''));
-  if(msHit.length) tldr.push('\u25C6 <b>Milestone'+(msHit.length>1?'s':'')+' hit:</b> '+msHit.map(m=>esc(m.txt)+' ('+esc(m.src)+')').join(' · '));
-  tldr.push('\u{1F4CA} <b>'+greens.length+' of '+(greens.length+flags.length)+' active projects on track</b>'+(flags.length?(' — watching: '+flags.map(r=>'<b>'+esc(r.p.name)+'</b> ('+(r.state==='late'?'late':'behind')+(r.b.odN?(', '+r.b.odN+' past-due'):'')+', '+esc((r.p.pm||'—').split(' ')[0])+')').join(' · ')):' — nothing flagged'));
-  tldr.push('\u{1F3ED} <b>Floor:</b> '+bayRows.length+' in bays · '+lotN+' in the lot · '+heldN+' on hold'+(backSoon.length?(' · '+backSoon.length+' returning \u22642 wks'):''));
-  if(odN||fioOd) tldr.push('\u26A0 <b>'+odN+' shop tasks overdue</b>'+(fioOd?(' · '+fioOd+' fleet issues overdue'):''));
-  if(finAhead.length||msAhead.length) tldr.push('\u23F0 <b>Next 2 weeks:</b> '+finAhead.map(r=>esc(r.p.name)+' finishes '+fmt(r.p.finishISO)).concat(msAhead.slice(0,3).map(m=>'\u25C6 '+esc(m.txt)+' '+fmt(m.d))).join(' · '));
-  // ---- charts (pure divs, print/email-safe): 6-week shop-output trend + health strip ----
-  let chartRow='';
+  // ---- charts row 1: shop output + health strip ----
+  let chartRow=''; let chartRow2='';
   try{
     const wk=[];
     for(let w=5;w>=0;w--){ const a=localISO(Date.parse(todayISO)-((w+1)*7-1)*86400000), b=localISO(Date.parse(todayISO)-w*7*86400000); wk.push({a:a,b:b,n:0}); }
@@ -12837,7 +12836,7 @@ function buildExecReportHtml(days){
       for(const bkt of wk){ if(fin>=bkt.a&&fin<=bkt.b){ bkt.n++; break; } } }));
     const mx=Math.max(1,...wk.map(x=>x.n));
     const bars=wk.map((x,i)=>{ const hpx=Math.max(3,Math.round(x.n/mx*58)); const cur=(i===wk.length-1);
-      return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="font-size:9px;font-weight:800;color:'+(cur?'#e04826':'#586a7e')+'">'+x.n+'</div><div style="width:70%;height:'+hpx+'px;border-radius:4px 4px 0 0;background:'+(cur?'#e04826':'#cbd5e1')+'"></div><div style="font-size:8px;color:#94a3b8">'+fmt(x.b).replace(/\/20\d\d$/,'')+'</div></div>'; }).join('');
+      return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="font-size:9px;font-weight:800;color:'+(cur?'#e04826':'#586a7e')+'">'+x.n+'</div><div style="width:70%;height:'+hpx+'px;border-radius:4px 4px 0 0;background:'+(cur?'#e04826':'#cbd5e1')+'"></div><div style="font-size:8px;color:#94a3b8">'+fmtMDs(x.b)+'</div></div>'; }).join('');
     const hb=[['#15803d',greens.length],['#b45309',flags.filter(r=>r.state==='behind').length],['#c81e1e',flags.filter(r=>r.state==='late').length],['#1d4ed8',upc.length]].filter(x=>x[1]>0);
     const tot=hb.reduce((a,x)=>a+x[1],0)||1;
     const strip=hb.map(x=>'<div style="width:'+(x[1]/tot*100).toFixed(1)+'%;background:'+x[0]+'" title="'+x[1]+'"></div>').join('');
@@ -12846,35 +12845,73 @@ function buildExecReportHtml(days){
       +'<div style="flex:1;min-width:210px;border:1px solid #dfe5ec;border-radius:9px;padding:9px 12px"><div style="font-size:9px;letter-spacing:.8px;color:#7b8794;font-weight:800;margin-bottom:6px">PORTFOLIO HEALTH</div>'
       +'<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;margin:14px 0 10px">'+strip+'</div>'
       +'<div style="font-size:10px;color:#586a7e">'+greens.length+' on track'+(flags.filter(r=>r.state==='behind').length?(' \u00b7 '+flags.filter(r=>r.state==='behind').length+' behind'):'')+(flags.filter(r=>r.state==='late').length?(' \u00b7 '+flags.filter(r=>r.state==='late').length+' late'):'')+(upc.length?(' \u00b7 '+upc.length+' upcoming'):'')+'</div></div></div>';
-  }catch(e){ chartRow=''; }
+    // ---- charts row 2: crew load + progress vs plan ----
+    const lanes={};
+    floorJobs.forEach(j=>{ if(/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')&&!/parts/i.test(j.bay||'')) return;
+      (j.tasks||[]).forEach(t=>{ if(t.done||isSalesT(t)||isSnzRep(t)) return; const od=t.due&&t.due<todayISO;
+        crewWhoList(t.who).forEach(w=>{ const L=(lanes[w]=lanes[w]||{n:0,od:0}); L.n++; if(od) L.od++; }); }); });
+    const laneKeys=Object.keys(lanes).sort((a,b)=>lanes[b].n-lanes[a].n).slice(0,7);
+    const lmx=Math.max(1,...laneKeys.map(k=>lanes[k].n));
+    const crewBars=laneKeys.map(k=>{ const L=lanes[k]; const w=(L.n/lmx*100).toFixed(1), wo=(L.od/lmx*100).toFixed(1);
+      return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:86px;flex:none;font-size:10px;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(k)+'</div>'
+        +'<div style="flex:1;position:relative;height:13px;background:#f1f5f9;border-radius:4px"><div style="position:absolute;left:0;top:0;bottom:0;width:'+w+'%;background:#cbd5e1;border-radius:4px"></div><div style="position:absolute;left:0;top:0;bottom:0;width:'+wo+'%;background:#c81e1e;border-radius:4px 0 0 4px"></div></div>'
+        +'<div style="width:64px;flex:none;font-size:9.5px;color:#586a7e"><b>'+L.n+'</b>'+(L.od?(' \u00b7 <span style="color:#c81e1e;font-weight:800">'+L.od+' od</span>'):'')+'</div></div>'; }).join('');
+    const pvRows=dated.slice(0,9).map(r=>{ const p=r.p; const exp=(r.h&&r.h.expectedPct!=null)?r.h.expectedPct:null; const col=HC[r.state]||'#64748b';
+      return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:110px;flex:none;font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'</div>'
+        +'<div style="flex:1;position:relative;height:13px;background:#f1f5f9;border-radius:4px"><div style="position:absolute;left:0;top:0;bottom:0;width:'+(p.pct||0)+'%;background:'+col+';border-radius:4px"></div>'
+        +(exp!=null?('<div style="position:absolute;left:'+exp+'%;top:-2px;bottom:-2px;width:2px;background:#1e293b" title="Expected '+exp+'% by today"></div>'):'')+'</div>'
+        +'<div style="width:86px;flex:none;font-size:9.5px;color:#586a7e"><b>'+(p.pct||0)+'%</b>'+(exp!=null?(' <span style="color:#94a3b8">/ exp '+exp+'%</span>'):'')+'</div></div>'; }).join('');
+    chartRow2='<div style="display:flex;gap:12px;margin:10px 0 2px;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:250px;border:1px solid #dfe5ec;border-radius:9px;padding:9px 12px"><div style="font-size:9px;letter-spacing:.8px;color:#7b8794;font-weight:800;margin-bottom:4px">CREW LOAD \u2014 OPEN TASKS (red = overdue)</div>'+crewBars+'</div>'
+      +'<div style="flex:1;min-width:250px;border:1px solid #dfe5ec;border-radius:9px;padding:9px 12px"><div style="font-size:9px;letter-spacing:.8px;color:#7b8794;font-weight:800;margin-bottom:4px">PROGRESS VS PLAN (black tick = where it should be today)</div>'+pvRows+'</div></div>';
+  }catch(e){ }
+  // ---- TL;DR ----
+  const tldr=[];
+  if(shipped.length) tldr.push('\u{1F6A2} <b>Shipped '+shipped.length+' trailer'+(shipped.length>1?'s':'')+':</b> '+shipped.map(j=>esc(j.project)).join(' \u00b7 '));
+  tldr.push('\u2705 <b>'+doneN+' tasks closed</b> this week'+(doneTop.length?(' \u2014 most on '+esc(doneTop[0])+' ('+doneBy[doneTop[0]]+')'):''));
+  if(msHit.length) tldr.push('\u25C6 <b>Milestone'+(msHit.length>1?'s':'')+' hit:</b> '+msHit.map(m=>esc(m.txt)+' ('+esc(m.src)+')').join(' \u00b7 '));
+  tldr.push('\u{1F4CA} <b>'+greens.length+' of '+(greens.length+flags.length)+' active projects on track</b>'+(flags.length?(' \u2014 watching: '+flags.map(r=>'<b>'+esc(r.p.name)+'</b> ('+(r.state==='late'?'late':'behind')+(r.b.odN?(', '+r.b.odN+' past-due'):'')+', '+esc((r.p.pm||'\u2014').split(' ')[0])+')').join(' \u00b7 ')):' \u2014 nothing flagged'));
+  tldr.push('\u{1F3ED} <b>Floor:</b> '+bayRows.length+' in bays \u00b7 '+lotN+' in the lot \u00b7 '+heldN+' on hold'+(backSoon.length?(' \u00b7 '+backSoon.length+' returning \u22642 wks'):''));
+  if(odN||fioOd) tldr.push('\u26A0 <b>'+odN+' shop tasks overdue</b>'+(fioOd?(' \u00b7 '+fioOd+' fleet issues overdue'):''));
   const tile=(n,lab,col)=>'<div class="st" style="border-left-color:'+col+'"><div class="n" style="color:'+col+'">'+n+'</div><div class="l">'+lab+'</div></div>';
-  // flagged projects — the ONLY place with detail lines
+  // flagged detail + per-project green lines (compact)
+  const gateTxt=b=>(b&&b.gate)?(' \u00b7 next: <b>'+esc(b.gate.name)+'</b> '+fmtMDs(b.gate.dateISO)):'';
   const flagHtml=flags.length?('<ul>'+flags.map(r=>{ const p=r.p,b=r.b;
-    return '<li style="font-size:13px"><span class="dot" style="background:'+(HC[r.state]||'#666')+'"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'—')+'</span> — '+PMT_LAB[r.state]+(p.pct!=null?(', '+p.pct+'%'):'')+', target '+(p.finishISO?fmt(p.finishISO):'TBD')
-      +((b&&b.odN)?('<div class="hdet">\u26A0 '+b.odN+' past-due'+(b.whoTxt?(' · with: '+esc(b.whoTxt)):'')+(b.gate?(' · next gate: <b>'+esc(b.gate.name)+'</b> '+fmt(b.gate.dateISO)):'')+'</div>'):'')+'</li>'; }).join('')+'</ul>')
+    return '<li style="font-size:13px"><span class="dot" style="background:'+(HC[r.state]||'#666')+'"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'\u2014')+'</span> \u2014 '+PMT_LAB[r.state]+(p.pct!=null?(', '+p.pct+'%'):'')+', target '+(p.finishISO?fmt(p.finishISO):'TBD')
+      +((b&&b.odN)?('<div class="hdet">\u26A0 '+b.odN+' past-due'+(b.whoTxt?(' \u00b7 with: '+esc(b.whoTxt)):'')+gateTxt(b)+'</div>'):'')+'</li>'; }).join('')+'</ul>')
     :'<div style="font-size:13px;color:#15803d;font-weight:700">\u2705 Every active project is on track.</div>';
-  const greenLine=greens.length?('<div style="font-size:11.5px;color:#374151;line-height:1.9;margin-top:4px"><span style="color:#15803d;font-weight:800">\u25CF ON TRACK:</span> '+greens.map(r=>'<b>'+esc(r.p.name)+'</b> '+(r.p.pct!=null?r.p.pct+'%':'')+(r.p.finishISO?(' \u2192 '+fmt(r.p.finishISO)):'')).join(' &nbsp;\u00b7&nbsp; ')+'</div>'):'';
-  const upcLine=upc.length?('<div style="font-size:11px;color:#586a7e;margin-top:3px"><b>Upcoming:</b> '+upc.map(r=>esc(r.p.name)).join(' · ')+'</div>'):'';
-  const rollup=doneTop.length?('<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">'+doneTop.slice(0,8).map(k=>'<span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px">'+esc(k)+' · '+doneBy[k]+'</span>').join('')+(doneTop.length>8?('<span style="color:#7b8794;font-size:11px;padding:3px 4px">+ '+doneTop.slice(8).reduce((a,k)=>a+doneBy[k],0)+' more on '+(doneTop.length-8)+' other jobs</span>'):'')+'</div>'):'<div class="empty">Nothing closed in the window.</div>';
+  const greenHtml=greens.length?('<ul style="margin-top:6px">'+greens.map(r=>{ const p=r.p,b=r.b;
+    return '<li style="font-size:11.5px;margin-bottom:2px"><span class="dot" style="background:#15803d"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'\u2014')+'</span> \u2014 '+(p.pct!=null?(p.pct+'%'):'')+(p.finishISO?(' \u2192 '+fmt(p.finishISO)):'')+gateTxt(b)+'</li>'; }).join('')+'</ul>'):'';
+  const upcLine=upc.length?('<div style="font-size:11px;color:#586a7e;margin-top:3px"><b>Upcoming:</b> '+upc.map(r=>esc(r.p.name)+(r.p.startISO?(' (starts '+fmtMDs(r.p.startISO)+')'):'')).join(' \u00b7 ')+'</div>'):'';
+  const rollup=doneTop.length?('<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">'+doneTop.slice(0,8).map(k=>'<span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px">'+esc(k)+' \u00b7 '+doneBy[k]+'</span>').join('')+(doneTop.length>8?('<span style="color:#7b8794;font-size:11px;padding:3px 4px">+ '+doneTop.slice(8).reduce((a,k)=>a+doneBy[k],0)+' more on '+(doneTop.length-8)+' other jobs</span>'):'')+'</div>'):'<div class="empty">Nothing closed in the window.</div>';
+  const notHtml=notable.length?('<div style="font-size:9px;letter-spacing:.8px;color:#7b8794;font-weight:800;margin:8px 0 2px">HIGHLIGHTS</div><ul>'+notable.slice(0,8).map(x=>'<li style="font-size:11px;margin-bottom:2px">'+esc(x.txt)+' <span class="src">'+esc(x.src)+'</span>'+(x.who?' <span class="who">'+esc(x.who)+'</span>':'')+' <span class="dt">'+fmtMDs(x.d)+'</span></li>').join('')+'</ul>'):'';
   const floorLines=bayRows.length?('<ul>'+bayRows.map(j=>{ const op=(j.tasks||[]).filter(t=>!t.done&&!isSalesT(t)&&!isSnzRep(t)).length;
-    return '<li style="font-size:12px"><b>'+esc(String(j.bay).replace(/\s*\/\s*Loading Dock/i,''))+':</b> '+esc(j.project)+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+' — '+op+' open'+(j.completionISO?(' · target '+fmt(j.completionISO)):'')+'</li>'; }).join('')+'</ul>'):'<div class="empty">No trailers in bays.</div>';
-  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Weekly Executive Report — '+rDate+'</title><style>'+REPORT_CSS
+    return '<li style="font-size:12px"><b>'+esc(String(j.bay).replace(/\s*\/\s*Loading Dock/i,''))+':</b> '+esc(j.project)+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+(j.pm&&j.pm!=='N/A'?' <span class="who">'+esc(j.pm)+'</span>':'')+' \u2014 '+op+' open'+(j.completionISO?(' \u00b7 target '+fmt(j.completionISO)):'')+'</li>'; }).join('')+'</ul>'):'<div class="empty">No trailers in bays.</div>';
+  const aheadHtml=(finAhead.length||msAhead.length||backSoon.length)?('<ul>'
+    +finAhead.map(r=>'<li style="font-size:12px">\u{1F3C1} <b>'+esc(r.p.name)+'</b> targeted to finish <span class="dt">'+fmt(r.p.finishISO)+'</span> <span class="who">'+esc(r.p.pm||'')+'</span></li>').join('')
+    +msAhead.slice(0,8).map(m=>'<li style="font-size:12px">\u25C6 <b>'+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span> <span class="dt">'+fmt(m.d)+'</span></li>').join('')
+    +backSoon.slice(0,6).map(i=>'<li style="font-size:12px">\u{1F69B} <b>'+esc(i.asset||i.jobNum||('#'+i.num))+'</b> back to MRA <span class="dt">'+esc(i.backMRA)+'</span>'+(i.leaveMRA?(' \u00b7 leaves '+esc(i.leaveMRA)):'')+'</li>').join('')
+    +'</ul>'):'<div class="empty">Quiet two weeks ahead on the schedule.</div>';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Weekly Executive Report \u2014 '+rDate+'</title><style>'+REPORT_CSS
     +'.tldr{background:#fff8f3;border:2px solid #e04826;border-radius:12px;padding:14px 18px;margin:4px 0 14px}.tldr div{font-size:14.5px;line-height:1.65;margin:5px 0}.tldr .tl-h{font-size:10px;letter-spacing:1.2px;color:#e04826;font-weight:900;margin:0 0 4px}'
     +'</style></head><body>'
-    +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Weekly executive report · refresh for live data</span></div>'
-    +'<div class="wrap"><h1><span class="mra">MRA</span> Weekly Executive Report</h1><div class="sub">Monday '+rDate+' · covering the last '+days+' days · data as of '+esc(D.generatedText||'')+'</div>'
+    +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Weekly executive report \u00b7 refresh for live data</span></div>'
+    +'<div class="wrap"><h1><span class="mra">MRA</span> Weekly Executive Report</h1><div class="sub">Monday '+rDate+' \u00b7 covering the last '+days+' days \u00b7 data as of '+esc(D.generatedText||'')+'</div>'
     +'<div class="tldr"><div class="tl-h">THE WEEK IN 30 SECONDS</div>'+tldr.map(t=>'<div>'+t+'</div>').join('')+'</div>'
-    +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+tile(doneN,'CLOSED — '+days+'D','#15803d')+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
+    +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+tile(doneN,'CLOSED \u2014 '+days+'D','#15803d')+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
     +chartRow
-    +'<h2>\u26A0 Projects needing attention</h2>'+flagHtml+greenLine+upcLine
+    +chartRow2
+    +'<h2>\u26A0 Projects needing attention</h2>'+flagHtml+greenHtml+upcLine
     +(gantt?('<h2>\u{1F4C5} Program timeline</h2>'+gantt):'')
-    +'<h2>\u2705 Closed this week — by job</h2>'
+    +'<h2>\u2705 Closed this week \u2014 by job</h2>'
     +(shipped.length?('<ul>'+shipped.map(j=>'<li style="font-size:13px">\u{1F6A2} <b>Shipped: '+esc(j.project)+'</b>'+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+'</li>').join('')+'</ul>'):'')
     +(msHit.length?('<ul>'+msHit.map(m=>'<li style="font-size:13px">\u25C6 <b>Milestone: '+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span></li>').join('')+'</ul>'):'')
     +rollup
+    +notHtml
     +'<h2>\u{1F3ED} Shop floor today</h2>'+floorLines
-    +'<div class="hnote" style="margin-left:0">Plus '+lotN+' in the Parking Lot · '+heldN+' on hold / next up'+(backSoon.length?(' · '+backSoon.length+' unit'+(backSoon.length>1?'s':'')+' returning within 2 weeks'):'')+'</div>'
-    +'<div class="foot">MRA Command Center · prepared automatically every Monday · questions? the dashboard has full detail — or ask Rich</div></div></body></html>';
+    +'<div class="hnote" style="margin-left:0">Plus '+lotN+' in the Parking Lot \u00b7 '+heldN+' on hold / next up'+(backSoon.length?(' \u00b7 '+backSoon.length+' unit'+(backSoon.length>1?'s':'')+' returning within 2 weeks'):'')+'</div>'
+    +'<h2>\u23F0 The next two weeks</h2>'+aheadHtml
+    +'<div class="foot">MRA Command Center \u00b7 prepared automatically every Monday \u00b7 questions? the dashboard has full detail \u2014 or ask Rich</div></div></body></html>';
 }
 function openExecReport(){ if(typeof closeDrops==='function') closeDrops();
   const html=buildExecReportHtml(7);
