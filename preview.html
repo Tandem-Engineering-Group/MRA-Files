@@ -3644,6 +3644,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"29.8", date:"2026-07-18", title:"\u{1F4C8} Executive report: week-over-week trend (research-backed)", items:[
+    "Researched executive-report best practice (Rich\u2019s ask): the biggest gap was <b>trend context</b> \u2014 executives read change, not snapshots. The \u201ctasks closed\u201d line and tile now carry a <b>\u25B2/\u25BC vs-last-week delta</b>. The rest of the report already matched the guidance: lead with a summary, 5-7 KPIs, exception-based detail (only flagged projects expand), visuals over tables, one page, consistent structure." ] },
   { rev:"29.7", date:"2026-07-18", title:"\u{1F9F9} Executive report: dropped the task-level HIGHLIGHTS", items:[
     "Rich: \u201cNot sure Tony cares about these details.\u201d The HIGHLIGHTS list (individual crew tasks) is gone \u2014 the closed-by-job pills, \u{1F6A2} shipped trailers and \u25C6 milestones already tell the week\u2019s story at the owner level." ] },
   { rev:"29.6", date:"2026-07-18", title:"\u{1F4F1} Executive report reads right on a phone (Rich\u2019s screenshots)", items:[
@@ -12836,15 +12838,17 @@ function buildExecReportHtml(days){
           +'<div class="gxb" style="left:'+st.toFixed(1)+'%;width:'+Math.max(0.8,e-st).toFixed(1)+'%;background:'+(HC[r.state]||'#64748b')+'" title="'+escA(p.name+' '+fmt(p.startISO)+' → '+fmt(p.finishISO))+'"></div></div>'
           +'<div class="gxd">'+fmtMDs(p.startISO)+' →<br><b>'+fmt(p.finishISO)+'</b></div></div>'; }).join('')+'</div>';
   }
+  // ---- weekly buckets (shared: charts + week-over-week deltas) ----
+  const wk=[];
+  for(let w=5;w>=0;w--){ const a=localISO(Date.parse(todayISO)-((w+1)*7-1)*86400000), b=localISO(Date.parse(todayISO)-w*7*86400000); wk.push({a:a,b:b,n:0}); }
+  liveJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done||!t.cl||isSalesT(t)) return; const c=String(t.cl);
+    for(const bkt of wk){ if(c>=bkt.a&&c<=bkt.b){ bkt.n++; break; } } }));
+  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; const isD=(t.done===true)||/complete/i.test(String(t.st||'')); if(!isD||!fin) return;
+    for(const bkt of wk){ if(fin>=bkt.a&&fin<=bkt.b){ bkt.n++; break; } } }));
+  const wkPrev=wk.length>1?wk[wk.length-2].n:null;   // last week's closed count, for the delta
   // ---- charts ----
   let chartRow=''; let chartRow2='';
   try{
-    const wk=[];
-    for(let w=5;w>=0;w--){ const a=localISO(Date.parse(todayISO)-((w+1)*7-1)*86400000), b=localISO(Date.parse(todayISO)-w*7*86400000); wk.push({a:a,b:b,n:0}); }
-    liveJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done||!t.cl||isSalesT(t)) return; const c=String(t.cl);
-      for(const bkt of wk){ if(c>=bkt.a&&c<=bkt.b){ bkt.n++; break; } } }));
-    projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; const isD=(t.done===true)||/complete/i.test(String(t.st||'')); if(!isD||!fin) return;
-      for(const bkt of wk){ if(fin>=bkt.a&&fin<=bkt.b){ bkt.n++; break; } } }));
     const mx=Math.max(1,...wk.map(x=>x.n));
     const bars=wk.map((x,i)=>{ const hpx=Math.max(3,Math.round(x.n/mx*58)); const cur=(i===wk.length-1);
       return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="font-size:9px;font-weight:800;color:'+(cur?'#e04826':'#586a7e')+'">'+x.n+'</div><div style="width:70%;height:'+hpx+'px;border-radius:4px 4px 0 0;background:'+(cur?'#e04826':'#cbd5e1')+'"></div><div style="font-size:8px;color:#94a3b8">'+fmtMDs(x.b)+'</div></div>'; }).join('');
@@ -12878,7 +12882,8 @@ function buildExecReportHtml(days){
   // ---- TL;DR ----
   const tldr=[];
   if(shipped.length) tldr.push('\u{1F6A2} <b>Shipped '+shipped.length+' trailer'+(shipped.length>1?'s':'')+':</b> '+shipped.map(j=>esc(j.project)).join(' · '));
-  tldr.push('✅ <b>'+doneN+' tasks closed</b> this week'+(doneTop.length?(' — most on '+esc(doneTop[0])+' ('+doneBy[doneTop[0]]+')'):''));
+  const wkDelta=(wkPrev!=null&&wkPrev>0)?(wk[wk.length-1].n-wkPrev):null;
+  tldr.push('✅ <b>'+doneN+' tasks closed</b> this week'+(wkDelta!=null?(' ('+(wkDelta>=0?'<span style="color:#15803d;font-weight:700">▲ '+wkDelta:'<span style="color:#b45309;font-weight:700">▼ '+Math.abs(wkDelta))+' vs last wk</span>)'):'')+(doneTop.length?(' — most on '+esc(doneTop[0])+' ('+doneBy[doneTop[0]]+')'):''));
   if(msHit.length) tldr.push('◆ <b>Milestone'+(msHit.length>1?'s':'')+' hit:</b> '+msHit.map(m=>esc(m.txt)+' ('+esc(m.src)+')').join(' · '));
   tldr.push('\u{1F4CA} <b>'+greens.length+' of '+(greens.length+flags.length)+' active projects on track</b>'+(flags.length?(' — watching: '+flags.map(r=>'<b>'+esc(r.p.name)+'</b> ('+(r.state==='late'?'late':'behind')+(r.b.odN?(', '+r.b.odN+' past-due'):'')+', '+esc((r.p.pm||'—').split(' ')[0])+')').join(' · ')):' — nothing flagged'));
   tldr.push('\u{1F3ED} <b>Floor:</b> '+bayRows.length+' in bays · '+lotN+' in the lot · '+heldN+' on hold'+(backSoon.length?(' · '+backSoon.length+' returning ≤2 wks'):''));
@@ -12940,7 +12945,7 @@ function buildExecReportHtml(days){
     +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Weekly executive report · refresh for live data</span></div>'
     +'<div class="wrap"><h1><span class="mra">MRA</span> Weekly Executive Report</h1><div class="sub">Monday '+rDate+' · covering the last '+days+' days · data as of '+esc(D.generatedText||'')+'</div>'
     +'<div class="tldr"><div class="tl-h">THE WEEK IN 30 SECONDS</div>'+tldr.map(t=>'<div>'+t+'</div>').join('')+'</div>'
-    +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+tile(doneN,'CLOSED — '+days+'D','#15803d')+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
+    +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+((wkPrev!=null&&wkPrev>0)?('<div class="st" style="border-left-color:#15803d"><div class="n" style="color:#15803d">'+doneN+' <span style="font-size:11px;font-weight:800;color:'+((wk[wk.length-1].n-wkPrev)>=0?'#15803d':'#b45309')+'">'+((wk[wk.length-1].n-wkPrev)>=0?'▲':'▼')+Math.abs(wk[wk.length-1].n-wkPrev)+'</span></div><div class="l">CLOSED — '+days+'D (VS LAST WK)</div></div>'):tile(doneN,'CLOSED — '+days+'D','#15803d'))+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
     +chartRow
     +chartRow2
     +'<h2>\u{1F4CB} Projects</h2>'+upcLine+projCards
