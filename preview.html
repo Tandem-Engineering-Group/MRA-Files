@@ -3644,6 +3644,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"29.5", date:"2026-07-18", title:"\u{1F512} Executive report: start\u2192finish on every project + Rich-only", items:[
+    "Every project line (green ones too) now shows <b>\u25B6 start \u2192 finish</b>, its <b>open-task count</b> and <b>how many closed this week</b> \u2014 so each line reads as a mini status.",
+    "The <span class=\"k\">?exec=1</span> report is <b>locked to Rich</b> on the live site for now \u2014 anyone else gets a sign-in screen. (When it\u2019s ready for Tony, it\u2019s a one-line change to allow him.)" ] },
   { rev:"29.4", date:"2026-07-18", title:"\u{1F4CA} Executive report: gantt dates, more detail, 2 more charts", items:[
     "The <b>Program timeline</b> now shows each project\u2019s <b>start \u2192 finish dates</b> on the row plus the PM and <b>% done</b> under the name.",
     "Two new charts: <b>CREW LOAD</b> \u2014 open tasks per crew with the <b>overdue portion in red</b> (spot who\u2019s buried at a glance) \u2014 and <b>PROGRESS VS PLAN</b> \u2014 each project\u2019s % complete bar with a <b>black tick where it should be today</b> (behind = bar short of the tick).",
@@ -12876,12 +12879,15 @@ function buildExecReportHtml(days){
   const tile=(n,lab,col)=>'<div class="st" style="border-left-color:'+col+'"><div class="n" style="color:'+col+'">'+n+'</div><div class="l">'+lab+'</div></div>';
   // flagged detail + per-project green lines (compact)
   const gateTxt=b=>(b&&b.gate)?(' \u00b7 next: <b>'+esc(b.gate.name)+'</b> '+fmtMDs(b.gate.dateISO)):'';
+  const projMeta=p=>{ const op=(p.tasks||[]).filter(t=>!t.done&&!/yes/i.test(t.ml||'')).length; const cw=doneBy[p.name]||0;
+    return ' \u00b7 '+op+' open'+(cw?(' \u00b7 <span style="color:#15803d;font-weight:700">'+cw+' closed this wk</span>'):''); };
+  const rangeTxt=p=>' \u00b7 \u25B6 '+(p.startISO?fmtMDs(p.startISO):'?')+' \u2192 <b>'+(p.finishISO?fmt(p.finishISO):'TBD')+'</b>';
   const flagHtml=flags.length?('<ul>'+flags.map(r=>{ const p=r.p,b=r.b;
-    return '<li style="font-size:13px"><span class="dot" style="background:'+(HC[r.state]||'#666')+'"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'\u2014')+'</span> \u2014 '+PMT_LAB[r.state]+(p.pct!=null?(', '+p.pct+'%'):'')+', target '+(p.finishISO?fmt(p.finishISO):'TBD')
+    return '<li style="font-size:13px"><span class="dot" style="background:'+(HC[r.state]||'#666')+'"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'\u2014')+'</span> \u2014 '+PMT_LAB[r.state]+(p.pct!=null?(', '+p.pct+'%'):'')+rangeTxt(p)+projMeta(p)
       +((b&&b.odN)?('<div class="hdet">\u26A0 '+b.odN+' past-due'+(b.whoTxt?(' \u00b7 with: '+esc(b.whoTxt)):'')+gateTxt(b)+'</div>'):'')+'</li>'; }).join('')+'</ul>')
     :'<div style="font-size:13px;color:#15803d;font-weight:700">\u2705 Every active project is on track.</div>';
   const greenHtml=greens.length?('<ul style="margin-top:6px">'+greens.map(r=>{ const p=r.p,b=r.b;
-    return '<li style="font-size:11.5px;margin-bottom:2px"><span class="dot" style="background:#15803d"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'\u2014')+'</span> \u2014 '+(p.pct!=null?(p.pct+'%'):'')+(p.finishISO?(' \u2192 '+fmt(p.finishISO)):'')+gateTxt(b)+'</li>'; }).join('')+'</ul>'):'';
+    return '<li style="font-size:11.5px;margin-bottom:2px"><span class="dot" style="background:#15803d"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'\u2014')+'</span> \u2014 '+(p.pct!=null?(p.pct+'%'):'')+rangeTxt(p)+gateTxt(b)+projMeta(p)+'</li>'; }).join('')+'</ul>'):'';
   const upcLine=upc.length?('<div style="font-size:11px;color:#586a7e;margin-top:3px"><b>Upcoming:</b> '+upc.map(r=>esc(r.p.name)+(r.p.startISO?(' (starts '+fmtMDs(r.p.startISO)+')'):'')).join(' \u00b7 ')+'</div>'):'';
   const rollup=doneTop.length?('<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">'+doneTop.slice(0,8).map(k=>'<span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px">'+esc(k)+' \u00b7 '+doneBy[k]+'</span>').join('')+(doneTop.length>8?('<span style="color:#7b8794;font-size:11px;padding:3px 4px">+ '+doneTop.slice(8).reduce((a,k)=>a+doneBy[k],0)+' more on '+(doneTop.length-8)+' other jobs</span>'):'')+'</div>'):'<div class="empty">Nothing closed in the window.</div>';
   const notHtml=notable.length?('<div style="font-size:9px;letter-spacing:.8px;color:#7b8794;font-weight:800;margin:8px 0 2px">HIGHLIGHTS</div><ul>'+notable.slice(0,8).map(x=>'<li style="font-size:11px;margin-bottom:2px">'+esc(x.txt)+' <span class="src">'+esc(x.src)+'</span>'+(x.who?' <span class="who">'+esc(x.who)+'</span>':'')+' <span class="dt">'+fmtMDs(x.d)+'</span></li>').join('')+'</ul>'):'';
@@ -16017,9 +16023,29 @@ if(_sheetSel){
   document.documentElement.innerHTML=_f.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
   document.title='MRA — Deficiency List';
 } else if(_execQ){
-  const _x=buildExecReportHtml(_execQ);
-  document.documentElement.innerHTML=_x.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
-  document.title='MRA — Weekly Executive Report';
+  // Owner report is Rich-only for now (his ask). Off the live host it renders straight away;
+  // on the live host it waits for the Microsoft session and only renders for Rich.
+  const _renderExec=()=>{ const _x=buildExecReportHtml(_execQ);
+    document.documentElement.innerHTML=_x.replace(/^<!doctype html><html>/i,'').replace(/<\/html>\s*$/i,'');
+    document.title='MRA \u2014 Weekly Executive Report'; };
+  if(!SSO.active()){ _renderExec(); }
+  else {
+    document.documentElement.innerHTML='<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA \u2014 Weekly Executive Report</title></head>'
+      +'<body style="margin:0;font-family:Segoe UI,Arial,sans-serif;background:#101827;color:#eef4ff;display:grid;place-items:center;min-height:100vh;text-align:center">'
+      +'<div><div style="width:52px;height:52px;border-radius:13px;margin:0 auto 16px;display:grid;place-items:center;background:linear-gradient(135deg,#e04826,#f6923f);font-weight:800;font-size:24px;color:#fff">M</div>'
+      +'<h2 style="margin:0 0 8px">Weekly Executive Report</h2><p id="xgMsg" style="color:#9aa9bd;margin:0 0 18px">Checking access\u2026</p>'
+      +'<button id="xgBtn" onclick="SSO.signIn()" style="display:none;background:#e04826;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:14px;cursor:pointer">\u{1F510} Sign in with Microsoft</button></div></body>';
+    try{ SSO.init(); }catch(e){}
+    const _xg=setInterval(()=>{ try{
+      if(!(SSO.ready||SSO.failed)) return;
+      clearInterval(_xg);
+      const msg=document.getElementById('xgMsg'), btn=document.getElementById('xgBtn');
+      if(SSO.failed){ if(msg) msg.textContent='Sign-in is unavailable right now \u2014 refresh to try again.'; return; }
+      if(SSO.user && isSuperAdmin()){ _renderExec(); return; }
+      if(msg) msg.textContent=SSO.user?'This report is limited right now \u2014 ask Rich.':'Sign in with your @gomra.com account to view.';
+      if(btn && !SSO.user) btn.style.display='';
+    }catch(e){} },300);
+  }
 } else if(_recapQ){
   const _pmQ=(()=>{ try{ return new URLSearchParams(location.search).get('pm'); }catch(e){ return null; } })();
   const _r=_pmQ?buildPMReportHtml(_pmQ, new URLSearchParams(location.search).get('days')||7):buildFloorRecapHtml(_recapQ);
