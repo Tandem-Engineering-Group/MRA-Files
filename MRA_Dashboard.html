@@ -3644,6 +3644,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"29.2", date:"2026-07-18", title:"\u{1F4E7} Executive report made glanceable (Rich: \u201cno way he reads that eye chart\u201d)", items:[
+    "The Monday owner report now leads with an orange <b>\u201cTHE WEEK IN 30 SECONDS\u201d</b> box — 5 plain-English lines (shipped · closed · projects on track + who\u2019s behind · floor · overdue). <b>60% less text overall</b>: on-track projects compress to one line, the 40-task list is now <b>closed-per-job pills</b>, and only yellow/red projects get detail. Whole report fits one screen." ] },
   { rev:"29.1", date:"2026-07-17", title:"📧 Weekly Executive Report — the Monday owner one-pager", items:[
     "New <b>☰ Actions → 📧 Executive report (weekly)</b> — a clean, professional Monday-morning one-pager built for ownership: <b>portfolio health</b> (every active project, worst-first, with who's behind), a <b>program timeline</b> (health-colored gantt of every dated project with a today line), <b>✅ accomplished last week</b> (tasks closed, milestones hit, trailers shipped), <b>🏭 shop floor today</b> (what's in every bay + lot/hold counts + units returning), <b>⏰ the week ahead</b> (finishes + milestones next 14 days) and <b>⚠ needs attention</b>.",
     "Lives at <span class=\"k\">?exec=1</span> (add <span class=\"k\">&amp;days=7</span> to change the window) — built for a scheduled <b>Monday 6 AM email to Tony</b>, same 3-step flow pattern as the daily My Work emails. Print / Save-PDF bar included." ] },
@@ -12765,15 +12767,36 @@ function buildExecReportHtml(days){
   const HC={late:'#c81e1e',behind:'#b45309',ontrack:'#15803d',upcoming:'#1d4ed8',parked:'#475569',done:'#475569'};
   const liveJobs=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0 && j.category!=='pipeline');
   const floorJobs=liveJobs.filter(j=>(j.status||'').toLowerCase()!=='shipped');
-  // ---- portfolio health (all active projects, worst first) ----
+  // ---- portfolio health ----
   const projs=(D.projects||[]).filter(p=>!p.nonOfficial);
   const hRows=projs.filter(p=>projStatus(p,todayISO)!=='done' && !p.parked).map(p=>{
-    const h=projHealth(p,todayISO); const b=_pmtBehindBits(p,todayISO); const tgt=p.finishISO?fmt(p.finishISO):'TBD';
-    const det=(b&&b.odN)?('<div class="hdet"><b>⚠ '+b.odN+' past-due</b>'+(b.whoTxt?(' · with: '+esc(b.whoTxt)):'')+(b.gate?(' · next gate: <b>'+esc(b.gate.name)+'</b> '+fmt(b.gate.dateISO)):'')+'</div>'):'';
-    return {state:h.state, p:p, html:'<li><span class="dot" style="background:'+(HC[h.state]||'#666')+'"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'—')+'</span> — '+PMT_LAB[h.state]+(p.pct!=null?(', '+p.pct+'%'):'')+', target '+tgt+det+'</li>'};
+    const h=projHealth(p,todayISO); const b=_pmtBehindBits(p,todayISO);
+    return {state:h.state, p:p, b:b};
   }).sort((a,b)=>HEALTH_RANK[a.state]-HEALTH_RANK[b.state]||String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
-  const g=hRows.filter(r=>r.state==='ontrack').length, yr=hRows.filter(r=>r.state==='late'||r.state==='behind').length;
-  // ---- program gantt (inline, print/email-safe divs) ----
+  const greens=hRows.filter(r=>r.state==='ontrack'), flags=hRows.filter(r=>r.state==='late'||r.state==='behind'), upc=hRows.filter(r=>r.state==='upcoming');
+  // ---- accomplished rollup ----
+  const doneBy={}; let doneN=0;
+  liveJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut&&!isSalesT(t)){ doneN++; doneBy[j.project]=(doneBy[j.project]||0)+1; } }));
+  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; const isDone=(t.done===true)||/complete/i.test(String(t.st||''));
+    if(isDone && fin && fin>cut && fin<=todayISO){ doneN++; doneBy[p.name]=(doneBy[p.name]||0)+1; } }));
+  const doneTop=Object.keys(doneBy).sort((a,b)=>doneBy[b]-doneBy[a]);
+  const msHit=[]; projs.forEach(p=>(p.milestones||[]).forEach(m=>{ const d=m.dateISO||''; if(m.done&&d&&d>cut&&d<=todayISO) msHit.push({src:p.name,txt:m.name||'Milestone',d}); }));
+  const shipRe=/\u{1F6A2}\s*Shipped:\s*(\d{1,2})\/(\d{1,2})\/(\d{2})/u;
+  const shipped=liveJobs.filter(j=>{ const m=String(j.notesRaw||'').match(shipRe); if(!m) return false;
+    const iso='20'+m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); return iso>cut&&iso<=todayISO; });
+  // ---- floor ----
+  const bayRows=floorJobs.filter(j=>/^bay/i.test(j.bay||'')).sort((a,b)=>String(a.bay).localeCompare(String(b.bay)));
+  const lotN=floorJobs.filter(j=>/^\s*parking\s*lot\s*$/i.test(j.bay||'')).length;
+  const heldN=floorJobs.filter(j=>!/parts/i.test(j.bay||'')&&/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')).length;
+  let openN=0, odN=0; floorJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done&&!isSalesT(t)&&!isSnzRep(t)){ openN++; if(t.due&&t.due<todayISO) odN++; } }));
+  const backSoon=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>{ const m=String(i.backMRA||'').match(/(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{4})/); if(!m) return false;
+    const iso=m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); return iso>=todayISO&&iso<=aheadTo; });
+  // ---- ahead / attention ----
+  const msAhead=[]; projs.forEach(p=>(p.milestones||[]).forEach(m=>{ const d=m.dateISO||''; if(!m.done&&d&&d>=todayISO&&d<=aheadTo) msAhead.push({src:p.name,txt:m.name||'Milestone',d}); }));
+  msAhead.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
+  const finAhead=hRows.filter(r=>r.p.finishISO&&r.p.finishISO>=todayISO&&r.p.finishISO<=aheadTo);
+  const fioOd=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>i.overdue).length;
+  // ---- program gantt (visual, no reading) ----
   const dated=hRows.filter(r=>r.p.startISO&&r.p.finishISO);
   let gantt='';
   if(dated.length){
@@ -12787,60 +12810,47 @@ function buildExecReportHtml(days){
     gantt='<div style="position:relative;height:14px;margin:2px 0 2px 168px">'+ticks+'</div>'
       +dated.map(r=>{ const p=r.p, s=pct(Date.parse(p.startISO)), e=pct(Date.parse(p.finishISO));
         return '<div style="display:flex;align-items:center;border-top:1px solid #eef1f5">'
-          +'<div style="width:160px;flex:none;font-size:9.5px;font-weight:700;padding:3px 8px 3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'<span style="color:#7b8794;font-weight:400"> · '+esc((p.pm||'').split(' ')[0])+'</span></div>'
-          +'<div style="flex:1;position:relative;height:16px"><span style="position:absolute;top:0;bottom:0;width:1px;background:#c81e1e;opacity:.45;'+tl+'"></span>'
-          +'<div style="position:absolute;left:'+s.toFixed(1)+'%;width:'+Math.max(0.8,e-s).toFixed(1)+'%;top:3px;height:10px;border-radius:4px;background:'+(HC[r.state]||'#64748b')+'" title="'+escA(p.name+' '+fmt(p.startISO)+' → '+fmt(p.finishISO))+'"></div></div></div>'; }).join('');
+          +'<div style="width:160px;flex:none;font-size:10px;font-weight:700;padding:4px 8px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'<span style="color:#7b8794;font-weight:400"> · '+esc((p.pm||'').split(' ')[0])+'</span></div>'
+          +'<div style="flex:1;position:relative;height:18px"><span style="position:absolute;top:0;bottom:0;width:1px;background:#c81e1e;opacity:.45;'+tl+'"></span>'
+          +'<div style="position:absolute;left:'+s.toFixed(1)+'%;width:'+Math.max(0.8,e-s).toFixed(1)+'%;top:4px;height:11px;border-radius:4px;background:'+(HC[r.state]||'#64748b')+'" title="'+escA(p.name+' '+fmt(p.startISO)+' → '+fmt(p.finishISO))+'"></div></div></div>'; }).join('');
     gantt='<div style="border:1px solid #dfe5ec;border-radius:9px;padding:8px 10px">'+gantt+'</div>';
   }
-  // ---- accomplished last week ----
-  const done=[];
-  liveJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut&&!isSalesT(t)) done.push({src:j.project, txt:cleanTask(t.t,false), who:t.who||'', d:t.cl}); }));
-  projs.forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; const isDone=(t.done===true)||/complete/i.test(String(t.st||''));
-    if(isDone && fin && fin>cut && fin<=todayISO) done.push({src:p.name, txt:t.t||'', who:t.who||'', d:fin}); }));
-  done.sort((a,b)=>String(b.d).localeCompare(String(a.d)));
-  const msHit=[]; projs.forEach(p=>(p.milestones||[]).forEach(m=>{ const d=m.dateISO||''; if(m.done&&d&&d>cut&&d<=todayISO) msHit.push({src:p.name,txt:m.name||'Milestone',d}); }));
-  const shipRe=/\u{1F6A2}\s*Shipped:\s*(\d{1,2})\/(\d{1,2})\/(\d{2})/u;
-  const shipped=liveJobs.filter(j=>{ const m=String(j.notesRaw||'').match(shipRe); if(!m) return false;
-    const iso='20'+m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); return iso>cut&&iso<=todayISO; });
-  // ---- shop floor today ----
-  const bayRows=floorJobs.filter(j=>/^bay/i.test(j.bay||'')).sort((a,b)=>String(a.bay).localeCompare(String(b.bay)));
-  const lotN=floorJobs.filter(j=>/^\s*parking\s*lot\s*$/i.test(j.bay||'')).length;
-  const heldN=floorJobs.filter(j=>!/parts/i.test(j.bay||'')&&/next\s*up|on\s*hold|off.?site/i.test(j.bay||'')).length;
-  let openN=0, odN=0; floorJobs.forEach(j=>(j.tasks||[]).forEach(t=>{ if(!t.done&&!isSalesT(t)&&!isSnzRep(t)){ openN++; if(t.due&&t.due<todayISO) odN++; } }));
-  const backSoon=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>{ const m=String(i.backMRA||'').match(/(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{4})/); if(!m) return false;
-    const iso=m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); return iso>=todayISO&&iso<=aheadTo; });
-  // ---- week ahead ----
-  const msAhead=[]; projs.forEach(p=>(p.milestones||[]).forEach(m=>{ const d=m.dateISO||''; if(!m.done&&d&&d>=todayISO&&d<=aheadTo) msAhead.push({src:p.name,txt:m.name||'Milestone',d}); }));
-  msAhead.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
-  const finAhead=hRows.filter(r=>r.p.finishISO&&r.p.finishISO>=todayISO&&r.p.finishISO<=aheadTo);
-  // ---- needs attention ----
-  const att=hRows.filter(r=>r.state==='late'||r.state==='behind');
-  const fioOd=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>i.overdue).length;
+  // ---- THE WEEK IN 30 SECONDS (auto-written plain English — the part Tony actually reads) ----
+  const tldr=[];
+  if(shipped.length) tldr.push('\u{1F6A2} <b>Shipped '+shipped.length+' trailer'+(shipped.length>1?'s':'')+':</b> '+shipped.map(j=>esc(j.project)).join(' · '));
+  tldr.push('\u2705 <b>'+doneN+' tasks closed</b> this week'+(doneTop.length?(' — most on '+esc(doneTop[0])+' ('+doneBy[doneTop[0]]+')'):''));
+  if(msHit.length) tldr.push('\u25C6 <b>Milestone'+(msHit.length>1?'s':'')+' hit:</b> '+msHit.map(m=>esc(m.txt)+' ('+esc(m.src)+')').join(' · '));
+  tldr.push('\u{1F4CA} <b>'+greens.length+' of '+(greens.length+flags.length)+' active projects on track</b>'+(flags.length?(' — watching: '+flags.map(r=>'<b>'+esc(r.p.name)+'</b> ('+(r.state==='late'?'late':'behind')+(r.b.odN?(', '+r.b.odN+' past-due'):'')+', '+esc((r.p.pm||'—').split(' ')[0])+')').join(' · ')):' — nothing flagged'));
+  tldr.push('\u{1F3ED} <b>Floor:</b> '+bayRows.length+' in bays · '+lotN+' in the lot · '+heldN+' on hold'+(backSoon.length?(' · '+backSoon.length+' returning \u22642 wks'):''));
+  if(odN||fioOd) tldr.push('\u26A0 <b>'+odN+' shop tasks overdue</b>'+(fioOd?(' · '+fioOd+' fleet issues overdue'):''));
+  if(finAhead.length||msAhead.length) tldr.push('\u23F0 <b>Next 2 weeks:</b> '+finAhead.map(r=>esc(r.p.name)+' finishes '+fmt(r.p.finishISO)).concat(msAhead.slice(0,3).map(m=>'\u25C6 '+esc(m.txt)+' '+fmt(m.d))).join(' · '));
   const tile=(n,lab,col)=>'<div class="st" style="border-left-color:'+col+'"><div class="n" style="color:'+col+'">'+n+'</div><div class="l">'+lab+'</div></div>';
-  const liD=x=>'<li><b>'+esc(x.txt)+'</b> <span class="src">'+esc(x.src)+'</span>'+(x.who?' <span class="who">'+esc(x.who)+'</span>':'')+' <span class="dt">'+fmt(x.d)+'</span></li>';
-  const cap=(arr,n)=>arr.length>n?arr.slice(0,n):arr;
-  const doneHtml=done.length?('<ul>'+cap(done,40).map(liD).join('')+'</ul>'+(done.length>40?'<div class="empty">+ '+(done.length-40)+' more — see the dashboard</div>':'')):'<div class="empty">Nothing closed in the window.</div>';
-  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Weekly Executive Report — '+rDate+'</title><style>'+REPORT_CSS+'</style></head><body>'
-    +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Weekly executive report · last '+days+' days · refresh for live data</span></div>'
-    +'<div class="wrap"><h1><span class="mra">MRA</span> Weekly Executive Report</h1><div class="sub">Monday '+rDate+' · covering the last '+days+' days · board data as of '+esc(D.generatedText||'')+'</div>'
-    +'<div class="stats">'+tile(hRows.length,'ACTIVE PROJECTS','#1d4ed8')+tile(g,'GREEN','#15803d')+tile(yr,'YELLOW / RED',(yr?'#b45309':'#15803d'))+tile(done.length,'TASKS CLOSED — '+days+'D','#15803d')+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(openN,'OPEN ON FLOOR','#586a7e')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
-    +'<h2>\u{1F4CA} Portfolio health</h2>'+(hRows.length?('<ul>'+hRows.map(r=>r.html).join('')+'</ul>'):'<div class="empty">No active projects.</div>')
+  // flagged projects — the ONLY place with detail lines
+  const flagHtml=flags.length?('<ul>'+flags.map(r=>{ const p=r.p,b=r.b;
+    return '<li style="font-size:13px"><span class="dot" style="background:'+(HC[r.state]||'#666')+'"></span><b>'+esc(p.name)+'</b> <span class="who">'+esc(p.pm||'—')+'</span> — '+PMT_LAB[r.state]+(p.pct!=null?(', '+p.pct+'%'):'')+', target '+(p.finishISO?fmt(p.finishISO):'TBD')
+      +((b&&b.odN)?('<div class="hdet">\u26A0 '+b.odN+' past-due'+(b.whoTxt?(' · with: '+esc(b.whoTxt)):'')+(b.gate?(' · next gate: <b>'+esc(b.gate.name)+'</b> '+fmt(b.gate.dateISO)):'')+'</div>'):'')+'</li>'; }).join('')+'</ul>')
+    :'<div style="font-size:13px;color:#15803d;font-weight:700">\u2705 Every active project is on track.</div>';
+  const greenLine=greens.length?('<div style="font-size:11.5px;color:#374151;line-height:1.9;margin-top:4px"><span style="color:#15803d;font-weight:800">\u25CF ON TRACK:</span> '+greens.map(r=>'<b>'+esc(r.p.name)+'</b> '+(r.p.pct!=null?r.p.pct+'%':'')+(r.p.finishISO?(' \u2192 '+fmt(r.p.finishISO)):'')).join(' &nbsp;\u00b7&nbsp; ')+'</div>'):'';
+  const upcLine=upc.length?('<div style="font-size:11px;color:#586a7e;margin-top:3px"><b>Upcoming:</b> '+upc.map(r=>esc(r.p.name)).join(' · ')+'</div>'):'';
+  const rollup=doneTop.length?('<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">'+doneTop.slice(0,8).map(k=>'<span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px">'+esc(k)+' · '+doneBy[k]+'</span>').join('')+(doneTop.length>8?('<span style="color:#7b8794;font-size:11px;padding:3px 4px">+ '+doneTop.slice(8).reduce((a,k)=>a+doneBy[k],0)+' more on '+(doneTop.length-8)+' other jobs</span>'):'')+'</div>'):'<div class="empty">Nothing closed in the window.</div>';
+  const floorLines=bayRows.length?('<ul>'+bayRows.map(j=>{ const op=(j.tasks||[]).filter(t=>!t.done&&!isSalesT(t)&&!isSnzRep(t)).length;
+    return '<li style="font-size:12px"><b>'+esc(String(j.bay).replace(/\s*\/\s*Loading Dock/i,''))+':</b> '+esc(j.project)+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+' — '+op+' open'+(j.completionISO?(' · target '+fmt(j.completionISO)):'')+'</li>'; }).join('')+'</ul>'):'<div class="empty">No trailers in bays.</div>';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Weekly Executive Report — '+rDate+'</title><style>'+REPORT_CSS
+    +'.tldr{background:#fff8f3;border:2px solid #e04826;border-radius:12px;padding:14px 18px;margin:4px 0 14px}.tldr div{font-size:14.5px;line-height:1.65;margin:5px 0}.tldr .tl-h{font-size:10px;letter-spacing:1.2px;color:#e04826;font-weight:900;margin:0 0 4px}'
+    +'</style></head><body>'
+    +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Weekly executive report · refresh for live data</span></div>'
+    +'<div class="wrap"><h1><span class="mra">MRA</span> Weekly Executive Report</h1><div class="sub">Monday '+rDate+' · covering the last '+days+' days · data as of '+esc(D.generatedText||'')+'</div>'
+    +'<div class="tldr"><div class="tl-h">THE WEEK IN 30 SECONDS</div>'+tldr.map(t=>'<div>'+t+'</div>').join('')+'</div>'
+    +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+tile(doneN,'CLOSED — '+days+'D','#15803d')+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
+    +'<h2>\u26A0 Projects needing attention</h2>'+flagHtml+greenLine+upcLine
     +(gantt?('<h2>\u{1F4C5} Program timeline</h2>'+gantt):'')
-    +'<h2>✅ Accomplished — last '+days+' days</h2>'
-    +(shipped.length?('<ul>'+shipped.map(j=>'<li>\u{1F6A2} <b>Shipped: '+esc(j.project)+'</b>'+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+'</li>').join('')+'</ul>'):'')
-    +(msHit.length?('<ul>'+msHit.map(m=>'<li>◆ <b>Milestone hit: '+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span> <span class="dt">'+fmt(m.d)+'</span></li>').join('')+'</ul>'):'')
-    +doneHtml
-    +'<h2>\u{1F3ED} Shop floor today</h2>'
-    +(bayRows.length?('<ul>'+bayRows.map(j=>{ const op=(j.tasks||[]).filter(t=>!t.done&&!isSalesT(t)&&!isSnzRep(t)).length;
-      return '<li><b>'+esc(j.bay)+':</b> '+esc(j.project)+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+' <span class="who">'+esc(j.pm||'')+'</span> — '+op+' open'+(j.completionISO?(' · target '+fmt(j.completionISO)):'')+'</li>'; }).join('')+'</ul>'):'<div class="empty">No trailers in bays.</div>')
+    +'<h2>\u2705 Closed this week — by job</h2>'
+    +(shipped.length?('<ul>'+shipped.map(j=>'<li style="font-size:13px">\u{1F6A2} <b>Shipped: '+esc(j.project)+'</b>'+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+'</li>').join('')+'</ul>'):'')
+    +(msHit.length?('<ul>'+msHit.map(m=>'<li style="font-size:13px">\u25C6 <b>Milestone: '+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span></li>').join('')+'</ul>'):'')
+    +rollup
+    +'<h2>\u{1F3ED} Shop floor today</h2>'+floorLines
     +'<div class="hnote" style="margin-left:0">Plus '+lotN+' in the Parking Lot · '+heldN+' on hold / next up'+(backSoon.length?(' · '+backSoon.length+' unit'+(backSoon.length>1?'s':'')+' returning within 2 weeks'):'')+'</div>'
-    +'<h2>⏰ The week ahead</h2>'
-    +((msAhead.length||finAhead.length)?('<ul>'
-      +finAhead.map(r=>'<li>\u{1F3C1} <b>'+esc(r.p.name)+'</b> targeted to finish <span class="dt">'+fmt(r.p.finishISO)+'</span> <span class="who">'+esc(r.p.pm||'')+'</span></li>').join('')
-      +msAhead.map(m=>'<li>◆ <b>'+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span> <span class="dt">'+fmt(m.d)+'</span></li>').join('')+'</ul>'):'<div class="empty">No milestones or finishes scheduled in the next two weeks.</div>')
-    +'<h2>⚠ Needs attention</h2>'
-    +((att.length||fioOd)?('<ul>'+att.map(r=>r.html).join('')+(fioOd?('<li><span class="dot" style="background:#b45309"></span><b>'+fioOd+' fleet issue'+(fioOd>1?'s':'')+' overdue</b> in Fleetio — see the Fleet tab</li>'):'')+'</ul>'):'<div class="empty">Nothing flagged — clean week.</div>')
-    +'<div class="foot">MRA Command Center · prepared automatically every Monday · open the dashboard for live detail</div></div></body></html>';
+    +'<div class="foot">MRA Command Center · prepared automatically every Monday · questions? the dashboard has full detail — or ask Rich</div></div></body></html>';
 }
 function openExecReport(){ if(typeof closeDrops==='function') closeDrops();
   const html=buildExecReportHtml(7);
