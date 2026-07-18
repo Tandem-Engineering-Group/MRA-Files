@@ -3644,6 +3644,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"30.0", date:"2026-07-18", title:"\u{1F4D0} Executive report: professional layout (research-backed redesign)", items:[
+    "Rich (iPad screenshots): the orphan OVERDUE tile sticking out, bay cards that were 90% empty space, big gaps everywhere \u2014 \u201cnot an executive owner level report.\u201d Researched dashboard-layout standards (NN/g data-table guidance, grid-alignment principles): <b>repeating records belong in tables on wide screens, and components must lock to a grid</b>.",
+    "<b>Stat tiles</b> now sit on a true 6-column grid \u2014 one balanced row, no orphan ever stretches full-width (3\u00d72 on phones).",
+    "<b>Projects and Shop floor are clean zebra TABLES on iPad/desktop</b> \u2014 aligned columns (Status \u00b7 Project \u00b7 PM \u00b7 Done \u00b7 Schedule \u00b7 Open \u00b7 Closed wk \u00b7 Next gate / Pos \u00b7 Trailer \u00b7 J# \u00b7 PM \u00b7 Open \u00b7 Target), bay group rows, amber past-due sub-rows, zero dead space. Phones keep the card layout (tables don\u2019t fit there).",
+    "Chart boxes no longer stretch to match heights (the crew-load dead space is gone)." ] },
   { rev:"29.9", date:"2026-07-18", title:"\u2705 Executive report: accuracy fixes + a data-integrity guard", items:[
     "<b>Shipped-this-week fixed</b> \u2014 it only counted jobs with the \u{1F6A2} notes tag and missed ships done by flipping Status\u2192Shipped (and re-ships where an old tag hid the new date, and pipeline-category builds). Now all 5 of this week\u2019s ships show, each with its date.",
     "<b>\u26A0 DATA CHECK banner</b> \u2014 Rich caught the report rendering a bad feed snapshot (shipped jobs in bays, zero closed). The report now refuses to present quietly when the feed is stale (>60 min), workbook-fallback, or implausibly empty \u2014 a red banner says exactly what\u2019s wrong and to refresh. An owner report should never lie silently." ] },
@@ -12912,19 +12917,39 @@ function buildExecReportHtml(days){
       +'<div class="meta">'+(p.pct!=null?('<b>'+p.pct+'%</b> · '):'')+'▶ '+(p.startISO?fmtMDs(p.startISO):'?')+' → <b>'+(p.finishISO?fmt(p.finishISO):'TBD')+'</b> · '+projMeta(p)+(gateTxt(b)?(' · '+gateTxt(b)):'')+'</div>'
       +((b&&b.odN)?('<div class="warn">⚠ '+b.odN+' past-due'+(b.whoTxt?(' · with: '+esc(b.whoTxt)):'')+'</div>'):'')+'</div>'; };
   const projCards=(flags.length||greens.length)?(flags.map(pcard).join('')+greens.map(pcard).join('')):'<div class="empty">No active projects.</div>';
+  const prow=r=>{ const p=r.p,b=r.b; const col=HC[r.state]||'#64748b';
+    let h='<tr><td><span class="schip" style="background:'+col+'">'+STL[r.state]+'</span></td>'
+      +'<td style="font-weight:800">'+esc(p.name)+'</td><td>'+esc(p.pm||'\u2014')+'</td>'
+      +'<td class="num">'+(p.pct!=null?(p.pct+'%'):'\u2014')+'</td>'
+      +'<td style="white-space:nowrap">'+(p.startISO?fmtMDs(p.startISO):'?')+' \u2192 <b>'+(p.finishISO?fmt(p.finishISO):'TBD')+'</b></td>'
+      +'<td class="num">'+((p.tasks||[]).filter(t=>!t.done&&!/yes/i.test(t.ml||'')).length)+'</td>'
+      +'<td class="num" style="color:#15803d">'+(doneBy[p.name]||0)+'</td>'
+      +'<td style="font-size:10.5px">'+((b&&b.gate)?(esc(b.gate.name)+' '+fmtMDs(b.gate.dateISO)):'\u2014')+'</td></tr>';
+    if(b&&b.odN) h+='<tr class="warnrow"><td colspan="8">\u26A0 '+b.odN+' past-due'+(b.whoTxt?(' \u00b7 with: '+esc(b.whoTxt)):'')+'</td></tr>';
+    return h; };
+  const projTable=(flags.length||greens.length)?('<table class="xtab"><thead><tr><th>Status</th><th>Project</th><th>PM</th><th>Done</th><th>Schedule</th><th>Open</th><th>Closed wk</th><th>Next gate</th></tr></thead><tbody>'
+    +flags.map(prow).join('')+greens.map(prow).join('')+'</tbody></table>'):'<div class="empty">No active projects.</div>';
   const upcLine=upc.length?('<div style="font-size:11px;color:#586a7e;margin:2px 0 4px"><b>Upcoming:</b> '+upc.map(r=>esc(r.p.name)+(r.p.startISO?(' (starts '+fmtMDs(r.p.startISO)+')'):'')).join(' · ')+'</div>'):'';
   const rollup=doneTop.length?('<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">'+doneTop.slice(0,8).map(k=>'<span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px">'+esc(k)+' · '+doneBy[k]+'</span>').join('')+(doneTop.length>8?('<span style="color:#7b8794;font-size:11px;padding:3px 4px">+ '+doneTop.slice(8).reduce((a,k)=>a+doneBy[k],0)+' more on '+(doneTop.length-8)+' other jobs</span>'):'')+'</div>'):'<div class="empty">Nothing closed in the window.</div>';
   // ---- shop floor grouped BY BAY (the separation Rich asked for) ----
-  let floorHtml='';
+  let floorHtml='', floorTable='';
   { const byBay={}, order=[];
     bayRows.forEach(j=>{ const m=String(j.bay||'').match(/bay\s*(\d+)/i); const k=m?('BAY '+m[1]):String(j.bay||'').toUpperCase();
       if(!(k in byBay)){ byBay[k]=[]; order.push(k); } byBay[k].push(j); });
+    const opN=j=>(j.tasks||[]).filter(t=>!t.done&&!isSalesT(t)&&!isSnzRep(t)).length;
+    const posOf=j=>/front/i.test(j.bay)?'FRONT':/middle/i.test(j.bay)?'MIDDLE':'BACK';
     floorHtml=order.length?order.map(k=>'<div class="bayh">\u{1F3ED} '+esc(k)+'</div>'
-      +byBay[k].map(j=>{ const op=(j.tasks||[]).filter(t=>!t.done&&!isSalesT(t)&&!isSnzRep(t)).length;
-        const pos=/front/i.test(j.bay)?'FRONT':/middle/i.test(j.bay)?'MIDDLE':'BACK';
-        return '<div class="bjob"><div><div class="bpos">'+pos+'</div><div class="bnm">'+esc(j.project)+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+'</div>'+(j.pm&&j.pm!=='N/A'?('<div style="font-size:10px;color:#7b8794">'+esc(j.pm)+'</div>'):'')+'</div>'
+      +byBay[k].map(j=>{ const op=opN(j);
+        return '<div class="bjob"><div><div class="bpos">'+posOf(j)+'</div><div class="bnm">'+esc(j.project)+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+'</div>'+(j.pm&&j.pm!=='N/A'?('<div style="font-size:10px;color:#7b8794">'+esc(j.pm)+'</div>'):'')+'</div>'
           +'<div class="bmeta"><b>'+op+' open</b>'+(j.completionISO?('<br>target '+fmtMDs(j.completionISO)):'')+'</div></div>'; }).join('')).join('')
-      :'<div class="empty">No trailers in bays.</div>'; }
+      :'<div class="empty">No trailers in bays.</div>';
+    floorTable=order.length?('<table class="xtab"><thead><tr><th>Pos</th><th>Trailer / Job</th><th>J#</th><th>PM</th><th>Open</th><th>Target</th></tr></thead><tbody>'
+      +order.map(k=>'<tr class="xg"><td colspan="6">\u{1F3ED} '+esc(k)+'</td></tr>'
+        +byBay[k].map(j=>'<tr><td style="font-size:9px;font-weight:800;color:#94a3b8">'+posOf(j)+'</td>'
+          +'<td style="font-weight:700">'+esc(j.project)+'</td><td>'+(j.jobNum?'<span class="src">'+esc(j.jobNum)+'</span>':'\u2014')+'</td>'
+          +'<td>'+((j.pm&&j.pm!=='N/A')?esc(j.pm):'\u2014')+'</td>'
+          +'<td class="num">'+opN(j)+'</td><td class="num">'+(j.completionISO?fmtMDs(j.completionISO):'\u2014')+'</td></tr>').join('')).join('')
+      +'</tbody></table>'):'<div class="empty">No trailers in bays.</div>'; }
   const aheadHtml=(finAhead.length||msAhead.length||backSoon.length)?('<ul class="seplist">'
     +finAhead.map(r=>'<li>\u{1F3C1} <b>'+esc(r.p.name)+'</b> targeted to finish <span class="dt">'+fmt(r.p.finishISO)+'</span> <span class="who">'+esc(r.p.pm||'')+'</span></li>').join('')
     +msAhead.slice(0,8).map(m=>'<li>◆ <b>'+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span> <span class="dt">'+fmt(m.d)+'</span></li>').join('')
@@ -12932,12 +12957,23 @@ function buildExecReportHtml(days){
     +'</ul>'):'<div class="empty">Quiet two weeks ahead on the schedule.</div>';
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Weekly Executive Report — '+rDate+'</title><style>'+REPORT_CSS
     +'.tldr{background:#fff8f3;border:2px solid #e04826;border-radius:12px;padding:14px 18px;margin:4px 0 14px}.tldr div{font-size:14.5px;line-height:1.65;margin:5px 0}.tldr .tl-h{font-size:10px;letter-spacing:1.2px;color:#e04826;font-weight:900;margin:0 0 4px}'
-    +'.crow{display:flex;gap:12px;margin:10px 0 2px;flex-wrap:wrap}.cbox{min-width:250px;border:1px solid #dfe5ec;border-radius:9px;padding:9px 12px}.ch{font-size:9px;letter-spacing:.8px;color:#7b8794;font-weight:800;margin-bottom:6px}'
+    +'.stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}.stats .st{min-width:0}'
+    +'@media(max-width:640px){.stats{grid-template-columns:repeat(3,1fr)}}'
+    +'.crow{display:flex;gap:12px;margin:10px 0 2px;flex-wrap:wrap;align-items:flex-start}.cbox{min-width:250px;border:1px solid #dfe5ec;border-radius:9px;padding:9px 12px}.ch{font-size:9px;letter-spacing:.8px;color:#7b8794;font-weight:800;margin-bottom:6px}'
+    +'.xtab{width:100%;border-collapse:collapse;font-size:11.5px}'
+    +'.xtab th{font-size:8.5px;letter-spacing:.7px;color:#7b8794;text-align:left;padding:5px 9px;border-bottom:2px solid #e04826;text-transform:uppercase;white-space:nowrap}'
+    +'.xtab td{padding:7px 9px;border-bottom:1px solid #eef1f5;vertical-align:middle}'
+    +'.xtab tbody tr:nth-child(even) td{background:#fafbfd}'
+    +'.xtab .xg td{background:#eef2f7;font-weight:900;font-size:9px;letter-spacing:.9px;color:#586a7e;padding:5px 9px}'
+    +'.xtab .num{text-align:right;white-space:nowrap;font-weight:700}'
+    +'.xtab .warnrow td{background:#fff8e6;color:#8a5e00;font-size:10.5px;padding:5px 9px 7px 26px;border-bottom:1px solid #f3e5b8}'
+    +'.only-mob{display:none}.only-desk{display:block}'
+    +'@media(max-width:640px){.only-mob{display:block}.only-desk{display:none}}'
     +'.pcard{border:1px solid #e8edf3;border-radius:10px;padding:9px 12px;margin:0 0 8px;background:#fcfdfe}'
     +'.pcard .nm{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
     +'.pcard .meta{font-size:11px;color:#3f4753;margin-top:4px;line-height:1.6}'
     +'.pcard .warn{font-size:10.5px;color:#8a5e00;background:#fff8e6;border-radius:6px;padding:4px 9px;margin-top:5px}'
-    +'.schip{font-size:8.5px;font-weight:900;letter-spacing:.5px;padding:2px 8px;border-radius:20px;color:#fff}'
+    +'.schip{font-size:8.5px;font-weight:900;letter-spacing:.5px;padding:2px 8px;border-radius:20px;color:#fff;white-space:nowrap;display:inline-block}'
     +'.bayh{font-size:10px;letter-spacing:1px;font-weight:900;color:#7b8794;margin:11px 0 5px}'
     +'.bjob{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid #e8edf3;border-radius:9px;padding:7px 11px;margin-bottom:5px;background:#fcfdfe}'
     +'.bjob .bnm{font-size:12px;font-weight:700}.bjob .bpos{font-size:8.5px;font-weight:800;color:#94a3b8;letter-spacing:.6px}'
@@ -12964,16 +13000,16 @@ function buildExecReportHtml(days){
       if(!why) return '';
       return '<div style="background:#fee2e2;border:2px solid #b91c1c;color:#7f1d1d;border-radius:10px;padding:11px 14px;margin:0 0 12px;font-size:12.5px;font-weight:700">\u26A0 DATA CHECK FAILED \u2014 do not trust these numbers: '+why+'. Refresh in ~5 minutes. If it persists, the \u201cMRA Lists to JSON\u201d flow needs a kick (ask Rich).</div>'; })()
     +'<div class="tldr"><div class="tl-h">THE WEEK IN 30 SECONDS</div>'+tldr.map(t=>'<div>'+t+'</div>').join('')+'</div>'
-    +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+((wkPrev!=null&&wkPrev>0)?('<div class="st" style="border-left-color:#15803d"><div class="n" style="color:#15803d">'+doneN+' <span style="font-size:11px;font-weight:800;color:'+((wk[wk.length-1].n-wkPrev)>=0?'#15803d':'#b45309')+'">'+((wk[wk.length-1].n-wkPrev)>=0?'▲':'▼')+Math.abs(wk[wk.length-1].n-wkPrev)+'</span></div><div class="l">CLOSED — '+days+'D (VS LAST WK)</div></div>'):tile(doneN,'CLOSED — '+days+'D','#15803d'))+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
+    +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+((wkPrev!=null&&wkPrev>0)?('<div class="st" style="border-left-color:#15803d"><div class="n" style="color:#15803d">'+doneN+' <span style="font-size:11px;font-weight:800;color:'+((wk[wk.length-1].n-wkPrev)>=0?'#15803d':'#b45309')+'">'+((wk[wk.length-1].n-wkPrev)>=0?'▲':'▼')+Math.abs(wk[wk.length-1].n-wkPrev)+'</span></div><div class="l">CLOSED — '+days+'D</div></div>'):tile(doneN,'CLOSED — '+days+'D','#15803d'))+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
     +chartRow
     +chartRow2
-    +'<h2>\u{1F4CB} Projects</h2>'+upcLine+projCards
+    +'<h2>\u{1F4CB} Projects</h2>'+upcLine+'<div class="only-desk">'+projTable+'</div><div class="only-mob">'+projCards+'</div>'
     +(gantt?('<h2>\u{1F4C5} Program timeline</h2>'+gantt):'')
     +'<h2>✅ Closed this week — by job</h2>'
     +(shipped.length?('<ul class="seplist">'+shipped.map(x=>'<li>\u{1F6A2} <b>Shipped: '+esc(x.j.project)+'</b>'+(x.j.jobNum?' <span class="src">'+esc(x.j.jobNum)+'</span>':'')+' <span class="dt">'+fmtMDs(x.iso)+'</span></li>').join('')+'</ul>'):'')
     +(msHit.length?('<ul class="seplist">'+msHit.map(m=>'<li>◆ <b>Milestone: '+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span></li>').join('')+'</ul>'):'')
     +rollup
-    +'<h2>\u{1F3ED} Shop floor today</h2>'+floorHtml
+    +'<h2>\u{1F3ED} Shop floor today</h2>'+'<div class="only-desk">'+floorTable+'</div><div class="only-mob">'+floorHtml+'</div>'
     +'<div class="hnote" style="margin-left:0">Plus '+lotN+' in the Parking Lot · '+heldN+' on hold / next up'+(backSoon.length?(' · '+backSoon.length+' unit'+(backSoon.length>1?'s':'')+' returning within 2 weeks'):'')+'</div>'
     +'<h2>⏰ The next two weeks</h2>'+aheadHtml
     +'<div class="foot">MRA Command Center · prepared automatically every Monday · questions? the dashboard has full detail — or ask Rich</div></div></body></html>';
