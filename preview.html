@@ -3651,6 +3651,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"31.4", date:"2026-07-20", title:"\u{1F4CA} Production Meeting print gantt = the standard look (health color + % shaded)", items:[
+    "Rich: the meeting-print gantt was a rainbow and hard to read. Rebuilt to our standard (same as the exec report): each bar is ONE status color (green/yellow/red/upcoming), on a light track, shaded to % complete with the % shown at the end — no more per-project colors.",
+    "Added a one-line key under the heading (bars colored by status · shaded to % complete · ◆ milestone · today) and toned the milestone markers down." ] },
   { rev:"31.3", date:"2026-07-20", title:"\u{1F5A8} Production Meeting print fixed — gantt up top + reliable pagination", items:[
     "Rich: the meeting report-out print was broken (gantt shoved to its own page, report-out sections dropping off, grey overflow, whitespace). Rebuilt: the <b>Program Gantt now sits right under the tiles + PM load</b>, then the PM Report-out — the reading order of the meeting.",
     "Fixed the pagination: fit-to-1-page now uses CSS zoom (which actually reflows for print) instead of a transform that the print engine ignored, so nothing overflows or gets sliced; colors (bars, tiles, chips) print; and each PM block stays whole across page breaks." ] },
@@ -10456,11 +10459,15 @@ function _pmtGanttSVG(items, today){
   rows.forEach((r,i)=>{ const y=top+i*rh;
     if(r.pm){ body+='<rect x="0" y="'+y+'" width="'+W+'" height="'+rh+'" fill="#eef3ff"/><text x="5" y="'+(y+12)+'" font-size="9.5" font-weight="700" fill="#1d4ed8">'+esc(r.pm.toUpperCase())+'</text>'; return; }
     const p=r.it.p, h=r.it.h; const l=X(parseISO(p.startISO).getTime()), rr=X(parseISO(p.finishISO).getTime()); const w=Math.max(2.5,rr-l);
-    const col=p._color||HC[h.state]||'#666'; const nm=p.name.length>32?p.name.slice(0,31)+'…':p.name;
+    // our standard bar: ONE health color · light track · solid fill to % complete · % shown (matches the exec report)
+    const col=HC[h.state]||'#64748b'; const done=(p.pct!=null?Math.max(0,Math.min(100,p.pct)):0);
+    const nm=p.name.length>32?p.name.slice(0,31)+'…':p.name;
     body+='<text x="8" y="'+(y+12)+'" font-size="8.5" fill="#222">'+esc(nm)+'</text>';
-    body+='<rect x="'+l.toFixed(1)+'" y="'+(y+3)+'" width="'+w.toFixed(1)+'" height="10" rx="2" fill="'+col+'"/>';
-    if(p.pct!=null&&p.pct>0&&p.pct<100) body+='<rect x="'+l.toFixed(1)+'" y="'+(y+3)+'" width="'+(w*p.pct/100).toFixed(1)+'" height="10" rx="2" fill="rgba(0,0,0,.28)"/>';
-    (p.milestones||[]).forEach(m=>{ const mi=parseISO(m.dateISO||m.date||m.finishISO); if(mi){ const mx=X(mi.getTime()); body+='<path d="M'+mx.toFixed(1)+' '+(y+2)+' l4.5 6 l-4.5 6 l-4.5 -6 z" fill="#7c3aed"/>'; } });
+    body+='<rect x="'+l.toFixed(1)+'" y="'+(y+3.5)+'" width="'+w.toFixed(1)+'" height="9" rx="2.5" fill="'+col+'" fill-opacity="0.20"/>';
+    if(done>0) body+='<rect x="'+l.toFixed(1)+'" y="'+(y+3.5)+'" width="'+(w*done/100).toFixed(1)+'" height="9" rx="2.5" fill="'+col+'"/>';
+    if(rr+24<=W) body+='<text x="'+(rr+3).toFixed(1)+'" y="'+(y+11)+'" font-size="7.5" font-weight="700" fill="#586a7e">'+done+'%</text>';
+    else body+='<text x="'+(rr-3).toFixed(1)+'" y="'+(y+11)+'" font-size="7.5" font-weight="700" fill="#fff" text-anchor="end">'+done+'%</text>';
+    (p.milestones||[]).forEach(m=>{ const mi=parseISO(m.dateISO||m.date||m.finishISO); if(mi){ const mx=X(mi.getTime()); body+='<path d="M'+mx.toFixed(1)+' '+(y+3.5)+' l3.5 4.5 l-3.5 4.5 l-3.5 -4.5 z" fill="#7c3aed"/>'; } });
   });
   return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-width:100%;height:auto" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="'+W+'" height="'+H+'" fill="#fff"/>'+grid+body+'</svg>';
 }
@@ -10553,7 +10560,7 @@ function printProdMeeting(){
     +'<h1 class="pp-h1"><span style="color:#e04826">MRA</span> Production Status — Report-out</h1>'
     +'<div class="pp-sub">'+stamp+' · '+items.length+' active · '+greens.length+' green · '+reds.length+' yellow/red</div>'
     +bandH
-    +'<div class="pp-gantt"><h2 class="pp-h2">\u{1F4CA} Program Gantt — every active project</h2>'+_pmtGanttSVG(items,today)+'</div>'
+    +'<div class="pp-gantt"><h2 class="pp-h2">\u{1F4CA} Program Gantt — every active project</h2><div style="font-size:8.5px;color:#94a3b8;margin:-4px 0 4px">Bars colored by status · shaded to % complete · ◆ milestone · ▏ today</div>'+_pmtGanttSVG(items,today)+'</div>'
     +'<h2 class="pp-h2">\u{1F4DD} PM Report-out</h2>'+cols.outerHTML
     +'</div></div>'
     +winJS+'</body></html>';
