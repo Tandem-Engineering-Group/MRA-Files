@@ -2035,7 +2035,7 @@
           <a class="editbtn" href="MRA_Project_Intake_Template.xlsx?v=20260618c" download="MRA_Project_Intake_Template.xlsx" title="Download the blank project intake template (.xlsx) — same columns & look as the schedule (now with a Sub column for subtasks + a how-to note up top), so you can upload it, drop it in the Intake Inbox, or paste straight into Excel">⬇ Download Template</a>
           <button class="editbtn" onclick="openUpload()" title="Upload a filled intake template right here — it loads into the schedule on the next ~15-min cycle">⬆ Upload Filled</button>
           <select id="dlProjSel" class="editbtn" onmousedown="dlFillProjects()" style="padding:4px 6px" title="Pick a project to download as an editable Excel template"><option value="">— pick a project —</option></select>
-          <button class="editbtn" onclick="downloadProjectXlsx()" title="Download the picked project's tasks as an Excel template (same format as Upload Filled) — frozen header + filters, shaded rows, milestones in gold. Edit/add tasks offline, then ⬆ Upload Filled to send it back">⬇ Download a Project</button>
+          <button class="editbtn" onclick="downloadProjectXlsx()" title="Download the picked project's tasks as an Excel template (same format as Upload Filled) — frozen header + filters, shaded rows, milestones in gold, and pick-from-list dropdowns on Type / Phase / Assigned / Status / PM / Milestone / Sub (same as the editor). Edit/add tasks offline, then ⬆ Upload Filled to send it back">⬇ Download a Project</button>
           <span class="vmlabel">📄 Hard-date schedule</span>
           <button class="editbtn" onclick="openTplPicker()" title="Build a print-ready Hard-Date schedule for one of your projects (pick project + style)">📄 Build Schedule</button>
         </div>
@@ -3667,6 +3667,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"31.8", date:"2026-07-20", title:"\u{2B07} Download a Project now has editor-style dropdowns", items:[
+    "Rich: the ⬇ Download a Project file had filter arrows but no real pick-lists. It now carries <b>pick-from-list dropdowns</b> on <b>Type · Phase · Assigned To · Status · PM · Milestone · Sub</b> — the same choices as the on-screen task editor — so filling it out offline is click-not-type (you can still type a custom value on any of them).",
+    "The lists ride a hidden sheet and cover the existing rows plus ~60 blank rows below, so tasks you add get the dropdowns too. (The blank ⬇ Download Template already had these.)" ] },
   { rev:"31.7", date:"2026-07-20", title:"\u{270F} Edit leave: the Name is now editable + Reason is type-anything", items:[
     "Rich: wanted a leave entry to read like “Brandon Choy - Work Travel” (the way Megan’s shows). Two fixes on the ✒ Edit leave form: the <b>Name field is now editable</b> when editing (was locked — you had to delete and re-add to rename); changing it renames the entry in place.",
     "The <b>Reason</b> is now a <b>type-anything box</b> with suggestions (Work Travel · On the Road · Vacation · Called in …) instead of a fixed dropdown — so the “- Work Travel” that shows after the name on the board is just the reason; set it there and it reads “Name - Work Travel.”" ] },
@@ -8995,6 +8998,28 @@ function downloadProjectXlsx(){
       ri++;
     });
     ws.autoFilter={ from:{row:6,column:1}, to:{row:6+(p.tasks||[]).length, column:15} };   // filter dropdowns on the header
+    // ---- real cell dropdowns (match the project editor + the blank template) ----
+    // values ride a hidden "Lists" sheet; showErrorMessage:false = pick-from-list OR type your own.
+    const _uniq=a=>[...new Set((a||[]).map(v=>String(v==null?'':v).trim()).filter(Boolean))];
+    const DL_TYPES=_uniq([...PROJ_TYPE_SEED,'Demolition','Materials', ..._tarr.map(t=>t.type)]);
+    const DL_STATS=PROJ_STATUS_OPTIONS.slice();
+    const DL_ASG=_uniq(['Sal','Wrap Team','Electricians','Doug','Josh','Jeff','MRA','MRA Shop','MRA Design','Vendor','Client', ...projAssignees()]);
+    const DL_PMS=_uniq((((window.MRA_DATA||{}).projects)||[]).map(x=>x.pm)).sort((a,b)=>a.localeCompare(b));
+    const DL_PHASES=_uniq(_tarr.map(t=>t.phase));
+    const DL_MILE=['Yes','No'], DL_SUB=['x'];
+    const lws=wb.addWorksheet('Lists'); lws.state='veryHidden';
+    [['Type',DL_TYPES],['Status',DL_STATS],['Assigned',DL_ASG],['PM',DL_PMS],['Phase',DL_PHASES],['Milestone',DL_MILE],['Sub',DL_SUB]]
+      .forEach((c,ci)=>{ lws.getCell(1,ci+1).value=c[0]; c[1].forEach((v,ri)=>{ lws.getCell(ri+2,ci+1).value=v; }); });
+    const _lastDV=6+(p.tasks||[]).length+60;   // cover the data rows + blanks for adding tasks
+    const _applyDV=(dataCol,listLetter,count)=>{ if(count<1) return; const f='Lists!$'+listLetter+'$2:$'+listLetter+'$'+(1+count);
+      for(let r=7;r<=_lastDV;r++){ ws.getCell(dataCol+r).dataValidation={ type:'list', allowBlank:true, showErrorMessage:false, formulae:[f] }; } };
+    _applyDV('B','E',DL_PHASES.length);   // Phase
+    _applyDV('C','A',DL_TYPES.length);    // Type
+    _applyDV('H','C',DL_ASG.length);      // Assigned To
+    _applyDV('I','B',DL_STATS.length);    // Status
+    _applyDV('J','D',DL_PMS.length);      // PM
+    _applyDV('K','F',DL_MILE.length);     // Milestone
+    _applyDV('O','G',DL_SUB.length);      // Sub
     const safe=(name.replace(/[^\w\- ]+/g,'').trim()||"project").slice(0,40);
     wb.xlsx.writeBuffer().then(buf=>{
       const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
