@@ -3651,6 +3651,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"31.0", date:"2026-07-20", title:"\u{1F3F7} Exec report shows the FULL portfolio — non-official projects included, tagged", items:[
+    "The Monday owner report now includes non-official / informal projects (JFSD builds, Siemens DI Pedestal, Stryker, etc.) so it matches the Production Meeting’s project list — each is marked with a \u{1F3F7} tag so the reader knows it’s informal work, not a formal job. They flow into the counts, the timeline, the progress-vs-plan chart and the past-due totals like any other project.",
+    "Two section subtitles added for the owner: “Closed this week” now says these are shop-floor + project tasks completed in the window, and “The next two weeks” explains it covers milestones, project finishes and trailers returning to MRA.",
+    "Progress-vs-plan chart no longer caps at 9 rows — with the fuller portfolio it lists every active dated project. Line-by-line verification suite expanded to 216 checks (was 174), all passing." ] },
   { rev:"30.9", date:"2026-07-20", title:"\u{1F5A8} Exec print: section titles repeat on every page + past-due strips stay glued", items:[
     "Rich’s reprint showed a bare table continuing onto page 2 with no context, and Cisco’s amber “16 past-due” strip printed alone at the top of a page. Now the PROJECTS / SHOP FLOOR TODAY / NEXT TWO WEEKS banded titles repeat at the top of every printed page their table spills onto (they ride the repeating table header), so every page says what you’re looking at.",
     "Each project row and its past-due strip are now an unbreakable pair, and each bay group (bay header + its trailers) stays together on one page. Screen version unchanged." ] },
@@ -12856,7 +12860,8 @@ function buildExecReportHtml(days){
   const liveJobs=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0 && j.category!=='pipeline');
   const floorJobs=liveJobs.filter(j=>(j.status||'').toLowerCase()!=='shipped');
   // ---- portfolio ----
-  const projs=(D.projects||[]).filter(p=>!p.nonOfficial);
+  const projs=(D.projects||[]);   // include non-official (🏷) so the owner sees the full portfolio
+  const pNm=p=>((p&&p.nonOfficial)?'\u{1F3F7} ':'')+esc((p&&p.name)||'');   // 🏷 marks informal / non-official projects
   const hRows=projs.filter(p=>projStatus(p,todayISO)!=='done' && !p.parked).map(p=>{
     const h=projHealth(p,todayISO); const b=_pmtBehindBits(p,todayISO); return {state:h.state, h:h, p:p, b:b};
   }).sort((a,b)=>HEALTH_RANK[a.state]-HEALTH_RANK[b.state]||String(a.p.finishISO||'9999').localeCompare(String(b.p.finishISO||'9999')));
@@ -12915,7 +12920,7 @@ function buildExecReportHtml(days){
     const tl='left:'+pctf(Date.parse(todayISO)).toFixed(1)+'%';
     gantt='<div class="gx"><div class="gxr" style="border-top:0"><div class="gxl"></div><div class="gxt" style="height:13px">'+ticks+'</div><div class="gxd"></div></div>'
       +dated.map(r=>{ const p=r.p, st=pctf(Date.parse(p.startISO)), e=pctf(Date.parse(p.finishISO));
-        return '<div class="gxr"><div class="gxl">'+esc(p.name)+'<small>'+esc((p.pm||'').split(' ')[0])+(p.pct!=null?(' · '+p.pct+'%'):'')+'</small></div>'
+        return '<div class="gxr"><div class="gxl">'+pNm(p)+'<small>'+esc((p.pm||'').split(' ')[0])+(p.pct!=null?(' · '+p.pct+'%'):'')+'</small></div>'
           +'<div class="gxt"><span class="gxnow" style="'+tl+'"></span>'
           +(function(){ const wPct=Math.max(0.8,e-st); const done=(p.pct!=null?Math.max(0,Math.min(100,p.pct)):0); const col=(HC[r.state]||'#64748b');
             return '<div class="gxb" data-pct="'+done+'" style="left:'+st.toFixed(1)+'%;width:'+wPct.toFixed(1)+'%;background:'+col+'40" title="'+escA(p.name+' · '+done+'% done · '+fmt(p.startISO)+' → '+fmt(p.finishISO))+'">'
@@ -12976,8 +12981,8 @@ function buildExecReportHtml(days){
       return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:86px;flex:none;font-size:10px;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(k)+'</div>'
         +'<div style="flex:1;position:relative;height:13px;background:#f1f5f9;border-radius:4px"><div style="position:absolute;left:0;top:0;bottom:0;width:'+w+'%;background:#cbd5e1;border-radius:4px"></div><div style="position:absolute;left:0;top:0;bottom:0;width:'+wo+'%;background:#c81e1e;border-radius:4px 0 0 4px"></div></div>'
         +'<div style="width:88px;flex:none;font-size:9.5px;color:#586a7e"><b>'+L.n+'</b>'+(L.pj?(' · '+L.pj+' \u{1F4CB}'):'')+(L.od?(' · <span style="color:#c81e1e;font-weight:800">'+L.od+' od</span>'):'')+'</div></div>'; }).join('');
-    const pvRows=dated.slice(0,9).map(r=>{ const p=r.p; const exp=(r.h&&r.h.expectedPct!=null)?r.h.expectedPct:null; const col=HC[r.state]||'#64748b';
-      return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:110px;flex:none;font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+'</div>'
+    const pvRows=dated.map(r=>{ const p=r.p; const exp=(r.h&&r.h.expectedPct!=null)?r.h.expectedPct:null; const col=HC[r.state]||'#64748b';
+      return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:110px;flex:none;font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pNm(p)+'</div>'
         +'<div style="flex:1;position:relative;height:13px;background:#f1f5f9;border-radius:4px"><div style="position:absolute;left:0;top:0;bottom:0;width:'+(p.pct||0)+'%;background:'+col+';border-radius:4px"></div>'
         +(exp!=null?('<div style="position:absolute;left:'+exp+'%;top:-2px;bottom:-2px;width:2px;background:#1e293b" title="Expected '+exp+'% by today"></div>'):'')+'</div>'
         +'<div style="width:86px;flex:none;font-size:9.5px;color:#586a7e"><b>'+(p.pct||0)+'%</b>'+(exp!=null?(' <span style="color:#94a3b8">/ exp '+exp+'%</span>'):'')+'</div></div>'; }).join('');
@@ -12991,10 +12996,10 @@ function buildExecReportHtml(days){
   const wkDelta=(wkPrev!=null&&wkPrev>0)?(wk[wk.length-1].n-wkPrev):null;
   tldr.push('✅ <b>'+doneN+' tasks closed</b> this week'+(wkDelta!=null?(' ('+(wkDelta>=0?'<span style="color:#15803d;font-weight:700">▲ '+wkDelta:'<span style="color:#b45309;font-weight:700">▼ '+Math.abs(wkDelta))+' vs last wk</span>)'):'')+(doneTop.length?(' — most on '+esc(doneTop[0])+' ('+doneBy[doneTop[0]]+')'):''));
   if(msHit.length) tldr.push('◆ <b>Milestone'+(msHit.length>1?'s':'')+' hit:</b> '+msHit.map(m=>esc(m.txt)+' ('+esc(m.src)+')').join(' · '));
-  tldr.push('\u{1F4CA} <b>'+greens.length+' of '+(greens.length+flags.length)+' active projects on track</b>'+(flags.length?(' — watching: '+flags.map(r=>'<b>'+esc(r.p.name)+'</b> ('+(r.state==='late'?'late':'behind')+(r.b.odN?(', '+r.b.odN+' past-due'):'')+', '+esc((r.p.pm||'—').split(' ')[0])+')').join(' · ')):' — nothing flagged'));
+  tldr.push('\u{1F4CA} <b>'+greens.length+' of '+(greens.length+flags.length)+' active projects on track</b>'+(flags.length?(' — watching: '+flags.map(r=>'<b>'+pNm(r.p)+'</b> ('+(r.state==='late'?'late':'behind')+(r.b.odN?(', '+r.b.odN+' past-due'):'')+', '+esc((r.p.pm||'—').split(' ')[0])+')').join(' · ')):' — nothing flagged'));
   tldr.push('\u{1F3ED} <b>Floor:</b> '+bayRows.length+' in bays · '+lotN+' in the lot · '+heldN+' on hold'+(backSoon.length?(' · '+backSoon.length+' returning ≤2 wks'):''));
   if(odN||fioOd) tldr.push('⚠ <b>'+odN+' shop tasks overdue</b>'+(fioOd?(' · '+fioOd+' fleet issues overdue'):''));
-  if(finAhead.length||msAhead.length) tldr.push('⏰ <b>Next 2 weeks:</b> '+finAhead.map(r=>'<b>'+esc(r.p.name)+'</b> finishes '+fmtMDs(r.p.finishISO)).concat(msAhead.slice(0,3).map(m=>'<b>'+esc(m.src)+'</b> milestone \u201c'+esc(m.txt)+'\u201d '+fmtMDs(m.d))).join(' · '));
+  if(finAhead.length||msAhead.length) tldr.push('⏰ <b>Next 2 weeks:</b> '+finAhead.map(r=>'<b>'+pNm(r.p)+'</b> finishes '+fmtMDs(r.p.finishISO)).concat(msAhead.slice(0,3).map(m=>'<b>'+esc(m.src)+'</b> milestone \u201c'+esc(m.txt)+'\u201d '+fmtMDs(m.d))).join(' · '));
   const tile=(n,lab,col)=>'<div class="st" style="border-left-color:'+col+'"><div class="n" style="color:'+col+'">'+n+'</div><div class="l">'+lab+'</div></div>';
   // ---- project CARDS (separation Rich asked for; phone-friendly) ----
   const gateTxt=b=>(b&&b.gate)?('next: <b>'+esc(b.gate.name)+'</b> '+fmtMDs(b.gate.dateISO)):'';
@@ -13003,13 +13008,13 @@ function buildExecReportHtml(days){
   const STL={late:'LATE',behind:'BEHIND',ontrack:'ON TRACK',upcoming:'UPCOMING'};
   const pcard=r=>{ const p=r.p,b=r.b; const col=HC[r.state]||'#64748b';
     return '<div class="pcard" style="border-left:4px solid '+col+'">'
-      +'<div class="nm"><span class="schip" style="background:'+col+'">'+STL[r.state]+'</span>'+esc(p.name)+' <span class="who">'+esc(p.pm||'—')+'</span></div>'
+      +'<div class="nm"><span class="schip" style="background:'+col+'">'+STL[r.state]+'</span>'+pNm(p)+' <span class="who">'+esc(p.pm||'—')+'</span></div>'
       +'<div class="meta">'+(p.pct!=null?('<b>'+p.pct+'%</b> · '):'')+'▶ '+(p.startISO?fmtMDs(p.startISO):'?')+' → <b>'+(p.finishISO?fmt(p.finishISO):'TBD')+'</b> · '+projMeta(p)+(gateTxt(b)?(' · '+gateTxt(b)):'')+'</div>'
       +((b&&b.odN)?('<div class="warn">⚠ '+b.odN+' past-due'+(b.whoTxt?(' · with: '+esc(b.whoTxt)):'')+'</div>'):'')+'</div>'; };
   const projCards=(flags.length||greens.length)?(flags.map(pcard).join('')+greens.map(pcard).join('')):'<div class="empty">No active projects.</div>';
   const prow=r=>{ const p=r.p,b=r.b; const col=HC[r.state]||'#64748b';
     let h='<tr><td><span class="schip" style="background:'+col+'">'+STL[r.state]+'</span></td>'
-      +'<td style="font-weight:800">'+esc(p.name)+'</td><td>'+esc(p.pm||'\u2014')+'</td>'
+      +'<td style="font-weight:800">'+pNm(p)+'</td><td>'+esc(p.pm||'\u2014')+'</td>'
       +'<td class="num">'+(p.pct!=null?(p.pct+'%'):'\u2014')+'</td>'
       +'<td style="white-space:nowrap">'+(p.startISO?fmtMDs(p.startISO):'?')+' \u2192 <b>'+(p.finishISO?fmt(p.finishISO):'TBD')+'</b></td>'
       +'<td class="num">'+((p.tasks||[]).filter(t=>!t.done&&!/yes/i.test(t.ml||'')).length)+'</td>'
@@ -13017,7 +13022,7 @@ function buildExecReportHtml(days){
       +'<td style="font-size:10.5px">'+((b&&b.gate)?(esc(b.gate.name)+' '+fmtMDs(b.gate.dateISO)):'\u2014')+'</td></tr>';
     if(b&&b.odN) h+='<tr class="warnrow"><td colspan="8">\u26A0 '+b.odN+' past-due'+(b.whoTxt?(' \u00b7 with: '+esc(b.whoTxt)):'')+'</td></tr>';
     return '<tbody class="xpr">'+h+'</tbody>'; };
-  const upcTxt=upc.length?('<b>Upcoming:</b> '+upc.map(r=>esc(r.p.name)+(r.p.startISO?(' (starts '+fmtMDs(r.p.startISO)+')'):'')).join(' · ')):'';
+  const upcTxt=upc.length?('<b>Upcoming:</b> '+upc.map(r=>pNm(r.p)+(r.p.startISO?(' (starts '+fmtMDs(r.p.startISO)+')'):'')).join(' · ')):'';
   const projTable=(flags.length||greens.length)?('<table class="xtab"><thead><tr class="xsec"><th colspan="8">\u{1F4CB} Projects</th></tr><tr><th>Status</th><th>Project</th><th>PM</th><th>Done</th><th>Schedule</th><th>Open</th><th>Closed wk</th><th>Next gate</th></tr></thead>'
     +(upcTxt?('<tbody class="prnt"><tr class="xup"><td colspan="8">'+upcTxt+'</td></tr></tbody>'):'')
     +flags.map(prow).join('')+greens.map(prow).join('')+'</table>'):'<div class="empty">No active projects.</div>';
@@ -13135,11 +13140,14 @@ function buildExecReportHtml(days){
     +'<h2 class="tblh">\u{1F4CB} Projects</h2>'+upcLine+'<div class="only-desk">'+projTable+'</div><div class="only-mob">'+projCards+'</div>'
     +(gantt?('<h2>\u{1F4C5} Program timeline</h2>'+gantt):'')
     +'<h2>✅ Closed this week — by job</h2>'
+    +'<div style="font-size:11px;color:#7b8794;margin:-4px 0 8px">Shop-floor and project tasks marked complete in the last '+days+' days, grouped by job</div>'
     +(msHit.length?('<ul class="seplist">'+msHit.map(m=>'<li>◆ <b>Milestone hit: '+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span></li>').join('')+'</ul>'):'')
     +rollup
     +'<h2 class="tblh">\u{1F3ED} Shop floor today</h2>'+'<div class="only-desk">'+floorTable+'</div><div class="only-mob">'+floorHtml+'</div>'
     +'<div class="hnote" style="margin-left:0">Plus '+lotN+' in the Parking Lot · '+heldN+' on hold / next up'+(backSoon.length?(' · '+backSoon.length+' unit'+(backSoon.length>1?'s':'')+' returning within 2 weeks'):'')+'</div>'
-    +'<h2 class="tblh">⏰ The next two weeks</h2>'+aheadHtml
+    +'<h2 class="tblh">⏰ The next two weeks</h2>'
+    +'<div class="scrn" style="font-size:11px;color:#7b8794;margin:-4px 0 8px">Milestones due, project finish dates, and trailers returning to MRA within 14 days</div>'
+    +aheadHtml
     +'<div class="foot rfoot"><img src="'+((location.origin&&location.origin.indexOf('http')===0)?(location.origin+'/logo.png'):'logo.png')+'" alt="" onerror="this.style.display=\'none\'"><span><b>MRA</b> · mobile.experiential — prepared automatically every Monday by the MRA Command Center · questions? the dashboard has full detail, or ask Rich</span></div></div></body></html>';
 }
 function openExecReport(){ if(typeof closeDrops==='function') closeDrops();
