@@ -3651,6 +3651,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"31.3", date:"2026-07-20", title:"\u{1F5A8} Production Meeting print fixed — gantt up top + reliable pagination", items:[
+    "Rich: the meeting report-out print was broken (gantt shoved to its own page, report-out sections dropping off, grey overflow, whitespace). Rebuilt: the <b>Program Gantt now sits right under the tiles + PM load</b>, then the PM Report-out — the reading order of the meeting.",
+    "Fixed the pagination: fit-to-1-page now uses CSS zoom (which actually reflows for print) instead of a transform that the print engine ignored, so nothing overflows or gets sliced; colors (bars, tiles, chips) print; and each PM block stays whole across page breaks." ] },
   { rev:"31.2", date:"2026-07-20", title:"\u{1F3F7} Exec report: non-official projects grouped at the bottom + a legend", items:[
     "Non-official (\u{1F3F7}) projects now sort to the BOTTOM of the projects list, the program timeline and the progress chart — official booked jobs first, informal work grouped underneath (health order preserved within each group).",
     "Added a legend under the Projects list explaining the \u{1F3F7} tag: non-official / informal project (change orders, one-off builds like the JFSD items) — tracked but not a formal booked job." ] },
@@ -10506,6 +10509,7 @@ function printProdMeeting(){
   tmp.querySelectorAll('.pmt-pm').forEach(n=>cols.appendChild(n));
   const styles=Array.prototype.map.call(document.querySelectorAll('style'),n=>n.textContent).join('\n');
   const over='html,body{background:#fff!important;margin:0;padding:0}'
+    +'*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}'
     +'.ppbar{position:sticky;top:0;z-index:20;background:#23272e;color:#fff;padding:9px 14px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;font:12px "Segoe UI",Arial}'
     +'.ppbar label{color:#cdd6e2;display:flex;gap:6px;align-items:center}'
     +'.ppbar select{font:12px "Segoe UI";padding:3px 6px;border-radius:5px;border:1px solid #4a5568;background:#fff;color:#111}'
@@ -10518,8 +10522,8 @@ function printProdMeeting(){
     +'.pp-cols .pmt-pm{break-inside:avoid;margin-bottom:8px}'
     +'.pmt-band{break-inside:avoid;margin-bottom:6px}'
     +'.pmt-row{cursor:default!important}.pmt-det{display:block!important}'
-    +'.pp-gantt{break-before:page}'
-    +'body.fit1 .pp-gantt{break-before:auto}'
+    +'.pp-gantt{break-inside:avoid;page-break-inside:avoid;margin-top:6px}'
+    +'.pp-gantt svg{max-width:100%;height:auto}'
     +'@media print{.ppbar{display:none}#sheetwrap{padding:0;overflow:visible}}';
   const bar='<div class="ppbar">'
     +'<button onclick="window.print()">\u{1F5A8} Print / Save PDF</button>'
@@ -10537,9 +10541,9 @@ function printProdMeeting(){
     +'document.getElementById("pg").textContent="@page{size:"+pap+" "+ori+";margin:"+m+"in}";'
     +'document.body.classList.toggle("fit1",fit);'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
-    +'s.style.transform="none";s.style.width=(w-2*mpx)+"px";wrap.style.height="";'
+    +'s.style.zoom="1";s.style.width=(w-2*mpx)+"px";wrap.style.height="";'
     +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.min(1,uW/cw,uH/ch);'
-    +'s.style.transform="scale("+sc+")";wrap.style.height=(ch*sc)+"px";}'
+    +'s.style.zoom=sc;}'
     +'}'
     +'window.onload=function(){applyOpts();};'
     +'</scr'+'ipt>';
@@ -10548,8 +10552,9 @@ function printProdMeeting(){
     +'<div id="sheetwrap"><div id="sheet">'
     +'<h1 class="pp-h1"><span style="color:#e04826">MRA</span> Production Status — Report-out</h1>'
     +'<div class="pp-sub">'+stamp+' · '+items.length+' active · '+greens.length+' green · '+reds.length+' yellow/red</div>'
-    +bandH+cols.outerHTML
+    +bandH
     +'<div class="pp-gantt"><h2 class="pp-h2">\u{1F4CA} Program Gantt — every active project</h2>'+_pmtGanttSVG(items,today)+'</div>'
+    +'<h2 class="pp-h2">\u{1F4DD} PM Report-out</h2>'+cols.outerHTML
     +'</div></div>'
     +winJS+'</body></html>';
   const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
