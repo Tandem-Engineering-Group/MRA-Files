@@ -3666,6 +3666,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"31.6", date:"2026-07-20", title:"\u{1F41B} Fix: Team & Actions typing · + action matrix now prints on the report-out", items:[
+    "Rich: couldn't type an action item and the panel kept going blank (needing a refresh). Cause: the background data poll re-rendered the whole meeting every ~minute, wiping the half-typed add row (and briefly blanking the panel).",
+    "The poll now skips re-rendering the Production Meeting while you're mid-interaction — typing in the add row or with an inline edit open (same guard Sales & Planning already uses) — and resumes live updates the moment the fields are idle.",
+    "The <b>Team & Action Items matrix now prints on the PM Report-out handout</b> (Subject · Action · Owner · Added · Due, due-sorted) under the report-out and gantt — so the one printout carries the whole meeting." ] },
   { rev:"31.5", date:"2026-07-20", title:"\u{1F4DD} Team & Actions: edit inline · subjects · date-added · sorting", items:[
     "Rich wanted more meat on the Production Meeting's Team & Actions list. Every action item now has an inline <b>✎ Edit</b> — fix the wording, owner, subject or due date right on the line (Save / cancel), no delete-and-re-add.",
     "New <b>Subject</b> tag per item (General / Project / Shop / Sales / Design / Fleet / Office) shown as a colored chip and settable on add + edit; each row also shows its <b>date added</b> alongside owner and due.",
@@ -10469,6 +10473,16 @@ function pmtAddAct(){
   if(ti) ti.value=''; if(wi) wi.value=''; if(di) di.value=''; if(ci) ci.value='';
   oApply(); renderProdMeeting();
 }
+// True while the user is mid-interaction in Team & Actions — the background poll must NOT re-render
+// and wipe a half-typed add row or an open inline edit (same idea as SP_FORM for Sales & Planning).
+function _pmtBusy(){
+  if(PMT_EDIT) return true;
+  const ae=document.activeElement;
+  if(ae && ae.closest && ae.closest('#pmtBody') && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName||'')) return true;
+  const t=document.getElementById('pmtActTxt'), c=document.getElementById('pmtActCat'), w=document.getElementById('pmtActWho'), d=document.getElementById('pmtActDue');
+  if((t&&t.value.trim())||(c&&c.value.trim())||(w&&w.value.trim())||(d&&d.value)) return true;
+  return false;
+}
 function pmtEditAct(raw){ if(!ensureAuth('edit an action item', ()=>pmtEditAct(raw))) return; PMT_EDIT=raw; renderProdMeeting();
   setTimeout(()=>{ const el=document.getElementById('pmtEditTxt'); if(el) el.focus(); },30); }
 function pmtEditCancel(){ PMT_EDIT=null; renderProdMeeting(); }
@@ -10584,6 +10598,12 @@ function printProdMeeting(){
     +'.pmt-row{cursor:default!important}.pmt-det{display:block!important}'
     +'.pp-gantt{break-inside:avoid;page-break-inside:avoid;margin-top:6px}'
     +'.pp-gantt svg{max-width:100%;height:auto}'
+    +'.pp-acts-wrap{break-inside:avoid;page-break-inside:avoid;margin-top:8px}'
+    +'.pp-acts{width:100%;border-collapse:collapse;font-size:10.5px}'
+    +'.pp-acts th{background:#f1f5f9;text-align:left;padding:5px 8px;font-size:8.5px;letter-spacing:.5px;text-transform:uppercase;color:#586a7e;border-bottom:1.5px solid #e04826;white-space:nowrap}'
+    +'.pp-acts td{padding:5px 8px;border-bottom:1px solid #eef1f5;vertical-align:top}'
+    +'.pp-acts td:nth-child(1){font-weight:700;color:#586a7e;white-space:nowrap}.pp-acts td:nth-child(3),.pp-acts td:nth-child(4),.pp-acts td:nth-child(5){white-space:nowrap}'
+    +'.pp-acts tr{break-inside:avoid;page-break-inside:avoid}.pp-acts thead{display:table-header-group}'
     +'@media print{.ppbar{display:none}#sheetwrap{padding:0;overflow:visible}}';
   const bar='<div class="ppbar">'
     +'<button onclick="window.print()">\u{1F5A8} Print / Save PDF</button>'
@@ -10607,6 +10627,16 @@ function printProdMeeting(){
     +'}'
     +'window.onload=function(){applyOpts();};'
     +'</scr'+'ipt>';
+  // Team & Action Items on the report-out handout (Rich's ask) — same open [MTG] items as the tab, due-sorted
+  const _gjP=(D.jobs||[]).find(j=>j.row==='general'||j.project===GENERAL_PROJ);
+  const _actsP=((_gjP&&_gjP.tasks)||[]).filter(t=>!t.done && String(t.t||'').indexOf(PMT_TAG)===0)
+    .slice().sort((a,b)=>String(a.due||'9999-99').localeCompare(String(b.due||'9999-99')));
+  const _mdP=iso=>{ if(!iso) return '—'; const p=String(iso).split('-'); return (+p[1])+'/'+(+p[2]); };
+  const actHtml=_actsP.length ? ('<div class="pp-acts-wrap"><h2 class="pp-h2">✅ Team & Action Items ('+_actsP.length+')</h2>'
+    +'<table class="pp-acts"><thead><tr><th>Subject</th><th>Action</th><th>Owner</th><th>Added</th><th>Due</th></tr></thead><tbody>'
+    +_actsP.map(t=>{ const cat=_actCat(t.cm); const txt=String(t.t).slice(PMT_TAG.length).trim();
+       return '<tr><td>'+esc(cat||'—')+'</td><td>'+esc(txt)+'</td><td>'+esc(t.who||'—')+'</td><td>'+_mdP(t.op)+'</td><td>'+(t.due?_mdP(t.due):'—')+'</td></tr>'; }).join('')
+    +'</tbody></table></div>') : '';
   const html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Production Status — '+stamp+'</title><style>'+styles+'</style><style>'+over+'</style><style id="pg"></style></head><body class="light fit1">'
     +bar
     +'<div id="sheetwrap"><div id="sheet">'
@@ -10615,6 +10645,7 @@ function printProdMeeting(){
     +bandH
     +'<div class="pp-gantt"><h2 class="pp-h2">\u{1F4CA} Program Gantt — every active project</h2><div style="font-size:8.5px;color:#94a3b8;margin:-4px 0 4px">Bars colored by status · shaded to % complete · ◆ milestone · ▏ today</div>'+_pmtGanttSVG(items,today)+'</div>'
     +'<h2 class="pp-h2">\u{1F4DD} PM Report-out</h2>'+cols.outerHTML
+    +actHtml
     +'</div></div>'
     +winJS+'</body></html>';
   const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
@@ -16206,7 +16237,7 @@ function renderAll(){
   renderFloor(D); renderCrewSched(D); renderProjects(D); renderFleetio(D); renderFleet();
   eotmSetup();
   try{ updateUnasChip(); if(UNAS_OPEN) renderUnas(); }catch(_){}
-  try{ if(PMT_OPEN) renderProdMeeting(); }catch(_){}
+  try{ if(PMT_OPEN && !_pmtBusy()) renderProdMeeting(); }catch(_){}   // don't wipe a half-typed add row / open edit on the poll
   try{ if(SP_OPEN && !SP_FORM) renderSalesPlan(); }catch(_){}   // 📈 sales/planning view live-syncs too (not while typing in the form)   // ⚠ unassigned-task finder chip + live list
   if(VIEW==='history') renderHistory();
   if(VIEW==='mywork') try{ renderMyWork(); }catch(e){}
