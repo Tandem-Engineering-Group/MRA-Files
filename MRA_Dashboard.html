@@ -3651,6 +3651,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"31.2", date:"2026-07-20", title:"\u{1F3F7} Exec report: non-official projects grouped at the bottom + a legend", items:[
+    "Non-official (\u{1F3F7}) projects now sort to the BOTTOM of the projects list, the program timeline and the progress chart — official booked jobs first, informal work grouped underneath (health order preserved within each group).",
+    "Added a legend under the Projects list explaining the \u{1F3F7} tag: non-official / informal project (change orders, one-off builds like the JFSD items) — tracked but not a formal booked job." ] },
   { rev:"31.1", date:"2026-07-20", title:"\u{1F4CA} Exec report: progress-vs-plan chart now explains itself", items:[
     "Added a footnote under the PROGRESS VS PLAN chart so the owner can read it without asking: the tick is a straight-line pace, builds naturally back-load so a small early lag is normal, only 15+ points behind is flagged yellow and past the finish date is red." ] },
   { rev:"31.0", date:"2026-07-20", title:"\u{1F3F7} Exec report shows the FULL portfolio — non-official projects included, tagged", items:[
@@ -12907,6 +12910,7 @@ function buildExecReportHtml(days){
   const fioOd=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>i.overdue).length;
   // ---- program gantt: class-based, capped month ticks (no more mush on phones) ----
   const dated=hRows.filter(r=>r.p.startISO&&r.p.finishISO);
+  dated.sort((a,b)=>(a.p.nonOfficial?1:0)-(b.p.nonOfficial?1:0));   // \u{1F3F7} non-official projects sink to the bottom (stable: keeps health order within each group)
   let gantt='';
   if(dated.length){
     let lo=Date.parse(todayISO)-7*86400000, hi=Date.parse(todayISO)+21*86400000;
@@ -13015,7 +13019,7 @@ function buildExecReportHtml(days){
       +'<div class="nm"><span class="schip" style="background:'+col+'">'+STL[r.state]+'</span>'+pNm(p)+' <span class="who">'+esc(p.pm||'—')+'</span></div>'
       +'<div class="meta">'+(p.pct!=null?('<b>'+p.pct+'%</b> · '):'')+'▶ '+(p.startISO?fmtMDs(p.startISO):'?')+' → <b>'+(p.finishISO?fmt(p.finishISO):'TBD')+'</b> · '+projMeta(p)+(gateTxt(b)?(' · '+gateTxt(b)):'')+'</div>'
       +((b&&b.odN)?('<div class="warn">⚠ '+b.odN+' past-due'+(b.whoTxt?(' · with: '+esc(b.whoTxt)):'')+'</div>'):'')+'</div>'; };
-  const projCards=(flags.length||greens.length)?(flags.map(pcard).join('')+greens.map(pcard).join('')):'<div class="empty">No active projects.</div>';
+  const projCards=(flags.length||greens.length)?(flags.filter(r=>!r.p.nonOfficial).map(pcard).join('')+greens.filter(r=>!r.p.nonOfficial).map(pcard).join('')+flags.filter(r=>r.p.nonOfficial).map(pcard).join('')+greens.filter(r=>r.p.nonOfficial).map(pcard).join('')):'<div class="empty">No active projects.</div>';
   const prow=r=>{ const p=r.p,b=r.b; const col=HC[r.state]||'#64748b';
     let h='<tr><td><span class="schip" style="background:'+col+'">'+STL[r.state]+'</span></td>'
       +'<td style="font-weight:800">'+pNm(p)+'</td><td>'+esc(p.pm||'\u2014')+'</td>'
@@ -13029,7 +13033,9 @@ function buildExecReportHtml(days){
   const upcTxt=upc.length?('<b>Upcoming:</b> '+upc.map(r=>pNm(r.p)+(r.p.startISO?(' (starts '+fmtMDs(r.p.startISO)+')'):'')).join(' · ')):'';
   const projTable=(flags.length||greens.length)?('<table class="xtab"><thead><tr class="xsec"><th colspan="8">\u{1F4CB} Projects</th></tr><tr><th>Status</th><th>Project</th><th>PM</th><th>Done</th><th>Schedule</th><th>Open</th><th>Closed wk</th><th>Next gate</th></tr></thead>'
     +(upcTxt?('<tbody class="prnt"><tr class="xup"><td colspan="8">'+upcTxt+'</td></tr></tbody>'):'')
-    +flags.map(prow).join('')+greens.map(prow).join('')+'</table>'):'<div class="empty">No active projects.</div>';
+    +flags.filter(r=>!r.p.nonOfficial).map(prow).join('')+greens.filter(r=>!r.p.nonOfficial).map(prow).join('')
+    +flags.filter(r=>r.p.nonOfficial).map(prow).join('')+greens.filter(r=>r.p.nonOfficial).map(prow).join('')   // \u{1F3F7} non-official grouped at the bottom
+    +'</table>'):'<div class="empty">No active projects.</div>';
   const upcLine=upcTxt?('<div class="scrn" style="font-size:11px;color:#586a7e;margin:2px 0 4px">'+upcTxt+'</div>'):'';
   const rollup=doneTop.length?('<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">'+doneTop.slice(0,8).map(k=>'<span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px">'+esc(k)+' · '+doneBy[k]+'</span>').join('')+(doneTop.length>8?('<span style="color:#7b8794;font-size:11px;padding:3px 4px">+ '+doneTop.slice(8).reduce((a,k)=>a+doneBy[k],0)+' more on '+(doneTop.length-8)+' other jobs</span>'):'')+'</div>'):'<div class="empty">Nothing closed in the window.</div>';
   // ---- shop floor grouped BY BAY (the separation Rich asked for) ----
@@ -13142,6 +13148,7 @@ function buildExecReportHtml(days){
     +chartRow
     +chartRow2
     +'<h2 class="tblh">\u{1F4CB} Projects</h2>'+upcLine+'<div class="only-desk">'+projTable+'</div><div class="only-mob">'+projCards+'</div>'
+    +'<div style="font-size:11px;color:#7b8794;margin:6px 0 2px">\u{1F3F7} = <b>non-official / informal project</b> (change orders and one-off builds such as the JFSD items) — tracked here but not a formal booked job. Grouped at the bottom of the list and timeline.</div>'
     +(gantt?('<h2>\u{1F4C5} Program timeline</h2>'+gantt):'')
     +'<h2>✅ Closed this week — by job</h2>'
     +'<div style="font-size:11px;color:#7b8794;margin:-4px 0 8px">Shop-floor and project tasks marked complete in the last '+days+' days, grouped by job</div>'
