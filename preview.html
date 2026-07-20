@@ -2578,7 +2578,8 @@
           <div><label>End date</label><input id="lvEnd" type="date"></div>
         </div>
         <div><label>Reason <span class="muted-note">(optional — shows on the board, e.g. “Called in”)</span></label>
-          <select id="lvReason"><option value=""></option><option>Called in</option><option>Off-site</option><option>Appointment</option><option>Vacation</option><option>Training</option><option>Other</option></select></div>
+          <input id="lvReason" list="lvReasonList" placeholder="e.g. Work Travel, Vacation, Called in" autocomplete="off">
+          <datalist id="lvReasonList"><option value="Work Travel"></option><option value="On the Road"></option><option value="Called in"></option><option value="Off-site"></option><option value="Appointment"></option><option value="Vacation"></option><option value="Training"></option><option value="Other"></option></datalist></div>
         <div><label>Show on crew card <span class="muted-note">(for team members without their own column — e.g. Kayla → Sal's card. People with a column match by name automatically.)</span></label>
           <select id="lvLane"><option value="">— auto (match by name) —</option><option>Sal</option><option>Wrap Team</option><option>Electricians</option><option>Doug</option><option>Josh</option><option>Jeff</option></select></div>
         <div id="lvMsg" style="font-size:12px; min-height:16px"></div>
@@ -3666,6 +3667,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"31.7", date:"2026-07-20", title:"\u{270F} Edit leave: the Name is now editable + Reason is type-anything", items:[
+    "Rich: wanted a leave entry to read like “Brandon Choy - Work Travel” (the way Megan’s shows). Two fixes on the ✒ Edit leave form: the <b>Name field is now editable</b> when editing (was locked — you had to delete and re-add to rename); changing it renames the entry in place.",
+    "The <b>Reason</b> is now a <b>type-anything box</b> with suggestions (Work Travel · On the Road · Vacation · Called in …) instead of a fixed dropdown — so the “- Work Travel” that shows after the name on the board is just the reason; set it there and it reads “Name - Work Travel.”" ] },
   { rev:"31.6", date:"2026-07-20", title:"\u{1F41B} Fix: Team & Actions typing · + action matrix now prints on the report-out", items:[
     "Rich: couldn't type an action item and the panel kept going blank (needing a refresh). Cause: the background data poll re-rendered the whole meeting every ~minute, wiping the half-typed add row (and briefly blanking the panel).",
     "The poll now skips re-rendering the Production Meeting while you're mid-interaction — typing in the add row or with an inline edit open (same guard Sales & Planning already uses) — and resumes live updates the moment the fields are idle.",
@@ -7053,7 +7057,7 @@ function _lvImport(bytes, fname){
 }
 function openLeave(){ if(!ensureAuth("add a leave entry")) return; _lvRow=null; window._lvJob=null;
   document.getElementById('lvTitle').textContent='➕ Add leave';
-  const n=document.getElementById('lvName'); n.value=''; n.readOnly=false; n.style.opacity=''; n.title='';
+  const n=document.getElementById('lvName'); n.value=''; n.readOnly=false; n.style.opacity=''; n.title=''; window._lvNameOrig='';
   document.getElementById('lvStart').value=''; document.getElementById('lvEnd').value='';
   { const r=document.getElementById('lvReason'); if(r) r.value=''; }
   { const L=document.getElementById('lvLane'); if(L) L.value=''; } window._lvReasonOrig='';
@@ -7075,10 +7079,10 @@ function openLeaveEdit(row){ if(!ensureAuth("edit a leave entry")) return;
   const j=((window.MRA_DATA||{}).jobs||[]).find(x=>x.row===row); if(!j){ alert("Couldn't find that leave entry."); return; }
   _lvRow=row; window._lvJob=j;
   document.getElementById('lvTitle').textContent='✎ Edit leave';
-  const n=document.getElementById('lvName'); n.value=(j.project||'').replace(/\s*[–-]\s*APL.*$/i,''); n.readOnly=true; n.style.opacity='.6'; n.title='To rename, delete this entry and add a new one';
+  const n=document.getElementById('lvName'); n.value=(j.project||'').replace(/\s*[–-]\s*APL.*$/i,''); n.readOnly=false; n.style.opacity=''; n.title='Edit the name to rename this leave entry'; window._lvNameOrig=n.value;
   document.getElementById('lvStart').value=j.startISO||''; document.getElementById('lvEnd').value=j.completionISO||'';
   { const pr=_lvParse(j.notesRaw||''); window._lvReasonOrig=pr.reason;
-    const r=document.getElementById('lvReason'); if(r) r.value=[...r.options].some(o=>o.value===pr.reason)?pr.reason:'';
+    const r=document.getElementById('lvReason'); if(r) r.value=pr.reason||'';
     const L=document.getElementById('lvLane'); if(L) L.value=[...L.options].some(o=>o.value===pr.lane)?pr.lane:''; }
   document.getElementById('lvMsg').textContent=''; const b=document.getElementById('lvSubmit'); b.disabled=false; b.textContent='Save';
   document.getElementById('leaveModal').classList.add('show'); }
@@ -7099,15 +7103,18 @@ function submitLeave(){
   const notes=(reason+(laneSel?(' [lane:'+laneSel+']'):'')).trim();
   if(adding){ payload={ action:"addJob", project:name, bay:"APL/Holidays", status:"Leave",
       start:start, completion:end||start, jobNum:"", client:"", pm:"", notes:notes, pin:CLOSE_PIN, user:CURRENT_USER }; }
-  else { const j=window._lvJob||{}; payload={ action:"editJob", row:_lvRow, project:j.project||name,
-      bay:(j.bay||"APL/Holidays"), status:(j.status||"Leave"), start:start, completion:end||start, notes:notes, pin:CLOSE_PIN, user:CURRENT_USER }; }
+  else { const j=window._lvJob||{}; const orig=j.project||name;
+      const renamed=(name && name!==(window._lvNameOrig||'') && name!==orig);   // Name was edited -> rename the entry
+      payload={ action:"editJob", row:_lvRow, project:orig,
+      bay:(j.bay||"APL/Holidays"), status:(j.status||"Leave"), start:start, completion:end||start, notes:notes, pin:CLOSE_PIN, user:CURRENT_USER };
+      if(renamed) payload.newProject=name; }
   shopWrite(payload)
     .then(()=>{
       const D=window.MRA_DATA||{};
       if(adding){ if(D.jobs){ const nj={ row:900000+Math.floor(Math.random()*90000), bay:"APL/Holidays", project:name, status:"Leave",
           startISO:start||null, completionISO:end||start||null, notesRaw:notes||"", openTasks:[], openCount:0, doneCount:0, doneTasks:[], salOpen:0, tasks:[] };
           oRecat(nj); D.jobs.push(nj); } }
-      else { const j=oJobRow(_lvRow); if(j){ j.startISO=start||null; j.completionISO=end||start||null; j.notesRaw=notes||""; oRecat(j); } }
+      else { const j=oJobRow(_lvRow); if(j){ j.startISO=start||null; j.completionISO=end||start||null; j.notesRaw=notes||""; if(payload.newProject) j.project=payload.newProject; oRecat(j); } }
       oApply();
       msg.style.color='var(--green)'; msg.textContent=adding?'✓ Leave added.':'✓ Saved.'; btn.textContent=adding?'Add':'Save';
       setTimeout(()=>document.getElementById('leaveModal').classList.remove('show'),1000); })
