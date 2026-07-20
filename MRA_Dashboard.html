@@ -3651,6 +3651,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"30.9", date:"2026-07-20", title:"\u{1F5A8} Exec print: section titles repeat on every page + past-due strips stay glued", items:[
+    "Rich’s reprint showed a bare table continuing onto page 2 with no context, and Cisco’s amber “16 past-due” strip printed alone at the top of a page. Now the PROJECTS / SHOP FLOOR TODAY / NEXT TWO WEEKS banded titles repeat at the top of every printed page their table spills onto (they ride the repeating table header), so every page says what you’re looking at.",
+    "Each project row and its past-due strip are now an unbreakable pair, and each bay group (bay header + its trailers) stays together on one page. Screen version unchanged." ] },
   { rev:"30.8", date:"2026-07-20", title:"\u{1F5A8} Print fixes — exec / PM / recap / deficiency reports paginate cleanly on paper", items:[
     "Rich’s printed exec report had sections sliced in half at page breaks and washed-out headers. Print CSS overhauled on ALL four morning reports: charts, project rows, gantt rows, table rows and stat tiles now never split across a page (break-inside:avoid), and the floor table’s column headers repeat at the top of every printed page.",
     "Colors now actually PRINT — the gantt progress bars, portfolio health strip, crew-load bars and status chips were disappearing on paper (browsers strip backgrounds by default); print-color-adjust:exact forces them onto the page.",
@@ -13013,10 +13016,12 @@ function buildExecReportHtml(days){
       +'<td class="num" style="color:#15803d">'+(doneBy[p.name]||0)+'</td>'
       +'<td style="font-size:10.5px">'+((b&&b.gate)?(esc(b.gate.name)+' '+fmtMDs(b.gate.dateISO)):'\u2014')+'</td></tr>';
     if(b&&b.odN) h+='<tr class="warnrow"><td colspan="8">\u26A0 '+b.odN+' past-due'+(b.whoTxt?(' \u00b7 with: '+esc(b.whoTxt)):'')+'</td></tr>';
-    return h; };
-  const projTable=(flags.length||greens.length)?('<table class="xtab"><thead><tr><th>Status</th><th>Project</th><th>PM</th><th>Done</th><th>Schedule</th><th>Open</th><th>Closed wk</th><th>Next gate</th></tr></thead><tbody>'
-    +flags.map(prow).join('')+greens.map(prow).join('')+'</tbody></table>'):'<div class="empty">No active projects.</div>';
-  const upcLine=upc.length?('<div style="font-size:11px;color:#586a7e;margin:2px 0 4px"><b>Upcoming:</b> '+upc.map(r=>esc(r.p.name)+(r.p.startISO?(' (starts '+fmtMDs(r.p.startISO)+')'):'')).join(' · ')+'</div>'):'';
+    return '<tbody class="xpr">'+h+'</tbody>'; };
+  const upcTxt=upc.length?('<b>Upcoming:</b> '+upc.map(r=>esc(r.p.name)+(r.p.startISO?(' (starts '+fmtMDs(r.p.startISO)+')'):'')).join(' · ')):'';
+  const projTable=(flags.length||greens.length)?('<table class="xtab"><thead><tr class="xsec"><th colspan="8">\u{1F4CB} Projects</th></tr><tr><th>Status</th><th>Project</th><th>PM</th><th>Done</th><th>Schedule</th><th>Open</th><th>Closed wk</th><th>Next gate</th></tr></thead>'
+    +(upcTxt?('<tbody class="prnt"><tr class="xup"><td colspan="8">'+upcTxt+'</td></tr></tbody>'):'')
+    +flags.map(prow).join('')+greens.map(prow).join('')+'</table>'):'<div class="empty">No active projects.</div>';
+  const upcLine=upcTxt?('<div class="scrn" style="font-size:11px;color:#586a7e;margin:2px 0 4px">'+upcTxt+'</div>'):'';
   const rollup=doneTop.length?('<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0">'+doneTop.slice(0,8).map(k=>'<span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px">'+esc(k)+' · '+doneBy[k]+'</span>').join('')+(doneTop.length>8?('<span style="color:#7b8794;font-size:11px;padding:3px 4px">+ '+doneTop.slice(8).reduce((a,k)=>a+doneBy[k],0)+' more on '+(doneTop.length-8)+' other jobs</span>'):'')+'</div>'):'<div class="empty">Nothing closed in the window.</div>';
   // ---- shop floor grouped BY BAY (the separation Rich asked for) ----
   let floorHtml='', floorTable='';
@@ -13033,13 +13038,13 @@ function buildExecReportHtml(days){
         return '<div class="bjob"><div><div class="bpos">'+posOf(j)+'</div><div class="bnm">'+esc(j.project)+(j.jobNum?' <span class="src">'+esc(j.jobNum)+'</span>':'')+'</div>'+(j.pm&&j.pm!=='N/A'?('<div style="font-size:10px;color:#7b8794">'+esc(j.pm)+'</div>'):'')+'</div>'
           +'<div class="bmeta"><b>'+op+' open</b>'+(pjN(j)?('<br>'+pjN(j)+' \u{1F4CB} sched'):'')+(j.completionISO?('<br>target '+fmtMDs(j.completionISO)):'')+'</div></div>'; }).join('')).join('')
       :'<div class="empty">No trailers in bays.</div>';
-    floorTable=order.length?('<table class="xtab"><thead><tr><th>Pos</th><th>Trailer / Job</th><th>J#</th><th>PM</th><th>Open \u00b7 \u{1F4CB} sched</th><th>Target</th></tr></thead><tbody>'
-      +order.map(k=>'<tr class="xg"><td colspan="6">\u{1F3ED} '+esc(k)+'</td></tr>'
+    floorTable=order.length?('<table class="xtab"><thead><tr class="xsec"><th colspan="6">\u{1F3ED} Shop floor today</th></tr><tr><th>Pos</th><th>Trailer / Job</th><th>J#</th><th>PM</th><th>Open \u00b7 \u{1F4CB} sched</th><th>Target</th></tr></thead>'
+      +order.map(k=>'<tbody class="xbay"><tr class="xg"><td colspan="6">\u{1F3ED} '+esc(k)+'</td></tr>'
         +byBay[k].map(j=>'<tr><td style="font-size:9px;font-weight:800;color:#94a3b8">'+posOf(j)+'</td>'
           +'<td style="font-weight:700">'+esc(j.project)+'</td><td>'+(j.jobNum?'<span class="src">'+esc(j.jobNum)+'</span>':'\u2014')+'</td>'
           +'<td>'+((j.pm&&j.pm!=='N/A')?esc(j.pm):'\u2014')+'</td>'
-          +'<td class="num">'+opN(j)+(pjN(j)?(' \u00b7 '+pjN(j)+' \u{1F4CB}'):'')+'</td><td class="num">'+(j.completionISO?fmtMDs(j.completionISO):'\u2014')+'</td></tr>').join('')).join('')
-      +'</tbody></table>'):'<div class="empty">No trailers in bays.</div>'; }
+          +'<td class="num">'+opN(j)+(pjN(j)?(' \u00b7 '+pjN(j)+' \u{1F4CB}'):'')+'</td><td class="num">'+(j.completionISO?fmtMDs(j.completionISO):'\u2014')+'</td></tr>').join('')+'</tbody>').join('')
+      +'</table>'):'<div class="empty">No trailers in bays.</div>'; }
   // normalize Fleetio's 07.18.2026-style stamps to the report's M/D form
   const nDate=v=>{ const m=String(v||'').match(/(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{4})/); return m?((+m[1])+'/'+(+m[2])):String(v||''); };
   const tidyAsset=v=>{ let x=String(v||'').replace(/\s+/g,' ').trim(); if(x.length>42) x=x.slice(0,40)+'\u2026';
@@ -13048,7 +13053,7 @@ function buildExecReportHtml(days){
   finAhead.forEach(r=>aheadRows.push({ic:'\u{1F3C1}', what:'<b>'+esc(r.p.name)+'</b> targeted to finish', src:esc(r.p.pm||''), d:fmtMDs(r.p.finishISO), d2:''}));
   msAhead.slice(0,8).forEach(m=>aheadRows.push({ic:'\u25C6', what:'<b>'+esc(m.txt)+'</b>', src:esc(m.src), d:fmtMDs(m.d), d2:''}));
   backSoon.slice(0,8).forEach(i=>aheadRows.push({ic:'\u{1F69B}', what:'<b>'+esc(tidyAsset(i.asset||i.jobNum||('#'+i.num)))+'</b> returns to MRA', src:esc(i.jobNum||''), d:nDate(i.backMRA), d2:i.leaveMRA?nDate(i.leaveMRA):''}));
-  const aheadTable=aheadRows.length?('<table class="xtab"><thead><tr><th></th><th>What</th><th>Project / J#</th><th>Date</th><th>Leaves</th></tr></thead><tbody>'
+  const aheadTable=aheadRows.length?('<table class="xtab"><thead><tr class="xsec"><th colspan="5">⏰ The next two weeks</th></tr><tr><th></th><th>What</th><th>Project / J#</th><th>Date</th><th>Leaves</th></tr></thead><tbody>'
     +aheadRows.map(r=>'<tr><td style="width:26px">'+r.ic+'</td><td>'+r.what+'</td><td>'+ (r.src||'\u2014') +'</td><td class="num">'+r.d+'</td><td class="num">'+(r.d2||'\u2014')+'</td></tr>').join('')
     +'</tbody></table>'):'<div class="empty">Quiet two weeks ahead on the schedule.</div>';
   const aheadList=aheadRows.length?('<ul class="seplist">'+aheadRows.map(r=>'<li>'+r.ic+' '+r.what+(r.src?(' <span class="src">'+r.src+'</span>'):'')+' <span class="dt">'+r.d+'</span>'+(r.d2?(' \u00b7 leaves <span class="dt">'+r.d2+'</span>'):'')+'</li>').join('')+'</ul>'):'<div class="empty">Quiet two weeks ahead on the schedule.</div>';
@@ -13064,7 +13069,11 @@ function buildExecReportHtml(days){
     +'.xtab tbody tr:nth-child(even) td{background:#fafbfd}'
     +'.xtab .xg td{background:#eef2f7;font-weight:900;font-size:9px;letter-spacing:.9px;color:#586a7e;padding:5px 9px}'
     +'.xtab .num{text-align:right;white-space:nowrap;font-weight:700}'
-    +'.xtab .warnrow td{background:#fff8e6;color:#8a5e00;font-size:10.5px;padding:5px 9px 7px 26px;border-bottom:1px solid #f3e5b8}'
+    +'.xtab tbody tr.warnrow td{background:#fff8e6;color:#8a5e00;font-size:10.5px;padding:5px 9px 7px 26px;border-bottom:1px solid #f3e5b8}'
+    +'.xtab tr.xsec{display:none}'
+    +'.xtab tr.xsec th{font-size:13.5px;letter-spacing:.6px;color:#9a3412;background:#fdf0eb;border-left:5px solid #e04826;border-bottom:0;padding:7px 12px;font-weight:900;border-radius:0 6px 6px 0}'
+    +'.xtab .xup td{font-size:11px;color:#586a7e;padding:5px 9px}'
+    +'tbody.prnt{display:none}'
     +'.only-mob{display:none}.only-desk{display:block}'
     +'@media(max-width:640px){.only-mob{display:block}.only-desk{display:none}}'
     +'.pcard{border:1px solid #e8edf3;border-radius:10px;padding:9px 12px;margin:0 0 8px;background:#fcfdfe}'
@@ -13099,6 +13108,12 @@ function buildExecReportHtml(days){
     +'.xtab thead{display:table-header-group}'
     +'.xtab tr.xg{break-after:avoid;page-break-after:avoid}'
     +'.rhead{break-after:avoid}'
+    +'h2.tblh,.scrn{display:none}'
+    +'.xtab tr.xsec{display:table-row}'
+    +'tbody.prnt{display:table-row-group}'
+    +'.xtab{margin-top:12px}'
+    +'.xtab tbody.xpr,.xtab tbody.xbay{break-inside:avoid;page-break-inside:avoid}'
+    +'.xtab tr.warnrow{break-before:avoid;page-break-before:avoid}'
     +'}'
     +'</style></head><body>'
     +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Weekly executive report · refresh for live data</span></div>'
@@ -13117,14 +13132,14 @@ function buildExecReportHtml(days){
     +'<div class="stats">'+tile(greens.length+flags.length,'ACTIVE PROJECTS','#1d4ed8')+tile(greens.length,'GREEN','#15803d')+tile(flags.length,'YELLOW / RED',(flags.length?'#b45309':'#15803d'))+((wkPrev!=null&&wkPrev>0)?('<div class="st" style="border-left-color:#15803d"><div class="n" style="color:#15803d">'+doneN+' <span style="font-size:11px;font-weight:800;color:'+((wk[wk.length-1].n-wkPrev)>=0?'#15803d':'#b45309')+'">'+((wk[wk.length-1].n-wkPrev)>=0?'▲':'▼')+Math.abs(wk[wk.length-1].n-wkPrev)+'</span></div><div class="l">CLOSED — '+days+'D</div></div>'):tile(doneN,'CLOSED — '+days+'D','#15803d'))+(shipped.length?tile(shipped.length,'SHIPPED','#1d4ed8'):'')+tile(odN,'OVERDUE',(odN?'#b91c1c':'#15803d'))+'</div>'
     +chartRow
     +chartRow2
-    +'<h2>\u{1F4CB} Projects</h2>'+upcLine+'<div class="only-desk">'+projTable+'</div><div class="only-mob">'+projCards+'</div>'
+    +'<h2 class="tblh">\u{1F4CB} Projects</h2>'+upcLine+'<div class="only-desk">'+projTable+'</div><div class="only-mob">'+projCards+'</div>'
     +(gantt?('<h2>\u{1F4C5} Program timeline</h2>'+gantt):'')
     +'<h2>✅ Closed this week — by job</h2>'
     +(msHit.length?('<ul class="seplist">'+msHit.map(m=>'<li>◆ <b>Milestone hit: '+esc(m.txt)+'</b> <span class="src">'+esc(m.src)+'</span></li>').join('')+'</ul>'):'')
     +rollup
-    +'<h2>\u{1F3ED} Shop floor today</h2>'+'<div class="only-desk">'+floorTable+'</div><div class="only-mob">'+floorHtml+'</div>'
+    +'<h2 class="tblh">\u{1F3ED} Shop floor today</h2>'+'<div class="only-desk">'+floorTable+'</div><div class="only-mob">'+floorHtml+'</div>'
     +'<div class="hnote" style="margin-left:0">Plus '+lotN+' in the Parking Lot · '+heldN+' on hold / next up'+(backSoon.length?(' · '+backSoon.length+' unit'+(backSoon.length>1?'s':'')+' returning within 2 weeks'):'')+'</div>'
-    +'<h2>⏰ The next two weeks</h2>'+aheadHtml
+    +'<h2 class="tblh">⏰ The next two weeks</h2>'+aheadHtml
     +'<div class="foot rfoot"><img src="'+((location.origin&&location.origin.indexOf('http')===0)?(location.origin+'/logo.png'):'logo.png')+'" alt="" onerror="this.style.display=\'none\'"><span><b>MRA</b> · mobile.experiential — prepared automatically every Monday by the MRA Command Center · questions? the dashboard has full detail, or ask Rich</span></div></div></body></html>';
 }
 function openExecReport(){ if(typeof closeDrops==='function') closeDrops();
