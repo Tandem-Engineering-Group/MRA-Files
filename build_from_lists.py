@@ -303,6 +303,7 @@ def main():
         if not name:
             continue
         p_task   = ff(it, 'Title')
+        is_meeting = '\U0001F5D3' in (p_task or '')[:3]   # 🗓 meeting marker rides the task title — informational, excluded from project stats
         p_phase  = ff(it, P_PHASE)
         p_type   = ff(it, P_TYPE)                        # 'TaskType' col (the empty display-only 'Type' col has an unusable internal name)
         p_nonoff = is_yes(ff(it, P_NONOFF))             # non-official-project flag on the task
@@ -332,33 +333,33 @@ def main():
             o['parked'] = True           # ⏸ any task flagged → the whole project is parked (frozen / on hold)
         if p_projjob and not o['jobNum']:
             o['jobNum'] = p_projjob      # #6: first task's explicit Job # → the project's Job #
-        o['taskCount'] += 1
-        if p_status == 'Completed':
-            o['doneCount'] += 1
-        tp = 0
-        if p_status == 'Completed':
-            tp = 100
-        else:
-            m = re.search(r'(\d{1,3})\s*%', p_status)
-            if m:
-                tp = max(0, min(100, int(m.group(1))))
-        o['pctSum'] += tp
         if p_pm and not o['pm']:
             o['pm'] = p_pm
-        if s_iso and (o['minStart'] is None or s_iso < o['minStart']):
-            o['minStart'] = s_iso
-        if f_iso and (o['maxFinish'] is None or f_iso > o['maxFinish']):
-            o['maxFinish'] = f_iso
-        if p_mile == 'Yes':
-            md = f_iso or s_iso
-            if md:
-                o['milestones'].append({'name': p_task, 'dateISO': md, 'owner': p_assign,
-                                        'status': p_status, 'phase': p_phase,
-                                        'done': p_status == 'Completed'})
-        if p_assign and p_status != 'Completed':
-            o['tasks']  # noqa
-            team_tasks.append({'assignee': p_assign, 'project': name, 'task': p_task,
-                               'dueISO': f_iso or s_iso, 'status': p_status})
+        if not is_meeting:   # 🗓 meetings excluded from counts / % / dates / milestones / team-load so a recurring series never skews the project
+            o['taskCount'] += 1
+            if p_status == 'Completed':
+                o['doneCount'] += 1
+            tp = 0
+            if p_status == 'Completed':
+                tp = 100
+            else:
+                m = re.search(r'(\d{1,3})\s*%', p_status)
+                if m:
+                    tp = max(0, min(100, int(m.group(1))))
+            o['pctSum'] += tp
+            if s_iso and (o['minStart'] is None or s_iso < o['minStart']):
+                o['minStart'] = s_iso
+            if f_iso and (o['maxFinish'] is None or f_iso > o['maxFinish']):
+                o['maxFinish'] = f_iso
+            if p_mile == 'Yes':
+                md = f_iso or s_iso
+                if md:
+                    o['milestones'].append({'name': p_task, 'dateISO': md, 'owner': p_assign,
+                                            'status': p_status, 'phase': p_phase,
+                                            'done': p_status == 'Completed'})
+            if p_assign and p_status != 'Completed':
+                team_tasks.append({'assignee': p_assign, 'project': name, 'task': p_task,
+                                   'dueISO': f_iso or s_iso, 'status': p_status})
         o['tasks'].append({'id': p_taskid, '_id': it.get('ID') or it.get('id'), 't': p_task,
                            'phase': p_phase, 'type': p_type, 'who': p_assign,
                            'startISO': s_iso, 'finISO': f_iso, 'dur': p_dur, 'st': p_status,
