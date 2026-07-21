@@ -3735,6 +3735,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"32.6", date:"2026-07-21", title:"\u{1F47B} Ghost board — reload on long reopen instead of flashing stale data", items:[
+    "Follow-up to 32.3: when a backgrounded tab (iPad especially) is reopened after being away a while, the board now <b>reloads fresh in one shot</b> instead of briefly showing the old \u201cghost\u201d screen before catching up. Quick glances away still just refresh quietly and keep your place; only a longer absence (or data that's already 15 min+ old) triggers the clean reload.",
+    "If your board is showing this on an OLD tab, do <b>one</b> manual refresh to pick up the fix \u2014 after that it self-heals on its own." ] },
   { rev:"32.5", date:"2026-07-21", title:"\u{1F527} Unassigned finder now flags new Fleetio issues too", items:[
     "The <b>\u26A0 unassigned</b> finder already surfaced shop tasks and project \u201cMRA Shop\u201d tasks with no crew. Now it also flags <b>open Fleetio maintenance issues on a trailer that aren't on the board yet</b> \u2014 so a new issue coming in from Fleetio can't sit unnoticed.",
     "Each shows under its trailer: tap <b>\u{1F464}</b> to add it as a task AND assign a crew in one step, <b>\u2795</b> to add it unassigned, or the <b>\u2197</b> to open it in Fleetio. Overdue issues are flagged." ] },
@@ -16676,17 +16679,23 @@ tick(); setInterval(tick,1000);
 let _refreshing=false, _lastRefreshOk=0;
 async function _guardedRefresh(){ if(_refreshing) return; _refreshing=true; try{ await refresh(); _lastRefreshOk=Date.now(); }finally{ _refreshing=false; } }
 setInterval(_guardedRefresh, REFRESH_SECONDS*1000);
-// 🔄 WAKE REFRESH — kills the "ghost"/stale-board bug. A backgrounded iPad/Safari tab can be frozen
-// for hours or days (bfcache + suspended timers) and, when reopened, restore showing its OLD board
-// with no network hit. The moment the tab returns to the foreground — page becomes visible, bfcache
-// restore (pageshow.persisted), window focus, or the network comes back online — we pull fresh data
-// immediately (cache-busted, re-entrancy-guarded, lightly throttled) so a reopened tab can NEVER sit
-// on stale data waiting for the next poll.
+// 🔄 WAKE / anti-ghost. A backgrounded iPad/Safari tab freezes (bfcache + suspended timers) and, on
+// reopen, restores its OLD board. Just swapping in fresh data still flashes that stale board for a beat
+// (the "ghost"). So on wake we decide:
+//   • brief away (< 90 s): quietly pull fresh data (fast, keeps scroll position).
+//   • long away (>= 90 s) OR the data on screen is already old: HARD RELOAD — the page comes back fresh
+//     in ONE shot, so a stale board is never presented as real (a reload shows a loading state, not fake data).
+let _awayAt=0;
 function _wakeRefresh(force){ if(document.hidden) return; if(!force && Date.now()-_lastRefreshOk<4000) return; _guardedRefresh(); }
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) _wakeRefresh(true); });
-window.addEventListener('pageshow', e=>{ if(e&&e.persisted) _wakeRefresh(true); });
-window.addEventListener('focus', ()=>_wakeRefresh(false));
-window.addEventListener('online', ()=>_wakeRefresh(true));
+function _dataOld(){ try{ const g=(window.MRA_DATA||{}).generatedAt; return g ? ((Date.now()-Date.parse(g)) > 15*60*1000) : false; }catch(e){ return false; } }
+function _onWake(){ if(document.hidden) return; const away=_awayAt?(Date.now()-_awayAt):0; _awayAt=0;
+  if(away>=90000 || _dataOld()){ try{ location.reload(); }catch(e){ _wakeRefresh(true); } return; }
+  _wakeRefresh(true); }
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ _awayAt=Date.now(); } else { _onWake(); } });
+window.addEventListener('pagehide', ()=>{ _awayAt=Date.now(); });
+window.addEventListener('pageshow', e=>{ if(e&&e.persisted) _onWake(); });
+window.addEventListener('focus', ()=>{ if(!document.hidden) _onWake(); });
+window.addEventListener('online', ()=>{ if(!document.hidden) _wakeRefresh(true); });
 }
 </script>
 </body>
