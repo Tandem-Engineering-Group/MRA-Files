@@ -708,13 +708,20 @@
     /* --- Table view (Al's ask: filterable, all metrics one row) --- */
   .cat-table-wrap{overflow-x:auto;border:1px solid var(--line,#2a3543);border-radius:10px}
   table.cat-table{border-collapse:collapse;width:100%;font-size:12.5px}
-  table.cat-table th,table.cat-table td{padding:7px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line,#2a3543)}
-  table.cat-table th{position:sticky;top:0;background:var(--panel2,#1d2632);cursor:pointer;user-select:none;font-weight:700;z-index:1}
+  table.cat-table th,table.cat-table td{padding:8px 11px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line,#2a3543);vertical-align:top}
+  table.cat-table th{position:sticky;top:0;background:var(--panel2,#1d2632);cursor:pointer;user-select:none;font-weight:700;z-index:1;font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted,#9aa5b1)}
   table.cat-table th:hover{color:#e04826}
   table.cat-table th .sortarr{opacity:.7;font-size:10px;margin-left:3px}
   table.cat-table tbody tr:hover{background:rgba(224,72,38,.10)}
-  table.cat-table tbody tr:nth-child(even){background:rgba(127,127,127,.05)}
+  table.cat-table tbody tr:nth-child(even){background:rgba(127,127,127,.045)}
   table.cat-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  table.cat-table th.num{text-align:right}
+  table.cat-table td.c-prod{white-space:normal;min-width:190px;max-width:300px;font-weight:600;line-height:1.3}
+  table.cat-table td.c-prod .c-id{display:block;font-weight:400;font-size:10.5px;color:var(--muted,#9aa5b1);font-family:ui-monospace,Menlo,Consolas,monospace;margin-top:2px}
+  table.cat-table td.c-cat .c-sub{display:block;font-size:10.5px;color:var(--muted,#9aa5b1)}
+  table.cat-table td.c-jobs{white-space:normal;max-width:140px;line-height:1.3}
+  table.cat-table td.c-cost .u{color:var(--muted,#9aa5b1);font-weight:400}
+  table.cat-table td.c-act{white-space:nowrap;text-align:right}
   .cat-tcount{margin:0 0 10px;color:var(--muted,#8b9bb0);font-size:12px}
   .cat-tbtn{background:none;border:none;color:#e04826;cursor:pointer;font-weight:700;font-size:12px}
   </style>
@@ -1454,7 +1461,7 @@ If unsure at any point → Manual Review</pre>
             });
              return m;
 
-        } function catSizeText(p){ return [p.size_1,p.size_2].filter(Boolean).join(' x ')+(p.thickness?(' \u00b7 '+p.thickness):'')+(p.length?(' \u00b7 '+p.length):''); }
+        } function catSizeText(p){ const dims=[p.size_1,p.size_2].filter(Boolean).join(' x '); return [dims,p.thickness,p.length].filter(Boolean).join(' \u00b7 '); }
         let tableSort={key:'canonical_name',dir:1};
         function renderTable(){
           const qv=$('search').value.toLowerCase(), fdep=$('departmentFilter').value,fcat=$('categoryFilter').value,fsub=$('subcategoryFilter').value,ffam=$('familyFilter').value,vendor=$('vendorFilter').value,job=$('projectFilter').value;
@@ -1473,11 +1480,24 @@ If unsure at any point → Manual Review</pre>
             switch(k){ case 'canonical_name':return p.canonical_name||''; case 'product_family':return p.product_family||''; case 'department':return p.department||''; case 'category':return p.category||''; case 'size':return catSizeText(p); case 'vendor':return h.vendor||''; case 'sku':return h.sku||''; case 'order_date':return h.order_date||''; case 'quantity':return num(h.quantity); case 'unit_cost':return num(h.unit_cost); case 'extended_cost':return num(h.extended_cost); case 'jobs':return jobsOf(o); default:return ''; } };
           const k=tableSort.key,dir=tableSort.dir;
           rows.sort((a,b)=>{ const va=val(a,k),vb=val(b,k); if(typeof va==='number'&&typeof vb==='number') return (va-vb)*dir; return String(va).localeCompare(String(vb))*dir; });
-          const cols=[['canonical_name','Product'],['product_family','Family'],['department','Dept'],['category','Category'],['size','Size'],['vendor','Vendor'],['sku','SKU'],['order_date','Order Date'],['quantity','Qty'],['unit_cost','Unit Cost'],['extended_cost','Total'],['jobs','Job(s)'],['','']];
+          const cols=[['canonical_name','Product'],['category','Category'],['size','Size'],['vendor','Vendor'],['sku','SKU'],['quantity','Qty'],['unit_cost','Unit Cost'],['extended_cost','Total'],['order_date','Ordered'],['jobs','Job(s)'],['','']];
+          const numCols=new Set(['quantity','unit_cost','extended_cost']);
           const arr=key=> key===tableSort.key?(tableSort.dir>0?'\u25b2':'\u25bc'):'';
-          const head='<thead><tr>'+cols.map(c=> c[1]? `<th data-k="${c[0]}">${esc(c[1])}<span class="sortarr">${arr(c[0])}</span></th>`:'<th></th>').join('')+'</tr></thead>';
+          const head='<thead><tr>'+cols.map(c=> c[1]? `<th data-k="${c[0]}" class="${numCols.has(c[0])?'num':''}">${esc(c[1])}<span class="sortarr">${arr(c[0])}</span></th>`:'<th></th>').join('')+'</tr></thead>';
           const body='<tbody>'+rows.map(o=>{ const p=o.p,h=o.h;
-            return `<tr><td>${esc(p.canonical_name||'\u2014')}</td><td>${esc(p.product_family||'')}</td><td>${esc(p.department||'')}</td><td>${esc(p.category||'')}</td><td>${esc(catSizeText(p))}</td><td>${esc(h?(h.vendor||''):'')}</td><td>${esc(h?(h.sku||''):'')}</td><td>${esc(h?(h.order_date||''):'')}</td><td class="num">${esc(h?(h.quantity||''):'')}</td><td class="num">${h?(money(h.unit_cost)+(h.unit?' /'+esc(h.unit):'')):''}</td><td class="num">${(h&&h.extended_cost!==''&&h.extended_cost!=null)?money(h.extended_cost):''}</td><td>${esc(jobsOf(o))}</td><td><button class="cat-tbtn" data-pick="${esc(p.internal_id)}" title="Add to order pick list">＋</button> <button class="cat-tbtn" data-ep="${esc(p.internal_id)}"${h?(' data-eh="'+esc(h.history_id)+'"'):''}>Edit</button></td></tr>`;
+            const catCell=`${esc(p.category||'—')}${p.subcategory?`<span class="c-sub">${esc(p.subcategory)}</span>`:''}`;
+            const ucCell=h?(money(h.unit_cost)+(h.unit?`<span class="u"> /${esc(h.unit)}</span>`:'')):'';
+            return `<tr><td class="c-prod">${esc(p.canonical_name||'—')}<span class="c-id">${esc(p.internal_id||'')}</span></td>`
+              +`<td class="c-cat">${catCell}</td>`
+              +`<td>${esc(catSizeText(p))||'—'}</td>`
+              +`<td>${esc(h?(h.vendor||''):'')}</td>`
+              +`<td>${esc(h?(h.sku||''):'')}</td>`
+              +`<td class="num">${esc(h?(h.quantity||''):'')}</td>`
+              +`<td class="num c-cost">${ucCell}</td>`
+              +`<td class="num">${(h&&h.extended_cost!==''&&h.extended_cost!=null)?money(h.extended_cost):''}</td>`
+              +`<td>${esc(h?(h.order_date||''):'')}</td>`
+              +`<td class="c-jobs">${esc(jobsOf(o))}</td>`
+              +`<td class="c-act"><button class="cat-tbtn" data-pick="${esc(p.internal_id)}" title="Add to order pick list">＋</button> <button class="cat-tbtn" data-ep="${esc(p.internal_id)}"${h?(' data-eh="'+esc(h.history_id)+'"'):''}>Edit</button></td></tr>`;
           }).join('')+'</tbody>';
           $('catTable').innerHTML=head+body;
           $('tableCount').textContent=rows.length+' row'+(rows.length===1?'':'s')+' \u2014 products + order history matching your search & filters. Click a column to sort.';
@@ -2259,6 +2279,9 @@ If unsure at any point → Manual Review</pre>
           const LS='mra_cat_picklist_v1';
           let PL={}; try{ PL=JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ PL={}; }
           const save=()=>{ try{ localStorage.setItem(LS,JSON.stringify(PL)); }catch(e){} };
+          const JLS='mra_cat_pickjob_v1';
+          let JOB=''; try{ JOB=localStorage.getItem(JLS)||''; }catch(e){ JOB=''; }
+          const saveJob=()=>{ try{ localStorage.setItem(JLS,JOB); }catch(e){} };
           const prod=id=>(catalog||[]).find(p=>p.internal_id===id);
           const os=id=>{ try{ return ordersFor(id).slice().sort((a,b)=>String(b.order_date||'').localeCompare(String(a.order_date||''))); }catch(e){ return []; } };
           const vendorOf=id=>{ const o=os(id); let v=o.length?(o[0].vendor||''):''; if(/^alro( steel)?$/i.test(v.trim())) v='Alro Steel'; return v; };
@@ -2285,6 +2308,9 @@ If unsure at any point → Manual Review</pre>
               .pk-act button{border:none;border-radius:9px;padding:10px 15px;font-weight:800;cursor:pointer;font-size:13px}
               .pk-act .pr{background:#e04826;color:#fff}.pk-act .em{background:#1d4ed8;color:#fff}.pk-act .cs{background:var(--panel2,#1d2632);color:var(--txt,#e6e9ef);border:1px solid var(--line,#2a3543)}
               .pk-act .cl{background:transparent;color:#fca5a5;border:1px solid #7f1d1d;margin-left:auto}
+              .pk-job{display:flex;align-items:center;gap:9px;margin:2px 0 8px;padding:10px 12px;background:var(--panel2,#1d2632);border:1px solid var(--line,#2a3543);border-radius:9px}
+              .pk-job label{font-weight:700;font-size:12.5px;white-space:nowrap}
+              .pk-job input{flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line,#2a3543);border-radius:7px;background:var(--panel,#161c26);color:var(--txt,#e6e9ef);font-size:13px}
               .pk-empty{color:var(--muted,#9aa5b1);padding:14px 0}
             `;
             document.head.appendChild(st);
@@ -2298,11 +2324,14 @@ If unsure at any point → Manual Review</pre>
             if(!ids.length){ m.innerHTML='<h3>Pick List</h3><div class="pk-empty">Nothing added yet. Tap <b>＋</b> on any product (Cards or Table view) to add it to your order.</div><div class="pk-act"><button class="cs" onclick="document.getElementById(\'pkBack\').classList.remove(\'show\')">Close</button></div>'; return; }
             const byv={}; ids.forEach(id=>{ const v=vendorOf(id)||'(vendor TBD)'; (byv[v]=byv[v]||[]).push(id); });
             let html='<h3>Pick List — Order Sheet</h3><div class="pk-sub">'+ids.length+' item'+(ids.length===1?'':'s')+' · grouped by vendor · set quantities, then print or email to the vendor.</div>';
+            let jobOpts=''; try{ jobOpts=Object.keys((typeof referenceLists!=='undefined'&&referenceLists.job_directory)||{}).sort().map(function(j){ return '<option value="'+esc(j)+'">'+esc(referenceLists.job_directory[j]||'')+'</option>'; }).join(''); }catch(e){}
+            html+='<div class="pk-job"><label>🏷 Job # (charge to)</label><input id="pkJob" list="pkJobList" placeholder="e.g. J1560" value="'+esc(JOB)+'"><datalist id="pkJobList">'+jobOpts+'</datalist></div>';
             Object.keys(byv).sort().forEach(v=>{ html+='<div class="pk-vend">'+esc(v)+'</div>';
               byv[v].forEach(id=>{ const p=prod(id); if(!p)return; const sku=skuOf(id);
                 html+='<div class="pk-row"><input class="q" type="number" min="1" value="'+(PL[id]||1)+'" data-q="'+esc(id)+'"><div class="nm">'+esc(p.canonical_name||id)+'<div class="s">'+esc([p.category,catSizeText(p)].filter(Boolean).join(' · '))+(sku?(' · #'+esc(sku)):'')+'</div></div><button class="rm" data-rm="'+esc(id)+'" title="Remove">✕</button></div>'; }); });
             html+='<div class="pk-act"><button class="pr" data-pk-print>🖨 Print</button><button class="em" data-pk-email>📧 Email</button><button class="cs" data-pk-csv>⬇ Excel (CSV)</button><button class="cl" data-pk-clear>Clear list</button></div>';
             m.innerHTML=html;
+            const jb=m.querySelector('#pkJob'); if(jb){ jb.oninput=function(){ JOB=jb.value.trim(); saveJob(); }; }
             qa('[data-q]',m).forEach(i=>i.onchange=()=>{ const n=parseInt(i.value,10); PL[i.dataset.q]=(n>0?n:1); save(); });
             qa('[data-rm]',m).forEach(b=>b.onclick=()=>{ delete PL[b.dataset.rm]; save(); updateBtn(); renderModal(); });
             m.querySelector('[data-pk-print]').onclick=()=>sheet('print');
@@ -2314,7 +2343,7 @@ If unsure at any point → Manual Review</pre>
           function dstr(){ const d=new Date(); return (d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear(); }
           function sheet(mode){
             const byv=lines(); const dd=dstr();
-            if(mode==='email'){ let body='MRA — Material Order Request\nDate: '+dd+'\n\n';
+            if(mode==='email'){ let body='MRA — Material Order Request\nDate: '+dd+(JOB?('\nJob #: '+JOB):'')+'\n\n';
               Object.keys(byv).sort().forEach(v=>{ body+=v+':\n'; byv[v].forEach(it=>{ body+='  - Qty '+it.qty+'   '+it.name+(it.sku?('   [#'+it.sku+']'):'')+'\n'; }); body+='\n'; });
               body+='Requested by: (your name)\n';
               window.location.href='mailto:?subject='+encodeURIComponent('MRA Material Order Request '+dd)+'&body='+encodeURIComponent(body); return; }
@@ -2329,13 +2358,13 @@ If unsure at any point → Manual Review</pre>
               +'tr.vh td{background:#fdf0eb;color:#9a3412;font-weight:800;text-transform:uppercase;font-size:11px;letter-spacing:.5px}'
               +'@media print{.bar{display:none}}</style></head><body>'
               +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button></div>'
-              +'<div class="pad"><h1>MRA — Material Order Request</h1><div class="sub">Date: '+dd+' · Customer #: 188458 · Requested by: __________</div>'
+              +'<div class="pad"><h1>MRA — Material Order Request</h1><div class="sub">Date: '+dd+' · Customer #: 188458'+(JOB?(' · Job #: <b>'+esc(JOB)+'</b>'):'')+' · Requested by: __________</div>'
               +'<table><thead><tr><th>Qty</th><th>Description</th><th>Part # / SKU</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
               +'<p style="color:#888;font-size:11px;margin-top:22px">Generated from the MRA Product Catalogue pick list.</p></div></body></html>';
             const w=window.open('','_blank'); if(!w){ alert('Allow pop-ups for this site, then tap Print again.'); return; } w.document.open(); w.document.write(html); w.document.close();
           }
-          function csv(){ const byv=lines(); const rows=[['Vendor','Qty','Description','Part#/SKU','Category','Notes']];
-            Object.keys(byv).sort().forEach(v=> byv[v].forEach(it=> rows.push([v,it.qty,it.name,it.sku||'',it.cat,''])));
+          function csv(){ const byv=lines(); const rows=[['Vendor','Qty','Description','Part#/SKU','Category','Job #','Notes']];
+            Object.keys(byv).sort().forEach(v=> byv[v].forEach(it=> rows.push([v,it.qty,it.name,it.sku||'',it.cat,JOB,''])));
             const txt=rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');
             const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv'})); a.download='MRA_Order_Request.csv'; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800); }
           document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('[data-pick]'); if(b){ e.preventDefault(); e.stopPropagation(); window.pickAdd(b.dataset.pick); } },true);
