@@ -702,6 +702,8 @@
   .petask-main{flex:1; min-width:0}
   .petask-t{font-size:13px; line-height:1.3}
   .petask-m{font-size:11px; color:var(--muted); margin-top:2px}
+  .petask-media{margin-top:4px}
+  .pe-projfiles{display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:12px; background:rgba(224,72,38,.08); border:1px solid var(--line); border-radius:8px; padding:6px 9px; margin:0 0 8px}
   .petask.isdone .petask-t{text-decoration:line-through; color:var(--muted)}
   .petask.petask-parent{background:rgba(45,212,191,.12); border-left:3px solid var(--teal); padding-left:7px}   /* parent task that has subtasks — teal (milestones are gold) */
   .petask.petask-parent .petask-t{font-weight:700}
@@ -2716,6 +2718,7 @@
         <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
         <button class="btn-ghost" onclick="projShiftAllBtn()" title="⏩ Slide the WHOLE schedule — move every task's start AND finish by the same number of days (e.g. +10 to push the project 10 days later because it slipped). Each task keeps its old due struck through.">⏩ Shift schedule</button>
         <button class="btn-ghost" onclick="peOpenDetail()" title="Open this project's full-screen Gantt (detailed view)">⛶ Gantt view</button>
+        <button class="btn-ghost" id="peFilesBtn" onclick="openProjFiles()" title="Attach spec sheets, drawings, photos or links to the WHOLE project — visible to everyone on this project">📎 Files</button>
         <button class="btn-ghost" onclick="deleteProjectBtn()" title="Delete this ENTIRE project — all its tasks + the matching floor job (can't be undone; re-upload the template to restore)" style="border-color:rgba(239,68,68,.5); color:#fca5a5">🗑 Delete project</button>
         <span id="peCount" style="color:var(--muted); font-size:12px"></span>
         <input id="peSearch" type="search" oninput="setPeSearch(this.value)" placeholder="🔎 Find task…" autocomplete="off" title="Filter this project's tasks by text — task, assignee, phase, type or notes" style="font-size:11px; padding:4px 8px; max-width:160px; border-radius:7px; border:1px solid var(--line); background:var(--panel); color:var(--txt)">
@@ -2727,6 +2730,30 @@
         </span>
       </div>
       <div id="peList" style="max-height:58vh; overflow:auto; margin:0 -4px; padding:0 4px"></div>
+    </div>
+  </div>
+
+  <!-- ===================== PROJECT FILES (whole-project attachments) ===================== -->
+  <div class="modal-overlay" id="projFilesModal" onclick="closeProjFiles(event)">
+    <div class="modal" style="max-width:560px">
+      <button class="modal-close" onclick="closeProjFiles()" title="Close">×</button>
+      <h3>📎 Project Files</h3>
+      <div class="msub" id="ppSub"></div>
+      <div class="addform">
+        <div><label>Files &amp; links for this project</label>
+          <div id="ppAtts" class="attstage"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="btn-ghost attbtn" onclick="attPickFile('pp','img')" title="Take or pick a photo — it's shrunk automatically and attached">📷 Photo</button>
+            <button type="button" class="btn-ghost attbtn" onclick="attPickFile('pp','pdf')" title="Attach a PDF or file">📎 PDF / file</button>
+            <button type="button" class="btn-ghost" onclick="attAddLink('pp')" title="Attach a web link (a SharePoint doc, a spec page…)">🔗 Link</button>
+          </div>
+        </div>
+        <div id="ppMsg" style="font-size:12px; min-height:16px"></div>
+        <div class="addbtns">
+          <button class="btn-ghost" onclick="closeProjFiles()">Cancel</button>
+          <button class="btn-primary" id="ppSave" onclick="saveProjFiles()">Save</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2895,6 +2922,14 @@
           <div><label>Budget ($)</label><input id="ptBudget" type="number" min="0" step="100" inputmode="decimal" autocomplete="off" placeholder="e.g. 5000"></div>
         </div>
         <div><label>Comments</label><input id="ptComments" autocomplete="off"></div>
+        <div><label>Attachments <span class="muted-note">(photos · PDFs · links — show on the task, the project schedule and reports)</span></label>
+          <div id="ptAtts" class="attstage"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="btn-ghost attbtn" onclick="attPickFile('pt','img')" title="Take or pick a photo — it's shrunk automatically and attached">📷 Photo</button>
+            <button type="button" class="btn-ghost attbtn" onclick="attPickFile('pt','pdf')" title="Attach a PDF or file">📎 PDF / file</button>
+            <button type="button" class="btn-ghost" onclick="attAddLink('pt')" title="Attach a web link (a SharePoint doc, a spec page…)">🔗 Link</button>
+          </div>
+        </div>
         <div id="ptMoveRow" style="display:none; border-top:1px solid var(--line); margin-top:6px; padding-top:8px; align-items:center; gap:8px; flex-wrap:wrap">
           <label style="margin:0">⇄ Move / copy to</label>
           <select id="ptMoveDest" style="min-width:170px"></select>
@@ -3471,6 +3506,13 @@ const GENERAL_HELP = `
       <li><b>Whole project</b>: ☰ project editor → <b>⏩ Shift schedule</b> slides <b>every</b> task's start &amp; finish by the days you enter — one click when the whole schedule moves. Each task keeps its old due struck through.</li>
     </ul></div>
 
+  <div class="hsec"><h4>②ᵃ 📎 Attach photos, PDFs &amp; links (projects &amp; tasks)</h4>
+    <p>Just like the shop floor, you can pin files to the Projects side:</p>
+    <ul>
+      <li><b>On a project task</b> (✎ Edit / ➕ Add task in the project editor): an <b>Attachments</b> row — <span class="k">📷 Photo</span> (auto-shrunk), <span class="k">📎 PDF / file</span>, or <span class="k">🔗 Link</span> (a SharePoint doc, a spec page). Thumbnails show on the task in the editor and carry into <b>My Work</b> and the <b>PM / exec reports</b>.</li>
+      <li><b>On the whole project</b>: the <span class="k">📎 Files</span> button in the project editor — attach spec sheets, drawings or links for the entire project. They show in a strip at the top of that project's task list.</li>
+    </ul></div>
+
   <div class="hsec"><h4>③ Bay Status — what's in each bay</h4>
     <p>Each tile shows the job's name, client / PM, job #, dates and its open tasks. On a <b>laptop / desktop</b> the tasks show by default (grouped by 🔧 Sal · 🎨 Wrap Team · ⚡ Electricians); click the little <span class="k">▾</span> caret next to a job's name to <b>collapse just that one job</b> and shrink it (click again to expand). Tasks list <b>due-soonest first</b> (undated last, 🔥 hot pinned on top) with their 📅 due dates shown — the <b>sort picker</b> in the Bay Status header switches to 🆕 Recently added or 📜 List order (remembered per device). The <b>trailers</b> on a tile list earliest-start first too — or <b>drag a trailer's ⠿ grip onto another trailer's card</b> to hand-order them (saved for everyone). They're also always listed in the <b>🧰 Open Tasks by Assignee</b> panel below. On the <b>📺 wall TV</b> the tile just shows a small <span class="k">N open</span> count (the tasks live in the panel below, which auto-scrolls), to keep the big screen compact. Every job in a bay is listed (busy lanes like Parking Lot / Next Up scroll). Click a tile's <b>title bar</b> (the <span class="k">▾</span> button) to <b>collapse</b> the whole tile to just its title + count; click again (<span class="k">▸</span>) to expand. Use <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span> (next to <span class="k">☰ Actions</span>) to <b>hide / show every job's tasks across all bays at once</b> (the job names stay). <b>Bays 3 &amp; 4 have a Middle spot</b> between Front and Back — assign it via <span class="k">✎ edit → Bay</span>; empty middles auto-hide, and the <span class="k">Ⓜ Middle bays</span> button shows them even when empty. <b>📦 Off Site / Parts tile:</b> for a unit that <b>isn't here</b> but the shop is building parts for (build &amp; ship) — set the job's Bay to <span class="k">Off Site / Parts</span> (✎ edit / ➕ Add job) or drag its card onto the tile, and it appears <b>under the General tile</b> (auto-hides when empty). Unlike On Hold / Off-Site, its tasks <b>DO feed the crew queues</b> — the parts work is real shop work. <b>🧩 Sub-jobs:</b> when several jobs share one J# (the trailer + a parts build), tick <span class="k">🧩 Sub-job</span> on ➕ Add job / ✎ edit for the side build — it shows a 🧩 pill and carries <b>no Fleetio</b> (dates, issues, GPS follow the MAIN job only); adding a job whose J# already exists asks you which one you mean. Per-tile collapse state is remembered on this device. When a trailer's Fleetio issue carries <b>Back-to-MRA / Leaving-MRA dates</b>, the card shows a <span class="k">🗓 Fleetio MRA: 7/1/26 → 7/31/26</span> line (same line appears on the 🗓 Meeting view and 🚦 What's Next). <b>📋 Project schedule lines</b> that belong to a trailer (matched by <b>Job #</b>) show right on its bay card behind a <span class="k">📋</span> pill — tap the <span class="k">⚒</span> on a line to break it into real, assignable shop tasks on that job (see ④). <b>📍 GPS on the holding lanes:</b> Parking-Lot cards flag <span class="k">⚠ GPS: (place)</span> when Samsara says the unit is NOT really in our lot (quiet 📍 at MRA when it is); Next Up / On Hold cards show a muted 📍 location; 📡 no GPS = no tracker. <b>🔧 Fleetio issues</b> show on a trailer's bay card as a <span class="k">🔧 N Fleetio ▸</span> pill (they only surface here until you assign them); expand it and hit <span class="k">➕</span> to drop one into a crew queue. Turn on <span class="k">Show closed</span> (☰ Actions) to peek at a trailer's completed tasks. The <b>Parking Lot</b> and <b>Next Up / On Hold</b> lists are sorted <b>by date</b> (earliest start first) and <b>default to collapsed</b> — they show just the trailers; click a trailer's <b>▸</b> (or its task pill) to expand its tasks. Below the lot sits a <b>General</b> tile for jobs assigned to bay "General" (equipment-only work with no floor space) — same behavior, and its tasks feed the crew lists like any active job. <span class="k">☰ Actions ▸ 🖨 Print…</span> opens the print picker: the <b>whole board</b>, or <b>any mix of crews</b> (tick Sal + Electricians, etc.) as one handout with a section per crew — grouped by trailer, with Fleetio descriptions, <b>photos as thumbnails</b> and <b>📎 links</b> to PDFs/files. <b>🧾 Whole-job punch list:</b> ✎ edit a job → <span class="k">🧾 Punch list</span> = one document with <b>every crew's</b> open tasks on that job grouped by crew (photos, notes box, signature) — digital first, print from there; deep-linkable via <span class="k">?punch=J####</span> — and every item has an <span class="k">⚠ Issue</span> button: the crew types what's wrong + their name and a new ⚠ ISSUE task lands on that job <b>assigned to the PM</b> (original task untouched). <b>📧 Floor recap:</b> ☰ Actions → <span class="k">📧 Floor recap — last 24h</span> = what closed (who + photos) and what's still open per job; the <span class="k">?recap=1</span> link is built for a scheduled daily email (add <span class="k">&amp;days=7</span> for a weekly view).</p></div>
 
@@ -3675,6 +3717,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"32.1", date:"2026-07-21", title:"\u{1F4CE} Attach photos / PDFs / links to projects & project tasks (like the shop floor)", items:[
+    "The same <b>\u{1F4F7} Photo · \u{1F4CE} PDF/file · \u{1F517} Link</b> attachments the shop floor has are now on the <b>Projects</b> side too. In the project-task editor (\u{270E} Edit / ➕ Add task) there's an <b>Attachments</b> row — pin a drawing, a spec PDF, a photo or a web link to any task; the thumbnails show on the task in the project editor and carry into My Work + the PM/exec reports.",
+    "New <b>\u{1F4CE} Files</b> button on the project editor for <b>whole-project</b> files — attach spec sheets / drawings / links to the entire project; they show in a strip at the top of that project's task list.",
+    "Photos are auto-shrunk and uploaded like the shop ones; links attach instantly. No workbook or list changes needed." ] },
   { rev:"32.0", date:"2026-07-21", title:"\u{1F4F1} Floor readable on iPad portrait — bay cards stack instead of cramming", items:[
     "Rich (iPad): the bay board was squeezing its columns to ~150px (unreadable) with big empty gaps from uneven column heights. Below 1024px (iPad portrait, split-view, narrow windows) the bays now stack into <b>full-width, readable cards</b> — same clean behavior the phone already had — so no more cramming or dead space. iPad landscape (≥ ~1194px) keeps the multi-column grid.",
     "First pass on the mobile/tablet shop view; more phone polish to follow." ] },
@@ -5857,6 +5903,27 @@ function _byLine(cm){ const b=_taskBy(cm); return b?('<div style="font-size:10px
 function _taskDue0(cm){ const m=String(cm||'').match(/\[due0:(\d{4}-\d{2}-\d{2})\]/i); return m?m[1]:''; }
 function stripDue0(cm){ return String(cm||'').replace(/\s*\[due0:[^\]]*\]/ig,'').trim(); }
 function _withDue0(cm,iso){ cm=stripDue0(cm); if(/^\d{4}-\d{2}-\d{2}$/.test(String(iso||''))){ cm=(cm?cm+' ':'')+'[due0:'+iso+']'; } return cm; }
+// ---------- Attachments on PROJECT tasks + PROJECTS (photos / PDFs / links) ----------
+// Shop tasks keep attachments in a real 'Files' list column. Project tasks/projects have no such
+// column, so — exactly like [by:] / [due0:] / [repeat:] — they RIDE the comments column as a hidden
+// base64 tag: [files:…] per project TASK, [pfiles:…] for the whole PROJECT (stored on an anchor task).
+// Base64 keeps the JSON brackets out of the tag; NO SharePoint / flow / pipeline change is needed.
+function _b64enc(s){ try{ return btoa(unescape(encodeURIComponent(String(s||'')))); }catch(e){ try{ return btoa(String(s||'')); }catch(_){ return ''; } } }
+function _b64dec(b){ try{ return decodeURIComponent(escape(atob(String(b||'')))); }catch(e){ try{ return atob(String(b||'')); }catch(_){ return ''; } } }
+function _decFiles(b){ try{ const a=JSON.parse(_b64dec(b)); return Array.isArray(a)?a.filter(x=>x&&x.url).map(x=>({n:x.n||'',url:x.url,mime:x.mime||''})):[]; }catch(e){ return []; } }
+function _encFiles(files){ return _b64enc(JSON.stringify((files||[]).filter(x=>x&&x.url).map(x=>({n:x.n||'',url:x.url,mime:x.mime||''})))); }
+function _taskFiles(cm){ const m=String(cm||'').match(/\[files:([A-Za-z0-9+/=]+)\]/i); return m?_decFiles(m[1]):[]; }
+function stripFiles(cm){ return String(cm||'').replace(/\s*\[files:[A-Za-z0-9+/=]*\]/ig,'').trim(); }
+function _withFiles(cm,files){ cm=stripFiles(cm); files=(files||[]).filter(x=>x&&x.url); if(files.length){ cm=(cm?cm+' ':'')+'[files:'+_encFiles(files)+']'; } return cm; }
+function _taskPFiles(cm){ const m=String(cm||'').match(/\[pfiles:([A-Za-z0-9+/=]+)\]/i); return m?_decFiles(m[1]):[]; }
+function stripPFiles(cm){ return String(cm||'').replace(/\s*\[pfiles:[A-Za-z0-9+/=]*\]/ig,'').trim(); }
+function _withPFiles(cm,files){ cm=stripPFiles(cm); files=(files||[]).filter(x=>x&&x.url); if(files.length){ cm=(cm?cm+' ':'')+'[pfiles:'+_encFiles(files)+']'; } return cm; }
+// Project-LEVEL files: aggregate any [pfiles:] across the project's tasks (deduped by url).
+function _projFiles(p){ const out=[], seen={}; ((p&&p.tasks)||[]).forEach(t=>_taskPFiles(t.cm).forEach(f=>{ if(f.url&&!seen[f.url]){ seen[f.url]=1; out.push(f); } })); return out; }
+// Stable anchor task to WRITE project-level files onto (smallest SharePoint _id; else first with an id; else first task).
+function _projFilesAnchor(p){ const ts=((p&&p.tasks)||[]); if(!ts.length) return null;
+  const withSp=ts.filter(t=>t._id!=null); if(withSp.length){ return withSp.slice().sort((a,b)=>(+a._id||0)-(+b._id||0))[0]; }
+  const withId=ts.filter(t=>t.id!=null&&t.id!==''); return withId[0]||ts[0]; }
 // Struck-through original due to PREPEND before a task's current due, when it was pushed to a later date.
 function _due0Strike(cm, curISO){ const o=_taskDue0(cm); if(!o||!curISO||o===String(curISO)) return '';
   return '<span style="text-decoration:line-through;opacity:.6;font-weight:400" title="Original due date — pushed out">'+esc(fmtMD(o))+'</span> → '; }
@@ -6185,7 +6252,7 @@ function queueAllFleetio(rowRef){
    Photos shrink in the browser (~1600px JPEG) then upload through the "MRA File Upload" flow into
    $web/uploads (public URL known in advance -> no response needed). Links attach with no upload.
    The list rides a JSON 'Files' column on the task (isolated setTaskFiles write). */
-const ATT_STAGE={at:[], et:[]};
+const ATT_STAGE={at:[], et:[], pt:[], pp:[]};   // at/et = shop add/edit; pt = project task; pp = project-level
 function attRender(px){ const el=document.getElementById(px+'Atts'); if(!el) return;
   const a=ATT_STAGE[px]||[];
   el.innerHTML=a.length?a.map((x,i)=>`<span class="attchip">${/^image\//i.test(x.mime||'')?`<img loading="lazy" src="${escA(x.url)}">`:'\u{1F4CE}'} ${esc(String(x.n||'file').slice(0,20))} <b onclick="attRemove('${px}',${i})" title="Remove this attachment">✕</b></span>`).join(''):`<span class="muted-note">none yet</span>`;
@@ -7384,6 +7451,37 @@ function peOpenDetail(){ const name=peCurrentProject(); if(!name){ return; }   /
 function closePE(e){ if(!e || e.target.id==='projEditModal' || e.target.classList.contains('modal-close')){
   document.getElementById('projEditModal').classList.remove('show');
   if(GFS==='project' && typeof renderGanttFS==='function') renderGanttFS(); } }   // reflect add/edit/delete back in the detail bars
+/* ---- 📎 whole-PROJECT files: stored as a hidden [pfiles:] tag on a stable anchor task ---- */
+function openProjFiles(){
+  const name=peCurrentProject(), p=oProj(name);
+  if(!name || !p){ alert('Pick a project first.'); return; }
+  if(!(p.tasks&&p.tasks.length)){ alert('Add at least one task to this project first — project files attach to the project\u2019s schedule.'); return; }
+  if(!ensureAuth('attach project files', ()=>openProjFiles())) return;
+  window._ppProj=name;
+  ATT_STAGE.pp=_projFiles(p).slice(); attRender('pp');
+  document.getElementById('ppSub').innerHTML='<b>'+esc(projLabel(name))+'</b> — spec sheets, drawings, photos or links for the whole project.';
+  document.getElementById('ppMsg').textContent='';
+  document.getElementById('projFilesModal').classList.add('show');
+}
+function closeProjFiles(e){ if(!e || e.target.id==='projFilesModal' || e.target.classList.contains('modal-close')) document.getElementById('projFilesModal').classList.remove('show'); }
+function saveProjFiles(){
+  const name=window._ppProj, p=oProj(name); if(!p) return;
+  const anchor=_projFilesAnchor(p); if(!anchor){ alert('This project has no task to attach files to yet — add a task first.'); return; }
+  const files=(ATT_STAGE.pp||[]).slice();
+  const newCm=_withPFiles(anchor.cm||'', files);
+  const btn=document.getElementById('ppSave'), msg=document.getElementById('ppMsg');
+  btn.disabled=true; msg.style.color='var(--muted)'; msg.textContent='Saving…';
+  const payload={ action:'editProjectTask', project:name, pin:CLOSE_PIN, user:CURRENT_USER,
+    id:anchor.id, _id:(anchor._id!=null?anchor._id:undefined), taskOld:anchor.t, task:anchor.t,
+    phase:anchor.phase||'', type:anchor.type||'', assigned:anchor.who||'', status:anchor.st||'Not Started',
+    start:anchor.startISO||'', finish:anchor.finISO||'', pred:anchor.pred||'', milestone:anchor.ml||'',
+    parentId:anchor.parent||'', estDays:(anchor.eD!=null?anchor.eD:''), estHours:(anchor.eH!=null?anchor.eH:''),
+    budget:(anchor.bud!=null?anchor.bud:''), comments:newCm };
+  shopWrite(payload).then(()=>{ anchor.cm=newCm; oApply(); try{ renderProjTaskList(); }catch(e){}
+    msg.style.color='var(--green)'; msg.textContent='✓ Saved.'; btn.disabled=false;
+    setTimeout(()=>document.getElementById('projFilesModal').classList.remove('show'),800);
+  }).catch(()=>{ msg.style.color='var(--red)'; msg.textContent="Couldn't reach the service — try again."; btn.disabled=false; });
+}
 function peCurrentProject(){
   const v=document.getElementById('peProject').value;
   return (v==='__new__') ? document.getElementById('peNewProj').value.trim() : v;
@@ -7817,6 +7915,7 @@ function renderProjTaskList(){
   const name=peCurrentProject(), p=oProj(name);
   const pmBtn=document.getElementById('pePMBtn'); if(pmBtn) pmBtn.textContent=(p&&p.pm)?('👤 PM: '+p.pm):'👤 Set PM';
   syncNonOffBtn(); syncParkBtn(); syncJobBtn();
+  { const fb=document.getElementById('peFilesBtn'); if(fb){ const nfp=(p?_projFiles(p).length:0); fb.textContent='📎 Files'+(nfp?(' ('+nfp+')'):''); } }
   const list=document.getElementById('peList'), cnt=document.getElementById('peCount');
   const tasks=(p&&p.tasks)||[];
   // assignee filter dropdown — populate from this project's people; self-reset if the picked one isn't here
@@ -7845,7 +7944,9 @@ function renderProjTaskList(){
   fTasks.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!groups[ph]){ groups[ph]=[]; order.push(ph); } groups[ph].push(t); });
   window._peOrder=order;
   if(PE_EXPANDED.size===0 && order.length===1) PE_EXPANDED.add(order[0]);   // a single phase opens by default
-  list.innerHTML = order.map(ph=>{
+  const _pfDocs=(p?_projFiles(p):[]);
+  const _pfStrip=_pfDocs.length?(`<div class="pe-projfiles">📎 <b>Project files:</b> ${mediaHtml(_pfDocs)}</div>`):'';
+  list.innerHTML = _pfStrip + order.map(ph=>{
     const gAll=groups[ph], doneN=gAll.filter(projIsDone).length;
     const g = PE_HIDEDONE ? gAll.filter(t=>!projIsDone(t)) : gAll;
     if(!g.length) return '';   // phase fully completed -> hidden when "Hide completed" is on
@@ -7863,7 +7964,7 @@ function renderProjTaskList(){
         : `<span class="ttool done" ${idA} onclick="completeProjTaskBtn(this)" title="Mark complete" style="color:var(--green)">✓</span>${subBtn}<span class="ttool edit" ${idA} onclick="editProjTaskBtn(this)" title="Edit">✎</span><span class="ttool del" ${idA} onclick="delProjTaskBtn(this)" title="Delete">🗑</span>`;
       const lead = (opt.caret!=null) ? `<span class="pesubcaret" onclick="togglePeSub(event,'${escA(opt.pkey)}')" title="Collapse / expand subtasks">${opt.caret}</span>` : (opt.sub?'<span class="pesubtick">›</span>':'');
       return `<div class="petask${opt.sub?' petask-sub':''}${opt.caret!=null?' petask-parent':''}${projIsDone(t)?' isdone':''}${/yes/i.test(t.ml||'')?' ismile':''}"><div class="petask-main"><div class="petask-t">${lead}${esc(t.t||'(task)')}</div>`+
-        (meta?`<div class="petask-m">${meta}</div>`:'')+`</div>`+
+        (meta?`<div class="petask-m">${meta}</div>`:'')+((t.files&&t.files.length)?(`<div class="petask-media">${mediaHtml(_taskMedia(t.files,null))}</div>`):'')+`</div>`+
         `<div class="petask-r">${projStatusBadge(t)}<span class="petask-tools">${tools}</span></div></div>`;
     };
     // Nest subtasks under their parent. A task is a subtask two ways:
@@ -8036,6 +8137,7 @@ function openProjTaskNew(){
   document.getElementById('ptPred').value=""; document.getElementById('ptMilestone').value="";
   document.getElementById('ptEstDays').value=""; document.getElementById('ptEstHours').value=""; document.getElementById('ptBudget').value="";
   document.getElementById('ptComments').value=""; window._ptBy=''; window._ptDue0=''; window._ptFinOld='';
+  ATT_STAGE.pt=[]; attRender('pt'); window._ptPFiles=[];
   document.getElementById('ptDelete').style.display='none';
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Add task";
   try{ ptDurFromDates(); }catch(e){}
@@ -8068,7 +8170,8 @@ function openProjTaskEdit(id, projOverride){
   document.getElementById('ptEstDays').value=(t.eD!=null?t.eD:"");
   document.getElementById('ptEstHours').value=(t.eH!=null?t.eH:"");
   document.getElementById('ptBudget').value=(t.bud!=null?t.bud:"");
-  document.getElementById('ptComments').value=stripDue0(stripBy(t.cm||"")); window._ptBy=_taskBy(t.cm||"");
+  document.getElementById('ptComments').value=stripFiles(stripPFiles(stripDue0(stripBy(t.cm||"")))); window._ptBy=_taskBy(t.cm||"");
+  ATT_STAGE.pt=_taskFiles(t.cm||"").slice(); attRender('pt'); window._ptPFiles=_taskPFiles(t.cm||"");   // keep project-level [pfiles:] through an anchor-task edit
   window._ptDue0=_taskDue0(t.cm||""); window._ptFinOld=t.finISO||"";   // keep the original finish when it's pushed out
   document.getElementById('ptDelete').style.display=(t.id!=null&&t.id!=='')?'':'none';
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Save";
@@ -8109,7 +8212,7 @@ function submitProjTask(){
     comments:(function(){ const _nf=document.getElementById('ptFinish').value;
       let _kd0=(window._ptId!=null?(window._ptDue0||''):'');
       if(window._ptId!=null && !_kd0 && _nf && window._ptFinOld && _nf>window._ptFinOld) _kd0=window._ptFinOld;
-      return _withDue0(_withBy(document.getElementById('ptComments').value.trim(), (window._ptId!=null?(window._ptBy||''):'')), _kd0); })() };
+      return _withPFiles(_withFiles(_withDue0(_withBy(document.getElementById('ptComments').value.trim(), (window._ptId!=null?(window._ptBy||''):'')), _kd0), ATT_STAGE.pt), (window._ptPFiles||[])); })() };
   f.nonOfficial = !!(p && p.nonOfficial);   // #2: a task added to a non-official project inherits the flag
   const editing=(window._ptId!=null);
   const _oldEdit=editing?projTaskByAnyId(p,window._ptId):null;   // resolve by real TaskID or "s<_id>" handle
@@ -13325,7 +13428,7 @@ function mwSetFollow(name, arr){ try{ localStorage.setItem(_mwFollowKey(name), J
 function mwToggleFollow(proj){ const who=myWorkWho(); if(!who||!proj) return; const cur=mwGetFollow(who); const i=cur.indexOf(proj); if(i>=0) cur.splice(i,1); else cur.push(proj); mwSetFollow(who,cur); try{ renderMyWork(); }catch(e){} }
 function mwPickFollow(sel){ const v=sel&&sel.value; if(v) mwToggleFollow(v); if(sel) sel.value=''; }
 // Clean a task's comments for display: drop the machine tags ([repeat:…], [pt:…], [sales]…, [subjob], [mtg]).
-function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub|by|due0)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
+function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub|by|due0|files|pfiles)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
 function myWorkFor(name){
   const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
   const soon=localISO(Date.parse(today)+7*86400000);
@@ -16275,6 +16378,7 @@ function renderAll(){
   // 🔁 keep openCount/openTasks in sync with the snoozed-repeat rule on every paint (idempotent)
   try{ ((window.MRA_DATA||{}).jobs||[]).forEach(j=>{ if(j.tasks&&j.tasks.length) oRecompute(j); }); }catch(e){}
   try{ _pjRebuild(); }catch(e){}   // 📋 schedule-tasks-per-card map, once per paint (perf)
+  try{ ((window.MRA_DATA||{}).projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ t.files=_taskFiles(t.cm); })); }catch(e){}   // 📎 derive project-task attachments from the [files:] comment tag (source of truth)
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
   fioApplyResolved(D);   // drop issues this device resolved in Fleetio until the export confirms
