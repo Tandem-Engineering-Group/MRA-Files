@@ -3718,6 +3718,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"32.3", date:"2026-07-21", title:"\u{1F47B} Fix the stale / \u201cghost\u201d board on reopened tabs (esp. iPad)", items:[
+    "A tab left open in the background \u2014 iPad / Safari especially \u2014 could freeze and, when reopened, show an <b>old board</b> (sometimes days stale). Now the moment the tab comes back to the front (or Safari restores it from its cache), the board <b>pulls the latest data automatically</b>, so it can never sit on a frozen \u201cghost\u201d copy while you're looking at it.",
+    "If data ever does look old, the red bar now shows how old it is and <b>tapping it reloads the page</b>; a page left stale for a full day reloads itself once to grab the current version." ] },
   { rev:"32.2", date:"2026-07-21", title:"\u{1F9F9} My Work — click a task to open THAT task (consistent \u201cEdit task\u201d)", items:[
     "In <b>My Work</b>, clicking a task used to open two different screens depending on where it lived — the whole <b>job</b> for a shop task, the whole <b>project list</b> for a project task. Now it always opens <b>that one task's editor</b>, titled <b>\u270E Edit task</b> either way. Same full options — it just lands you right on the task.",
     "Part of the same cleanup: the project single-task editor is now titled \u201cEdit task\u201d so it matches the shop one." ] },
@@ -16419,11 +16422,16 @@ function renderAll(){
   // LOUD banner when the export hasn't run in a long time — otherwise a frozen board (adds/edits never
   // appearing) looks like a dashboard bug when it's really that data.js stopped regenerating.
   (function(){ let bn=document.getElementById('staleBanner');
-    if(_ageH!=null && _ageH>=12){
+    if(_ageH!=null && _ageH>=6){
       if(!bn){ bn=document.createElement('div'); bn.id='staleBanner'; document.body.insertBefore(bn, document.body.firstChild); }
-      bn.style.cssText='background:#b91c1c;color:#fff;font-weight:700;text-align:center;padding:9px 14px;font-size:13px;letter-spacing:.2px';
-      bn.innerHTML='⚠ Board data is '+Math.round(_ageH)+'h old (as of '+esc(_stamp)+') — the export hasn’t run. New tasks &amp; edits won’t appear here until <b>Export-Data.ps1</b> runs again.';
+      bn.style.cssText='background:#b91c1c;color:#fff;font-weight:700;text-align:center;padding:9px 14px;font-size:13px;letter-spacing:.2px;cursor:pointer';
+      bn.title='Tap to reload the page and pull the latest data';
+      bn.onclick=function(){ location.reload(); };
+      bn.innerHTML='⚠ Board data is '+Math.round(_ageH)+'h old (as of '+esc(_stamp)+') — you may be seeing a stale page. <b>Tap here to reload.</b> (If it stays old, the export hasn’t run — tell Rich.)';
       bn.style.display='';
+      // Extreme staleness (e.g. a tab restored after days) almost always means the PAGE itself is a stale
+      // cached copy — force one hard reload (once per tab session) to pull fresh HTML + data.
+      if(_ageH>=24){ try{ if(!sessionStorage.getItem('mra_autoreload')){ sessionStorage.setItem('mra_autoreload','1'); location.reload(); } }catch(e){} }
     } else if(bn){ bn.style.display='none'; } })();
   document.getElementById('footerText').innerHTML=
     `Data refreshed ${esc(_stamp)}${_staleTag} · live refresh every ${REFRESH_SECONDS}s · `+
@@ -16586,7 +16594,20 @@ try{ applyRoleUI(); }catch(e){}   // apply the safe default (floor-only on the l
 try{ SSO.init(); }catch(e){}       // then resolve the Microsoft session and re-apply the real role
 refresh().then(ok=>{ if(!ok) renderAll(); try{ if(localStorage.getItem('mra_wall')){ const b=document.getElementById('btnWall'); if(b && !WALL) toggleWall(b); } }catch(e){} });
 tick(); setInterval(tick,1000);
-setInterval(refresh, REFRESH_SECONDS*1000);
+let _refreshing=false, _lastRefreshOk=0;
+async function _guardedRefresh(){ if(_refreshing) return; _refreshing=true; try{ await refresh(); _lastRefreshOk=Date.now(); }finally{ _refreshing=false; } }
+setInterval(_guardedRefresh, REFRESH_SECONDS*1000);
+// 🔄 WAKE REFRESH — kills the "ghost"/stale-board bug. A backgrounded iPad/Safari tab can be frozen
+// for hours or days (bfcache + suspended timers) and, when reopened, restore showing its OLD board
+// with no network hit. The moment the tab returns to the foreground — page becomes visible, bfcache
+// restore (pageshow.persisted), window focus, or the network comes back online — we pull fresh data
+// immediately (cache-busted, re-entrancy-guarded, lightly throttled) so a reopened tab can NEVER sit
+// on stale data waiting for the next poll.
+function _wakeRefresh(force){ if(document.hidden) return; if(!force && Date.now()-_lastRefreshOk<4000) return; _guardedRefresh(); }
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) _wakeRefresh(true); });
+window.addEventListener('pageshow', e=>{ if(e&&e.persisted) _wakeRefresh(true); });
+window.addEventListener('focus', ()=>_wakeRefresh(false));
+window.addEventListener('online', ()=>_wakeRefresh(true));
 }
 </script>
 </body>
