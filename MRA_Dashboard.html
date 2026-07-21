@@ -2986,7 +2986,7 @@
     <div class="modal" style="max-width:580px">
       <button class="modal-close" onclick="closeUnas()" title="Close">×</button>
       <h3>⚠ Unassigned tasks <span class="count" id="unasCount"></span></h3>
-      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule as <b>“MRA Shop / Sal”</b> (the MRA Shop bucket STAYS so the MRA Shop load views still count it; only the person changes on re-assign), and everything drops off once it has a crew. <b>Assigned 📋 tasks don't vanish:</b> they show up in that crew's column on the FLOOR as a <b>📋 project-schedule card</b> (same 2-week window), click-through to the project editor. And because schedule lines are often generic, the <b>⚒</b> button (here and on the crew column) <b>breaks one into real shop tasks</b>: pick the trailer, type one task per line, assign + due — each becomes a normal closable task tagged to the schedule line, the line flips to <b>In Progress</b>, and when the <b>last</b> one closes the board offers <b>🟡 Mark ready</b> — the same PM sign-off loop as the design board (Megan/Al/the PM verifies &amp; closes it on the Projects tab).</div>
+      <div class="msub">Every open task with <b>no crew</b>, grouped by job — plus <b>📋 project-schedule tasks assigned to “MRA Shop”</b> (nobody has picked them up) that start or finish <b>within the next 2 weeks or are overdue</b>; further-out schedule lines stay hidden until their window. Tap the 👤 to assign one right here — 📋 ones write the crew back to the project schedule as <b>“MRA Shop / Sal”</b> (the MRA Shop bucket STAYS so the MRA Shop load views still count it; only the person changes on re-assign), and everything drops off once it has a crew. <b>Assigned 📋 tasks don't vanish:</b> they show up in that crew's column on the FLOOR as a <b>📋 project-schedule card</b> (same 2-week window), click-through to the project editor. And because schedule lines are often generic, the <b>⚒</b> button (here and on the crew column) <b>breaks one into real shop tasks</b>: pick the trailer, type one task per line, assign + due — each becomes a normal closable task tagged to the schedule line, the line flips to <b>In Progress</b>, and when the <b>last</b> one closes the board offers <b>🟡 Mark ready</b> — the same PM sign-off loop as the design board (Megan/Al/the PM verifies &amp; closes it on the Projects tab). <b>🔧 New Fleetio issues</b> on a trailer that aren’t on the board yet also show here — 👤 adds it as a task <b>and</b> assigns a crew in one tap, or ➕ adds it unassigned.</div>
       <div id="unasList" style="max-height:62vh;overflow:auto;margin-top:6px"></div>
     </div>
   </div>
@@ -3735,6 +3735,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"32.5", date:"2026-07-21", title:"\u{1F527} Unassigned finder now flags new Fleetio issues too", items:[
+    "The <b>\u26A0 unassigned</b> finder already surfaced shop tasks and project \u201cMRA Shop\u201d tasks with no crew. Now it also flags <b>open Fleetio maintenance issues on a trailer that aren't on the board yet</b> \u2014 so a new issue coming in from Fleetio can't sit unnoticed.",
+    "Each shows under its trailer: tap <b>\u{1F464}</b> to add it as a task AND assign a crew in one step, <b>\u2795</b> to add it unassigned, or the <b>\u2197</b> to open it in Fleetio. Overdue issues are flagged." ] },
   { rev:"32.4", date:"2026-07-21", title:"\u{1F5D3} Meetings on a project (one-time or recurring)", items:[
     "Al: you can now add a <b>meeting</b> to a project. In the project task editor tick <b>\u{1F5D3} This is a meeting</b> \u2014 it drops onto the schedule marked with a <b>\u{1F5D3}</b> (its own symbol, distinct from \u25c6 milestones) and <b>doesn't count as work</b>: it never drags the project's % down and never shows as overdue.",
     "Make it <b>recurring</b> \u2014 Weekly / Every 2 weeks / Monthly, through a date you choose \u2014 and it lays the <b>whole series</b> onto the schedule automatically, one \u{1F5D3} per occurrence." ] },
@@ -16258,6 +16261,23 @@ function unassignedTasks(){
       let par=''; if(t.sub){ const ts=p.tasks||[]; const ix=ts.indexOf(t); for(let k2=ix-1;k2>=0;k2--){ if(!ts[k2].sub){ par=ts[k2].t||''; break; } } }
       out.push({proj:p.name, jobNum:'', bay:'', raw:t.t, disp:t.t, due:t.finISO||'', st0:t.startISO||'', kind:'proj', handle:handle,
         ph:(t.phase||'').trim(), par:par, cm:String(t.cm||'').trim()}); })); }
+  // \u{1F527} OPEN FLEETIO ISSUES not yet actioned — a new maintenance issue coming in from Fleetio shows on
+  // its trailer's bay card as a 🔧 pill until someone queues it; surface those here too so they don't slip by.
+  { const flByJob={};
+    ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(typeof SHOW_TRACTOR!=='undefined' && !SHOW_TRACTOR && /tractor/i.test(it.asset||'')) return;
+      const k=((String(it.jobNum||'').match(/\d{3,}/)||[])[0]); if(k){ (flByJob[k]=flByJob[k]||[]).push(it); } });
+    const tasked=new Set();
+    (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) tasked.add(m[1]); }));
+    const seen=new Set();
+    (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
+      if(String(j.row||'').indexOf('orphan:')===0 || j.category==='pipeline') return;
+      if(typeof jobIsSub==='function' && jobIsSub(j)) return;                         // 🧩 sub-jobs don't carry Fleetio
+      (((String(j.jobNum||'').match(/\d{3,}/g))||[])).forEach(k=>{ (flByJob[k]||[]).forEach(it=>{ const num=String(it.num);
+        if(tasked.has(num)||seen.has(num)) return; seen.add(num);
+        out.push({kind:'fleetio', proj:j.project, jobNum:j.jobNum||'', bay:j.bay||'', row:j.row, num:num,
+          raw:'🔧 #'+num, disp:'🔧 #'+num+' '+((it.summary||it.summ)||('Issue '+num)), due:'', overdue:!!it.overdue}); }); });
+    });
+  }
   out.sort((a,b)=> String(a.due||'9999').localeCompare(String(b.due||'9999')) || String(a.proj).localeCompare(String(b.proj)) );
   return out;
 }
@@ -16432,9 +16452,13 @@ function renderUnas(){
   box.innerHTML=order.map(k=>{ const arr=byJob[k], j0=arr[0];
     const tag=j0.kind==='proj'
       ? ` <span class="unas-bay" title="These come from the PROJECT SCHEDULE — tasks assigned to the generic 'MRA Shop' bucket, meaning no crew has picked them up. Only ones starting or finishing within the NEXT 2 WEEKS (or overdue) show here. Tap 👤 to give one a crew — the project schedule updates too.">📋 project schedule · next 2 wks</span>`
+      : j0.kind==='fleetio'
+      ? ` <span class="unas-bay" title="Open Fleetio maintenance issues on this trailer that aren&#39;t on the board yet. Tap 👤 to add it as a task AND assign a crew, or ➕ to add it unassigned.">🔧 Fleetio — not on the board yet</span>${j0.bay?` <span class="unas-bay">${esc(j0.bay)}</span>`:''}`
       : (j0.bay?` <span class="unas-bay">${esc(j0.bay)}</span>`:'');
     return `<div class="unas-job"><div class="unas-jh">${esc(j0.proj)}${j0.jobNum?` <span class="unas-jn">${esc(j0.jobNum)}</span>`:''}${tag}</div>`
       + arr.map(t=>{ const ctx=(t.kind==='proj')?[t.par?('\u21b3 '+t.par):'', t.ph, _mwCleanCm(t.cm)?_mwCleanCm(t.cm).slice(0,180):''].filter(Boolean).join(' \u00b7 '):'';
+        if(t.kind==='fleetio'){ const rowLit=(typeof t.row==='number')?String(t.row):("'"+escJsAttr(String(t.row))+"'"); const nl="'"+escJsAttr(String(t.num))+"'";
+          return `<div class="unas-t"><span class="qa" onclick="event.stopPropagation();qaOpen(event,function(w){addFleetioTask(${rowLit},${nl},w);})" title="Add this Fleetio issue as a task AND assign a crew">👤</span><span class="qa" onclick="event.stopPropagation();addFleetioTask(${rowLit},${nl})" title="Add to the board unassigned — then give it a crew">➕</span><span class="unas-tx">${esc(t.disp)}</span>${t.overdue?' <span class="unas-due od">⚠ overdue</span>':''} ${fioArrow('issue',t.num)}</div>`; }
         return `<div class="unas-t">${t.kind==='proj'?`<span class="qa" onclick="event.stopPropagation();unasProjAsg('${escA(t.proj)}','${escA(t.handle)}')" title="Assign this project-schedule task to a crew — writes the crew back to the project schedule">\u{1F464}</span><span class="qa" onclick="event.stopPropagation();ptbOpen('${escA(t.proj)}','${escA(t.handle)}')" title="⚒ Break this schedule line into real shop tasks on a trailer — each becomes its own closable task; closing the last one flags this line 🟡 for the PM to verify">⚒</span>`:qaChip(t.proj,t.raw)}<span class="unas-tx">${t.kind==='proj'?'📋 ':''}${esc(t.disp)}</span>${t.kind==='proj'?` <span class="unas-due${(today&&t.due&&t.due<today)?' od':''}" title="Start → finish from the project schedule. It's on this list because the START (or an overdue finish) falls inside the 2-week window — the finish can be later.">▶ ${esc(fmtMD(t.st0||t.due))}${(t.due&&t.due!==t.st0)?' → '+esc(fmtMD(t.due)):''}</span>`:(t.due?` <span class="unas-due${(today&&t.due<today)?' od':''}">📅 ${esc(fmtMD(t.due))}</span>`:'')}${ctx?`<div class="unas-ctx" title="${escA(ctx)}">${esc(ctx)}</div>`:''}</div>`; }).join('')
       + `</div>`;
   }).join('');
