@@ -3494,6 +3494,7 @@ const GENERAL_HELP = `
       <li><b>📊 My Projects</b> — each project you run (or follow) with its <b>health color, target date, past-due count and %</b>; tap to open its editor.</li>
       <li><b>◆ Milestones (next 30 days)</b>, <b>✅ Completed (last 7 days)</b>, and <b>🗂 Everything else open</b>.</li>
     </ul>
+    <p><b>Click any task</b> on your page to open it in the <span class="k">✎ Edit task</span> editor — the <b>same single-task editor</b> whether it's a shop or a project task (it no longer lands you on the whole job or the whole project list).</p>
     <p><b>⚙ Customize:</b> at the bottom, pin any project with <span class="k">➕ Follow</span> and it shows up on your page (health, milestones, past-due count) even if it isn't assigned to you — handy for watching a job that isn't strictly yours. (Saved on your device.)</p>
     <p>The <b>daily email</b> everyone gets is this exact page — a link to your live My Work (<span class="k">?mywork=Your Name</span>) that always opens fresh. <b>Rich (admin)</b> gets a <b>View person</b> picker to open anyone's page.</p>
     <p><i>The MY WORK tab currently shows for the group that uses it — the PMs, design team and shop crew (Megan, Al, Luciana, Brandon, Mark, Sarah, Sal, Jeff, Josh, Doug &amp; Stephanie), plus Rich. Ask Rich to add anyone else.</i></p></div>
@@ -3717,6 +3718,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"32.2", date:"2026-07-21", title:"\u{1F9F9} My Work — click a task to open THAT task (consistent \u201cEdit task\u201d)", items:[
+    "In <b>My Work</b>, clicking a task used to open two different screens depending on where it lived — the whole <b>job</b> for a shop task, the whole <b>project list</b> for a project task. Now it always opens <b>that one task's editor</b>, titled <b>\u270E Edit task</b> either way. Same full options — it just lands you right on the task.",
+    "Part of the same cleanup: the project single-task editor is now titled \u201cEdit task\u201d so it matches the shop one." ] },
   { rev:"32.1", date:"2026-07-21", title:"\u{1F4CE} Attach photos / PDFs / links to projects & project tasks (like the shop floor)", items:[
     "The same <b>\u{1F4F7} Photo · \u{1F4CE} PDF/file · \u{1F517} Link</b> attachments the shop floor has are now on the <b>Projects</b> side too. In the project-task editor (\u{270E} Edit / ➕ Add task) there's an <b>Attachments</b> row — pin a drawing, a spec PDF, a photo or a web link to any task; the thumbnails show on the task in the project editor and carry into My Work + the PM/exec reports.",
     "New <b>\u{1F4CE} Files</b> button on the project editor for <b>whole-project</b> files — attach spec sheets / drawings / links to the entire project; they show in a strip at the top of that project's task list.",
@@ -8152,7 +8156,7 @@ function openProjTaskEdit(id, projOverride){
     if(mr&&sel){ const names=(((window.MRA_DATA||{}).projects)||[]).map(x=>x.name).filter(n=>n&&n!==name).sort((a,b)=>a.localeCompare(b));
       sel.innerHTML = names.length ? names.map(n=>`<option>${esc(n)}</option>`).join('') : '<option value="">(no other projects)</option>';
       mr.style.display = names.length ? 'flex' : 'none'; const mm=document.getElementById('ptMoveMsg'); if(mm) mm.textContent=''; } }
-  document.getElementById('ptTitle').textContent="✎ Edit project task";
+  document.getElementById('ptTitle').textContent="✎ Edit task";
   document.getElementById('ptSub').innerHTML=`<b>${esc(projLabel(name))}</b>`;
   fillAssignAndPhase(p); fillPredOptions(p,t.id); fillParentOptions(p,t.id);   // exclude self by real TaskID (handle may be an "s<_id>" token)
   document.getElementById('ptTask').value=t.t||"";
@@ -13440,11 +13444,11 @@ function myWorkFor(name){
   (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
     (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
       if(_whoMatch(t.who,name)){ const fm=String(t.t||'').match(/🔧\s*#(\d+)/);
-        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, due0:_taskDue0(t.cm), kind:'shop', proj:j.project, raw:t.t, files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row}}); } }); });
+        items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, due0:_taskDue0(t.cm), kind:'shop', proj:j.project, raw:t.t, files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row,proj:j.project,raw:t.t}}); } }); });
   (D.projects||[]).forEach(p=>{ const ts=p.tasks||[]; ts.forEach((t,i)=>{ if(/yes/i.test(t.ml||'')) return;
       if(isDoneT(t) || projIsPendingVerify(t)) return;   // pending-verify shows in its own section
       if(_whoMatch(t.who,name)){ let parent=''; if(t.sub){ for(let k=i-1;k>=0;k--){ if(!ts[k].sub){ parent=ts[k].t||''; break; } } }
-        items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, due0:_taskDue0(t.cm), st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name}}); } }); });
+        items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, due0:_taskDue0(t.cm), st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name,h:projTaskHandle(t)}}); } }); });
   const od=items.filter(x=>x.due&&x.due<today).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const due=items.filter(x=>x.due&&x.due>=today&&x.due<=soon).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
   const later=items.filter(x=>!x.due||x.due>soon).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
@@ -13460,8 +13464,8 @@ function myWorkFor(name){
   awaitingMe.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
   // --- ✅ completed in the last 7 days (mine) ---
   const doneRecent=[];
-  (D.jobs||[]).forEach(j=>{ if(j.category==='leave') return; (j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut7&&!isSalesT(t)&&_whoMatch(t.who,name)) doneRecent.push({t:cleanTask(t.t,false), where:(j.project||''), d:t.cl, kind:'shop', nav:{k:'shop',row:j.row}}); }); });
-  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; if(isDoneT(t)&&fin&&fin>cut7&&fin<=today&&_whoMatch(t.who,name)) doneRecent.push({t:String(t.t||''), where:p.name, d:fin, kind:'proj', nav:{k:'proj',proj:p.name}}); }));
+  (D.jobs||[]).forEach(j=>{ if(j.category==='leave') return; (j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut7&&!isSalesT(t)&&_whoMatch(t.who,name)) doneRecent.push({t:cleanTask(t.t,false), where:(j.project||''), d:t.cl, kind:'shop', nav:{k:'shop',row:j.row,proj:j.project,raw:t.t}}); }); });
+  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; if(isDoneT(t)&&fin&&fin>cut7&&fin<=today&&_whoMatch(t.who,name)) doneRecent.push({t:String(t.t||''), where:p.name, d:fin, kind:'proj', nav:{k:'proj',proj:p.name,h:projTaskHandle(t)}}); }));
   doneRecent.sort((a,b)=>String(b.d).localeCompare(String(a.d)));
   // --- 📊 my projects (I'm PM) + any I follow ---
   const follow=mwGetFollow(name); const seen={}; const myProjects=[];
@@ -13478,11 +13482,15 @@ function myWorkFor(name){
 let MW_PROJ_OPEN=new Set();   // which project rows are expanded to show their past-due detail
 function mwToggleProj(name){ if(MW_PROJ_OPEN.has(name)) MW_PROJ_OPEN.delete(name); else MW_PROJ_OPEN.add(name); try{ renderMyWork(); }catch(e){} }
 function mwTileGo(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
-function mwGoShop(row){ const r=(row!=null&&row!==''&&!isNaN(+row))?+row:row; if(typeof openEditJob==='function') openEditJob(r); }
-function mwGoProj(name){ if(typeof openProjectEditor==='function') openProjectEditor(name); }
+// My Work click-through — clicking a task opens THAT single task's editor (consistent "Edit task"),
+// whether it's a shop or a project task. Falls back to the whole job/project when no task ref is present.
+function mwGoShop(row, proj, raw){ if(proj&&raw&&typeof openEditTask==='function'){ openEditTask(proj, raw); return; }
+  const r=(row!=null&&row!==''&&!isNaN(+row))?+row:row; if(typeof openEditJob==='function') openEditJob(r); }
+function mwGoProj(name, handle){ if(handle&&typeof openProjTaskEdit==='function'){ openProjTaskEdit(handle, name); return; }
+  if(typeof openProjectEditor==='function') openProjectEditor(name); }
 function _mwNavAttr(nav){ if(!nav) return {oc:'', tip:'', chevron:''};
-  if(nav.k==='shop') return {oc:' onclick="mwGoShop(\''+escJsAttr(String(nav.row))+'\')"', tip:' title="Open this job — bay, dates, tasks"', chevron:' <span class="mw-go">›</span>'};
-  if(nav.k==='proj') return {oc:' onclick="mwGoProj(\''+escJsAttr(nav.proj)+'\')"', tip:' title="Open '+escA(nav.proj)+' — full schedule"', chevron:' <span class="mw-go">›</span>'};
+  if(nav.k==='shop') return {oc:' onclick="mwGoShop(\''+escJsAttr(String(nav.row))+'\',\''+escJsAttr(String(nav.proj||''))+'\',\''+escJsAttr(String(nav.raw||''))+'\')"', tip:' title="Edit task"', chevron:' <span class="mw-go">›</span>'};
+  if(nav.k==='proj') return {oc:' onclick="mwGoProj(\''+escJsAttr(nav.proj)+'\',\''+escJsAttr(String(nav.h||''))+'\')"', tip:' title="Edit task"', chevron:' <span class="mw-go">›</span>'};
   return {oc:'', tip:'', chevron:''}; }
 function _mwList(arr, today){ if(!arr.length) return '<div class="empty">— none —</div>';
   return arr.map(x=>_mwRow(x,today)).join(''); }
