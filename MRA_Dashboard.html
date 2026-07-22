@@ -2221,7 +2221,8 @@
             <option value="num_desc"># High→low</option>
             <option value="num_asc"># Low→high</option>
           </select></label>
-        <button class="expandbtn fsbtn" style="margin-left:auto" onclick="toggleIssuesFS(this)" title="Open the open-issues list full screen (Esc to exit)">⛶ Full screen</button>
+        <button class="expandbtn" style="margin-left:auto" onclick="fioPrintIssues()" title="Print every open issue with its description, photos and Fleetio data (respects the current sort &amp; filter)">🖨 Print all</button>
+        <button class="expandbtn fsbtn" onclick="toggleIssuesFS(this)" title="Open the open-issues list full screen (Esc to exit)">⛶ Full screen</button>
         <button class="expandbtn fexp" onclick="toggleFScroll(this,'fIssues')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
       </h2>
       <div class="fl-fsbody">
@@ -3737,6 +3738,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"33.2", date:"2026-07-21", title:"\u{1F5A8} FLEETIO: print all open issues (with photos)", items:[
+    "New <b>🖨 Print all</b> button on the <b>⚠ Open Issues</b> panel — prints <b>every open Fleetio issue grouped by unit</b> with the full description, all photos and the Fleetio data (priority, assignee, reporter, opened date, overdue). Respects the current sort &amp; filter, and works from the full-screen view too." ] },
   { rev:"33.1", date:"2026-07-21", title:"\u{1F195} New Projects screen \u2014 complete + wired into the Command Center", items:[
     "The new Command-Center Projects screen is now the <b>Projects tab in the Command Center</b> (your view) \u2014 no more secret link. Full feature set: small <b>KPI cards</b> up top (Active · At risk · Overdue tasks · Milestones 30d · Complete); project cards with health + % ; <b>program overview Gantt</b> (shaded % + dates + today line); <b>PM load</b> and <b>Milestones (30d)</b>; per-project panels with a <b>phase overview timeline then detailed tasks</b>, a <b>phase-grouped task list</b>, and <b>collapse/expand</b> (each + all); <b>sort</b> (Health/PM/Date/A\u2013Z); a <b>Gantt zoom slider + level-of-detail</b> (overview / tasks / both); <b>Print</b> (portfolio + phase-grouped task report); and the <b>full live edit engine</b> (task edit, project editor, verify/send-back). MRA Orange per the UI standard. The classic Projects tab is unchanged." ] },
   { rev:"33.0", date:"2026-07-21", title:"\u{1F195} Projects preview \u2014 round 2 (fuller product)", items:[
@@ -11941,6 +11944,44 @@ let FIO_ISS_SORT='overdue';
 try{ const s=localStorage.getItem('mra_fio_iss_sort'); if(s) FIO_ISS_SORT=s; }catch(e){}
 function setFioIssSort(v){ FIO_ISS_SORT=v||'overdue'; try{localStorage.setItem('mra_fio_iss_sort',FIO_ISS_SORT);}catch(e){}
   if(window.MRA_DATA) renderFleetio(window.MRA_DATA); }
+/* 🖨 Print every OPEN Fleetio issue with full detail + photos (Rich's ask). Uses the same open-issue
+   set, sort and filters as the ⚠ Open Issues panel, grouped by unit. */
+function fioPrintIssues(){ const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+  let issues=((D.fleetio&&D.fleetio.issues)||[]).slice();
+  try{ if(typeof FFILTER!=='undefined' && FFILTER==='iss_over') issues=issues.filter(i=>i.overdue); }catch(e){}
+  try{ if(typeof FASSIGN!=='undefined' && FASSIGN) issues=issues.filter(i=>fAsg(i).indexOf(FASSIGN)>=0); }catch(e){}
+  try{ if(typeof FREPORT!=='undefined' && FREPORT) issues=issues.filter(i=>i.reporter===FREPORT); }catch(e){}
+  try{ if(typeof fioFlagOK==='function') issues=issues.filter(i=>fioFlagOK(i.asset)); }catch(e){}
+  try{ issues.sort(_fioIssCmp); }catch(e){}
+  if(!issues.length){ alert('No open issues to print right now.'); return; }
+  const byU={}, uOrder=[]; issues.forEach(i=>{ const u=(i.asset||'(no unit)'); if(!byU[u]){byU[u]=[];uOrder.push(u);} byU[u].push(i); });
+  const d=new Date(); const dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+  const secs=uOrder.map(u=>{ const rows=byU[u].map(it=>{ const a=(typeof fAsg==='function')?fAsg(it):[]; const age=it.openedISO?Math.max(0,daysBetween(today,it.openedISO)):(it.ageDays!=null?it.ageDays:null);
+      const docs=it.docs||[], imgs=docs.filter(x=>/^image\//i.test(x.mime||'')), files=docs.filter(x=>!/^image\//i.test(x.mime||''));
+      const meta=[it.jobNum?('Job '+it.jobNum):'', it.priority?('Priority: '+it.priority):'', it.overdue?'OVERDUE':(age!=null?(age+'d open'):''), a.length?('Assigned: '+a.join(', ')):'', it.reporter?('Reported by '+it.reporter):'', it.openedISO?('Opened '+fmtMDY(it.openedISO)):''].filter(Boolean).join(' · ');
+      return `<div class="iss ${it.overdue?'od':''}"><div class="ih"><span class="n">#${esc(it.num)}</span> ${esc(it.summary||'Issue')}</div>`
+        +(meta?`<div class="im">${esc(meta)}</div>`:'')
+        +(it.detail?`<div class="idsc">${esc(it.detail)}</div>`:'<div class="idsc mut">(no description)</div>')
+        +(imgs.length?`<div class="ii">${imgs.map(x=>`<img src="${escA(x.url)}" alt="">`).join('')}</div>`:'')
+        +(files.length?`<div class="iff">${files.map(x=>`<a href="${escA(x.url)}">📎 ${esc((x.n||'file').slice(0,50))}</a>`).join(' · ')}</div>`:'')
+        +`</div>`; }).join('');
+    return `<h2>${esc(u)} <span class="uc">${byU[u].length} open</span></h2>${rows}`; }).join('');
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Open Issues '+dd+'</title><style>'
+    +'body{font-family:Segoe UI,Arial,sans-serif;color:#223047;margin:0}'
+    +'.bar{background:#101827;color:#fff;padding:9px 16px}.bar button{background:#F36C21;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer;font-size:13px}'
+    +'.pad{padding:24px 30px}h1{color:#F36C21;font-size:22px;margin:0}.subh{color:#66758a;margin:3px 0 16px;font-size:13px}'
+    +'h2{font-size:15px;margin:20px 0 8px;border-bottom:2px solid #F36C21;padding-bottom:4px}.uc{font-size:11px;color:#66758a;font-weight:600}'
+    +'.iss{border:1px solid #e6e8eb;border-radius:9px;padding:10px 13px;margin-bottom:9px;break-inside:avoid}.iss.od{border-color:#B92D3A;background:#fdECEC}'
+    +'.ih{font-weight:800;font-size:13.5px}.ih .n{color:#F36C21}.im{color:#66758a;font-size:11.5px;margin-top:2px}'
+    +'.idsc{font-size:12.5px;margin-top:6px;white-space:pre-wrap}.idsc.mut{color:#9aa9bd}'
+    +'.ii{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.ii img{max-width:230px;max-height:180px;border-radius:7px;border:1px solid #e6e8eb}'
+    +'.iff{margin-top:6px;font-size:12px}.iff a{color:#2166f3;text-decoration:none}'
+    +'@media print{.bar{display:none}}</style></head><body>'
+    +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button></div>'
+    +'<div class="pad"><h1>MRA — Open Fleetio Issues</h1><div class="subh">'+dd+' · '+issues.length+' open issue'+(issues.length===1?'':'s')+' · '+uOrder.length+' unit'+(uOrder.length===1?'':'s')+'</div>'
+    +secs+'</div></body></html>';
+  const w=window.open('','_blank'); if(!w){ alert('Allow pop-ups for this site, then tap Print again.'); return; } w.document.open(); w.document.write(html); w.document.close();
+}
 // 🆕 "new" = opened within the last 7 days (so a brand-new issue can't hide at the bottom).
 function _fioAge(i){ if(i&&i.openedISO){ const t=(window.MRA_DATA&&window.MRA_DATA.todayISO)||localISO(Date.now());
   const d=daysBetween(t,i.openedISO); return (d==null||isNaN(d))?null:Math.max(0,d); }
