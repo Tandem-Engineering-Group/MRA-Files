@@ -127,7 +127,7 @@
   <div class="card">
     <h2 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <span>Tracked hours</span>
-      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm" id="sampleBtn">🧪 Sample week (Sal)</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
+      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm" id="sampleBtn" title="Reload the real 7/13–17 demo week">🧪 Reload demo week</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
     <div class="filtrow noprint">
       <select id="fRange">
         <option value="tw">This week</option>
@@ -167,10 +167,12 @@
 var LS={ names:'mra_time_names', jobs:'mra_time_chargejobs', ents:'mra_time_entries', theme:'mra_time_theme', pin:'mra_time_pinok' };
 function lget(k,def){ try{ var v=localStorage.getItem(k); return v==null?def:JSON.parse(v); }catch(e){ return def; } }
 function lset(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
-var NAMES=lget(LS.names, ['Sal','Doug','Jeff','Josh','Sal Jr','Tracy Arnold','Brent Burns','Brian Glenn','Kayla Roe','Jacob Rohn','John Tindle']);
+/* roster = the crew on Luc's Job Cost punch report (hourly). Manage (1974) to add/edit. */
+var ROSTER=['Brent Burns','Brian Glenn','Kayla Roe','Jacob Rohn','Sal Jr','John Tindle'];
+var ROSTER_IDS={'Brent Burns':'674','Brian Glenn':'891','Kayla Roe':'815','Jacob Rohn':'719','Sal Jr':'860','John Tindle':'721'};
+var NAMES=lget(LS.names, ROSTER.slice());
 var CJOBS=lget(LS.jobs, ['Shop / General','All Purpose Leave','Holiday','Jury Duty','Lunch']);
-/* payroll IDs (from finance Master Time Card) — name -> employee ID */
-var EMPIDS=lget('mra_time_empids', {'Sal':'672','Sal Jr':'860','Doug':'756','Tracy Arnold':'617','Brent Burns':'674','Brian Glenn':'891','Kayla Roe':'815','Jacob Rohn':'719','John Tindle':'721'});
+var EMPIDS=lget('mra_time_empids', JSON.parse(JSON.stringify(ROSTER_IDS)));
 /* finance job-code names (code = J# without the J) */
 var JCNAMES={'1014':'MRA Internal','1420':'Oakland Schools','1428':'Mott','1479':'WFCU','1543':'Washtenaw Community College','1553':'Medtronic','1557':'Ferguson Roadshow (Bizbox)'};
 /* pay types that are NOT job work */
@@ -290,23 +292,24 @@ function exportCSV(){
 }
 
 /* ---------- demo sample data ---------- */
-function _pick(a){ return a[Math.floor(Math.random()*a.length)]; }
-function seedSampleWeek(){
-  var pool=jobListItems().filter(function(o){ return o.code && o.active!==false && !o.custom; });
-  if(!pool.length) pool=jobListItems().filter(function(o){ return o.code; });
-  if(!pool.length){ alert('No board jobs loaded yet — try again in a moment.'); return; }
-  var tasks=['Wrap','Wiring','Install','Fabrication','Layout','Prep','Cabinets','Final QC','Graphics','Assembly'];
-  var thisMon=startOfWeek(new Date()), lastMon=new Date(thisMon); lastMon.setDate(thisMon.getDate()-7);
-  var today=new Date(); today.setHours(23,59,59,0); var add=[];
-  [lastMon,thisMon].forEach(function(mon){
-    for(var d=0;d<5;d++){ var day=new Date(mon); day.setDate(mon.getDate()+d); if(day>today) continue; var dISO=ymd(day);
-      if(Math.random()<0.4){ var h1=_pick([2,3,4]), h2=8-h1, j1=_pick(pool), j2=_pick(pool);
-        add.push({id:uid(),who:'Sal',dateISO:dISO,job:j1.val,jobNum:j1.code,hours:h1,task:_pick(tasks),notes:'',ts:new Date().toISOString()});
-        add.push({id:uid(),who:'Sal',dateISO:dISO,job:j2.val,jobNum:j2.code,hours:h2,task:_pick(tasks),notes:'',ts:new Date().toISOString()});
-      } else { var j=_pick(pool), h=_pick([6,7,8,8,8]);
-        add.push({id:uid(),who:'Sal',dateISO:dISO,job:j.val,jobNum:j.code,hours:h,task:_pick(tasks),notes:'',ts:new Date().toISOString()}); } }
-  });
-  ENTS=ENTS.concat(add); lset(LS.ents,ENTS); lset('mra_time_seeded',1); renderTracking();
+/* REAL demo week 7/13-7/17 2026 (from Luc's Job Cost Numbers punch report; dept 210).
+   [name, dayIndex(0=Mon..4=Fri), jobCode, hours]  hours = clocked time minus 0.5h lunch. */
+var SEEDVER='rw-71317';
+var REALWK=[
+ ['Brent Burns',0,'1467',9.33],['Brent Burns',1,'1467',8.92],['Brent Burns',2,'1467',8.0],['Brent Burns',3,'1553',8.0],['Brent Burns',4,'1410',7.08],
+ ['Brian Glenn',0,'1420',9.95],['Brian Glenn',1,'1420',8.02],['Brian Glenn',2,'1014',8.0],['Brian Glenn',3,'1420',8.02],['Brian Glenn',4,'1420',8.0],
+ ['Kayla Roe',0,'1014',10.0],['Kayla Roe',1,'1014',8.1],['Kayla Roe',2,'1420',8.33],['Kayla Roe',3,'1014',8.0],
+ ['Jacob Rohn',0,'1535',6.7],['Jacob Rohn',0,'1543',3.5],['Jacob Rohn',1,'1524',6.17],['Jacob Rohn',1,'1420',2.0],['Jacob Rohn',2,'1541',8.47],['Jacob Rohn',3,'1420',5.9],['Jacob Rohn',3,'1410',2.03],['Jacob Rohn',4,'1410',7.13],
+ ['Sal Jr',0,'1407',6.5],['Sal Jr',0,'1014',4.05],['Sal Jr',1,'1014',6.42],['Sal Jr',1,'1420',2.93],['Sal Jr',2,'1407',9.9],['Sal Jr',3,'1407',8.63],['Sal Jr',4,'1407',8.0],
+ ['John Tindle',0,'1420',10.45],['John Tindle',2,'1420',8.75],['John Tindle',3,'1420',6.63],['John Tindle',4,'1420',7.2]
+];
+var REALLV=[ ['John Tindle',1,'All Purpose Leave',8.0] ]; /* Tindle Tue = APL 8h; Roe Fri = absent; Glenn/Sal Jr Fri rows were cut off in the PDF (Fri estimated on their main job). */
+function _codeLabel(code){ if(JCNAMES[code]) return code+' · '+JCNAMES[code]; var it=jobListItems().filter(function(o){return o.code===code;})[0]; return it?it.val:(code+' · Job '+code); }
+function seedRealWeek(){
+  var add=[]; function day(i){ return '2026-07-'+(13+i); }
+  REALWK.forEach(function(r){ add.push({id:uid(),who:r[0],dateISO:day(r[1]),job:_codeLabel(r[2]),jobNum:r[2],hours:r[3],task:'',notes:'',demo:true,ts:day(r[1])+'T12:00:00'}); });
+  REALLV.forEach(function(r){ add.push({id:uid(),who:r[0],dateISO:day(r[1]),job:r[2],jobNum:'',hours:r[3],task:'',notes:'',demo:true,ts:day(r[1])+'T12:00:00'}); });
+  ENTS=ENTS.filter(function(e){return !e.demo;}).concat(add); lset(LS.ents,ENTS); lset('mra_time_seedver',SEEDVER); renderTracking();
 }
 function clearAll(){ if(!confirm('Delete ALL entries on this device?')) return; ENTS=[]; lset(LS.ents,ENTS); lset('mra_time_seeded',1); renderTracking(); }
 
@@ -371,8 +374,14 @@ function boot(){
   if(window.__booted) return; window.__booted=true;
   applyTheme();
   $('fDate').value=todayISO();
+  if(lget('mra_time_seedver','')!==SEEDVER){
+    if(lget('mra_time_seeded',0)){ ENTS=[]; lset(LS.ents,ENTS); lset('mra_time_seeded',0); }
+    NAMES=ROSTER.slice(); lset(LS.names,NAMES);
+    EMPIDS=JSON.parse(JSON.stringify(ROSTER_IDS)); lset('mra_time_empids',EMPIDS);
+    seedRealWeek();
+  }
   fillWho(); fillJobs(); fillHchips();
-  if(!ENTS.length && !lget('mra_time_seeded',0)) seedSampleWeek();
+  if(ENTS.length && !ENTS.some(function(e){return inRange(e.dateISO,'tw');})) $('fRange').value='lw';
   renderTracking();
   // events
   $('submitBtn').onclick=submit;
@@ -382,7 +391,7 @@ function boot(){
   $('addJobBtn').onclick=addJob;  $('addJob').onkeydown=function(e){ if(e.key==='Enter') addJob(); };
   $('themeBtn').onclick=toggleTheme;
   $('csvBtn').onclick=exportCSV; $('printBtn').onclick=function(){ window.print(); };
-  $('sampleBtn').onclick=seedSampleWeek; $('clearBtn').onclick=clearAll;
+  $('sampleBtn').onclick=seedRealWeek; $('clearBtn').onclick=clearAll;
   $('finBtn').onclick=buildFinanceReport;
   $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
   ['fRange','fPerson','fJobF'].forEach(function(id){ $(id).onchange=renderTracking; });
