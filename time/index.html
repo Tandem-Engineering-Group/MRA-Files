@@ -129,6 +129,7 @@
     <h2>🔒 Hours &amp; reports — manager sign-in</h2>
     <p class="muted" style="margin:0 0 12px">The time-entry form above is open to everyone. Tracked hours, totals and the weekly Finance report are for <b>managers</b> — sign in with your <b>MRA (Microsoft) account</b> to view.</p>
     <button class="tbtn primary" id="lockLoginBtn">🔓 Sign in with Microsoft</button>
+    <button class="tbtn" id="lockPinBtn" style="margin-left:8px">Use manager code</button>
     <div id="lockMsg" class="muted" style="margin-top:10px;color:var(--err)"></div>
   </div>
 
@@ -297,15 +298,18 @@ var SSO=(function(){
 function ssoEnforcing(){ return SSO.active() && SSO.ready && !SSO.failed; }
 function ssoRole(){ if(!SSO.active()||SSO.failed) return null; var em=SSO.email(); if(ROLE_BY_EMAIL[em]) return ROLE_BY_EMAIL[em]; var nk=_nmKey(SSO.name()); if(ROLE_BY_NAME[nk]) return ROLE_BY_NAME[nk]; return SSO.user?'staff':null; }
 /* manager view: open off-host (dev/preview); on the live host require a signed-in manager (fail CLOSED to protect hours) */
-function isMgr(){ if(!SSO.active()) return true; if(!SSO.ready||SSO.failed) return false; if(!SSO.user) return false; return HOURS_ROLES.indexOf(ssoRole())>=0; }
+var PINOK=(sessionStorage.getItem('mra_time_mgr')==='1');  /* interim manager code fallback (works before the app-reg redirect URIs are added) */
+function isMgr(){ if(PINOK) return true; if(!SSO.active()) return true; if(!SSO.ready||SSO.failed) return false; if(!SSO.user) return false; return HOURS_ROLES.indexOf(ssoRole())>=0; }
 function activeEntries(){ return (isMgr() && SHARED && SHARED.length) ? SHARED : ENTS; }
-function applyMgr(){ var on=isMgr(); var hc=$('hoursCard'), hl=$('hoursLocked'); if(hc) hc.classList.toggle('hide',!on); if(hl) hl.classList.toggle('hide',on);
-  var b=$('mgrLoginBtn'); if(b) b.textContent = (SSO.user? '🔓 Sign out' : '🔒 Sign in');
+function applyMgr(){ var on=isMgr(); var unlocked=(SSO.user||PINOK); var hc=$('hoursCard'), hl=$('hoursLocked'); if(hc) hc.classList.toggle('hide',!on); if(hl) hl.classList.toggle('hide',on);
+  var b=$('mgrLoginBtn'); if(b) b.textContent = (unlocked? '🔓 Sign out' : '🔒 Sign in');
   var lm=$('lockMsg'); if(lm) lm.textContent = (SSO.user && !on) ? ('Signed in as '+SSO.email()+' — this account doesn\u2019t have access to hours/reports.') : '';
   if(on && !SHARED) loadShared(function(){ renderTracking(); });
   renderTracking();
 }
-function mgrClick(){ if(SSO.user) SSO.signOut(); else SSO.signIn(); }
+function pinUnlock(){ var p=prompt('Manager code:'); if(p==null) return; if(p==='1974'){ PINOK=true; sessionStorage.setItem('mra_time_mgr','1'); applyMgr(); var hc=$('hoursCard'); if(hc) hc.scrollIntoView({behavior:'smooth',block:'start'}); } else alert('Wrong code.'); }
+function mgrLogout(){ PINOK=false; sessionStorage.removeItem('mra_time_mgr'); SHARED=null; if(SSO.user){ SSO.signOut(); return; } applyMgr(); }
+function mgrClick(){ if(SSO.user||PINOK) mgrLogout(); else SSO.signIn(); }
 function mapShared(arr){ if(!Array.isArray(arr)) return []; return arr.map(function(it){ var code=String(it.JobCode||it.jobNum||'').trim(); return {id:it.EntryId||it.id||('s'+(it.ID||Math.round(Math.random()*1e6))), who:it.Employee||it.who||'', empId:it.EmpId||it.empId||'', dateISO:String(it.DateWorked||it.dateISO||'').slice(0,10), job:it.JobName||it.job||'', jobNum:code, hours:parseFloat(it.Hours!=null?it.Hours:(it.hours||0))||0, payType:it.PayType||it.payType||'', task:it.Task||it.task||'', notes:it.Notes||it.notes||'', ts:it.Created||it.ts||'', shared:true}; }); }
 function loadShared(cb){ function done(a){ SHARED=mapShared(a); if(cb)cb(true); } function fail(){ SHARED=null; if(cb)cb(false); }
   fetch('../time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ fetch('time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(fail); }); }
@@ -449,7 +453,7 @@ function boot(){
   $('csvBtn').onclick=exportCSV; $('printBtn').onclick=function(){ window.print(); };
   $('sampleBtn').onclick=seedRealWeek; $('clearBtn').onclick=clearAll;
   $('finBtn').onclick=buildFinanceReport;
-  $('mgrLoginBtn').onclick=mgrClick; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrClick;
+  $('mgrLoginBtn').onclick=mgrClick; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrClick; var _lp=$('lockPinBtn'); if(_lp) _lp.onclick=pinUnlock;
   SSO.init(); applyMgr();
   $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
   ['fRange','fPerson','fJobF'].forEach(function(id){ $(id).onchange=renderTracking; });
