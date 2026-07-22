@@ -2221,7 +2221,7 @@
             <option value="num_desc"># High→low</option>
             <option value="num_asc"># Low→high</option>
           </select></label>
-        <button class="expandbtn" style="margin-left:auto" onclick="fioPrintIssues()" title="Print every open issue with its description, photos and Fleetio data (respects the current sort &amp; filter)">🖨 Print all</button>
+        <button class="expandbtn" style="margin-left:auto" onclick="fioPrintPick()" title="Pick which trailer(s) to print — open issues with descriptions &amp; photos">🖨 Print…</button>
         <button class="expandbtn fsbtn" onclick="toggleIssuesFS(this)" title="Open the open-issues list full screen (Esc to exit)">⛶ Full screen</button>
         <button class="expandbtn fexp" onclick="toggleFScroll(this,'fIssues')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button>
       </h2>
@@ -2261,7 +2261,7 @@
       <div id="fWorkOrders" class="fscroll"></div>
     </div>
     <div class="panel" id="fp-trailers">
-      <h2>🚛 By Trailer <span class="count" id="fTrailerCount"></span><button class="expandbtn fexp" style="margin-left:auto" onclick="toggleFScroll(this,'fByTrailer')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
+      <h2>🚛 By Trailer <span class="count" id="fTrailerCount"></span><button class="expandbtn" style="margin-left:auto" onclick="fioPrintPick()" title="Pick a trailer (or several) and print its open issues + photos">🖨 Print…</button><button class="expandbtn fexp" onclick="toggleFScroll(this,'fByTrailer')" title="Expand to full height (otherwise it scrolls within)">⤢ Expand</button></h2>
       <div class="ftools">
         <input id="fTrailerSearch" type="search" placeholder="Find a trailer — type a J# or name…" oninput="renderTrailerCards()" />
         <select id="fTrailerSort" onchange="renderTrailerCards()" title="Sort trailers">
@@ -3738,6 +3738,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"33.3", date:"2026-07-21", title:"\u{1F5A8} FLEETIO: pick which trailer(s) to print", items:[
+    "The Open Issues <b>🖨 Print…</b> (and a new one on <b>🚛 By Trailer</b>) now opens a <b>trailer picker</b> — search, tick one or several units (or All), and print just those units\u2019 open issues with full descriptions + photos. Pick one trailer = that trailer\u2019s issues only." ] },
   { rev:"33.2", date:"2026-07-21", title:"\u{1F5A8} FLEETIO: print all open issues (with photos)", items:[
     "New <b>🖨 Print all</b> button on the <b>⚠ Open Issues</b> panel — prints <b>every open Fleetio issue grouped by unit</b> with the full description, all photos and the Fleetio data (priority, assignee, reporter, opened date, overdue). Respects the current sort &amp; filter, and works from the full-screen view too." ] },
   { rev:"33.1", date:"2026-07-21", title:"\u{1F195} New Projects screen \u2014 complete + wired into the Command Center", items:[
@@ -11946,14 +11948,20 @@ function setFioIssSort(v){ FIO_ISS_SORT=v||'overdue'; try{localStorage.setItem('
   if(window.MRA_DATA) renderFleetio(window.MRA_DATA); }
 /* 🖨 Print every OPEN Fleetio issue with full detail + photos (Rich's ask). Uses the same open-issue
    set, sort and filters as the ⚠ Open Issues panel, grouped by unit. */
-function fioPrintIssues(){ const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+function fioPrintIssues(){ const D=window.MRA_DATA||{};
   let issues=((D.fleetio&&D.fleetio.issues)||[]).slice();
   try{ if(typeof FFILTER!=='undefined' && FFILTER==='iss_over') issues=issues.filter(i=>i.overdue); }catch(e){}
   try{ if(typeof FASSIGN!=='undefined' && FASSIGN) issues=issues.filter(i=>fAsg(i).indexOf(FASSIGN)>=0); }catch(e){}
   try{ if(typeof FREPORT!=='undefined' && FREPORT) issues=issues.filter(i=>i.reporter===FREPORT); }catch(e){}
   try{ if(typeof fioFlagOK==='function') issues=issues.filter(i=>fioFlagOK(i.asset)); }catch(e){}
-  try{ issues.sort(_fioIssCmp); }catch(e){}
-  if(!issues.length){ alert('No open issues to print right now.'); return; }
+  _fioPrintReport(issues, 'Open Fleetio Issues'); }
+function fioPrintTrailer(key){ const t=(window._FTBYKEY||{})[key]; if(!t){ alert('Reopen the Fleetio tab and try again.'); return; }
+  const issues=(t._i||[]).map(x=>(typeof fioIssue==='function'?(fioIssue(x.num)||x):x)).filter(Boolean);
+  if(!issues.length){ alert('No open issues on '+((t.jobNum||t.name||'this unit'))+' to print.'); return; }
+  _fioPrintReport(issues, (t.jobNum?(t.jobNum+' · '):'')+(t.name||'Unit')+' — Open Issues'); }
+function _fioPrintReport(issues, label){ const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+  try{ issues=(issues||[]).slice().sort(_fioIssCmp); }catch(e){ issues=issues||[]; }
+  if(!issues.length){ alert('No open issues to print.'); return; }
   const byU={}, uOrder=[]; issues.forEach(i=>{ const u=(i.asset||'(no unit)'); if(!byU[u]){byU[u]=[];uOrder.push(u);} byU[u].push(i); });
   const d=new Date(); const dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
   const secs=uOrder.map(u=>{ const rows=byU[u].map(it=>{ const a=(typeof fAsg==='function')?fAsg(it):[]; const age=it.openedISO?Math.max(0,daysBetween(today,it.openedISO)):(it.ageDays!=null?it.ageDays:null);
@@ -11978,10 +11986,50 @@ function fioPrintIssues(){ const D=window.MRA_DATA||{}; const today=D.todayISO||
     +'.iff{margin-top:6px;font-size:12px}.iff a{color:#2166f3;text-decoration:none}'
     +'@media print{.bar{display:none}}</style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button></div>'
-    +'<div class="pad"><h1>MRA — Open Fleetio Issues</h1><div class="subh">'+dd+' · '+issues.length+' open issue'+(issues.length===1?'':'s')+' · '+uOrder.length+' unit'+(uOrder.length===1?'':'s')+'</div>'
+    +'<div class="pad"><h1>MRA — '+esc(label)+'</h1><div class="subh">'+dd+' · '+issues.length+' open issue'+(issues.length===1?'':'s')+' · '+uOrder.length+' unit'+(uOrder.length===1?'':'s')+'</div>'
     +secs+'</div></body></html>';
   const w=window.open('','_blank'); if(!w){ alert('Allow pop-ups for this site, then tap Print again.'); return; } w.document.open(); w.document.write(html); w.document.close();
 }
+
+function ensureFioPick(){ if(document.getElementById('fioPickBack')) return;
+  const st=document.createElement('style'); st.textContent=`
+    #fioPickBack{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:26px;overflow:auto}
+    #fioPickBack.show{display:flex}
+    .fiopk{background:var(--panel,#161c26);color:var(--txt,#e6e9ef);border:1px solid var(--line,#2a3543);border-radius:14px;max-width:560px;width:100%;padding:16px 18px}
+    .fiopk h3{margin:0 0 3px;font-size:18px}.fiopk .sub{color:var(--muted,#9aa5b1);font-size:12px;margin:0 0 10px}
+    .fiopk-tools{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+    .fiopk-tools input.s{flex:1;min-width:150px;padding:7px 9px;border:1px solid var(--line,#2a3543);border-radius:8px;background:var(--panel2,#1d2632);color:var(--txt,#e6e9ef)}
+    .fiopk-tools button{border:1px solid var(--line,#2a3543);background:var(--panel2,#1d2632);color:var(--txt,#e6e9ef);border-radius:8px;padding:6px 11px;cursor:pointer;font-size:12px}
+    #fioPickList{max-height:52vh;overflow:auto;border:1px solid var(--line,#2a3543);border-radius:9px}
+    .fiopk-row{display:flex;align-items:center;gap:9px;padding:8px 11px;border-bottom:1px solid var(--line,#2a3543);cursor:pointer;font-size:13px}
+    .fiopk-row:last-child{border-bottom:0}.fiopk-row:hover{background:rgba(224,72,38,.08)}
+    .fiopk-act{display:flex;gap:9px;justify-content:flex-end;margin-top:13px}
+    .fiopk-act .pr{background:#e04826;color:#fff;border:none;border-radius:9px;padding:10px 16px;font-weight:800;cursor:pointer}
+    .fiopk-act .cs{background:var(--panel2,#1d2632);color:var(--txt,#e6e9ef);border:1px solid var(--line,#2a3543);border-radius:9px;padding:10px 16px;cursor:pointer}`;
+  document.head.appendChild(st);
+  const back=document.createElement('div'); back.id='fioPickBack';
+  back.innerHTML='<div class="fiopk"><h3>🖨 Print open issues</h3><div class="sub">Pick the trailer(s) to print — open issues with descriptions &amp; photos.</div>'
+    +'<div class="fiopk-tools"><input class="s" id="fioPickSearchInp" placeholder="🔎 Find a trailer…" oninput="fioPickSearch(this.value)"><button onclick="fioPickAll(true)">All</button><button onclick="fioPickAll(false)">None</button></div>'
+    +'<div id="fioPickList"></div>'
+    +'<div class="fiopk-act"><button class="cs" onclick="document.getElementById(\'fioPickBack\').classList.remove(\'show\')">Cancel</button><button class="pr" onclick="fioPickPrint()">🖨 Print selected</button></div></div>';
+  document.body.appendChild(back);
+  back.addEventListener('click',e=>{ if(e.target===back) back.classList.remove('show'); }); }
+function fioPrintPick(){ ensureFioPick();
+  const units=(typeof FTRAILERS!=='undefined'?FTRAILERS:[]).filter(t=>t&&t._i&&t._i.length).slice()
+    .sort((a,b)=>String(a.jobNum||a.name||'').localeCompare(String(b.jobNum||b.name||''),undefined,{numeric:true}));
+  window._FIOPICK=units; const box=document.getElementById('fioPickList');
+  box.innerHTML=units.length?units.map((t,i)=>`<label class="fiopk-row"><input type="checkbox" class="fiopk-cb" data-i="${i}" checked><b>${esc(t.jobNum||t.name||'Unit')}</b>${(t.jobNum&&t.name&&t.name!==t.jobNum)?` <span style="color:var(--muted)">· ${esc(t.name)}</span>`:''}<span class="badge amber" style="margin-left:auto">${t._i.length} open</span></label>`).join(''):'<div class="empty" style="padding:14px">No units with open issues.</div>';
+  const si=document.getElementById('fioPickSearchInp'); if(si){ si.value=''; } fioPickSearch('');
+  document.getElementById('fioPickBack').classList.add('show'); }
+function fioPickAll(v){ document.querySelectorAll('#fioPickList .fiopk-row').forEach(r=>{ if(r.style.display!=='none'){ const c=r.querySelector('.fiopk-cb'); if(c) c.checked=v; } }); }
+function fioPickSearch(q){ q=(q||'').toLowerCase(); document.querySelectorAll('#fioPickList .fiopk-row').forEach(r=>{ r.style.display=(!q||r.textContent.toLowerCase().indexOf(q)>=0)?'':'none'; }); }
+function fioPickPrint(){ const units=window._FIOPICK||[]; const sel=[];
+  document.querySelectorAll('#fioPickList .fiopk-cb:checked').forEach(c=>{ const u=units[+c.dataset.i]; if(u) sel.push(u); });
+  if(!sel.length){ alert('Pick at least one trailer to print.'); return; }
+  const seen={}, issues=[]; sel.forEach(t=>(t._i||[]).forEach(x=>{ const full=(typeof fioIssue==='function'?(fioIssue(x.num)||x):x); if(full&&!seen[full.num]){ seen[full.num]=1; issues.push(full); } }));
+  const label = sel.length===1 ? ((sel[0].jobNum?sel[0].jobNum+' · ':'')+(sel[0].name||'Unit')+' — Open Issues') : ('Open Fleetio Issues — '+sel.length+' trailers');
+  document.getElementById('fioPickBack').classList.remove('show');
+  _fioPrintReport(issues, label); }
 // 🆕 "new" = opened within the last 7 days (so a brand-new issue can't hide at the bottom).
 function _fioAge(i){ if(i&&i.openedISO){ const t=(window.MRA_DATA&&window.MRA_DATA.todayISO)||localISO(Date.now());
   const d=daysBetween(t,i.openedISO); return (d==null||isNaN(d))?null:Math.max(0,d); }

@@ -740,6 +740,7 @@ function showPage(name){ if(!window.MRA_PAGES[name] && !BOARD_VIEWS[name]) name=
   window.scrollTo(0,0); renderCurrent(); }
 
 function toggleTheme(){ const dark=document.body.classList.toggle('dark'); const b=document.getElementById('theme'); if(b) b.textContent=dark?'☀ Light':'☾ Dark';
+  { const rb=document.getElementById('railTheme'); if(rb) rb.textContent=dark?'☀ Light':'☾ Dark'; }
   try{ localStorage.setItem('cc_theme', dark?'dark':'light'); }catch(e){}
   syncBoardTheme(); }
 function openFloor(){ const f=document.getElementById('floor'); if(!f) return; WALL=true; if(window.MRA_PAGES.floor) window.MRA_PAGES.floor.render(); f.classList.add('open'); }
@@ -747,10 +748,11 @@ function closeFloor(){ const f=document.getElementById('floor'); if(f) f.classLi
 
 function initCC(){
   // theme
-  try{ if(localStorage.getItem('cc_theme')==='dark'){ document.body.classList.add('dark'); const b=document.getElementById('theme'); if(b) b.textContent='☀ Light'; } }catch(e){}
+  try{ if(localStorage.getItem('cc_theme')==='dark'){ document.body.classList.add('dark'); const b=document.getElementById('theme'); if(b) b.textContent='☀ Light'; const rb=document.getElementById('railTheme'); if(rb) rb.textContent='☀ Light'; } }catch(e){}
   // nav
   document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>showPage(b.dataset.page));
   const th=document.getElementById('theme'); if(th) th.onclick=toggleTheme;
+  const rth=document.getElementById('railTheme'); if(rth) rth.onclick=toggleTheme;
   const q=document.getElementById('quick'); const qb=document.getElementById('quickBtn'); if(qb&&q) qb.onclick=()=>q.classList.toggle('open');
   const fo=document.getElementById('floorOpen'); if(fo) fo.onclick=openFloor;
   const fc=document.getElementById('floorClose'); if(fc) fc.onclick=closeFloor;
