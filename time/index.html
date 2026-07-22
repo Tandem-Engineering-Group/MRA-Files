@@ -74,6 +74,7 @@
     <img src="../logo.png" alt="MRA" onerror="this.onerror=null;this.src='logo.png'">
     <div><h1>Time Tracking</h1><div class="sub" id="hdrsub">Log hours by job</div></div>
     <div class="sp"></div>
+    <button class="tbtn sm" id="mgrLoginBtn" title="Managers: log in to see everyone's hours + reports">🔒 Manager login</button>
     <button class="tbtn sm" id="mgrBtn" title="Add / edit names and charge jobs">⚙ Manage</button>
     <button class="tbtn sm" id="themeBtn" title="Light / dark">☀</button>
   </header>
@@ -123,11 +124,19 @@
     <div style="margin-top:12px"><button class="tbtn sm" id="mgrDone">Done</button></div>
   </div>
 
-  <!-- TRACKING / ROLLUPS -->
-  <div class="card">
+  <!-- HOURS LOCKED NOTICE (non-managers) -->
+  <div class="card noprint" id="hoursLocked">
+    <h2>🔒 Hours &amp; reports — manager only</h2>
+    <p class="muted" style="margin:0 0 12px">The time-entry form above is open to everyone. Tracked hours, totals and the weekly Finance report are visible to <b>managers only</b>. Log in to view.</p>
+    <button class="tbtn primary" id="lockLoginBtn">🔒 Manager login</button>
+  </div>
+
+  <!-- TRACKING / ROLLUPS (manager only) -->
+  <div class="card hide" id="hoursCard">
     <h2 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <span>Tracked hours</span>
       <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm" id="sampleBtn" title="Reload the real 7/13–17 demo week">🧪 Reload demo week</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
+    <div id="shareNote" class="muted" style="font-size:11.5px;margin:0 0 8px"></div>
     <div class="filtrow noprint">
       <select id="fRange">
         <option value="tw">This week</option>
@@ -248,7 +257,7 @@ function submit(){
 }
 
 /* ---------- manage ---------- */
-function ensurePin(){ if(sessionStorage.getItem(LS.pin)==='1') return true; var p=prompt('Manager code to edit names / jobs:'); if(p==='1974'){ sessionStorage.setItem(LS.pin,'1'); return true; } if(p!=null) alert('Wrong code.'); return false; }
+function ensurePin(){ if(MGR || sessionStorage.getItem(LS.pin)==='1') return true; var p=prompt('Manager code to edit names / jobs:'); if(p==='1974'){ sessionStorage.setItem(LS.pin,'1'); return true; } if(p!=null) alert('Wrong code.'); return false; }
 function openMgr(){ if(!ensurePin()) return; $('mgrCard').classList.remove('hide'); renderMgr(); $('mgrCard').scrollIntoView({behavior:'smooth',block:'start'}); }
 function renderMgr(){
   $('nameList').innerHTML=NAMES.map(function(n,i){return '<li><span>'+esc(n)+'</span><input class="idbox" data-idn="'+esc(n)+'" value="'+esc(EMPIDS[n]||'')+'" placeholder="ID#" title="Payroll ID (for the finance report)"><button class="rowedit" data-en="'+i+'">✎</button><button class="rowdel" data-dn="'+i+'">×</button></li>';}).join('')||'<li class="muted">No names yet.</li>';
@@ -257,9 +266,20 @@ function renderMgr(){
 function addName(){ var v=$('addName').value.trim(); if(!v) return; if(NAMES.some(function(n){return n.toLowerCase()===v.toLowerCase();})){ alert('Already in the list.'); return; } NAMES.push(v); lset(LS.names,NAMES); $('addName').value=''; fillWho(); fillPersonFilter(); renderMgr(); }
 function addJob(){ var v=$('addJob').value.trim(); if(!v) return; if(CJOBS.some(function(n){return n.toLowerCase()===v.toLowerCase();})){ alert('Already in the list.'); return; } CJOBS.push(v); lset(LS.jobs,CJOBS); $('addJob').value=''; fillJobs(); renderMgr(); }
 
+/* ---------- manager login + shared read-back ---------- */
+var MGR=(sessionStorage.getItem('mra_time_mgr')==='1');
+var SHARED=null; /* everyone's entries, loaded from time.json after manager login */
+function activeEntries(){ return (MGR && SHARED && SHARED.length) ? SHARED : ENTS; }
+function applyMgr(){ var hc=$('hoursCard'), hl=$('hoursLocked'); if(hc) hc.classList.toggle('hide',!MGR); if(hl) hl.classList.toggle('hide',MGR); var b=$('mgrLoginBtn'); if(b) b.textContent=MGR?'🔓 Log out':'🔒 Manager login'; }
+function mgrLogin(){ if(MGR){ mgrLogout(); return; } var p=prompt('Manager code to view hours / reports:'); if(p==null) return; if(p!=='1974'){ alert('Wrong code.'); return; } MGR=true; sessionStorage.setItem('mra_time_mgr','1'); sessionStorage.setItem(LS.pin,'1'); applyMgr(); loadShared(function(){ renderTracking(); }); renderTracking(); var hc=$('hoursCard'); if(hc) hc.scrollIntoView({behavior:'smooth',block:'start'}); }
+function mgrLogout(){ MGR=false; SHARED=null; sessionStorage.removeItem('mra_time_mgr'); applyMgr(); renderTracking(); }
+function mapShared(arr){ if(!Array.isArray(arr)) return []; return arr.map(function(it){ var code=String(it.JobCode||it.jobNum||'').trim(); return {id:it.EntryId||it.id||('s'+(it.ID||Math.round(Math.random()*1e6))), who:it.Employee||it.who||'', empId:it.EmpId||it.empId||'', dateISO:String(it.DateWorked||it.dateISO||'').slice(0,10), job:it.JobName||it.job||'', jobNum:code, hours:parseFloat(it.Hours!=null?it.Hours:(it.hours||0))||0, payType:it.PayType||it.payType||'', task:it.Task||it.task||'', notes:it.Notes||it.notes||'', ts:it.Created||it.ts||'', shared:true}; }); }
+function loadShared(cb){ function done(a){ SHARED=mapShared(a); if(cb)cb(true); } function fail(){ SHARED=null; if(cb)cb(false); }
+  fetch('../time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ fetch('time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(fail); }); }
+
 /* ---------- tracking / rollups ---------- */
-function fillPersonFilter(){ var sel=$('fPerson'); var cur=sel.value; var ppl=[].concat(NAMES); ENTS.forEach(function(e){ if(e.who&&ppl.indexOf(e.who)<0) ppl.push(e.who); }); sel.innerHTML='<option value="">All people</option>'+ppl.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); if(cur) sel.value=cur; }
-function fillJobFilter(){ var sel=$('fJobF'); var cur=sel.value; var js=[]; ENTS.forEach(function(e){ if(e.job&&js.indexOf(e.job)<0) js.push(e.job); }); js.sort(); sel.innerHTML='<option value="">All jobs</option>'+js.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); if(cur) sel.value=cur; }
+function fillPersonFilter(){ var sel=$('fPerson'); var cur=sel.value; var ppl=[].concat(NAMES); activeEntries().forEach(function(e){ if(e.who&&ppl.indexOf(e.who)<0) ppl.push(e.who); }); sel.innerHTML='<option value="">All people</option>'+ppl.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); if(cur) sel.value=cur; }
+function fillJobFilter(){ var sel=$('fJobF'); var cur=sel.value; var js=[]; activeEntries().forEach(function(e){ if(e.job&&js.indexOf(e.job)<0) js.push(e.job); }); js.sort(); sel.innerHTML='<option value="">All jobs</option>'+js.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); if(cur) sel.value=cur; }
 function inRange(dateISO,range){
   if(range==='all') return true;
   var d=new Date(dateISO+'T00:00:00'); var now=new Date();
@@ -270,7 +290,7 @@ function inRange(dateISO,range){
 }
 function filtered(){
   var r=$('fRange').value, p=$('fPerson').value, j=$('fJobF').value;
-  return ENTS.filter(function(e){ return inRange(e.dateISO,r) && (!p||e.who===p) && (!j||e.job===j); })
+  return activeEntries().filter(function(e){ return inRange(e.dateISO,r) && (!p||e.who===p) && (!j||e.job===j); })
     .sort(function(a,b){ return String(b.dateISO).localeCompare(String(a.dateISO))||String(b.ts).localeCompare(String(a.ts)); });
 }
 function renderTracking(){
@@ -280,9 +300,11 @@ function renderTracking(){
   $('grandTot').textContent=tot.toFixed(2).replace(/\.00$/,'.0');
   function totHtml(obj){ var ks=Object.keys(obj).sort(function(a,b){return obj[b]-obj[a];}); return ks.length?ks.map(function(k){return '<div class="totrow"><span>'+esc(k)+'</span><b>'+obj[k].toFixed(2).replace(/\.00$/,'.0')+'</b></div>';}).join(''):'<div class="muted" style="padding:6px 2px">No hours in this range.</div>'; }
   $('byJob').innerHTML=totHtml(byJob); $('byPerson').innerHTML=totHtml(byPer);
+  var ro=(MGR && SHARED && SHARED.length);
+  var sn=$('shareNote'); if(sn) sn.textContent = ro ? '☁ Showing everyone’s hours (shared list).' : (MGR ? 'Showing this device only — shared read-back not live yet (build the “MRA Time to JSON” flow).' : '');
   $('entRows').innerHTML=rows.length?rows.map(function(e){
     var tn=[e.task,e.notes].filter(Boolean).join(' — ');
-    return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint"><button class="rowdel" data-del="'+e.id+'" title="Delete">×</button></td></tr>';
+    return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint">'+(ro?'':'<button class="rowdel" data-del="'+e.id+'" title="Delete">×</button>')+'</td></tr>';
   }).join(''):'<tr><td colspan="6" class="muted" style="padding:14px">No time entries yet.</td></tr>';
 }
 function delEntry(id){ if(!confirm('Delete this entry?')) return; ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS); renderTracking(); }
@@ -394,6 +416,8 @@ function boot(){
   $('csvBtn').onclick=exportCSV; $('printBtn').onclick=function(){ window.print(); };
   $('sampleBtn').onclick=seedRealWeek; $('clearBtn').onclick=clearAll;
   $('finBtn').onclick=buildFinanceReport;
+  $('mgrLoginBtn').onclick=mgrLogin; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrLogin;
+  applyMgr(); if(MGR) loadShared(function(){ renderTracking(); });
   $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
   ['fRange','fPerson','fJobF'].forEach(function(id){ $(id).onchange=renderTracking; });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
