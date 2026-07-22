@@ -126,9 +126,10 @@
 
   <!-- HOURS LOCKED NOTICE (non-managers) -->
   <div class="card noprint" id="hoursLocked">
-    <h2>🔒 Hours &amp; reports — manager only</h2>
-    <p class="muted" style="margin:0 0 12px">The time-entry form above is open to everyone. Tracked hours, totals and the weekly Finance report are visible to <b>managers only</b>. Log in to view.</p>
-    <button class="tbtn primary" id="lockLoginBtn">🔒 Manager login</button>
+    <h2>🔒 Hours &amp; reports — manager sign-in</h2>
+    <p class="muted" style="margin:0 0 12px">The time-entry form above is open to everyone. Tracked hours, totals and the weekly Finance report are for <b>managers</b> — sign in with your <b>MRA (Microsoft) account</b> to view.</p>
+    <button class="tbtn primary" id="lockLoginBtn">🔓 Sign in with Microsoft</button>
+    <div id="lockMsg" class="muted" style="margin-top:10px;color:var(--err)"></div>
   </div>
 
   <!-- TRACKING / ROLLUPS (manager only) -->
@@ -257,8 +258,8 @@ function submit(){
 }
 
 /* ---------- manage ---------- */
-function ensurePin(){ if(MGR || sessionStorage.getItem(LS.pin)==='1') return true; var p=prompt('Manager code to edit names / jobs:'); if(p==='1974'){ sessionStorage.setItem(LS.pin,'1'); return true; } if(p!=null) alert('Wrong code.'); return false; }
-function openMgr(){ if(!ensurePin()) return; $('mgrCard').classList.remove('hide'); renderMgr(); $('mgrCard').scrollIntoView({behavior:'smooth',block:'start'}); }
+function canManage(){ return isMgr(); }
+function openMgr(){ if(!canManage()){ alert('Sign in with your MRA (Microsoft) account to manage names & jobs.'); if(typeof SSO!=='undefined' && !SSO.user) SSO.signIn(); return; } $('mgrCard').classList.remove('hide'); renderMgr(); $('mgrCard').scrollIntoView({behavior:'smooth',block:'start'}); }
 function renderMgr(){
   $('nameList').innerHTML=NAMES.map(function(n,i){return '<li><span>'+esc(n)+'</span><input class="idbox" data-idn="'+esc(n)+'" value="'+esc(EMPIDS[n]||'')+'" placeholder="ID#" title="Payroll ID (for the finance report)"><button class="rowedit" data-en="'+i+'">✎</button><button class="rowdel" data-dn="'+i+'">×</button></li>';}).join('')||'<li class="muted">No names yet.</li>';
   $('jobMList').innerHTML=CJOBS.map(function(n,i){return '<li><span>'+esc(n)+'</span><button class="rowedit" data-ej="'+i+'">✎</button><button class="rowdel" data-dj="'+i+'">×</button></li>';}).join('')||'<li class="muted">None — board jobs still show automatically.</li>';
@@ -266,13 +267,45 @@ function renderMgr(){
 function addName(){ var v=$('addName').value.trim(); if(!v) return; if(NAMES.some(function(n){return n.toLowerCase()===v.toLowerCase();})){ alert('Already in the list.'); return; } NAMES.push(v); lset(LS.names,NAMES); $('addName').value=''; fillWho(); fillPersonFilter(); renderMgr(); }
 function addJob(){ var v=$('addJob').value.trim(); if(!v) return; if(CJOBS.some(function(n){return n.toLowerCase()===v.toLowerCase();})){ alert('Already in the list.'); return; } CJOBS.push(v); lset(LS.jobs,CJOBS); $('addJob').value=''; fillJobs(); renderMgr(); }
 
-/* ---------- manager login + shared read-back ---------- */
-var MGR=(sessionStorage.getItem('mra_time_mgr')==='1');
-var SHARED=null; /* everyone's entries, loaded from time.json after manager login */
-function activeEntries(){ return (MGR && SHARED && SHARED.length) ? SHARED : ENTS; }
-function applyMgr(){ var hc=$('hoursCard'), hl=$('hoursLocked'); if(hc) hc.classList.toggle('hide',!MGR); if(hl) hl.classList.toggle('hide',MGR); var b=$('mgrLoginBtn'); if(b) b.textContent=MGR?'🔓 Log out':'🔒 Manager login'; }
-function mgrLogin(){ if(MGR){ mgrLogout(); return; } var p=prompt('Manager code to view hours / reports:'); if(p==null) return; if(p!=='1974'){ alert('Wrong code.'); return; } MGR=true; sessionStorage.setItem('mra_time_mgr','1'); sessionStorage.setItem(LS.pin,'1'); applyMgr(); loadShared(function(){ renderTracking(); }); renderTracking(); var hc=$('hoursCard'); if(hc) hc.scrollIntoView({behavior:'smooth',block:'start'}); }
-function mgrLogout(){ MGR=false; SHARED=null; sessionStorage.removeItem('mra_time_mgr'); applyMgr(); renderTracking(); }
+/* ---------- MRA (Microsoft) sign-in + shared read-back ---------- */
+var SHARED=null; /* everyone's entries, loaded from time.json once a manager signs in */
+function _nmKey(s){ return String(s||'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' '); }
+var ROLE_BY_EMAIL={ 'rmiller@gomra.com':'admin','akarloff@gomra.com':'admin','luciana.giglio@gomra.com':'admin','qolivito@gomra.com':'admin','megan.fraser@gomra.com':'editor','bchoy@gomra.com':'editor','nsolomos@gomra.com':'editor','swilliams@gomra.com':'design','markm@gomra.com':'design','cindyi@gomra.com':'shopedit','rwheeler@gomra.com':'shopedit','tony@gomra.com':'exec','johnr@gomra.com':'exec','gbitonti@gomra.com':'exec','jeberhart@gomra.com':'closer','jsellers@gomra.com':'closer' };
+var ROLE_BY_NAME=(function(){ var m={}, g={admin:['Rich Miller','Al Karloff','Luciana Giglio','Quintin Olivito'],editor:['Megan Fraser','Brandon Choy','Niko Solomos'],design:['Sarah Williams','Mark Mustonen'],exec:['Tony Amato','John Renaud','Gino Bitonti'],shopedit:['Cindy Irland','Robin Wheeler'],closer:['Joshua Eberhart','Jeff Sellers']}; for(var r in g)g[r].forEach(function(n){ m[_nmKey(n)]=r; }); return m; })();
+var HOURS_ROLES=['admin','editor','exec'];  /* who may see hours + the finance report */
+var SSO=(function(){
+  var TENANT='1dc2dfee-5d93-4f0c-aa97-2344b72fe6b0', CLIENT='fad6a2aa-2dab-4c46-ad3a-29e7040036ae';
+  var HOSTS=['mrashopdash.z13.web.core.windows.net'];
+  var pca=null, user=null, ready=false, failed=false;
+  function active(){ return HOSTS.indexOf(location.hostname)>=0; }
+  function domainOK(e){ return /@gomra\.com$/i.test(String(e||'')); }
+  function done(){ ready=true; try{ applyMgr(); }catch(e){} }
+  function loadMsal(cb){ if(window.msal) return cb();
+    var urls=['https://alcdn.msftauth.net/browser/2.38.1/js/msal-browser.min.js','https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js'];
+    var i=0; (function tryNext(){ if(i>=urls.length){ cb(new Error('msal')); return; } var sc=document.createElement('script'); sc.async=true; sc.src=urls[i++]; sc.onload=function(){ window.msal?cb():tryNext(); }; sc.onerror=tryNext; document.head.appendChild(sc); })(); }
+  function init(){ if(!active()){ done(); return; }
+    var settled=false; function finish(f){ if(settled) return; settled=true; if(f) failed=true; done(); }
+    setTimeout(function(){ finish(true); }, 6000);
+    loadMsal(function(err){ if(err || !window.msal){ finish(true); return; }
+      try{ pca=new msal.PublicClientApplication({ auth:{ clientId:CLIENT, authority:'https://login.microsoftonline.com/'+TENANT, redirectUri:location.origin+location.pathname }, cache:{ cacheLocation:'localStorage' } });
+        pca.handleRedirectPromise().then(function(resp){ if(resp&&resp.account) pca.setActiveAccount(resp.account); var a=pca.getActiveAccount()||(pca.getAllAccounts()[0]||null); if(a){ if(domainOK(a.username)) user=a; else { finish(false); pca.logoutRedirect({account:a}); return; } } finish(false); }).catch(function(){ finish(false); });
+      }catch(e){ finish(true); } }); }
+  function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; } try{ pca.loginRedirect({ scopes:['openid','profile','email'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
+  function signOut(){ if(!pca) return; var a=pca.getActiveAccount(); user=null; try{ pca.logoutRedirect(a?{account:a}:{}); }catch(e){ try{ applyMgr(); }catch(_){} } }
+  return { init:init, signIn:signIn, signOut:signOut, active:active, email:function(){ return user?String(user.username||'').toLowerCase():''; }, name:function(){ return user?(user.name||user.username||''):''; }, get user(){ return user; }, get ready(){ return ready; }, get failed(){ return failed; } };
+})();
+function ssoEnforcing(){ return SSO.active() && SSO.ready && !SSO.failed; }
+function ssoRole(){ if(!SSO.active()||SSO.failed) return null; var em=SSO.email(); if(ROLE_BY_EMAIL[em]) return ROLE_BY_EMAIL[em]; var nk=_nmKey(SSO.name()); if(ROLE_BY_NAME[nk]) return ROLE_BY_NAME[nk]; return SSO.user?'staff':null; }
+/* manager view: open off-host (dev/preview); on the live host require a signed-in manager (fail CLOSED to protect hours) */
+function isMgr(){ if(!SSO.active()) return true; if(!SSO.ready||SSO.failed) return false; if(!SSO.user) return false; return HOURS_ROLES.indexOf(ssoRole())>=0; }
+function activeEntries(){ return (isMgr() && SHARED && SHARED.length) ? SHARED : ENTS; }
+function applyMgr(){ var on=isMgr(); var hc=$('hoursCard'), hl=$('hoursLocked'); if(hc) hc.classList.toggle('hide',!on); if(hl) hl.classList.toggle('hide',on);
+  var b=$('mgrLoginBtn'); if(b) b.textContent = (SSO.user? '🔓 Sign out' : '🔒 Sign in');
+  var lm=$('lockMsg'); if(lm) lm.textContent = (SSO.user && !on) ? ('Signed in as '+SSO.email()+' — this account doesn\u2019t have access to hours/reports.') : '';
+  if(on && !SHARED) loadShared(function(){ renderTracking(); });
+  renderTracking();
+}
+function mgrClick(){ if(SSO.user) SSO.signOut(); else SSO.signIn(); }
 function mapShared(arr){ if(!Array.isArray(arr)) return []; return arr.map(function(it){ var code=String(it.JobCode||it.jobNum||'').trim(); return {id:it.EntryId||it.id||('s'+(it.ID||Math.round(Math.random()*1e6))), who:it.Employee||it.who||'', empId:it.EmpId||it.empId||'', dateISO:String(it.DateWorked||it.dateISO||'').slice(0,10), job:it.JobName||it.job||'', jobNum:code, hours:parseFloat(it.Hours!=null?it.Hours:(it.hours||0))||0, payType:it.PayType||it.payType||'', task:it.Task||it.task||'', notes:it.Notes||it.notes||'', ts:it.Created||it.ts||'', shared:true}; }); }
 function loadShared(cb){ function done(a){ SHARED=mapShared(a); if(cb)cb(true); } function fail(){ SHARED=null; if(cb)cb(false); }
   fetch('../time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ fetch('time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(fail); }); }
@@ -300,8 +333,8 @@ function renderTracking(){
   $('grandTot').textContent=tot.toFixed(2).replace(/\.00$/,'.0');
   function totHtml(obj){ var ks=Object.keys(obj).sort(function(a,b){return obj[b]-obj[a];}); return ks.length?ks.map(function(k){return '<div class="totrow"><span>'+esc(k)+'</span><b>'+obj[k].toFixed(2).replace(/\.00$/,'.0')+'</b></div>';}).join(''):'<div class="muted" style="padding:6px 2px">No hours in this range.</div>'; }
   $('byJob').innerHTML=totHtml(byJob); $('byPerson').innerHTML=totHtml(byPer);
-  var ro=(MGR && SHARED && SHARED.length);
-  var sn=$('shareNote'); if(sn) sn.textContent = ro ? '☁ Showing everyone’s hours (shared list).' : (MGR ? 'Showing this device only — shared read-back not live yet (build the “MRA Time to JSON” flow).' : '');
+  var ro=(isMgr() && SHARED && SHARED.length);
+  var sn=$('shareNote'); if(sn) sn.textContent = ro ? '☁ Showing everyone’s hours (shared list).' : (isMgr() ? 'Showing this device only — shared read-back not live yet (build the “MRA Time to JSON” flow).' : '');
   $('entRows').innerHTML=rows.length?rows.map(function(e){
     var tn=[e.task,e.notes].filter(Boolean).join(' — ');
     return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint">'+(ro?'':'<button class="rowdel" data-del="'+e.id+'" title="Delete">×</button>')+'</td></tr>';
@@ -416,8 +449,8 @@ function boot(){
   $('csvBtn').onclick=exportCSV; $('printBtn').onclick=function(){ window.print(); };
   $('sampleBtn').onclick=seedRealWeek; $('clearBtn').onclick=clearAll;
   $('finBtn').onclick=buildFinanceReport;
-  $('mgrLoginBtn').onclick=mgrLogin; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrLogin;
-  applyMgr(); if(MGR) loadShared(function(){ renderTracking(); });
+  $('mgrLoginBtn').onclick=mgrClick; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrClick;
+  SSO.init(); applyMgr();
   $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
   ['fRange','fPerson','fJobF'].forEach(function(id){ $(id).onchange=renderTracking; });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
