@@ -219,9 +219,10 @@ function allJobOptions(){
 /* ---------- render form dropdowns ---------- */
 function fillWho(){ var sel=$('fWho'); var cur=sel.value; sel.innerHTML='<option value="">— pick your name —</option>'+NAMES.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); if(cur) sel.value=cur; }
 function jobListItems(){
-  var out=[], seen={};
-  boardJobs().forEach(function(j){ var code=String(j.jobNum||'').replace(/^j/i,'').trim(); var nm=j.label.replace(/^\s*j?\d{3,6}\s*[·\-\u2014]\s*/i,'').trim()||j.label; var val=code?(code+' · '+nm):nm; var k=code?('c'+code):('n'+nm.toLowerCase()); if(seen[k])return; seen[k]=1; out.push({val:val,code:code,name:nm,active:j.active}); });
-  Object.keys(JCNAMES).forEach(function(code){ if(seen['c'+code])return; seen['c'+code]=1; out.push({val:code+' · '+JCNAMES[code],code:code,name:JCNAMES[code],active:true}); });
+  var out=[], seen={}, codes={};
+  // every distinct client job (dedup by full code·name, NOT by code — so all jobs sharing a J# still each show)
+  boardJobs().forEach(function(j){ var code=String(j.jobNum||'').replace(/^j/i,'').trim(); var nm=j.label.replace(/^\s*j?\d{3,6}\s*[·\-\u2014]\s*/i,'').trim()||j.label; var val=code?(code+' · '+nm):nm; var k='v'+val.toLowerCase(); if(seen[k])return; seen[k]=1; if(code)codes[code]=1; out.push({val:val,code:code,name:nm,active:j.active}); });
+  Object.keys(JCNAMES).forEach(function(code){ if(codes[code])return; codes[code]=1; out.push({val:code+' · '+JCNAMES[code],code:code,name:JCNAMES[code],active:true}); });
   CJOBS.forEach(function(c){ var k='x'+c.toLowerCase(); if(seen[k])return; seen[k]=1; out.push({val:c,code:'',name:c,custom:true}); });
   return out;
 }
@@ -239,7 +240,7 @@ function submit(){
   var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
   var e={ id:uid(), who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes, ts:new Date().toISOString() };
   ENTS.push(e); lset(LS.ents, ENTS);
-  if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'addTime'}, e))}); }catch(_){} }
+  if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'addTime',empId:(EMPIDS[e.who]||''),code:fCode(e),payType:fPayType(e)}, e))}); }catch(_){} }
   // reset for the next punch (keep who + date)
   $('fJob').value=''; $('fHours').value=''; $('fTask').value=''; $('fNotes').value=''; document.querySelectorAll('.hchip.on').forEach(function(c){c.classList.remove('on');});
   var ok=$('okMsg'); ok.textContent='✓ Saved '+e.hours+' hr'+(e.hours===1?'':'s')+' to '+e.job; ok.classList.remove('hide'); setTimeout(function(){ ok.classList.add('hide'); },2600);
