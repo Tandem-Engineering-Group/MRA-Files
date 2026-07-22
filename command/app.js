@@ -713,7 +713,10 @@ function ensureBoard(){ let f=document.getElementById('boardFrame');
     f=document.getElementById('boardFrame'); }
   return f; }
 function boardSetView(v){ const f=ensureBoard(); if(!f) return;
-  const go=()=>{ try{ if(f.contentWindow && typeof f.contentWindow.setView==='function'){ f.contentWindow.setView(v); return true; } }catch(e){} return false; };
+  const go=()=>{ try{ const w=f.contentWindow; if(!w) return false;
+    if(v==='projects'){ if(typeof w.openProjV2==='function'){ w.openProjV2(); return true; } return false; }   // 🆕 CC Projects tab = the new project screen
+    if(typeof w.closeProjV2==='function'){ try{ w.closeProjV2(); }catch(e){} }                                 // leaving projects → drop the overlay
+    if(typeof w.setView==='function'){ w.setView(v); return true; } return false; }catch(e){ return false; } };
   if(!go()){ let n=0; const t=setInterval(()=>{ if(go()||++n>60) clearInterval(t); },250); } }
 function syncBoardTheme(){ try{ const f=document.getElementById('boardFrame'); if(!f||!f.contentWindow) return;
   const light=!document.body.classList.contains('dark');

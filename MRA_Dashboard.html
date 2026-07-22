@@ -3737,6 +3737,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"33.1", date:"2026-07-21", title:"\u{1F195} New Projects screen \u2014 complete + wired into the Command Center", items:[
+    "The new Command-Center Projects screen is now the <b>Projects tab in the Command Center</b> (your view) \u2014 no more secret link. Full feature set: small <b>KPI cards</b> up top (Active · At risk · Overdue tasks · Milestones 30d · Complete); project cards with health + % ; <b>program overview Gantt</b> (shaded % + dates + today line); <b>PM load</b> and <b>Milestones (30d)</b>; per-project panels with a <b>phase overview timeline then detailed tasks</b>, a <b>phase-grouped task list</b>, and <b>collapse/expand</b> (each + all); <b>sort</b> (Health/PM/Date/A\u2013Z); a <b>Gantt zoom slider + level-of-detail</b> (overview / tasks / both); <b>Print</b> (portfolio + phase-grouped task report); and the <b>full live edit engine</b> (task edit, project editor, verify/send-back). MRA Orange per the UI standard. The classic Projects tab is unchanged." ] },
   { rev:"33.0", date:"2026-07-21", title:"\u{1F195} Projects preview \u2014 round 2 (fuller product)", items:[
     "New Projects preview (?projv2=1) build-out: <b>each project panel now shows a phase overview timeline THEN the detailed task Gantt</b> below; <b>dates on every Gantt bar</b> + % shading + today line; <b>task list grouped by phase</b>; <b>per-project collapse/expand</b> caret (plus Expand all / Collapse all); and pulled-in <b>PM load</b> and <b>Milestones (next 30 days)</b> sections. Still preview-only; live Projects tab unchanged. (Next: the zoom / pan gantt sliders.)" ] },
   { rev:"32.9", date:"2026-07-21", title:"\u{1F195} Projects preview \u2014 Rich's round-1 tweaks", items:[
@@ -16715,7 +16717,7 @@ try{ if(new URLSearchParams(location.search).get('projv2')){ (function _pw(){ if
    It REUSES the live data (MRA_DATA.projects) and the REAL edit engine — openProjectEditor / openProjTaskEdit /
    verifyTask / sendBackTask — so every bell + edit function still works. The live Projects tab is untouched;
    this is a full-screen overlay you only see at ?projv2=1 (or ☰ menu). Flag off = zero impact on the board. */
-let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let PV2_SORT='health';
+let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let PV2_SORT='health'; let PV2_ZOOM=1, PV2_LOD='both';
 (function(){ const st=document.createElement('style'); st.id='projV2css'; st.textContent=`
   #projV2{position:fixed;inset:0;z-index:70;overflow:auto;display:none;
     --pv-bg:#f3f6fa;--pv-card:#fff;--pv-text:#223047;--pv-muted:#66758a;--pv-line:#dfe6ef;
@@ -16733,6 +16735,12 @@ let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let P
   #projV2 .pv-tr{display:flex;gap:8px;align-items:center}
   #projV2 .pv-main{max-width:1900px;margin:auto;padding:20px 22px 60px}
   #projV2 .pv-h2{font-size:15px;font-weight:800;margin:22px 0 11px}
+  #projV2 .pv-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:0 0 14px}
+  #projV2 .pv-kpi{background:var(--pv-card);border:1px solid var(--pv-line);border-radius:11px;padding:8px 13px}
+  #projV2 .pv-kpi .k{display:block;font-size:11px;color:var(--pv-muted)}
+  #projV2 .pv-kpi b{font-size:21px;font-weight:800}
+  #projV2 .pv-kpi.err b{color:var(--pv-err)} #projV2 .pv-kpi.warn b{color:var(--pv-warn)} #projV2 .pv-kpi.ok b{color:var(--pv-ok)}
+  @media(max-width:820px){#projV2 .pv-kpis{grid-template-columns:repeat(2,1fr)}}
   #projV2 .pv-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(224px,1fr));gap:12px}
   #projV2 .pv-card{padding:13px 14px;border:1px solid var(--pv-line);border-radius:13px;background:var(--pv-card);color:var(--pv-text);cursor:pointer;text-align:left;position:relative}
   #projV2 .pv-card:hover{border-color:var(--pv-org)}
@@ -16764,7 +16772,7 @@ let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let P
   #projV2 .pv-mod h3.sub2{margin-top:16px}
   /* gantt */
   #projV2 .pvg{overflow-x:auto}
-  #projV2 .pvg-head,#projV2 .pvg-row{display:grid;grid-template-columns:170px 1fr;min-width:640px}
+  #projV2 .pvg-head,#projV2 .pvg-row{display:grid;grid-template-columns:170px 1fr;min-width:calc(660px * var(--pvz,1))}
   #projV2 .pvg-head .gl{padding:5px 6px}
   #projV2 .pvg-head .pvg-track{display:flex}
   #projV2 .pvg-head .pvg-track span{flex:1;text-align:center;font-size:10px;color:var(--pv-muted);border-left:1px solid var(--pv-line)}
@@ -16815,6 +16823,8 @@ function _pvId(s){ return String(s||'').replace(/[^a-z0-9]/gi,'_'); }
 function pvOpenEditor(name){ if(typeof openProjectEditor==='function') openProjectEditor(name); }
 function pvEditTask(name,handle){ if(typeof openProjTaskEdit==='function') openProjTaskEdit(handle,name); }
 function pvSetSort(v){ PV2_SORT=v; renderProjV2(); }
+function pvZoom(v){ PV2_ZOOM=+v||1; const o=document.getElementById('projV2'); if(o) o.style.setProperty('--pvz', PV2_ZOOM); }
+function pvLod(v){ PV2_LOD=v; renderProjV2(); }
 function _pvSortProjs(arr){ const rk={late:0,behind:1,ontrack:2,upcoming:3,parked:4,done:5}; const cp=arr.slice();
   if(PV2_SORT==='pm') cp.sort((a,b)=>String(a.pm||'~~').localeCompare(String(b.pm||'~~'))||String(a.name).localeCompare(String(b.name)));
   else if(PV2_SORT==='date') cp.sort((a,b)=>String(a.startISO||a.finishISO||'9999').localeCompare(String(b.startISO||b.finishISO||'9999')));
@@ -16825,10 +16835,38 @@ function pvExpandAll(){ const D=window.MRA_DATA||{}; (D.projects||[]).forEach(x=
 function pvCollapseAll(){ const D=window.MRA_DATA||{}; (D.projects||[]).forEach(x=>{ if(x&&x.name){ PV2_OPEN.add(x.name); PV2_COLL.add(x.name); } }); renderProjV2(); }
 function pvPanelCaret(name){ if(PV2_COLL.has(name)) PV2_COLL.delete(name); else PV2_COLL.add(name); renderProjV2(); }
 function pvArchive(){ alert('Project Archive isn’t wired into this preview yet — it’ll link to the archived-projects view once we build that. For now, use the live board to delete/close projects.'); }
+function pvPrint(){ const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+  const projs=_pvSortProjs((D.projects||[]).filter(p=>p&&p.name));
+  const openArr=projs.filter(p=>PV2_OPEN.has(p.name)&&!PV2_COLL.has(p.name)); const detail=openArr.length?openArr:projs;
+  const d=new Date(); const dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+  const HL={late:'Past due',behind:'Behind',ontrack:'On track',upcoming:'Upcoming',parked:'Parked',done:'Done'};
+  const jnOf=nm=>(typeof projJobNum==='function')?(projJobNum(nm)||''):'';
+  const portRows=projs.map(p=>`<tr><td>${esc(jnOf(p.name))}</td><td>${esc(p.name)}</td><td>${esc(p.pm||'—')}</td><td>${p.startISO?esc(fmtMDY(p.startISO)):'—'}</td><td>${p.finishISO?esc(fmtMDY(p.finishISO)):'—'}</td><td class="r">${p.pct||0}%</td><td>${esc(HL[_pvHstate(p)]||'')}</td></tr>`).join('');
+  const secs=detail.map(p=>{ const tasks=(p.tasks||[]).filter(t=>!projIsDone(t)).slice().sort((a,b)=>String(a.finISO||a.startISO||'9999').localeCompare(String(b.finISO||b.startISO||'9999')));
+    const byph={},order=[]; tasks.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!byph[ph]){byph[ph]=[];order.push(ph);} byph[ph].push(t); });
+    const rows=tasks.length?order.map(ph=>`<tr class="ph"><td colspan="4">${esc(ph)}</td></tr>`+byph[ph].map(t=>{ const st=t.startISO||'',fin=t.finISO||'',due=fin||st,od=due&&due<today,who=(t.who||'').split('/')[0].trim(),ms=/yes/i.test(t.ml||'');
+      return `<tr class="${od?'od':''}"><td>${ms?'◆ ':''}${esc(t.t||'')}${od?' <b>OVERDUE</b>':''}</td><td>${who?esc(who):'<i>Unassigned</i>'}</td><td>${(st&&fin)?(esc(fmtMD(st))+' → '+esc(fmtMD(fin))):(due?esc(fmtMD(due)):'—')}</td><td>${esc((t.type||'').trim())}</td></tr>`; }).join('')).join(''):'<tr><td colspan="4"><i>No open tasks.</i></td></tr>';
+    return `<h2>${esc(jnOf(p.name)?jnOf(p.name)+' · ':'')}${esc(p.name)}</h2><div class="sub">${p.startISO?esc(fmtMDY(p.startISO)):'—'} → ${p.finishISO?esc(fmtMDY(p.finishISO)):'—'} · ${p.pct||0}% · PM ${esc(p.pm||'—')} · ${esc(HL[_pvHstate(p)]||'')}</div><table class="t"><thead><tr><th>Task</th><th>Assignee</th><th>Start → Finish</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table>`; }).join('');
+  const active=projs.filter(x=>['late','behind','ontrack'].indexOf(_pvHstate(x))>=0).length, risk=projs.filter(x=>['late','behind'].indexOf(_pvHstate(x))>=0).length;
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Projects '+dd+'</title><style>'
+    +'body{font-family:Segoe UI,Arial,sans-serif;color:#223047;margin:0}'
+    +'.bar{background:#101827;color:#fff;padding:9px 16px}.bar button{background:#F36C21;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer;font-size:13px}'
+    +'.pad{padding:24px 30px}h1{color:#F36C21;font-size:22px;margin:0}.subh{color:#66758a;margin:3px 0 14px;font-size:13px}'
+    +'table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:8px}th{background:#101827;color:#fff;text-align:left;padding:6px 9px;font-size:10px;text-transform:uppercase;letter-spacing:.4px}'
+    +'td{padding:6px 9px;border-bottom:1px solid #e6e8eb;vertical-align:top}td.r{text-align:right}tr.ph td{background:#FFF1E8;color:#C94F0A;font-weight:800;text-transform:uppercase;font-size:10px;letter-spacing:.4px}'
+    +'tr.od td{background:#fdECEC}tr.od b{color:#B92D3A}h2{font-size:15px;margin:18px 0 2px}.sub{color:#66758a;font-size:12px;margin-bottom:6px}tr{break-inside:avoid}'
+    +'@media print{.bar{display:none}}</style></head><body>'
+    +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button></div>'
+    +'<div class="pad"><h1>MRA — Projects</h1><div class="subh">'+dd+' · '+projs.length+' projects · Active '+active+' · At risk '+risk+'</div>'
+    +'<h2>Portfolio</h2><table class="t"><thead><tr><th>Job #</th><th>Project</th><th>PM</th><th>Start</th><th>Finish</th><th>%</th><th>Status</th></tr></thead><tbody>'+portRows+'</tbody></table>'
+    +secs+'</div></body></html>';
+  const w=window.open('','_blank'); if(!w){ alert('Allow pop-ups for this site, then tap Print again.'); return; } w.document.open(); w.document.write(html); w.document.close();
+}
 function pvThemeToggle(){ const o=document.getElementById('projV2'); if(o){ o.classList.toggle('pvdark'); const b=document.getElementById('pvTheme'); if(b) b.textContent=o.classList.contains('pvdark')?'☀ Light':'☾ Dark'; } }
 function openProjV2(){ let o=document.getElementById('projV2');
-  if(!o){ o=document.createElement('div'); o.id='projV2'; document.body.appendChild(o); if(document.body.classList.contains('dark')||document.documentElement.classList.contains('dark')) o.classList.add('pvdark'); }
-  PROJV2_OPEN=true; o.classList.add('show'); document.body.style.overflow='hidden';
+  if(!o){ o=document.createElement('div'); o.id='projV2'; document.body.appendChild(o); }
+  o.classList.toggle('pvdark', !document.body.classList.contains('light'));
+  PROJV2_OPEN=true; o.classList.add('show'); o.style.setProperty('--pvz', PV2_ZOOM); document.body.style.overflow='hidden';
   // default-open the worst-health projects so the preview looks populated
   if(!PV2_OPEN.size){ const D=window.MRA_DATA||{}; const ps=(D.projects||[]).filter(p=>(p.tasks||[]).length);
     const rk={late:0,behind:1,ontrack:2,upcoming:3,parked:4,done:5};
@@ -16837,7 +16875,7 @@ function openProjV2(){ let o=document.getElementById('projV2');
 function _pvHstate(p){ try{ const t=(window.MRA_DATA||{}).todayISO||localISO(Date.now()); return ((typeof projHealth==='function')?projHealth(p,t):{}).state||'ontrack'; }catch(e){ return 'ontrack'; } }
 function closeProjV2(){ PROJV2_OPEN=false; const o=document.getElementById('projV2'); if(o) o.classList.remove('show'); document.body.style.overflow='';
   try{ const u=new URL(location.href); if(u.searchParams.has('projv2')){ u.searchParams.delete('projv2'); history.replaceState(null,'',u.pathname+(u.search||'')+u.hash); } }catch(e){} }
-function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) return; const D=window.MRA_DATA||{};
+function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) return; const D=window.MRA_DATA||{}; const _emb=(function(){ try{ return window.self!==window.top; }catch(e){ return true; } })();
   const today=D.todayISO||localISO(Date.now());
   const projs=_pvSortProjs((D.projects||[]).filter(p=>p&&p.name));
   // ---- cards ----
@@ -16872,6 +16910,9 @@ function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) retur
     // phase-rollup OVERVIEW (the whole project on the timeline, then task detail below)
     const _phm={}, _pho=[]; if(!coll)(p.tasks||[]).forEach(t=>{ if(!(t.startISO||t.finISO))return; const ph=((t.phase||'').trim())||'(no phase)'; if(!_phm[ph]){_phm[ph]={s:null,f:null,ps:0,pn:0};_pho.push(ph);} const o2=_phm[ph], s=t.startISO||t.finISO, f=t.finISO||t.startISO; if(s&&(!o2.s||s<o2.s))o2.s=s; if(f&&(!o2.f||f>o2.f))o2.f=f; o2.pn++; o2.ps+=(projIsDone(t)?100:((typeof projTaskPct==='function')?(projTaskPct(t.st)||0):0)); });
     const prows=_pho.map(ph=>({label:ph, s:_phm[ph].s, f:_phm[ph].f, cls:h.c, pct:_phm[ph].pn?Math.round(_phm[ph].ps/_phm[ph].pn):0, text:''}));
+    const _gmod = PV2_LOD==='overview' ? `<h3>Project timeline — phases</h3>${_pvGantt(prows,t0,t1)}`
+      : PV2_LOD==='detail' ? `<h3>Detailed tasks</h3>${_pvGantt(grows,t0,t1)}`
+      : `<h3>Project timeline — phases</h3>${_pvGantt(prows,t0,t1)}<h3 class="sub2">Detailed tasks</h3>${_pvGantt(grows,t0,t1)}`;
     const _hd=`<div class="pv-ptop">
         <div style="display:flex;align-items:center;gap:10px;min-width:0"><button class="pvbtn" title="Collapse / expand this project" onclick="pvPanelCaret('${escJsAttr(p.name)}')" style="padding:5px 11px;font-weight:800">${coll?'▸':'▾'}</button>
           <div style="min-width:0"><div class="nm">${jn?esc(jn)+' · ':''}${esc(p.name)} <span class="pv-chip ${h.c}">${esc(h.l)}</span></div>
@@ -16880,7 +16921,7 @@ function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) retur
     if(coll) return `<article class="pv-panel" id="pvp-${_pvId(p.name)}">${_hd}</article>`;
     return `<article class="pv-panel" id="pvp-${_pvId(p.name)}">${_hd}
       <div class="pv-pbody"><div class="pv-mod left"><h3>Task list <span>${tasks.length} open</span></h3>${trows}</div>
-        <div class="pv-mod"><h3>Project timeline — phases</h3>${_pvGantt(prows,t0,t1)}<h3 class="sub2">Detailed tasks</h3>${_pvGantt(grows,t0,t1)}</div></div></article>`; }).join('');
+        <div class="pv-mod">${_gmod}</div></div></article>`; }).join('');
   // ---- portfolio gantt ----
   const dated=projs.filter(p=>p.startISO&&p.finishISO);
   let P0=Date.now(),P1=Date.now()+120*86400000;
@@ -16894,14 +16935,20 @@ function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) retur
   projs.forEach(p=>(p.milestones||[]).forEach(m=>{ if(m&&m.dateISO&&m.dateISO>=today&&m.dateISO<=_t30&&!m.done) _ms.push({proj:p.name,name:m.name,d:m.dateISO}); }));
   _ms.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
   const msRows=_ms.length?_ms.map(m=>`<div class="pv-vrow"><div style="min-width:0"><b>◆ ${esc(m.name||'Milestone')}</b><div class="pj">${esc(m.proj)}</div></div><span class="pv-chip warn">${esc(fmtMD(m.d))}</span></div>`).join(''):'<div class="pv-empty">No milestones in the next 30 days.</div>';
+  const kActive=projs.filter(x=>['late','behind','ontrack'].indexOf(_pvHstate(x))>=0).length;
+  const kRisk=projs.filter(x=>['late','behind'].indexOf(_pvHstate(x))>=0).length;
+  const kDone=projs.filter(x=>_pvHstate(x)==='done').length;
+  let kOD=0; projs.forEach(x=>(x.tasks||[]).forEach(t=>{ if(projIsDone(t)||(typeof isMeetingTask==='function'&&isMeetingTask(t)))return; const d=t.finISO||t.startISO; if(d&&d<today)kOD++; }));
+  const kpiHtml=`<div class="pv-kpis"><div class="pv-kpi"><span class="k">Active projects</span><b>${kActive}</b></div><div class="pv-kpi ${kRisk?'err':''}"><span class="k">At risk</span><b>${kRisk}</b></div><div class="pv-kpi ${kOD?'err':''}"><span class="k">Overdue tasks</span><b>${kOD}</b></div><div class="pv-kpi ${_ms.length?'warn':''}"><span class="k">Milestones · 30d</span><b>${_ms.length}</b></div><div class="pv-kpi ok"><span class="k">Complete</span><b>${kDone}</b></div></div>`;
   const pmMileHtml=`<div class="pv-h2">Team &amp; milestones</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px"><div class="pv-vq"><h3>📊 PM load <span class="pj">— open tasks by PM</span></h3>${pmRows}</div><div class="pv-vq"><h3>◆ Milestones — next 30 days <span class="pv-chip warn">${_ms.length}</span></h3>${msRows}</div></div>`;
   o.innerHTML=`<div class="pv-top">
-      <div><h1>Projects <span class="pv-prev">PREVIEW · NEW FORMAT</span></h1><div class="sub">Full-screen project planning · ${projs.length} projects · reuses the live editor + data</div></div>
-      <div class="pv-tr"><button class="pvbtn" onclick="pvArchive()">Project Archive</button><button class="pvbtn" id="pvTheme" onclick="pvThemeToggle()">☾ Dark</button><button class="pvbtn primary" onclick="closeProjV2()">✕ Back to board</button></div></div>
+      <div><h1>Projects ${_emb?'':'<span class="pv-prev">PREVIEW · NEW FORMAT</span>'}</h1><div class="sub">${projs.length} projects · full project planning</div></div>
+      <div class="pv-tr"><button class="pvbtn" onclick="pvPrint()">🖨 Print</button><button class="pvbtn" onclick="pvArchive()">Project Archive</button>${_emb?'':'<button class="pvbtn" id="pvTheme" onclick="pvThemeToggle()">☾ Dark</button><button class="pvbtn primary" onclick="closeProjV2()">✕ Back to board</button>'}</div></div>
     <div class="pv-main">
+      ${kpiHtml}
       <div class="pv-h2" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><span>Projects <span class="pj" style="font-weight:400;color:var(--pv-muted)">— tap a card to open / close</span></span><span class="pv-tr"><label class="pj" style="color:var(--pv-muted)">Sort</label><select class="pvbtn" onchange="pvSetSort(this.value)"><option value="health"${PV2_SORT==='health'?' selected':''}>Health (default)</option><option value="pm"${PV2_SORT==='pm'?' selected':''}>By PM</option><option value="date"${PV2_SORT==='date'?' selected':''}>By date</option><option value="name"${PV2_SORT==='name'?' selected':''}>A–Z</option></select><button class="pvbtn" onclick="pvExpandAll()">⊞ Expand all</button><button class="pvbtn" onclick="pvCollapseAll()">⊟ Collapse all</button></span></div>
       <div class="pv-cards">${cards||'<div class="pv-empty">No projects.</div>'}</div>
-      <div class="pv-h2">Program overview <span class="pj" style="font-weight:400;color:var(--pv-muted)">— all projects on one timeline (bars shaded to % complete)</span></div>
+      <div class="pv-h2" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><span>Program overview <span class="pj" style="font-weight:400;color:var(--pv-muted)">— all projects on one timeline</span></span><span class="pv-tr"><label class="pj" style="color:var(--pv-muted)">Detail</label><select class="pvbtn" onchange="pvLod(this.value)"><option value="both"${PV2_LOD==='both'?' selected':''}>Overview + tasks</option><option value="overview"${PV2_LOD==='overview'?' selected':''}>Overview only</option><option value="detail"${PV2_LOD==='detail'?' selected':''}>Tasks only</option></select><label class="pj" style="color:var(--pv-muted)">🔍 Zoom</label><input type="range" min="1" max="4" step="0.5" value="${PV2_ZOOM}" oninput="pvZoom(this.value)" title="Zoom the timeline in/out — then scroll sideways to pan" style="width:120px;vertical-align:middle"></span></div>
       <div class="pv-vq" style="padding:8px 12px">${_pvGantt(portRows,P0,P1)}</div>
       ${pmMileHtml}
       ${vqHtml}
