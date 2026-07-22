@@ -3763,6 +3763,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"33.9", date:"2026-07-22", title:"🚨 Stale-data alarm when the Lists sync stalls", items:[
+    "If the <b>Lists\u2192JSON</b> pipeline stalls (e.g. the \u201cMRA Lists to JSON\u201d flow hangs), a <b>red alarm banner</b> now drops across the top of the board once the data is <b>&gt;40 min old</b> \u2014 so a frozen board (edits not saving) is obvious instead of silent. Tap to dismiss 15 min." ] },
   { rev:"33.8", date:"2026-07-22", title:"📁 Projects tab: project cards up top; dropped 3 panels", items:[
     "The classic <b>Projects</b> tab now leads with the <b>project cards</b> (name · J# · PM · 📅 start→finish · health · %) — tap one to open its editor. Removed <b>⚡ Needs Attention</b>, <b>Project Progress</b> and <b>🏭 Bay Occupancy</b>, and <b>streamlined the top</b> (smaller KPI tiles, tighter spacing) to match the new board." ] },
   { rev:"33.7", date:"2026-07-22", title:"⏱ Time Tracking added to the ☰ Menu", items:[
@@ -16620,6 +16622,22 @@ function renderUnas(){
       + `</div>`;
   }).join('');
 }
+function _staleCheck(D){
+  try{
+    var el=document.getElementById('staleAlarm');
+    var la=D&&D.listsAsOf; if(!la){ if(el) el.style.display='none'; return; }
+    if(window._staleSnooze && Date.now()<window._staleSnooze){ if(el) el.style.display='none'; return; }
+    var mins=Math.floor((Date.now()-Date.parse(la))/60000);
+    if(!(mins>40)){ if(el) el.style.display='none'; return; }   // pipeline normally refreshes every 2-3 min
+    if(!el){ el=document.createElement('div'); el.id='staleAlarm';
+      el.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;background:#b91c1c;color:#fff;font-weight:800;text-align:center;padding:10px 16px;font-size:13.5px;box-shadow:0 3px 12px #0008;cursor:pointer;letter-spacing:.2px';
+      el.onclick=function(){ el.style.display='none'; window._staleSnooze=Date.now()+15*60000; };
+      document.body.appendChild(el); }
+    var hrs=Math.floor(mins/60), rem=mins%60, age=hrs?(hrs+'h '+rem+'m'):(mins+'m');
+    el.innerHTML='\u26A0 DATA PIPELINE STALLED \u2014 the board hasn\u2019t synced from the Lists in <b>'+age+'</b>. New jobs / tasks / bring-backs are NOT saving to the board. Restart the \u201cMRA Lists to JSON\u201d flow (cancel stuck runs \u2192 Run). <span style="opacity:.85;font-weight:600">(tap to dismiss 15 min)</span>';
+    el.style.display='block';
+  }catch(e){}
+}
 function renderAll(){
   // 🔁 keep openCount/openTasks in sync with the snoozed-repeat rule on every paint (idempotent)
   try{ ((window.MRA_DATA||{}).jobs||[]).forEach(j=>{ if(j.tasks&&j.tasks.length) oRecompute(j); }); }catch(e){}
@@ -16628,6 +16646,7 @@ function renderAll(){
   try{ ((window.MRA_DATA||{}).projects||[]).forEach(p=>{ if((p.tasks||[]).some(isMeetingTask)) oRecomputeProject(p); }); }catch(e){}   // 🗓 recompute ONLY projects that contain meetings so meetings never skew %/count/dates (meeting-free projects keep server numbers)
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
+  try{ _staleCheck(D); }catch(_){}
   fioApplyResolved(D);   // drop issues this device resolved in Fleetio until the export confirms
   const _wsnap=snapWallScroll();
   renderFloor(D); renderCrewSched(D); renderProjects(D); renderFleetio(D); renderFleet();
