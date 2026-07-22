@@ -3737,6 +3737,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"33.0", date:"2026-07-21", title:"\u{1F195} Projects preview \u2014 round 2 (fuller product)", items:[
+    "New Projects preview (?projv2=1) build-out: <b>each project panel now shows a phase overview timeline THEN the detailed task Gantt</b> below; <b>dates on every Gantt bar</b> + % shading + today line; <b>task list grouped by phase</b>; <b>per-project collapse/expand</b> caret (plus Expand all / Collapse all); and pulled-in <b>PM load</b> and <b>Milestones (next 30 days)</b> sections. Still preview-only; live Projects tab unchanged. (Next: the zoom / pan gantt sliders.)" ] },
   { rev:"32.9", date:"2026-07-21", title:"\u{1F195} Projects preview \u2014 Rich's round-1 tweaks", items:[
     "New Projects preview (?projv2=1) refinements: task rows show <b>start \u2192 finish</b>; <b>Program overview Gantt moved up top</b> (before the detail panels); Gantt bars now <b>shade to % complete</b> with a today line (the usual look); <b>Sort</b> by Health / PM / Date / A\u2013Z; <b>Expand all / Collapse all</b> + per-project collapse; and <b>dark-mode</b> card text fixed (was unreadable). Still preview-only; live Projects tab unchanged." ] },
   { rev:"32.8", date:"2026-07-21", title:"\u{1F195} New Projects screen \u2014 PREVIEW (Quintin's Command-Center format)", items:[
@@ -16758,6 +16760,8 @@ let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let P
   #projV2 .pv-trow.od{background:#fde1e412}#projV2 .pv-trow.od .due{color:var(--pv-err);font-weight:800}
   #projV2 .pv-od{font-size:9px;font-weight:800;color:#fff;background:var(--pv-err);padding:1px 6px;border-radius:999px;margin-left:6px;vertical-align:middle}
   #projV2 .pv-mut{color:var(--pv-muted);font-size:12px;padding:10px 4px}
+  #projV2 .pv-ph{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--pv-org);padding:11px 4px 4px;border-bottom:1px solid var(--pv-line);margin-top:4px}
+  #projV2 .pv-mod h3.sub2{margin-top:16px}
   /* gantt */
   #projV2 .pvg{overflow-x:auto}
   #projV2 .pvg-head,#projV2 .pvg-row{display:grid;grid-template-columns:170px 1fr;min-width:640px}
@@ -16774,6 +16778,7 @@ let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let P
   #projV2 .pvbar .pvun{position:absolute;top:0;right:0;bottom:0;background:rgba(255,255,255,.52);pointer-events:none}
   #projV2.pvdark .pvbar .pvun{background:rgba(6,12,22,.5)}
   #projV2 .pvbar .pvbt{position:relative;z-index:1}
+  #projV2 .pvbdate{position:absolute;top:6px;height:22px;line-height:22px;font-size:10px;color:var(--pv-muted);white-space:nowrap;pointer-events:none}
   #projV2 .pv-today{position:absolute;top:0;bottom:0;width:2px;background:var(--pv-err);opacity:.55;z-index:2}
   #projV2 .pv-vq{border:1px solid var(--pv-line);border-radius:14px;background:var(--pv-card);padding:14px 16px;margin:14px 0}
   #projV2 .pv-vrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--pv-line);flex-wrap:wrap}
@@ -16799,7 +16804,8 @@ function _pvGantt(rows, t0, t1){
     let left=Math.max(0,(bs-t0)/span*100), w=Math.max(1.6,(bf-bs)/span*100); if(left>100)left=100; if(left+w>100)w=Math.max(1.6,100-left);
     const bar=r.ms?`<div class="pvbar ms" style="left:${Math.min(left,98)}%" title="${escA('◆ '+r.label+' · '+fmtMD(r.s))}">◆</div>`
       :`<div class="pvbar ${r.cls||''}" style="left:${left}%;width:${w}%" title="${escA(r.label+' · '+fmtMD(r.s)+' → '+fmtMD(r.f||r.s)+(r.pct!=null?(' · '+r.pct+'%'):''))}">${(r.pct!=null&&r.pct<100)?`<span class="pvun" style="left:${Math.max(0,Math.min(100,r.pct))}%"></span>`:''}<span class="pvbt">${esc(r.text||'')}</span></div>`;
-    return `<div class="pvg-row">${gl}<div class="pvg-track" style="background-size:calc(100%/${n}) 100%">${todayPct>=0?`<div class="pv-today" style="left:${todayPct}%"></div>`:''}${bar}</div></div>`; }).join('');
+    const _dl=r.ms?`<span class="pvbdate" style="left:calc(${Math.min(left,98)}% + 16px)">${esc(fmtMD(r.s))}</span>`:`<span class="pvbdate" style="left:calc(${Math.min(left+w,100)}% + 6px)">${esc(fmtMD(r.s))}${(f&&f.getTime()>s.getTime())?(' → '+esc(fmtMD(r.f))):''}</span>`;
+    return `<div class="pvg-row">${gl}<div class="pvg-track" style="background-size:calc(100%/${n}) 100%">${todayPct>=0?`<div class="pv-today" style="left:${todayPct}%"></div>`:''}${bar}${_dl}</div></div>`; }).join('');
   return `<div class="pvg">${head}${body||'<div class="pv-mut">No dated items.</div>'}</div>`;
 }
 function _pvProjRange(p){ let mn=null,mx=null; ((p&&p.tasks)||[]).forEach(t=>{ if(t.startISO&&(!mn||t.startISO<mn))mn=t.startISO; const f=t.finISO||t.startISO; if(f&&(!mx||f>mx))mx=f; });
@@ -16849,30 +16855,46 @@ function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) retur
       <div class="pv-tr"><button class="pvbtn primary" onclick="verifyTask('${escJsAttr(p.name)}','${escJsAttr(hn)}')">✓ Verify</button><button class="pvbtn" onclick="sendBackTask('${escJsAttr(p.name)}','${escJsAttr(hn)}')">↩ Send back</button></div></div>`; }).join('')+`</div>`:'';
   // ---- open panels ----
   const panels=projs.filter(p=>PV2_OPEN.has(p.name)).map(p=>{
-    const jn=(typeof projJobNum==='function')?projJobNum(p.name):(p.jobNum||''); const h=_pvHealth(p);
-    const tasks=(p.tasks||[]).filter(t=>!projIsDone(t)).slice().sort((a,b)=>String(a.finISO||a.startISO||'9999').localeCompare(String(b.finISO||b.startISO||'9999')));
-    const trows=tasks.length?tasks.map(t=>{ const st=t.startISO||'', fin=t.finISO||'', due=fin||st; const od=due&&due<today; const hn=(typeof projTaskHandle==='function')?projTaskHandle(t):'';
-      const ms=/yes/i.test(t.ml||''); const who=(t.who||'').split(/\s*\/\s*/)[0]||'';
-      const ctx=[t.phase,(t.type||'')].filter(Boolean).join(' · ');
-      return `<div class="pv-trow ${od?'od':''}" onclick="pvEditTask('${escJsAttr(p.name)}','${escJsAttr(hn)}')">
-        <div class="tt">${ms?'◆ ':''}${esc(t.t||'(task)')}${od?'<span class="pv-od">OVERDUE</span>':''}</div>
-        <div class="due">${(st&&fin&&st!==fin)?(esc(fmtMD(st))+' → '+esc(fmtMD(fin))):(due?esc(fmtMD(due)):'—')}</div>
-        <div class="mx">${who?('👤 '+esc(who)):'<span style="color:var(--pv-err)">Unassigned</span>'}${ctx?(' · '+esc(ctx)):''}</div></div>`; }).join(''):'<div class="pv-empty">No open tasks. 🎉</div>';
+    const jn=(typeof projJobNum==='function')?projJobNum(p.name):(p.jobNum||''); const h=_pvHealth(p); const coll=PV2_COLL.has(p.name);
+    const tasks=coll?[]:(p.tasks||[]).filter(t=>!projIsDone(t)).slice().sort((a,b)=>String(a.finISO||a.startISO||'9999').localeCompare(String(b.finISO||b.startISO||'9999')));
+    let trows;
+    if(!tasks.length){ trows='<div class="pv-empty">No open tasks. 🎉</div>'; }
+    else { const _bp={}, _po=[]; tasks.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!_bp[ph]){_bp[ph]=[];_po.push(ph);} _bp[ph].push(t); });
+      trows=_po.map(ph=>`<div class="pv-ph">${esc(ph)}</div>`+_bp[ph].map(t=>{ const st=t.startISO||'', fin=t.finISO||'', due=fin||st, od=due&&due<today, hn=(typeof projTaskHandle==='function')?projTaskHandle(t):'', ms=/yes/i.test(t.ml||''), who=(t.who||'').split(/\s*\/\s*/)[0]||'', ty=(t.type||'').trim();
+        return `<div class="pv-trow ${od?'od':''}" onclick="pvEditTask('${escJsAttr(p.name)}','${escJsAttr(hn)}')">
+          <div class="tt">${ms?'◆ ':''}${esc(t.t||'(task)')}${od?'<span class="pv-od">OVERDUE</span>':''}</div>
+          <div class="due">${(st&&fin&&st!==fin)?(esc(fmtMD(st))+' → '+esc(fmtMD(fin))):(due?esc(fmtMD(due)):'—')}</div>
+          <div class="mx">${who?('👤 '+esc(who)):'<span style="color:var(--pv-err)">Unassigned</span>'}${ty?(' · '+esc(ty)):''}</div></div>`; }).join('')).join(''); }
     const [t0,t1]=_pvProjRange(p);
-    const grows=(p.tasks||[]).filter(t=>t.startISO||t.finISO).slice().sort((a,b)=>String(a.startISO||a.finISO||'').localeCompare(String(b.startISO||b.finISO||''))).slice(0,60)
+    const grows=coll?[]:(p.tasks||[]).filter(t=>t.startISO||t.finISO).slice().sort((a,b)=>String(a.startISO||a.finISO||'').localeCompare(String(b.startISO||b.finISO||''))).slice(0,80)
       .map(t=>{ const done=projIsDone(t), due=t.finISO||t.startISO||'', od=!done&&due&&due<today; const hn=(typeof projTaskHandle==='function')?projTaskHandle(t):'';
         return {label:t.t||'(task)', s:t.startISO||t.finISO, f:t.finISO||t.startISO, ms:/yes/i.test(t.ml||''), cls:done?'done':(od?'err':''), pct:done?100:((typeof projTaskPct==='function')?(projTaskPct(t.st)||0):0), text:'', onclick:`pvEditTask(&quot;${escJsAttr(p.name).replace(/"/g,'&quot;')}&quot;,&quot;${escJsAttr(hn)}&quot;)`}; });
-    return `<article class="pv-panel" id="pvp-${_pvId(p.name)}"><div class="pv-ptop">
-        <div><div class="nm">${jn?esc(jn)+' · ':''}${esc(p.name)} <span class="pv-chip ${h.c}">${esc(h.l)}</span></div>
-          <div class="dt">${p.startISO?esc(fmtMDY(p.startISO)):'—'} → ${p.finishISO?esc(fmtMDY(p.finishISO)):'—'} · ${p.pct||0}% · PM ${esc(p.pm||'—')}</div></div>
-        <div class="pv-tr"><button class="pvbtn primary" onclick="pvOpenEditor('${escJsAttr(p.name)}')">✎ Edit / add tasks</button><button class="pvbtn" onclick="pvToggle('${escJsAttr(p.name)}')">Close panel</button></div></div>
+    // phase-rollup OVERVIEW (the whole project on the timeline, then task detail below)
+    const _phm={}, _pho=[]; if(!coll)(p.tasks||[]).forEach(t=>{ if(!(t.startISO||t.finISO))return; const ph=((t.phase||'').trim())||'(no phase)'; if(!_phm[ph]){_phm[ph]={s:null,f:null,ps:0,pn:0};_pho.push(ph);} const o2=_phm[ph], s=t.startISO||t.finISO, f=t.finISO||t.startISO; if(s&&(!o2.s||s<o2.s))o2.s=s; if(f&&(!o2.f||f>o2.f))o2.f=f; o2.pn++; o2.ps+=(projIsDone(t)?100:((typeof projTaskPct==='function')?(projTaskPct(t.st)||0):0)); });
+    const prows=_pho.map(ph=>({label:ph, s:_phm[ph].s, f:_phm[ph].f, cls:h.c, pct:_phm[ph].pn?Math.round(_phm[ph].ps/_phm[ph].pn):0, text:''}));
+    const _hd=`<div class="pv-ptop">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0"><button class="pvbtn" title="Collapse / expand this project" onclick="pvPanelCaret('${escJsAttr(p.name)}')" style="padding:5px 11px;font-weight:800">${coll?'▸':'▾'}</button>
+          <div style="min-width:0"><div class="nm">${jn?esc(jn)+' · ':''}${esc(p.name)} <span class="pv-chip ${h.c}">${esc(h.l)}</span></div>
+          <div class="dt">${p.startISO?esc(fmtMDY(p.startISO)):'—'} → ${p.finishISO?esc(fmtMDY(p.finishISO)):'—'} · ${p.pct||0}% · PM ${esc(p.pm||'—')}</div></div></div>
+        <div class="pv-tr"><button class="pvbtn primary" onclick="pvOpenEditor('${escJsAttr(p.name)}')">✎ Edit / add tasks</button><button class="pvbtn" onclick="pvToggle('${escJsAttr(p.name)}')">Close panel</button></div></div>`;
+    if(coll) return `<article class="pv-panel" id="pvp-${_pvId(p.name)}">${_hd}</article>`;
+    return `<article class="pv-panel" id="pvp-${_pvId(p.name)}">${_hd}
       <div class="pv-pbody"><div class="pv-mod left"><h3>Task list <span>${tasks.length} open</span></h3>${trows}</div>
-        <div class="pv-mod"><h3>Detailed project Gantt</h3>${_pvGantt(grows,t0,t1)}</div></div></article>`; }).join('');
+        <div class="pv-mod"><h3>Project timeline — phases</h3>${_pvGantt(prows,t0,t1)}<h3 class="sub2">Detailed tasks</h3>${_pvGantt(grows,t0,t1)}</div></div></article>`; }).join('');
   // ---- portfolio gantt ----
   const dated=projs.filter(p=>p.startISO&&p.finishISO);
   let P0=Date.now(),P1=Date.now()+120*86400000;
   if(dated.length){ P0=Math.min.apply(null,dated.map(p=>parseISO(p.startISO).getTime())); P1=Math.max.apply(null,dated.map(p=>parseISO(p.finishISO).getTime())); }
   const portRows=dated.map(p=>{ const h=_pvHealth(p); return {label:((typeof projJobNum==='function'&&projJobNum(p.name))?projJobNum(p.name)+' · ':'')+p.name, s:p.startISO, f:p.finishISO, cls:h.c, pct:p.pct, text:(p.pct||0)+'%', onclick:`pvToggle(&quot;${escJsAttr(p.name).replace(/"/g,'&quot;')}&quot;)`}; });
+  // ---- PM load + upcoming milestones (pulled-in pieces) ----
+  const _pmm={}; projs.forEach(p=>{ const pm=(p.pm&&String(p.pm).trim())||'Unassigned / TBD'; if(!_pmm[pm])_pmm[pm]={n:0,open:0,od:0}; _pmm[pm].n++; (p.tasks||[]).forEach(t=>{ if(projIsDone(t))return; _pmm[pm].open++; const d=t.finISO||t.startISO; if(d&&d<today)_pmm[pm].od++; }); });
+  const _pmMax=Math.max(1,...Object.values(_pmm).map(x=>x.open));
+  const pmRows=Object.keys(_pmm).sort((a,b)=>_pmm[b].open-_pmm[a].open).map(pm=>`<div class="pv-vrow" style="display:block"><div style="display:flex;justify-content:space-between"><b>${esc(pm)}</b><span class="pj">${_pmm[pm].n} proj · ${_pmm[pm].open} open${_pmm[pm].od?(' · <span style=&quot;color:var(--pv-err)&quot;>'+_pmm[pm].od+' overdue</span>'):''}</span></div><div class="pv-prog" style="margin-top:6px"><span style="width:${Math.round(_pmm[pm].open/_pmMax*100)}%"></span></div></div>`).join('')||'<div class="pv-empty">No PMs.</div>';
+  const _t30=localISO(Date.parse(today)+30*86400000); const _ms=[];
+  projs.forEach(p=>(p.milestones||[]).forEach(m=>{ if(m&&m.dateISO&&m.dateISO>=today&&m.dateISO<=_t30&&!m.done) _ms.push({proj:p.name,name:m.name,d:m.dateISO}); }));
+  _ms.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
+  const msRows=_ms.length?_ms.map(m=>`<div class="pv-vrow"><div style="min-width:0"><b>◆ ${esc(m.name||'Milestone')}</b><div class="pj">${esc(m.proj)}</div></div><span class="pv-chip warn">${esc(fmtMD(m.d))}</span></div>`).join(''):'<div class="pv-empty">No milestones in the next 30 days.</div>';
+  const pmMileHtml=`<div class="pv-h2">Team &amp; milestones</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px"><div class="pv-vq"><h3>📊 PM load <span class="pj">— open tasks by PM</span></h3>${pmRows}</div><div class="pv-vq"><h3>◆ Milestones — next 30 days <span class="pv-chip warn">${_ms.length}</span></h3>${msRows}</div></div>`;
   o.innerHTML=`<div class="pv-top">
       <div><h1>Projects <span class="pv-prev">PREVIEW · NEW FORMAT</span></h1><div class="sub">Full-screen project planning · ${projs.length} projects · reuses the live editor + data</div></div>
       <div class="pv-tr"><button class="pvbtn" onclick="pvArchive()">Project Archive</button><button class="pvbtn" id="pvTheme" onclick="pvThemeToggle()">☾ Dark</button><button class="pvbtn primary" onclick="closeProjV2()">✕ Back to board</button></div></div>
@@ -16881,6 +16903,7 @@ function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) retur
       <div class="pv-cards">${cards||'<div class="pv-empty">No projects.</div>'}</div>
       <div class="pv-h2">Program overview <span class="pj" style="font-weight:400;color:var(--pv-muted)">— all projects on one timeline (bars shaded to % complete)</span></div>
       <div class="pv-vq" style="padding:8px 12px">${_pvGantt(portRows,P0,P1)}</div>
+      ${pmMileHtml}
       ${vqHtml}
       ${panels||'<div class="pv-empty" style="margin-top:16px">Tap a project card above to open its panel (task list + detailed Gantt).</div>'}
     </div>`;
