@@ -106,6 +106,12 @@
     </div>
   </div>
 
+  <!-- YOUR ENTRIES (open to everyone — shows the selected person's own hours for the day) -->
+  <div class="card" id="myDayCard">
+    <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span id="myDayTitle">What you\u2019ve logged</span><span class="grand">Total <b id="myDayTot">0.0</b> hrs</span></h2>
+    <div style="overflow:auto"><table class="t"><thead><tr><th>Job charged</th><th class="r">Hrs</th><th>Task / notes</th></tr></thead><tbody id="myDayRows"></tbody></table></div>
+  </div>
+
   <!-- MANAGE (hidden until pin) -->
   <div class="card hide" id="mgrCard">
     <h2>⚙ Manage <span class="n">names &amp; charge jobs</span></h2>
@@ -255,7 +261,7 @@ function submit(){
   // reset for the next punch (keep who + date)
   $('fJob').value=''; $('fHours').value=''; $('fTask').value=''; $('fNotes').value=''; document.querySelectorAll('.hchip.on').forEach(function(c){c.classList.remove('on');});
   var ok=$('okMsg'); ok.textContent='✓ Saved '+e.hours+' hr'+(e.hours===1?'':'s')+' to '+e.job; ok.classList.remove('hide'); setTimeout(function(){ ok.classList.add('hide'); },2600);
-  renderTracking(); $('fJob').focus();
+  renderTracking(); renderMyDay(); $('fJob').focus();
 }
 
 /* ---------- manage ---------- */
@@ -313,6 +319,20 @@ function mgrClick(){ if(SSO.user||PINOK) mgrLogout(); else SSO.signIn(); }
 function mapShared(arr){ if(!Array.isArray(arr)) return []; return arr.map(function(it){ var code=String(it.JobCode||it.jobNum||'').trim(); return {id:it.EntryId||it.id||('s'+(it.ID||Math.round(Math.random()*1e6))), who:it.Employee||it.who||'', empId:it.EmpId||it.empId||'', dateISO:String(it.DateWorked||it.dateISO||'').slice(0,10), job:it.JobName||it.job||'', jobNum:code, hours:parseFloat(it.Hours!=null?it.Hours:(it.hours||0))||0, payType:it.PayType||it.payType||'', task:it.Task||it.task||'', notes:it.Notes||it.notes||'', ts:it.Created||it.ts||'', shared:true}; }); }
 function loadShared(cb){ function done(a){ SHARED=mapShared(a); if(cb)cb(true); } function fail(){ SHARED=null; if(cb)cb(false); }
   fetch('../time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ fetch('time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(fail); }); }
+
+/* ---------- employee "my day" summary (open, this device, selected person + date) ---------- */
+function renderMyDay(){
+  var who=$('fWho').value.trim(), date=$('fDate').value||todayISO();
+  var mine=ENTS.filter(function(e){ return e.who===who && e.dateISO===date; }).sort(function(a,b){ return String(a.ts).localeCompare(String(b.ts)); });
+  var tot=mine.reduce(function(x,e){ return x+(e.hours||0); },0);
+  var tt=$('myDayTitle'); if(tt) tt.textContent = who ? (who+' \u2014 '+isoToMDY(date)) : 'What you\u2019ve logged';
+  var mt=$('myDayTot'); if(mt) mt.textContent = tot.toFixed(2).replace(/\.00$/,'.0');
+  var tb=$('myDayRows'); if(!tb) return;
+  if(!who){ tb.innerHTML='<tr><td colspan="3" class="muted" style="padding:12px">Pick your name above to see what you\u2019ve logged today.</td></tr>'; return; }
+  tb.innerHTML = mine.length ? mine.map(function(e){ var tn=[e.task,e.notes].filter(Boolean).join(' \u2014 ');
+      return '<tr><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td></tr>'; }).join('')
+    : '<tr><td colspan="3" class="muted" style="padding:12px">Nothing logged yet for '+esc(who)+' on '+esc(isoToMDY(date))+'.</td></tr>';
+}
 
 /* ---------- tracking / rollups ---------- */
 function fillPersonFilter(){ var sel=$('fPerson'); var cur=sel.value; var ppl=[].concat(NAMES); activeEntries().forEach(function(e){ if(e.who&&ppl.indexOf(e.who)<0) ppl.push(e.who); }); sel.innerHTML='<option value="">All people</option>'+ppl.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); if(cur) sel.value=cur; }
@@ -454,9 +474,10 @@ function boot(){
   $('sampleBtn').onclick=seedRealWeek; $('clearBtn').onclick=clearAll;
   $('finBtn').onclick=buildFinanceReport;
   $('mgrLoginBtn').onclick=mgrClick; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrClick; var _lp=$('lockPinBtn'); if(_lp) _lp.onclick=pinUnlock;
-  SSO.init(); applyMgr();
+  SSO.init(); applyMgr(); renderMyDay();
   $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
   ['fRange','fPerson','fJobF'].forEach(function(id){ $(id).onchange=renderTracking; });
+  $('fWho').onchange=renderMyDay; $('fDate').addEventListener('change',renderMyDay);
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
   $('entRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d) delEntry(d.getAttribute('data-del')); });
   // manage list edit/delete delegation
