@@ -1753,6 +1753,7 @@
       <button class="mi" onclick="openPMReport()" title="Per-PM report (Megan's ask): her projects' health overview, everything done in the last 7 days (last 24h highlighted), what's coming due in 14 days, milestones. Emailable via ?recap=1&pm=Megan.">📧 PM report…</button>
       <button class="mi" onclick="openExecReport()" title="The Monday owner report (Tony): portfolio health, program timeline, what was accomplished last week, shop floor today, the week ahead, needs-attention. Emailable via ?exec=1.">📧 Executive report (weekly)</button>
       <button class="mi" onclick="openDeficiency()" title="Every correctable data problem on the board, grouped by PM → project + a floor section — past-due & undated tasks, missing PMs/J#s/dates, unassigned, GPS mismatches, ghosts — each line with a FIX hint. Emailable via ?fix=1 (add &pm=Megan for one PM).">🩺 Deficiency list</button>
+      <button class="mi" onclick="openProjV2()" title="PREVIEW of the new Command-Center Projects screen (Quintin's format). Reuses the live editor + data; the current Projects tab is unchanged. Also at ?projv2=1.">🆕 Projects (new · preview)</button>
     </div>
   </div>
 
@@ -1896,6 +1897,7 @@
       <button class="mi" onclick="openPMReport()" title="Per-PM report (Megan's ask): her projects' health overview, everything done in the last 7 days (last 24h highlighted), what's coming due in 14 days, milestones. Emailable via ?recap=1&pm=Megan.">📧 PM report…</button>
       <button class="mi" onclick="openExecReport()" title="The Monday owner report (Tony): portfolio health, program timeline, what was accomplished last week, shop floor today, the week ahead, needs-attention. Emailable via ?exec=1.">📧 Executive report (weekly)</button>
       <button class="mi" onclick="openDeficiency()" title="Every correctable data problem on the board, grouped by PM → project + a floor section — past-due & undated tasks, missing PMs/J#s/dates, unassigned, GPS mismatches, ghosts — each line with a FIX hint. Emailable via ?fix=1 (add &pm=Megan for one PM).">🩺 Deficiency list</button>
+      <button class="mi" onclick="openProjV2()" title="PREVIEW of the new Command-Center Projects screen (Quintin's format). Reuses the live editor + data; the current Projects tab is unchanged. Also at ?projv2=1.">🆕 Projects (new · preview)</button>
           </div>
         </div>
       </h2>
@@ -3735,6 +3737,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"32.8", date:"2026-07-21", title:"\u{1F195} New Projects screen \u2014 PREVIEW (Quintin's Command-Center format)", items:[
+    "A first look at the Projects screen in the new Command-Center layout \u2014 project cards with health, open panels with a clean task list (assignee \u00b7 due, overdue flagged) and a detailed project Gantt, plus a portfolio timeline. <b>Preview only</b>, at <b>?projv2=1</b> or \u2630 Menu \u2192 \u{1F195} Projects (new \u00b7 preview). The <b>current Projects tab is unchanged</b>; this reuses the live editor + data, so every edit still works. MRA Orange per the UI standard." ] },
   { rev:"32.7", date:"2026-07-21", title:"\u{1F4E7} Weekly Executive report opened to the management team", items:[
     "The <b>?exec=1</b> Weekly Executive report was locked to Rich only; it now opens for <b>everyone with edit access</b> (admins, editors, design) plus the execs \u2014 so the Monday email link works for Tony, Luc, Megan, Al, Brandon, etc. Still requires an @gomra.com sign-in; view-only floor/staff logins don't get it." ] },
   { rev:"32.6", date:"2026-07-21", title:"\u{1F47B} Ghost board — reload on long reopen instead of flashing stale data", items:[
@@ -16481,6 +16485,7 @@ function renderAll(){
   renderFloor(D); renderCrewSched(D); renderProjects(D); renderFleetio(D); renderFleet();
   eotmSetup();
   try{ updateUnasChip(); if(UNAS_OPEN) renderUnas(); }catch(_){}
+  try{ if(PROJV2_OPEN) renderProjV2(); }catch(_){}   // 🆕 Projects V2 preview reflects live edits
   try{ if(PMT_OPEN && !_pmtBusy()) renderProdMeeting(); }catch(_){}   // don't wipe a half-typed add row / open edit on the poll
   try{ if(SP_OPEN && !SP_FORM) renderSalesPlan(); }catch(_){}   // 📈 sales/planning view live-syncs too (not while typing in the form)   // ⚠ unassigned-task finder chip + live list
   if(VIEW==='history') renderHistory();
@@ -16698,7 +16703,177 @@ window.addEventListener('pagehide', ()=>{ _awayAt=Date.now(); });
 window.addEventListener('pageshow', e=>{ if(e&&e.persisted) _onWake(); });
 window.addEventListener('focus', ()=>{ if(!document.hidden) _onWake(); });
 window.addEventListener('online', ()=>{ if(!document.hidden) _wakeRefresh(true); });
+try{ if(new URLSearchParams(location.search).get('projv2')){ (function _pw(){ if(window.MRA_DATA){ try{ openProjV2(); }catch(e){} } else setTimeout(_pw,200); })(); } }catch(e){}
 }
+
+/* ========================= 🆕 PROJECTS V2 — Quintin Command-Center format (PREVIEW via ?projv2=1) =========================
+   Zero-risk reskin of the Projects screen following Quintin's MRA Command Center UI Standard (MRA Orange #F36C21).
+   It REUSES the live data (MRA_DATA.projects) and the REAL edit engine — openProjectEditor / openProjTaskEdit /
+   verifyTask / sendBackTask — so every bell + edit function still works. The live Projects tab is untouched;
+   this is a full-screen overlay you only see at ?projv2=1 (or ☰ menu). Flag off = zero impact on the board. */
+let PROJV2_OPEN=false; const PV2_OPEN=new Set();
+(function(){ const st=document.createElement('style'); st.id='projV2css'; st.textContent=`
+  #projV2{position:fixed;inset:0;z-index:70;overflow:auto;display:none;
+    --pv-bg:#f3f6fa;--pv-card:#fff;--pv-text:#223047;--pv-muted:#66758a;--pv-line:#dfe6ef;
+    --pv-org:#F36C21;--pv-orgd:#C94F0A;--pv-orgl:#FFF1E8;--pv-ok:#168A62;--pv-warn:#A86800;--pv-err:#B92D3A;
+    background:var(--pv-bg);color:var(--pv-text);font:14px/1.45 Inter,Segoe UI,Arial,sans-serif}
+  #projV2.show{display:block}
+  #projV2.pvdark{--pv-bg:#0c1420;--pv-card:#172131;--pv-text:#eef4ff;--pv-muted:#9aa9bd;--pv-line:#2d394c;--pv-orgl:#2a1a10}
+  #projV2 .pv-top{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 22px;background:var(--pv-card);border-bottom:1px solid var(--pv-line)}
+  #projV2 .pv-top h1{margin:0;font-size:22px;font-weight:800;display:flex;align-items:center;gap:10px}
+  #projV2 .pv-top .sub{color:var(--pv-muted);font-size:12px;margin-top:2px}
+  #projV2 .pv-prev{background:var(--pv-orgl);color:var(--pv-orgd);font-weight:800;font-size:10.5px;padding:3px 10px;border-radius:999px;letter-spacing:.4px}
+  #projV2 .pvbtn{padding:8px 13px;border:1px solid var(--pv-line);border-radius:9px;background:var(--pv-card);color:var(--pv-text);cursor:pointer;font-weight:650;font-size:13px}
+  #projV2 .pvbtn:hover{border-color:var(--pv-org)}
+  #projV2 .pvbtn.primary{background:var(--pv-org);border-color:var(--pv-org);color:#fff}
+  #projV2 .pv-tr{display:flex;gap:8px;align-items:center}
+  #projV2 .pv-main{max-width:1900px;margin:auto;padding:20px 22px 60px}
+  #projV2 .pv-h2{font-size:15px;font-weight:800;margin:22px 0 11px}
+  #projV2 .pv-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(224px,1fr));gap:12px}
+  #projV2 .pv-card{padding:13px 14px;border:1px solid var(--pv-line);border-radius:13px;background:var(--pv-card);cursor:pointer;text-align:left;position:relative}
+  #projV2 .pv-card:hover{border-color:var(--pv-org)}
+  #projV2 .pv-card.on{border-color:var(--pv-org);box-shadow:inset 0 0 0 1px var(--pv-org)}
+  #projV2 .pv-card .pn{font-weight:800;font-size:13.5px;margin-bottom:2px;line-height:1.25}
+  #projV2 .pv-card .pj{color:var(--pv-muted);font-size:11px}
+  #projV2 .pv-card .pv-row2{display:flex;justify-content:space-between;align-items:center;margin-top:9px}
+  #projV2 .pv-prog{height:7px;background:#8891a326;border-radius:10px;overflow:hidden;margin-top:8px}
+  #projV2 .pv-prog span{display:block;height:100%;background:var(--pv-org)}
+  #projV2 .pv-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  #projV2 .pv-chip.ok{background:#e4f6ef;color:var(--pv-ok)} #projV2 .pv-chip.warn{background:#fdf1d8;color:var(--pv-warn)} #projV2 .pv-chip.err{background:#fde1e4;color:var(--pv-err)} #projV2 .pv-chip.done,#projV2 .pv-chip.park,#projV2 .pv-chip.upcoming{background:#e9edf2;color:var(--pv-muted)}
+  #projV2.pvdark .pv-chip.ok{background:#12352a} #projV2.pvdark .pv-chip.warn{background:#3a2e12} #projV2.pvdark .pv-chip.err{background:#3a1620} #projV2.pvdark .pv-chip.done,#projV2.pvdark .pv-chip.park,#projV2.pvdark .pv-chip.upcoming{background:#1f2a3a}
+  #projV2 .pv-tag{font-size:9.5px;font-weight:800;padding:1px 7px;border-radius:999px;background:var(--pv-orgl);color:var(--pv-orgd)}
+  #projV2 .pv-panel{border:1px solid var(--pv-line);border-radius:14px;background:var(--pv-card);margin:14px 0;overflow:hidden}
+  #projV2 .pv-ptop{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--pv-line);flex-wrap:wrap}
+  #projV2 .pv-ptop .nm{font-weight:800;font-size:16px} #projV2 .pv-ptop .dt{color:var(--pv-muted);font-size:12px;margin-top:2px}
+  #projV2 .pv-pbody{display:grid;grid-template-columns:400px minmax(520px,1fr)}
+  #projV2 .pv-mod{padding:13px 16px} #projV2 .pv-mod.left{border-right:1px solid var(--pv-line);max-height:520px;overflow:auto}
+  #projV2 .pv-mod h3{margin:0 0 9px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--pv-muted);display:flex;justify-content:space-between}
+  #projV2 .pv-trow{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:9px 4px;border-bottom:1px solid var(--pv-line);cursor:pointer}
+  #projV2 .pv-trow:hover{background:var(--pv-orgl)}
+  #projV2 .pv-trow .tt{font-weight:600;min-width:0;font-size:13px}
+  #projV2 .pv-trow .mx{grid-column:1/-1;display:flex;gap:9px;color:var(--pv-muted);font-size:11.5px}
+  #projV2 .pv-trow .due{font-size:12px;white-space:nowrap;color:var(--pv-muted);text-align:right}
+  #projV2 .pv-trow.od{background:#fde1e412}#projV2 .pv-trow.od .due{color:var(--pv-err);font-weight:800}
+  #projV2 .pv-od{font-size:9px;font-weight:800;color:#fff;background:var(--pv-err);padding:1px 6px;border-radius:999px;margin-left:6px;vertical-align:middle}
+  #projV2 .pv-mut{color:var(--pv-muted);font-size:12px;padding:10px 4px}
+  /* gantt */
+  #projV2 .pvg{overflow-x:auto}
+  #projV2 .pvg-head,#projV2 .pvg-row{display:grid;grid-template-columns:170px 1fr;min-width:640px}
+  #projV2 .pvg-head .gl{padding:5px 6px}
+  #projV2 .pvg-head .pvg-track{display:flex}
+  #projV2 .pvg-head .pvg-track span{flex:1;text-align:center;font-size:10px;color:var(--pv-muted);border-left:1px solid var(--pv-line)}
+  #projV2 .pvg-row{border-top:1px solid var(--pv-line);align-items:center}
+  #projV2 .pvg-row .gl{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:4px 8px 4px 0;cursor:pointer}
+  #projV2 .pvg-row .gl:hover{color:var(--pv-org)}
+  #projV2 .pvg-track{position:relative;height:34px;background-image:linear-gradient(to right,var(--pv-line) 1px,transparent 1px);background-repeat:repeat-x;background-position:left top}
+  #projV2 .pvbar{position:absolute;top:6px;height:22px;border-radius:6px;background:var(--pv-org);color:#fff;font-size:10px;line-height:22px;padding:0 7px;white-space:nowrap;overflow:hidden;box-shadow:0 1px 2px #0002}
+  #projV2 .pvbar.ok{background:var(--pv-ok)} #projV2 .pvbar.warn{background:var(--pv-warn)} #projV2 .pvbar.err{background:var(--pv-err)} #projV2 .pvbar.done{background:#8891a3} #projV2 .pvbar.upcoming{background:#9aa9bd}
+  #projV2 .pvbar.ms{background:transparent;color:var(--pv-org);font-size:15px;padding:0;box-shadow:none;top:4px}
+  #projV2 .pv-today{position:absolute;top:0;bottom:0;width:2px;background:var(--pv-err);opacity:.55;z-index:2}
+  #projV2 .pv-vq{border:1px solid var(--pv-line);border-radius:14px;background:var(--pv-card);padding:14px 16px;margin:14px 0}
+  #projV2 .pv-vrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--pv-line);flex-wrap:wrap}
+  #projV2 .pv-empty{color:var(--pv-muted);font-style:italic;padding:14px 4px}
+  @media(max-width:1050px){#projV2 .pv-pbody{grid-template-columns:1fr}#projV2 .pv-mod.left{border-right:0;border-bottom:1px solid var(--pv-line);max-height:none}}
+  `; document.head.appendChild(st); })();
+
+function _pvHealth(p){ try{ const t=(window.MRA_DATA||{}).todayISO||localISO(Date.now()); const h=(typeof projHealth==='function')?projHealth(p,t):{state:'ontrack'};
+  const map={late:{c:'err',l:'⚠ Past due'},behind:{c:'warn',l:'Behind'},ontrack:{c:'ok',l:'On track'},upcoming:{c:'upcoming',l:'Upcoming'},parked:{c:'park',l:'⏸ Parked'},done:{c:'done',l:'✓ Done'}};
+  return map[h.state]||map.ontrack; }catch(e){ return {c:'ok',l:'On track'}; } }
+function _pvMonths(t0,t1){ const out=[]; const d=new Date(t0); d.setDate(1); const end=new Date(t1);
+  while(d<=end && out.length<24){ out.push(new Date(d)); d.setMonth(d.getMonth()+1); } if(!out.length) out.push(new Date(t0)); return out; }
+const _PVM=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _pvGantt(rows, t0, t1){
+  if(!(t1>t0)) t1=t0+45*86400000; const span=t1-t0;
+  const months=_pvMonths(t0,t1), n=months.length;
+  const head=`<div class="pvg-head"><div class="gl"></div><div class="pvg-track">`+months.map(m=>`<span>${_PVM[m.getMonth()]} ${String(m.getFullYear()).slice(2)}</span>`).join('')+`</div></div>`;
+  const nowMs=Date.now(); const todayPct=(nowMs>t0&&nowMs<t1)?((nowMs-t0)/span*100):-1;
+  const body=rows.map(r=>{ const s=parseISO(r.s), f=parseISO(r.f||r.s);
+    const gl=`<div class="gl" ${r.onclick?('onclick="'+r.onclick+'"'):''} title="${escA(r.label)}">${esc(r.label)}</div>`;
+    if(!s) return `<div class="pvg-row">${gl}<div class="pvg-track" style="background-size:calc(100%/${n}) 100%">${todayPct>=0?`<div class="pv-today" style="left:${todayPct}%"></div>`:''}</div></div>`;
+    const bs=s.getTime(), bf=Math.max(bs+86400000,(f?f.getTime():bs)+86400000);
+    let left=Math.max(0,(bs-t0)/span*100), w=Math.max(1.6,(bf-bs)/span*100); if(left>100)left=100; if(left+w>100)w=Math.max(1.6,100-left);
+    const bar=r.ms?`<div class="pvbar ms" style="left:${Math.min(left,98)}%" title="${escA('◆ '+r.label+' · '+fmtMD(r.s))}">◆</div>`
+      :`<div class="pvbar ${r.cls||''}" style="left:${left}%;width:${w}%" title="${escA(r.label+' · '+fmtMD(r.s)+' → '+fmtMD(r.f||r.s))}">${esc(r.text||'')}</div>`;
+    return `<div class="pvg-row">${gl}<div class="pvg-track" style="background-size:calc(100%/${n}) 100%">${todayPct>=0?`<div class="pv-today" style="left:${todayPct}%"></div>`:''}${bar}</div></div>`; }).join('');
+  return `<div class="pvg">${head}${body||'<div class="pv-mut">No dated items.</div>'}</div>`;
+}
+function _pvProjRange(p){ let mn=null,mx=null; ((p&&p.tasks)||[]).forEach(t=>{ if(t.startISO&&(!mn||t.startISO<mn))mn=t.startISO; const f=t.finISO||t.startISO; if(f&&(!mx||f>mx))mx=f; });
+  mn=mn||p.startISO; mx=mx||p.finishISO||mn; return [parseISO(mn)?parseISO(mn).getTime():Date.now(), parseISO(mx)?parseISO(mx).getTime():Date.now()+45*86400000]; }
+function pvToggle(name){ if(PV2_OPEN.has(name)) PV2_OPEN.delete(name); else PV2_OPEN.add(name); renderProjV2(); const el=document.getElementById('pvp-'+_pvId(name)); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function _pvId(s){ return String(s||'').replace(/[^a-z0-9]/gi,'_'); }
+function pvOpenEditor(name){ if(typeof openProjectEditor==='function') openProjectEditor(name); }
+function pvEditTask(name,handle){ if(typeof openProjTaskEdit==='function') openProjTaskEdit(handle,name); }
+function pvArchive(){ alert('Project Archive isn’t wired into this preview yet — it’ll link to the archived-projects view once we build that. For now, use the live board to delete/close projects.'); }
+function pvThemeToggle(){ const o=document.getElementById('projV2'); if(o){ o.classList.toggle('pvdark'); const b=document.getElementById('pvTheme'); if(b) b.textContent=o.classList.contains('pvdark')?'☀ Light':'☾ Dark'; } }
+function openProjV2(){ let o=document.getElementById('projV2');
+  if(!o){ o=document.createElement('div'); o.id='projV2'; document.body.appendChild(o); if(document.body.classList.contains('dark')||document.documentElement.classList.contains('dark')) o.classList.add('pvdark'); }
+  PROJV2_OPEN=true; o.classList.add('show'); document.body.style.overflow='hidden';
+  // default-open the worst-health projects so the preview looks populated
+  if(!PV2_OPEN.size){ const D=window.MRA_DATA||{}; const ps=(D.projects||[]).filter(p=>(p.tasks||[]).length);
+    const rk={late:0,behind:1,ontrack:2,upcoming:3,parked:4,done:5};
+    ps.slice().sort((a,b)=>(rk[_pvHstate(a)]||2)-(rk[_pvHstate(b)]||2)).slice(0,3).forEach(p=>PV2_OPEN.add(p.name)); }
+  renderProjV2(); }
+function _pvHstate(p){ try{ const t=(window.MRA_DATA||{}).todayISO||localISO(Date.now()); return ((typeof projHealth==='function')?projHealth(p,t):{}).state||'ontrack'; }catch(e){ return 'ontrack'; } }
+function closeProjV2(){ PROJV2_OPEN=false; const o=document.getElementById('projV2'); if(o) o.classList.remove('show'); document.body.style.overflow='';
+  try{ const u=new URL(location.href); if(u.searchParams.has('projv2')){ u.searchParams.delete('projv2'); history.replaceState(null,'',u.pathname+(u.search||'')+u.hash); } }catch(e){} }
+function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) return; const D=window.MRA_DATA||{};
+  const today=D.todayISO||localISO(Date.now());
+  const projs=(D.projects||[]).filter(p=>p&&p.name).slice().sort((a,b)=>{ const rk={late:0,behind:1,ontrack:2,upcoming:3,parked:4,done:5};
+    return (rk[_pvHstate(a)]||2)-(rk[_pvHstate(b)]||2) || String(a.name).localeCompare(String(b.name)); });
+  // ---- cards ----
+  const cards=projs.map(p=>{ const h=_pvHealth(p), open=PV2_OPEN.has(p.name), jn=(typeof projJobNum==='function')?projJobNum(p.name):(p.jobNum||'');
+    return `<button class="pv-card ${open?'on':''}" onclick="pvToggle('${escJsAttr(p.name)}')">
+      <div class="pn">${esc(p.name)}${p.nonOfficial?' <span class="pv-tag">🏷</span>':''}</div>
+      <div class="pj">${jn?esc(jn)+' · ':''}${esc(p.pm||'No PM')}</div>
+      <div class="pv-row2"><span class="pv-chip ${h.c}">${esc(h.l)}</span><span class="pj">${p.pct||0}%</span></div>
+      <div class="pv-prog"><span style="width:${Math.max(0,Math.min(100,p.pct||0))}%"></span></div></button>`; }).join('');
+  // ---- verify queue ----
+  const vq=[]; projs.forEach(p=>(p.tasks||[]).forEach(t=>{ if(typeof projIsPendingVerify==='function' && projIsPendingVerify(t)) vq.push({p,t}); }));
+  const canV=(name)=>{ try{ return (typeof canVerify==='function')?canVerify(name):true; }catch(e){ return true; } };
+  const vqHtml=vq.length?`<div class="pv-vq"><h3>🟡 Awaiting verification <span class="pv-chip warn">${vq.length}</span></h3>`+vq.map(({p,t})=>{ const hn=(typeof projTaskHandle==='function')?projTaskHandle(t):'';
+    return `<div class="pv-vrow"><div><b>${esc(t.t||'')}</b><div class="pj">${esc(p.name)} · PM ${esc(p.pm||'—')}</div></div>
+      <div class="pv-tr"><button class="pvbtn primary" onclick="verifyTask('${escJsAttr(p.name)}','${escJsAttr(hn)}')">✓ Verify</button><button class="pvbtn" onclick="sendBackTask('${escJsAttr(p.name)}','${escJsAttr(hn)}')">↩ Send back</button></div></div>`; }).join('')+`</div>`:'';
+  // ---- open panels ----
+  const panels=projs.filter(p=>PV2_OPEN.has(p.name)).map(p=>{
+    const jn=(typeof projJobNum==='function')?projJobNum(p.name):(p.jobNum||''); const h=_pvHealth(p);
+    const tasks=(p.tasks||[]).filter(t=>!projIsDone(t)).slice().sort((a,b)=>String(a.finISO||a.startISO||'9999').localeCompare(String(b.finISO||b.startISO||'9999')));
+    const trows=tasks.length?tasks.map(t=>{ const due=t.finISO||t.startISO||''; const od=due&&due<today; const hn=(typeof projTaskHandle==='function')?projTaskHandle(t):'';
+      const ms=/yes/i.test(t.ml||''); const who=(t.who||'').split(/\s*\/\s*/)[0]||'';
+      const ctx=[t.phase,(t.type||'')].filter(Boolean).join(' · ');
+      return `<div class="pv-trow ${od?'od':''}" onclick="pvEditTask('${escJsAttr(p.name)}','${escJsAttr(hn)}')">
+        <div class="tt">${ms?'◆ ':''}${esc(t.t||'(task)')}${od?'<span class="pv-od">OVERDUE</span>':''}</div>
+        <div class="due">${due?esc(fmtMD(due)):'—'}</div>
+        <div class="mx">${who?('👤 '+esc(who)):'<span style="color:var(--pv-err)">Unassigned</span>'}${ctx?(' · '+esc(ctx)):''}</div></div>`; }).join(''):'<div class="pv-empty">No open tasks. 🎉</div>';
+    const [t0,t1]=_pvProjRange(p);
+    const grows=(p.tasks||[]).filter(t=>t.startISO||t.finISO).slice().sort((a,b)=>String(a.startISO||a.finISO||'').localeCompare(String(b.startISO||b.finISO||''))).slice(0,60)
+      .map(t=>{ const done=projIsDone(t), due=t.finISO||t.startISO||'', od=!done&&due&&due<today; const hn=(typeof projTaskHandle==='function')?projTaskHandle(t):'';
+        return {label:t.t||'(task)', s:t.startISO||t.finISO, f:t.finISO||t.startISO, ms:/yes/i.test(t.ml||''), cls:done?'done':(od?'err':''), text:'', onclick:`pvEditTask(&quot;${escJsAttr(p.name).replace(/"/g,'&quot;')}&quot;,&quot;${escJsAttr(hn)}&quot;)`}; });
+    return `<article class="pv-panel" id="pvp-${_pvId(p.name)}"><div class="pv-ptop">
+        <div><div class="nm">${jn?esc(jn)+' · ':''}${esc(p.name)} <span class="pv-chip ${h.c}">${esc(h.l)}</span></div>
+          <div class="dt">${p.startISO?esc(fmtMDY(p.startISO)):'—'} → ${p.finishISO?esc(fmtMDY(p.finishISO)):'—'} · ${p.pct||0}% · PM ${esc(p.pm||'—')}</div></div>
+        <div class="pv-tr"><button class="pvbtn primary" onclick="pvOpenEditor('${escJsAttr(p.name)}')">✎ Edit / add tasks</button><button class="pvbtn" onclick="pvToggle('${escJsAttr(p.name)}')">Close panel</button></div></div>
+      <div class="pv-pbody"><div class="pv-mod left"><h3>Task list <span>${tasks.length} open</span></h3>${trows}</div>
+        <div class="pv-mod"><h3>Detailed project Gantt</h3>${_pvGantt(grows,t0,t1)}</div></div></article>`; }).join('');
+  // ---- portfolio gantt ----
+  const dated=projs.filter(p=>p.startISO&&p.finishISO);
+  let P0=Date.now(),P1=Date.now()+120*86400000;
+  if(dated.length){ P0=Math.min.apply(null,dated.map(p=>parseISO(p.startISO).getTime())); P1=Math.max.apply(null,dated.map(p=>parseISO(p.finishISO).getTime())); }
+  const portRows=dated.map(p=>{ const h=_pvHealth(p); return {label:((typeof projJobNum==='function'&&projJobNum(p.name))?projJobNum(p.name)+' · ':'')+p.name, s:p.startISO, f:p.finishISO, cls:h.c, text:p.pct+'%', onclick:`pvToggle(&quot;${escJsAttr(p.name).replace(/"/g,'&quot;')}&quot;)`}; });
+  o.innerHTML=`<div class="pv-top">
+      <div><h1>Projects <span class="pv-prev">PREVIEW · NEW FORMAT</span></h1><div class="sub">Full-screen project planning · ${projs.length} projects · reuses the live editor + data</div></div>
+      <div class="pv-tr"><button class="pvbtn" onclick="pvArchive()">Project Archive</button><button class="pvbtn" id="pvTheme" onclick="pvThemeToggle()">☾ Dark</button><button class="pvbtn primary" onclick="closeProjV2()">✕ Back to board</button></div></div>
+    <div class="pv-main">
+      <div class="pv-h2">Projects <span class="pj" style="font-weight:400;color:var(--pv-muted)">— tap a card to open / close its panel</span></div>
+      <div class="pv-cards">${cards||'<div class="pv-empty">No projects.</div>'}</div>
+      ${vqHtml}
+      ${panels||'<div class="pv-empty" style="margin-top:16px">Tap a project card above to open its panel (task list + detailed Gantt).</div>'}
+      <div class="pv-h2">Concurrent project timeline <span class="pj" style="font-weight:400;color:var(--pv-muted)">— portfolio Gantt</span></div>
+      <div class="pv-vq" style="padding:8px 12px">${_pvGantt(portRows,P0,P1)}</div>
+    </div>`;
+  const tb=document.getElementById('pvTheme'); if(tb) tb.textContent=o.classList.contains('pvdark')?'☀ Light':'☾ Dark';
+}
+
+
 </script>
 </body>
 </html>
