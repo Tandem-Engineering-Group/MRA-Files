@@ -3736,6 +3736,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"33.5", date:"2026-07-22", title:"\u{1F5C2} Projects screen: view filters + tighter, MRA-branded header", items:[
+    "Same view filters as the classic Projects tab: <b>\u{1F3F7} Hide non-official</b> (informal work) and <b>⏸ Hide parked</b> (frozen / on-hold), each with a count. Your choices stick between visits.",
+    "<b>Header conserves space</b> — the <b>MRA logo + Projects title</b> now sit on the <b>same line as the KPI cards</b>, and the <b>Print / Show archived / Hide filters</b> buttons moved down next to the <b>Sort</b> menu (off the top bar, since the menu lives in the side rail now)." ] },
   { rev:"33.4", date:"2026-07-22", title:"\u{1F4C5} Projects screen: dates on cards + archive done projects", items:[
     "The <b>project cards</b> at the top of the new Projects screen now show the <b>\u{1F4C5} start → finish dates</b> right on each card (under the PM line).",
     "<b>Done projects auto-archive</b> again — a project drops off the Projects screen <b>8 days</b> after it wraps (100% complete or its trailer shipped), just like the classic board. A <b>\u{1F5C4} Show archived (N)</b> button up top brings them back when you need them." ] },
@@ -16807,7 +16810,8 @@ try{ if(new URLSearchParams(location.search).get('projv2')){ (function _pw(){ if
    It REUSES the live data (MRA_DATA.projects) and the REAL edit engine — openProjectEditor / openProjTaskEdit /
    verifyTask / sendBackTask — so every bell + edit function still works. The live Projects tab is untouched;
    this is a full-screen overlay you only see at ?projv2=1 (or ☰ menu). Flag off = zero impact on the board. */
-let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let PV2_SORT='health'; let PV2_ZOOM=1, PV2_LOD='both'; let PV2_ARCH=false;
+let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let PV2_SORT='health'; let PV2_ZOOM=1, PV2_LOD='both'; let PV2_ARCH=false, PV2_NONOFF=false, PV2_PARK=false;
+try{ PV2_ARCH=localStorage.getItem('mra_pv2_arch')==='1'; PV2_NONOFF=localStorage.getItem('mra_pv2_noff')==='1'; PV2_PARK=localStorage.getItem('mra_pv2_park')==='1'; }catch(e){}
 (function(){ const st=document.createElement('style'); st.id='projV2css'; st.textContent=`
   #projV2{position:fixed;inset:0;z-index:70;overflow:auto;display:none;
     --pv-bg:#f3f6fa;--pv-card:#fff;--pv-text:#223047;--pv-muted:#66758a;--pv-line:#dfe6ef;
@@ -16819,6 +16823,16 @@ let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let P
   #projV2 .pv-top h1{margin:0;font-size:22px;font-weight:800;display:flex;align-items:center;gap:10px}
   #projV2 .pv-top .sub{color:var(--pv-muted);font-size:12px;margin-top:2px}
   #projV2 .pv-prev{background:var(--pv-orgl);color:var(--pv-orgd);font-weight:800;font-size:10.5px;padding:3px 10px;border-radius:999px;letter-spacing:.4px}
+  #projV2 .pv-head{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:16px;padding:9px 22px;background:var(--pv-card);border-bottom:1px solid var(--pv-line);flex-wrap:wrap}
+  #projV2 .pv-brand{display:flex;align-items:center;gap:11px;flex:0 0 auto}
+  #projV2 .pv-logo{height:34px;width:auto;display:block}
+  #projV2 .pv-head h1{margin:0;font-size:20px;font-weight:800;line-height:1.1}
+  #projV2 .pv-head .sub{color:var(--pv-muted);font-size:11px;margin-top:1px}
+  #projV2 .pv-head .pv-kpis{flex:1 1 460px;margin:0}
+  #projV2 .pv-head .pv-kpi{padding:6px 11px}
+  #projV2 .pv-head .pv-kpi b{font-size:18px}
+  #projV2 .pv-sep{width:1px;align-self:stretch;background:var(--pv-line);margin:2px 5px}
+  @media(max-width:820px){#projV2 .pv-head .pv-kpis{flex-basis:100%}}
   #projV2 .pvbtn{padding:8px 13px;border:1px solid var(--pv-line);border-radius:9px;background:var(--pv-card);color:var(--pv-text);cursor:pointer;font-weight:650;font-size:13px}
   #projV2 .pvbtn:hover{border-color:var(--pv-org)}
   #projV2 .pvbtn.primary{background:var(--pv-org);border-color:var(--pv-org);color:#fff}
@@ -16925,7 +16939,9 @@ function _pvSortProjs(arr){ const rk={late:0,behind:1,ontrack:2,upcoming:3,parke
 function pvExpandAll(){ const D=window.MRA_DATA||{}; (D.projects||[]).forEach(x=>{ if(x&&x.name){ PV2_OPEN.add(x.name); PV2_COLL.delete(x.name); } }); renderProjV2(); }
 function pvCollapseAll(){ const D=window.MRA_DATA||{}; (D.projects||[]).forEach(x=>{ if(x&&x.name){ PV2_OPEN.add(x.name); PV2_COLL.add(x.name); } }); renderProjV2(); }
 function pvPanelCaret(name){ if(PV2_COLL.has(name)) PV2_COLL.delete(name); else PV2_COLL.add(name); renderProjV2(); }
-function pvArchive(){ PV2_ARCH=!PV2_ARCH; renderProjV2(); }
+function pvArchive(){ PV2_ARCH=!PV2_ARCH; try{localStorage.setItem('mra_pv2_arch',PV2_ARCH?'1':'0');}catch(e){} renderProjV2(); }
+function pvToggleNoff(){ PV2_NONOFF=!PV2_NONOFF; try{localStorage.setItem('mra_pv2_noff',PV2_NONOFF?'1':'0');}catch(e){} renderProjV2(); }
+function pvTogglePark(){ PV2_PARK=!PV2_PARK; try{localStorage.setItem('mra_pv2_park',PV2_PARK?'1':'0');}catch(e){} renderProjV2(); }
 function pvPrint(){ const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
   const projs=_pvSortProjs((D.projects||[]).filter(p=>p&&p.name));
   const openArr=projs.filter(p=>PV2_OPEN.has(p.name)&&!PV2_COLL.has(p.name)); const detail=openArr.length?openArr:projs;
@@ -16969,8 +16985,13 @@ function closeProjV2(){ PROJV2_OPEN=false; const o=document.getElementById('proj
 function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) return; const D=window.MRA_DATA||{}; const _emb=(function(){ try{ return window.self!==window.top; }catch(e){ return true; } })();
   const today=D.todayISO||localISO(Date.now());
   const _pvIsArch=(p)=>{ try{ return typeof projArchived==='function' && projArchived(p); }catch(e){ return false; } };
-  const _pvArchN=(D.projects||[]).filter(p=>p&&p.name&&_pvIsArch(p)).length;
-  const projs=_pvSortProjs((D.projects||[]).filter(p=>p&&p.name).filter(p=>PV2_ARCH||!_pvIsArch(p)));
+  const _pvBase=(D.projects||[]).filter(p=>p&&p.name);
+  const _pvArchN=_pvBase.filter(_pvIsArch).length;
+  const _pvAfterArch=_pvBase.filter(p=>PV2_ARCH||!_pvIsArch(p));
+  const _pvNoffN=_pvAfterArch.filter(p=>p.nonOfficial).length;
+  const _pvAfterNoff=PV2_NONOFF?_pvAfterArch.filter(p=>!p.nonOfficial):_pvAfterArch;
+  const _pvParkN=_pvAfterNoff.filter(p=>p.parked).length;
+  const projs=_pvSortProjs(PV2_PARK?_pvAfterNoff.filter(p=>!p.parked):_pvAfterNoff);
   // ---- cards ----
   const cards=projs.map(p=>{ const h=_pvHealth(p), open=PV2_OPEN.has(p.name), jn=(typeof projJobNum==='function')?projJobNum(p.name):(p.jobNum||'');
     return `<button class="pv-card ${open?'on':''}" onclick="pvToggle('${escJsAttr(p.name)}')">
@@ -17035,12 +17056,12 @@ function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) retur
   let kOD=0; projs.forEach(x=>(x.tasks||[]).forEach(t=>{ if(projIsDone(t)||(typeof isMeetingTask==='function'&&isMeetingTask(t)))return; const d=t.finISO||t.startISO; if(d&&d<today)kOD++; }));
   const kpiHtml=`<div class="pv-kpis"><div class="pv-kpi"><span class="k">Active projects</span><b>${kActive}</b></div><div class="pv-kpi ${kRisk?'err':''}"><span class="k">At risk</span><b>${kRisk}</b></div><div class="pv-kpi ${kOD?'err':''}"><span class="k">Overdue tasks</span><b>${kOD}</b></div><div class="pv-kpi ${_ms.length?'warn':''}"><span class="k">Milestones · 30d</span><b>${_ms.length}</b></div><div class="pv-kpi ok"><span class="k">Complete</span><b>${kDone}</b></div></div>`;
   const pmMileHtml=`<div class="pv-h2">Team &amp; milestones</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px"><div class="pv-vq"><h3>📊 PM load <span class="pj">— open tasks by PM</span></h3>${pmRows}</div><div class="pv-vq"><h3>◆ Milestones — next 30 days <span class="pv-chip warn">${_ms.length}</span></h3>${msRows}</div></div>`;
-  o.innerHTML=`<div class="pv-top">
-      <div><h1>Projects ${_emb?'':'<span class="pv-prev">PREVIEW · NEW FORMAT</span>'}</h1><div class="sub">${projs.length} projects · full project planning</div></div>
-      <div class="pv-tr"><button class="pvbtn" onclick="pvPrint()">🖨 Print</button><button class="pvbtn" onclick="pvArchive()">${PV2_ARCH?'🗄 Hide archived':'🗄 Show archived'+(_pvArchN?' ('+_pvArchN+')':'')}</button>${_emb?'':'<button class="pvbtn" id="pvTheme" onclick="pvThemeToggle()">☾ Dark</button><button class="pvbtn primary" onclick="closeProjV2()">✕ Back to board</button>'}</div></div>
-    <div class="pv-main">
+  o.innerHTML=`<div class="pv-head">
+      <div class="pv-brand"><img class="pv-logo" src="logo.png" alt="MRA" onerror="this.style.display='none'"><div><h1>Projects</h1><div class="sub">${projs.length} projects</div></div></div>
       ${kpiHtml}
-      <div class="pv-h2" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><span>Projects <span class="pj" style="font-weight:400;color:var(--pv-muted)">— tap a card to open / close</span></span><span class="pv-tr"><label class="pj" style="color:var(--pv-muted)">Sort</label><select class="pvbtn" onchange="pvSetSort(this.value)"><option value="health"${PV2_SORT==='health'?' selected':''}>Health (default)</option><option value="pm"${PV2_SORT==='pm'?' selected':''}>By PM</option><option value="date"${PV2_SORT==='date'?' selected':''}>By date</option><option value="name"${PV2_SORT==='name'?' selected':''}>A–Z</option></select><button class="pvbtn" onclick="pvExpandAll()">⊞ Expand all</button><button class="pvbtn" onclick="pvCollapseAll()">⊟ Collapse all</button></span></div>
+      ${_emb?'':'<div class="pv-tr"><button class="pvbtn" id="pvTheme" onclick="pvThemeToggle()">☾ Dark</button><button class="pvbtn primary" onclick="closeProjV2()">✕ Back to board</button></div>'}</div>
+    <div class="pv-main">
+      <div class="pv-h2" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><span>Projects <span class="pj" style="font-weight:400;color:var(--pv-muted)">— tap a card to open / close</span></span><span class="pv-tr"><button class="pvbtn" onclick="pvPrint()">🖨 Print</button><button class="pvbtn" onclick="pvArchive()">${PV2_ARCH?'🗄 Hide archived':'🗄 Show archived'+(_pvArchN?' ('+_pvArchN+')':'')}</button>${(_pvNoffN||PV2_NONOFF)?`<button class="pvbtn" onclick="pvToggleNoff()">${PV2_NONOFF?'🏷 Show non-official':'🏷 Hide non-official'+(_pvNoffN?' ('+_pvNoffN+')':'')}</button>`:''}${(_pvParkN||PV2_PARK)?`<button class="pvbtn" onclick="pvTogglePark()">${PV2_PARK?'⏸ Show parked':'⏸ Hide parked'+(_pvParkN?' ('+_pvParkN+')':'')}</button>`:''}<span class="pv-sep"></span><label class="pj" style="color:var(--pv-muted)">Sort</label><select class="pvbtn" onchange="pvSetSort(this.value)"><option value="health"${PV2_SORT==='health'?' selected':''}>Health (default)</option><option value="pm"${PV2_SORT==='pm'?' selected':''}>By PM</option><option value="date"${PV2_SORT==='date'?' selected':''}>By date</option><option value="name"${PV2_SORT==='name'?' selected':''}>A–Z</option></select><button class="pvbtn" onclick="pvExpandAll()">⊞ Expand all</button><button class="pvbtn" onclick="pvCollapseAll()">⊟ Collapse all</button></span></div>
       <div class="pv-cards">${cards||'<div class="pv-empty">No projects.</div>'}</div>
       <div class="pv-h2" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><span>Program overview <span class="pj" style="font-weight:400;color:var(--pv-muted)">— all projects on one timeline</span></span><span class="pv-tr"><label class="pj" style="color:var(--pv-muted)">Detail</label><select class="pvbtn" onchange="pvLod(this.value)"><option value="both"${PV2_LOD==='both'?' selected':''}>Overview + tasks</option><option value="overview"${PV2_LOD==='overview'?' selected':''}>Overview only</option><option value="detail"${PV2_LOD==='detail'?' selected':''}>Tasks only</option></select><label class="pj" style="color:var(--pv-muted)">🔍 Zoom</label><input type="range" min="1" max="4" step="0.5" value="${PV2_ZOOM}" oninput="pvZoom(this.value)" title="Zoom the timeline in/out — then scroll sideways to pan" style="width:120px;vertical-align:middle"></span></div>
       <div class="pv-vq" style="padding:8px 12px">${_pvGantt(portRows,P0,P1)}</div>
