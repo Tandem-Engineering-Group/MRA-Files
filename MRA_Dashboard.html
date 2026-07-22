@@ -3765,6 +3765,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"34.2", date:"2026-07-22", title:"🧠 My Command — usable pass: open-the-email, contacts, inbound, richer Fleetio", items:[
+    "Each 🔴 Waiting item now has 📧 <b>Open email</b> (opens the real thread in Outlook for the full back-story) alongside ✉ Reply (draft pre-filled). The ✉/📅 composers have <b>contact autocomplete</b> — type “meg” → Megan (no memorizing addresses). New 📦 <b>Inbound this week</b> card (vendor deliveries/orders + board gaps). The Fleetio watchdog rows show <b>priority · opened · assignee · photos</b> and <b>click to open the full board issue card</b>." ] },
   { rev:"34.1", date:"2026-07-22", title:"🧠 My Command grows up — brief, reply & schedule (Rich only)", items:[
     "My Command is now a <b>tab</b> (not a menu link) and pulls a live <b>brief</b>: 🔴 <b>Waiting on you</b> (people who need your answer, with a one-tap <b>✉ Reply</b>), a <b>per-project rundown</b> cross-checked against the board (missing tasks, inbound material, decisions), the <b>Fleetio watchdog</b>, and your <b>tasks</b>. You can <b>✉ send email</b> and <b>📅 schedule meetings</b> right from the screen. Still just you." ] },
   { rev:"34.0", date:"2026-07-22", title:"🧠 My Command — private agent screen (Rich only)", items:[
@@ -17150,27 +17152,43 @@ function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) retur
 var MC_MAILSEND='https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/7ba4c77598ca4828b4d81b19adf6ad68/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=PZKfuzfqqSjvD2o2o7i3BhF2ANhYYITbG9-I_zm2ZfI';
 var MC_MEETING='https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/29/workflows/f556f729b480468eac24c3ef51b29b1c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=68QO_pBiDfbjxvCPZ3OLcc6L4zGBdDt5K8-ECnFOfNg';
 var MC_TASKS_KEY='mra_mycmd_tasks_v1'; var _MC_AGENT=null;
+var MC_CONTACTS=[
+ {n:"Megan Fraser",e:"megan.fraser@gomra.com"},{n:"Al Karloff",e:"akarloff@gomra.com"},{n:"Luciana Giglio",e:"luciana.giglio@gomra.com"},
+ {n:"Brandon Choy",e:"bchoy@gomra.com"},{n:"Mark Mustonen",e:"markm@gomra.com"},{n:"Sarah Williams",e:"swilliams@gomra.com"},
+ {n:"Niko Solomos",e:"nsolomos@gomra.com"},{n:"Tony Amato",e:"tony@gomra.com"},{n:"John Renaud",e:"johnr@gomra.com"},{n:"Gino Bitonti",e:"gbitonti@gomra.com"},
+ {n:"Robin Wheeler",e:"rwheeler@gomra.com"},{n:"Cindy Irland",e:"cindyi@gomra.com"},{n:"Stephanie Pearce",e:"spearce@gomra.com"},{n:"Doug Cooley",e:"dcooley@gomra.com"},
+ {n:"Jesica Wasczenski",e:"jesicaw@gomra.com"},{n:"Dawn Ziesmer",e:"dawnz@gomra.com"},{n:"Ted O",e:"tedo@gomra.com"},{n:"Quintin Olivito",e:"qolivito@gomra.com"},
+ {n:"Josh Eberhart",e:"jeberhart@gomra.com"},{n:"Jeff Sellers",e:"jsellers@gomra.com"},{n:"Sal (shop)",e:"shopsupport@gomra.com"},{n:"Jim Notarianni",e:"jimn@gomra.com"},{n:"Alyssa Aubin",e:"aaubin@gomra.com"},
+ {n:"Dan Perry - R.K. Hoppe",e:"dperry@rkhoppe.com"},{n:"Taylor Osborne - Alro Steel",e:"tosborne@alro.com"},{n:"Bob Fender - John R Glass",e:"bfender@johnrglass.com"},
+ {n:"Carl Berkley - Art Guild",e:"cberkley@artguildinc.com"},{n:"Sean Payton - Art Guild",e:"spayton@artguildinc.com"},{n:"Kevin Sweeney - Art Guild",e:"ksweeney@artguildinc.com"},
+ {n:"Brian Alexander - Onyx",e:"brian.alexander@onyxintegrations.com"},{n:"Cameron Uhlig - Onyx",e:"cameron.uhlig@onyxintegrations.com"},
+ {n:"Chris Beyer - Beyer Electric",e:"bec@beyerelectric.com"},{n:"Chad - MasterWraps",e:"masterwraps1@yahoo.com"},{n:"Jeff - W2 Graphic",e:"jeff@w2graphic.com"}
+];
 function _mcTasks(){ try{ return JSON.parse(localStorage.getItem(MC_TASKS_KEY)||'[]'); }catch(e){ return []; } }
 function _mcSave(a){ try{ localStorage.setItem(MC_TASKS_KEY,JSON.stringify(a||[])); }catch(e){} }
 function _mcId(){ return 'm'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36); }
+function _mcEmail(raw){ var m=String(raw||'').match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/); return m?m[0]:String(raw||'').trim(); }
+function _mcEmails(raw){ var m=String(raw||'').match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g); return (m||[]).join(';'); }
+function _mcEnsureContacts(){ if(document.getElementById('mcContacts')) return; var dl=document.createElement('datalist'); dl.id='mcContacts';
+  dl.innerHTML=MC_CONTACTS.map(function(c){ return '<option value="'+esc(c.n+' - '+c.e)+'">'; }).join(''); document.body.appendChild(dl); }
 function openMyCmd(){
   if(typeof closeDrops==='function') closeDrops();
   if(typeof ssoEnforcing==='function' && ssoEnforcing() && typeof isSuperAdmin==='function' && !isSuperAdmin()){ alert('My Command is private — just for Rich.'); return; }
   var o=document.getElementById('myCmd');
   if(!o){ o=document.createElement('div'); o.id='myCmd'; document.body.appendChild(o); _mcInjectCss(); }
-  o.classList.add('show'); document.body.style.overflow='hidden'; renderMyCmd();
+  _mcEnsureContacts(); o.classList.add('show'); document.body.style.overflow='hidden'; renderMyCmd();
   loadAgent(function(){ renderMyCmd(); });
 }
 function closeMyCmd(){ var o=document.getElementById('myCmd'); if(o) o.classList.remove('show'); document.body.style.overflow=''; }
-function loadAgent(cb){ function done(a){ _MC_AGENT=a||null; if(cb)cb(); } 
+function loadAgent(cb){ function done(a){ _MC_AGENT=a||null; if(cb)cb(); }
   fetch('../agent.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done)
   .catch(function(){ fetch('agent.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ if(cb)cb(); }); }); }
 function _mcInjectCss(){ if(document.getElementById('myCmdCss')) return; var s=document.createElement('style'); s.id='myCmdCss';
   s.textContent='#myCmd{position:fixed;inset:0;z-index:1200;background:var(--bg);color:var(--txt);display:none;overflow:auto}'
    +'#myCmd.show{display:block}'
-   +'#myCmd .mc-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line)}'
+   +'#myCmd .mc-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}'
    +'#myCmd .mc-top h1{margin:0;font-size:20px;font-weight:800}#myCmd .mc-top .sub{color:var(--muted);font-size:11px}#myCmd .mc-sp{flex:1}'
-   +'#myCmd .mc-btn{padding:8px 13px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--txt);cursor:pointer;font-weight:650;font-size:13px}'
+   +'#myCmd .mc-btn{padding:8px 13px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--txt);cursor:pointer;font-weight:650;font-size:13px;text-decoration:none;display:inline-block}'
    +'#myCmd .mc-btn:hover{border-color:var(--brand)}#myCmd .mc-btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}'
    +'#myCmd .mc-wrap{max-width:1120px;margin:0 auto;padding:18px 20px 70px;display:grid;grid-template-columns:1fr 1fr;gap:16px}'
    +'#myCmd .mc-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}#myCmd .mc-card.full{grid-column:1/-1}'
@@ -17178,23 +17196,23 @@ function _mcInjectCss(){ if(document.getElementById('myCmdCss')) return; var s=d
    +'#myCmd .mc-grp{font-weight:700;font-size:12px;margin:10px 0 2px}'
    +'#myCmd .mc-row{display:flex;gap:9px;align-items:flex-start;padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px}#myCmd .mc-row:hover{background:var(--panel2)}'
    +'#myCmd .mc-flag{font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:999px;white-space:nowrap;flex:0 0 auto;margin-top:1px}'
-   +'#myCmd .mc-flag.red{background:#3a1620;color:#f87171}#myCmd .mc-flag.amber{background:#3a2e12;color:#fbbf24}#myCmd .mc-flag.blue{background:#12243a;color:#6aa9ff}'
+   +'#myCmd .mc-flag.red{background:#3a1620;color:#f87171}#myCmd .mc-flag.amber{background:#3a2e12;color:#fbbf24}#myCmd .mc-flag.blue{background:#12243a;color:#6aa9ff}#myCmd .mc-flag.green{background:#12352a;color:#4ade80}'
    +'#myCmd .mc-wait{padding:11px 8px;border-bottom:1px solid var(--line)}#myCmd .mc-wait:hover{background:var(--panel2)}'
    +'#myCmd .mc-wait .w1{display:flex;justify-content:space-between;gap:10px;align-items:baseline}#myCmd .mc-wait .who{font-weight:800;font-size:13.5px}#myCmd .mc-wait .proj{font-size:10.5px;color:var(--brand);font-weight:700}'
-   +'#myCmd .mc-wait .subj{color:var(--muted);font-size:11.5px;margin:1px 0 4px}#myCmd .mc-wait .need{font-size:13px}'
+   +'#myCmd .mc-wait .subj{color:var(--muted);font-size:11.5px;margin:1px 0 4px}#myCmd .mc-wait .need{font-size:13px}#myCmd .mc-wait .acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}'
    +'#myCmd .mc-pj{border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:10px;background:var(--panel2)}'
    +'#myCmd .mc-pj .pjh{font-weight:800;font-size:14px}#myCmd .mc-pj .pjm{color:var(--muted);font-size:11px;margin-bottom:5px}#myCmd .mc-pj .pjb{font-size:12.5px;line-height:1.5}'
-   +'#myCmd .mc-pj .pjf{color:#f87171;font-size:12px;margin-top:5px;display:flex;gap:6px}#myCmd .mc-pj .pjf b{color:#f87171}'
+   +'#myCmd .mc-pj .pjf{color:#f87171;font-size:12px;margin-top:5px}'
    +'#myCmd .mc-task{display:flex;gap:9px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--line)}#myCmd .mc-task.done{opacity:.5}#myCmd .mc-task.done .t{text-decoration:line-through}#myCmd .mc-task .t{flex:1;font-size:13.5px}'
    +'#myCmd .mc-task input[type=checkbox]{width:18px;height:18px;cursor:pointer;flex:0 0 auto}'
    +'#myCmd .mc-mini{background:none;border:0;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 5px}#myCmd .mc-mini:hover{color:var(--txt)}'
    +'#myCmd .mc-add{display:flex;gap:8px;margin-top:12px}#myCmd .mc-add input{flex:1;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px}'
    +'#myCmd .mc-muted{color:var(--muted);font-size:12px;padding:6px 2px;line-height:1.5}'
    +'#mcModal{position:fixed;inset:0;z-index:1300;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;padding:20px;overflow:auto}#mcModal.show{display:flex}'
-   +'#mcModal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:600px;width:100%;padding:20px;margin-top:6vh}'
+   +'#mcModal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:640px;width:100%;padding:20px;margin-top:6vh}'
    +'#mcModal h3{margin:0 0 12px;font-size:17px}#mcModal label{display:block;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;margin:10px 0 3px}'
    +'#mcModal input,#mcModal textarea,#mcModal select{width:100%;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:10px 11px;font-size:14px;font-family:inherit}'
-   +'#mcModal textarea{min-height:120px;resize:vertical}#mcModal .rowf{display:flex;gap:10px}#mcModal .rowf>div{flex:1}#mcModal .foot{display:flex;gap:10px;margin-top:16px}'
+   +'#mcModal textarea{min-height:130px;resize:vertical}#mcModal .rowf{display:flex;gap:10px}#mcModal .rowf>div{flex:1}#mcModal .foot{display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap}'
    +'@media(max-width:820px){#myCmd .mc-wrap{grid-template-columns:1fr}}';
   document.head.appendChild(s); }
 function _mcGaps(){
@@ -17211,22 +17229,33 @@ function _mcGaps(){
   return {overdue:overdue,gone:gone,notask:notask,total:iss.length};
 }
 function _mcIssRow(it,flag,cls){ var jn=it.jobNum?('['+esc(it.jobNum)+'] '):'';
-  return '<div class="mc-row"><span class="mc-flag '+cls+'">'+flag+'</span><div style="flex:1;min-width:0"><b>#'+esc(it.num)+'</b> '+esc(it.summary||'')+'<div class="mc-muted" style="padding:2px 0">'+jn+esc(String(it.asset||'').slice(0,52))+'</div></div></div>'; }
+  var asg=(typeof fAsg==='function')?fAsg(it):[]; var who=asg.length?(' · 👤 '+esc(asg.join(', '))):'';
+  var pr=it.priority?(' · '+esc(String(it.priority).slice(0,44))):''; var op=it.openedISO?(' · opened '+esc(it.openedISO)):'';
+  var nd=(it.docs&&it.docs.length)?(' · 📷 '+it.docs.length):'';
+  var det=it.detail?('<div class="mc-muted" style="padding:3px 0 0">'+esc(String(it.detail).replace(/\s+/g,' ').slice(0,150))+(String(it.detail).length>150?'…':'')+'</div>'):'';
+  return '<div class="mc-row" style="cursor:pointer" onclick="mcIss(\''+esc(it.num)+'\')"><span class="mc-flag '+cls+'">'+flag+'</span><div style="flex:1;min-width:0"><b>#'+esc(it.num)+'</b> '+esc(it.summary||'')+'<div class="mc-muted" style="padding:2px 0">'+jn+esc(String(it.asset||'').slice(0,60))+pr+op+who+nd+'</div>'+det+'</div><span class="mc-muted" style="align-self:center">›</span></div>'; }
+function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ _mcModal('<h3>🔧 Fleetio issue #'+esc(num)+'</h3><div style="max-height:66vh;overflow:auto">'+fioIssueDetailHtml(num)+'</div><div class="foot"><button class="mc-btn" onclick="_mcModalClose()">Close</button></div>'); } else { alert('Issue #'+num); } }
 function renderMyCmd(){
   var o=document.getElementById('myCmd'); if(!o) return; var D=window.MRA_DATA||{}; var A=_MC_AGENT||{};
   var g=_mcGaps(); var tasks=_mcTasks();
-  var waiting=A.waiting||[];
   var _kb=function(k){ return k==='client'?'<span class="mc-flag red">CLIENT</span>':k==='vendor'?'<span class="mc-flag amber">VENDOR</span>':k==='internal'?'<span class="mc-flag blue">INTERNAL</span>':''; };
+  var waiting=A.waiting||[];
   var wh=waiting.length?waiting.map(function(w,i){
+      var openBtn=w.link?('<a class="mc-btn" href="'+esc(w.link)+'" target="_blank" rel="noopener">📧 Open email</a>'):'';
       return '<div class="mc-wait"><div class="w1"><span class="who">'+_kb(w.kind)+' '+esc(w.who||'')+'</span>'+(w.project?'<span class="proj">'+esc(w.project)+'</span>':'')+'</div>'
         +'<div class="subj">'+esc(w.subject||'')+'</div><div class="need">'+esc(w.need||'')+'</div>'
-        +'<div style="margin-top:7px"><button class="mc-btn primary" style="padding:6px 12px;font-size:12.5px" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button></div></div>';
+        +'<div class="acts"><button class="mc-btn primary" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button>'+openBtn+'</div></div>';
     }).join(''):'<div class="mc-muted">'+(A.generatedText?'Nobody’s waiting on you right now. 🎉':'Your brief hasn’t been generated yet — ask me to “refresh my command.”')+'</div>';
   var projs=A.projects||[];
   var ph=projs.length?projs.map(function(p){
-      var flags=(p.flags||[]).map(function(f){ return '<div class="pjf">\U0001F534 <b>'+esc(f)+'</b></div>'; }).join('');
+      var flags=(p.flags||[]).map(function(f){ return '<div class="pjf">🔴 <b>'+esc(f)+'</b></div>'; }).join('');
       return '<div class="mc-pj"><div class="pjh">'+esc(p.name||'')+'</div><div class="pjm">'+(p.jobNum?esc(p.jobNum)+' · ':'')+'PM '+esc(p.pm||'—')+'</div><div class="pjb">'+esc(p.brief||'')+'</div>'+flags+'</div>';
     }).join(''):'<div class="mc-muted">No project activity in the latest brief.</div>';
+  var inb=A.inbound||[];
+  var ih=inb.length?inb.map(function(x){
+      var gap=x.gap?('<div class="pjf" style="color:#fbbf24">⚠ '+esc(x.gap)+'</div>'):'';
+      return '<div class="mc-row"><span class="mc-flag green">'+(esc(x.when||'—'))+'</span><div style="flex:1"><b>'+esc(x.item||'')+'</b> — '+esc(x.vendor||'')+(x.project?(' <span class="proj" style="color:var(--brand)">· '+esc(x.project)+'</span>'):'')+gap+'</div></div>';
+    }).join(''):'<div class="mc-muted">Nothing scheduled inbound in the brief.</div>';
   var wd='';
   if(g.overdue.length) wd+='<div class="mc-grp">⏰ Overdue ('+g.overdue.length+')</div>'+g.overdue.slice(0,10).map(function(it){return _mcIssRow(it,'OVERDUE','red');}).join('');
   if(g.gone.length)    wd+='<div class="mc-grp">🚚 Unit shipped, issue still open ('+g.gone.length+')</div>'+g.gone.slice(0,10).map(function(it){return _mcIssRow(it,'SHIPPED','amber');}).join('');
@@ -17235,26 +17264,26 @@ function renderMyCmd(){
   var th=tasks.length?tasks.map(function(t,i){ return '<div class="mc-task '+(t.done?'done':'')+'"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mcToggle('+i+')"><span class="t">'+esc(t.t)+'</span><button class="mc-mini" onclick="mcUp('+i+')">▲</button><button class="mc-mini" onclick="mcDown('+i+')">▼</button><button class="mc-mini" onclick="mcDel('+i+')" style="color:#f87171">✕</button></div>'; }).join(''):'<div class="mc-muted">No tasks yet — add one below.</div>';
   o.innerHTML='<div class="mc-top"><div><h1>🧠 My Command</h1><div class="sub">Private — just you'+(A.generatedText?(' · brief as of '+esc(A.generatedText)):'')+'</div></div><div class="mc-sp"></div><button class="mc-btn" onclick="mcSchedule()">📅 Schedule</button><button class="mc-btn" onclick="mcCompose()">✉ New email</button><button class="mc-btn" onclick="loadAgent(function(){renderMyCmd();})">🔄 Refresh</button><button class="mc-btn primary" onclick="closeMyCmd()">✕ Close</button></div>'
    +'<div class="mc-wrap">'
-   +'<div class="mc-card full"><h2>🔴 Waiting on you <span class="c">people who need your answer</span></h2>'+wh+'</div>'
+   +'<div class="mc-card full"><h2>🔴 Waiting on you <span class="c">people who need your answer · click ✉ to reply (draft ready) or 📧 to read the full email</span></h2>'+wh+'</div>'
    +'<div class="mc-card full"><h2>📋 Project brief <span class="c">today by project, cross-checked vs the board</span></h2>'+ph+'</div>'
-   +'<div class="mc-card"><h2>⚠ Fleetio watchdog <span class="c">'+g.total+' open issues scanned</span></h2>'+wd+'</div>'
+   +'<div class="mc-card full"><h2>📦 Inbound this week <span class="c">vendor deliveries &amp; orders coming</span></h2>'+ih+'</div>'
+   +'<div class="mc-card"><h2>⚠ Fleetio watchdog <span class="c">'+g.total+' scanned · click a row for the full issue</span></h2>'+wd+'</div>'
    +'<div class="mc-card"><h2>✅ My Tasks <span class="c">'+tasks.filter(function(t){return !t.done;}).length+' open</span></h2>'+th+'<div class="mc-add"><input id="mcNew" placeholder="Add a task…"><button class="mc-btn primary" onclick="mcAdd()">Add</button></div></div>'
    +'</div>';
   var n=document.getElementById('mcNew'); if(n) n.onkeydown=function(e){ if(e.key==='Enter') mcAdd(); };
 }
-/* ---- reply / new email / schedule composers (fire the flows) ---- */
 function _mcModal(html){ var m=document.getElementById('mcModal'); if(!m){ m=document.createElement('div'); m.id='mcModal'; document.body.appendChild(m); m.addEventListener('click',function(e){ if(e.target===m) m.classList.remove('show'); }); } m.innerHTML='<div class="box">'+html+'</div>'; m.classList.add('show'); }
 function _mcModalClose(){ var m=document.getElementById('mcModal'); if(m) m.classList.remove('show'); }
 function mcReply(i){ var w=((_MC_AGENT||{}).waiting||[])[i]; if(!w) return; mcCompose(w.email||'', 'Re: '+(w.subject||''), w.draft||''); }
 function mcCompose(to,subject,body){
   _mcModal('<h3>✉ Send email</h3>'
-    +'<label>To</label><input id="mcTo" value="'+esc(to||'')+'" placeholder="name@company.com">'
+    +'<label>To (type a name — e.g. meg)</label><input id="mcTo" list="mcContacts" value="'+esc(to||'')+'" placeholder="Type a name or email">'
     +'<label>Subject</label><input id="mcSubj" value="'+esc(subject||'')+'">'
     +'<label>Message</label><textarea id="mcBody" placeholder="Type your reply…">'+esc(body||'')+'</textarea>'
     +'<div class="foot"><button class="mc-btn primary" onclick="mcSendMail()">Send</button><button class="mc-btn" onclick="_mcModalClose()">Cancel</button><span id="mcMailMsg" class="mc-muted"></span></div>');
 }
 function mcSendMail(){
-  var to=(document.getElementById('mcTo').value||'').trim(), subj=(document.getElementById('mcSubj').value||'').trim(), body=(document.getElementById('mcBody').value||'').trim();
+  var to=_mcEmail(document.getElementById('mcTo').value), subj=(document.getElementById('mcSubj').value||'').trim(), body=(document.getElementById('mcBody').value||'').trim();
   if(!to){ alert('Add a recipient.'); return; }
   var html=esc(body).replace(/\n/g,'<br>')+'<br><br><span style="color:#888;font-size:12px">Sent from the MRA dashboard</span>';
   try{ fetch(MC_MAILSEND,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({to:to,subject:subj,html:html})}); }catch(e){}
@@ -17264,13 +17293,13 @@ function mcSchedule(){
   var d=new Date(); d.setDate(d.getDate()+1); var z=function(n){return String(n).padStart(2,'0');}; var day=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
   _mcModal('<h3>📅 Schedule a meeting</h3>'
     +'<label>Subject</label><input id="mcMSubj" placeholder="e.g. Trumpf electrical sync">'
-    +'<label>Attendees (comma-separated emails)</label><input id="mcMAtt" placeholder="akarloff@gomra.com, luciana.giglio@gomra.com">'
+    +'<label>Attendees (type names — add several)</label><input id="mcMAtt" list="mcContacts" placeholder="Type a name; add more separated by ;">'
     +'<div class="rowf"><div><label>Date</label><input type="date" id="mcMDate" value="'+day+'"></div><div><label>Start (ET)</label><input type="time" id="mcMTime" value="09:00"></div><div><label>Minutes</label><select id="mcMDur"><option>30</option><option selected>60</option><option>90</option></select></div></div>'
     +'<label>Notes</label><textarea id="mcMBody" placeholder="Agenda / notes (optional)"></textarea>'
     +'<div class="foot"><button class="mc-btn primary" onclick="mcBook()">Book + invite</button><button class="mc-btn" onclick="_mcModalClose()">Cancel</button><span id="mcMMsg" class="mc-muted"></span></div>');
 }
 function mcBook(){
-  var subj=(document.getElementById('mcMSubj').value||'').trim(), att=(document.getElementById('mcMAtt').value||'').trim().replace(/,\s*/g,';');
+  var subj=(document.getElementById('mcMSubj').value||'').trim(), att=_mcEmails(document.getElementById('mcMAtt').value);
   var date=document.getElementById('mcMDate').value, time=document.getElementById('mcMTime').value, dur=+document.getElementById('mcMDur').value||60, body=(document.getElementById('mcMBody').value||'').trim();
   if(!subj){ alert('Add a subject.'); return; } if(!date||!time){ alert('Pick a date and time.'); return; }
   var start=date+'T'+time+':00';
