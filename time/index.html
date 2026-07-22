@@ -346,7 +346,13 @@ function applyMgr(){ var on=isMgr(); var unlocked=(SSO.user||PINOK); var hc=$('h
 function pinUnlock(){ var p=prompt('Manager code:'); if(p==null) return; if(p==='1974'){ PINOK=true; sessionStorage.setItem('mra_time_mgr','1'); applyMgr(); var hc=$('hoursCard'); if(hc) hc.scrollIntoView({behavior:'smooth',block:'start'}); } else alert('Wrong code.'); }
 function mgrLogout(){ PINOK=false; sessionStorage.removeItem('mra_time_mgr'); SHARED=null; if(SSO.user){ SSO.signOut(); return; } applyMgr(); }
 function mgrClick(){ if(SSO.user||PINOK) mgrLogout(); else SSO.signIn(); }
-function mapShared(arr){ if(!Array.isArray(arr)) return []; return arr.map(function(it){ var code=String(it.JobCode||it.jobNum||'').trim(); return {id:it.EntryId||it.id||('s'+(it.ID||Math.round(Math.random()*1e6))), who:it.Employee||it.who||'', empId:it.EmpId||it.empId||'', dateISO:String(it.DateWorked||it.dateISO||'').slice(0,10), job:it.JobName||it.job||'', jobNum:code, hours:parseFloat(it.Hours!=null?it.Hours:(it.hours||0))||0, payType:it.PayType||it.payType||'', task:it.Task||it.task||'', notes:it.Notes||it.notes||'', ts:it.Created||it.ts||'', shared:true}; }); }
+function mapShared(arr){ if(!Array.isArray(arr)) return [];
+  return arr.filter(function(it){ return it && (it.Hours!=null || it.JobName || it.Title); })   /* skip the empty system row */
+    .map(function(it){
+      var who=it.Title||it.Employee||it.EmpID||it.who||'';   /* SharePoint stored the name in Title / EmpID */
+      var code=String(it.JobCode||it.jobNum||'').trim();
+      var eid=EMPIDS[who]||it.EmpId0||it.EmpId||it.empId||'';  /* derive payroll ID from the name (robust to the column-naming quirk) */
+      return {id:it.EntryID||it.EntryId||it.id||('s'+(it.ID||Math.round(Math.random()*1e6))), who:who, empId:eid, dateISO:String(it.DateWorked||it.dateISO||'').slice(0,10), job:it.JobName||it.job||'', jobNum:code, hours:parseFloat(it.Hours!=null?it.Hours:(it.hours||0))||0, payType:it.PayType||it.payType||'', task:it.Task||it.task||'', notes:it.Notes||it.notes||'', ts:it.Created||it.ts||'', shared:true}; }); }
 function loadShared(cb){ function done(a){ SHARED=mapShared(a); if(cb)cb(true); } function fail(){ SHARED=null; if(cb)cb(false); }
   fetch('../time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ fetch('time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(fail); }); }
 
