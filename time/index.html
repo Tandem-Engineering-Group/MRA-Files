@@ -61,6 +61,7 @@
   .mgr .lst li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .mgr .addrow{display:flex;gap:8px;margin-top:8px}
   .mgr .addrow input{flex:1;background:var(--input);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px}
+  .mgr .lst .idbox{flex:0 0 66px;width:66px;background:var(--input);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:6px 7px;font-size:13px;text-align:center}
   .hide{display:none!important}
   .muted{color:var(--muted)}
   .foot{color:var(--muted);font-size:12px;text-align:center;margin-top:20px}
@@ -87,8 +88,8 @@
         <select id="fWho"></select></div>
       <div class="fld"><label for="fDate">Date worked</label>
         <input type="date" id="fDate"></div>
-      <div class="fld full"><label for="fJob">Job to charge</label>
-        <input id="fJob" list="jobList" placeholder="Type a J# or job name…" autocomplete="off">
+      <div class="fld full"><label for="fJob">Job to charge <span class="muted">(type a code or name)</span></label>
+        <input id="fJob" list="jobList" placeholder="Start typing a job code or name…" autocomplete="off">
         <datalist id="jobList"></datalist></div>
       <div class="fld"><label for="fHours">Hours</label>
         <input type="number" id="fHours" min="0" max="24" step="0.25" inputmode="decimal" placeholder="0.0">
@@ -126,7 +127,7 @@
   <div class="card">
     <h2 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <span>Tracked hours</span>
-      <span class="noprint" style="display:flex;gap:8px"><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
+      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm" id="sampleBtn">🧪 Sample week (Sal)</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
     <div class="filtrow noprint">
       <select id="fRange">
         <option value="tw">This week</option>
@@ -166,8 +167,17 @@
 var LS={ names:'mra_time_names', jobs:'mra_time_chargejobs', ents:'mra_time_entries', theme:'mra_time_theme', pin:'mra_time_pinok' };
 function lget(k,def){ try{ var v=localStorage.getItem(k); return v==null?def:JSON.parse(v); }catch(e){ return def; } }
 function lset(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
-var NAMES=lget(LS.names, ['Sal','Doug','Jeff','Josh','Stephanie']);
-var CJOBS=lget(LS.jobs, ['Shop / General','PTO','Holiday','Training']);
+var NAMES=lget(LS.names, ['Sal','Doug','Jeff','Josh','Sal Jr','Tracy Arnold','Brent Burns','Brian Glenn','Kayla Roe','Jacob Rohn','John Tindle']);
+var CJOBS=lget(LS.jobs, ['Shop / General','All Purpose Leave','Holiday','Jury Duty','Lunch']);
+/* payroll IDs (from finance Master Time Card) — name -> employee ID */
+var EMPIDS=lget('mra_time_empids', {'Sal':'672','Sal Jr':'860','Doug':'756','Tracy Arnold':'617','Brent Burns':'674','Brian Glenn':'891','Kayla Roe':'815','Jacob Rohn':'719','John Tindle':'721'});
+/* finance job-code names (code = J# without the J) */
+var JCNAMES={'1014':'MRA Internal','1420':'Oakland Schools','1428':'Mott','1479':'WFCU','1543':'Washtenaw Community College','1553':'Medtronic','1557':'Ferguson Roadshow (Bizbox)'};
+/* pay types that are NOT job work */
+var LEAVEMAP={'all purpose leave':'All Purpose Leave','apl':'All Purpose Leave','pto':'All Purpose Leave','vacation':'All Purpose Leave','holiday':'Holiday','jury duty':'Jury Duty','jury':'Jury Duty','lunch':'Lunch','sick':'Sick','bereavement':'Bereavement'};
+function fPayType(e){ var k=String(e.job||'').toLowerCase().replace(/\s*\(.*/,'').replace(/^\d+\s*-\s*/,'').trim(); return LEAVEMAP[k]||'Work'; }
+function fCode(e){ if(fPayType(e)!=='Work') return ''; var jn=String(e.jobNum||'').replace(/^j/i,'').trim(); return jn||'Unknown'; }
+function fCodeName(e){ var c=fCode(e); if(!c) return ''; if(JCNAMES[c]) return JCNAMES[c]; var lbl=String(e.job||'').replace(/^\s*j?\d{3,6}\s*[·\-]\s*/i,'').trim(); return lbl||('Job '+c); }
 var ENTS =lget(LS.ents, []);
 
 /* future: set this to the "MRA Time Write" flow URL to also POST each entry (no-cors) */
@@ -206,12 +216,20 @@ function allJobOptions(){
 
 /* ---------- render form dropdowns ---------- */
 function fillWho(){ var sel=$('fWho'); var cur=sel.value; sel.innerHTML='<option value="">— pick your name —</option>'+NAMES.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); if(cur) sel.value=cur; }
-function fillJobs(){ var dl=$('jobList'); dl.innerHTML=allJobOptions().map(function(o){return '<option value="'+esc(o.label)+'">'+(o.custom?'🏷 ':'')+(o.active?'':'· shipped')+'</option>';}).join(''); }
+function jobListItems(){
+  var out=[], seen={};
+  boardJobs().forEach(function(j){ var code=String(j.jobNum||'').replace(/^j/i,'').trim(); var nm=j.label.replace(/^\s*j?\d{3,6}\s*[·\-\u2014]\s*/i,'').trim()||j.label; var val=code?(code+' · '+nm):nm; var k=code?('c'+code):('n'+nm.toLowerCase()); if(seen[k])return; seen[k]=1; out.push({val:val,code:code,name:nm,active:j.active}); });
+  Object.keys(JCNAMES).forEach(function(code){ if(seen['c'+code])return; seen['c'+code]=1; out.push({val:code+' · '+JCNAMES[code],code:code,name:JCNAMES[code],active:true}); });
+  CJOBS.forEach(function(c){ var k='x'+c.toLowerCase(); if(seen[k])return; seen[k]=1; out.push({val:c,code:'',name:c,custom:true}); });
+  return out;
+}
+function fillJobs(){ var dl=$('jobList'); dl.innerHTML=jobListItems().map(function(o){ return '<option value="'+esc(o.val)+'">'; }).join(''); }
 function fillHchips(){ var box=$('hchips'); box.innerHTML=[0.5,1,2,4,8].map(function(h){return '<button type="button" class="hchip" data-h="'+h+'">'+h+'</button>';}).join(''); }
 
 /* ---------- submit ---------- */
 function submit(){
-  var who=$('fWho').value.trim(), date=$('fDate').value||todayISO(), job=$('fJob').value.trim(), hours=num($('fHours').value), task=$('fTask').value.trim(), notes=$('fNotes').value.trim();
+  var who=$('fWho').value.trim(), date=$('fDate').value||todayISO(), hours=num($('fHours').value), task=$('fTask').value.trim(), notes=$('fNotes').value.trim();
+  var job=$('fJob').value.trim();
   if(!who){ alert('Pick your name.'); $('fWho').focus(); return; }
   if(!job){ alert('Pick a job to charge to.'); $('fJob').focus(); return; }
   if(!(hours>0)){ alert('Enter hours (more than 0).'); $('fHours').focus(); return; }
@@ -230,7 +248,7 @@ function submit(){
 function ensurePin(){ if(sessionStorage.getItem(LS.pin)==='1') return true; var p=prompt('Manager code to edit names / jobs:'); if(p==='1974'){ sessionStorage.setItem(LS.pin,'1'); return true; } if(p!=null) alert('Wrong code.'); return false; }
 function openMgr(){ if(!ensurePin()) return; $('mgrCard').classList.remove('hide'); renderMgr(); $('mgrCard').scrollIntoView({behavior:'smooth',block:'start'}); }
 function renderMgr(){
-  $('nameList').innerHTML=NAMES.map(function(n,i){return '<li><span>'+esc(n)+'</span><button class="rowedit" data-en="'+i+'">✎</button><button class="rowdel" data-dn="'+i+'">×</button></li>';}).join('')||'<li class="muted">No names yet.</li>';
+  $('nameList').innerHTML=NAMES.map(function(n,i){return '<li><span>'+esc(n)+'</span><input class="idbox" data-idn="'+esc(n)+'" value="'+esc(EMPIDS[n]||'')+'" placeholder="ID#" title="Payroll ID (for the finance report)"><button class="rowedit" data-en="'+i+'">✎</button><button class="rowdel" data-dn="'+i+'">×</button></li>';}).join('')||'<li class="muted">No names yet.</li>';
   $('jobMList').innerHTML=CJOBS.map(function(n,i){return '<li><span>'+esc(n)+'</span><button class="rowedit" data-ej="'+i+'">✎</button><button class="rowdel" data-dj="'+i+'">×</button></li>';}).join('')||'<li class="muted">None — board jobs still show automatically.</li>';
 }
 function addName(){ var v=$('addName').value.trim(); if(!v) return; if(NAMES.some(function(n){return n.toLowerCase()===v.toLowerCase();})){ alert('Already in the list.'); return; } NAMES.push(v); lset(LS.names,NAMES); $('addName').value=''; fillWho(); fillPersonFilter(); renderMgr(); }
@@ -271,6 +289,79 @@ function exportCSV(){
   var blob=new Blob([lines.join('\n')],{type:'text/csv'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='MRA_time_'+todayISO()+'.csv'; a.click();
 }
 
+/* ---------- demo sample data ---------- */
+function _pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function seedSampleWeek(){
+  var pool=jobListItems().filter(function(o){ return o.code && o.active!==false && !o.custom; });
+  if(!pool.length) pool=jobListItems().filter(function(o){ return o.code; });
+  if(!pool.length){ alert('No board jobs loaded yet — try again in a moment.'); return; }
+  var tasks=['Wrap','Wiring','Install','Fabrication','Layout','Prep','Cabinets','Final QC','Graphics','Assembly'];
+  var thisMon=startOfWeek(new Date()), lastMon=new Date(thisMon); lastMon.setDate(thisMon.getDate()-7);
+  var today=new Date(); today.setHours(23,59,59,0); var add=[];
+  [lastMon,thisMon].forEach(function(mon){
+    for(var d=0;d<5;d++){ var day=new Date(mon); day.setDate(mon.getDate()+d); if(day>today) continue; var dISO=ymd(day);
+      if(Math.random()<0.4){ var h1=_pick([2,3,4]), h2=8-h1, j1=_pick(pool), j2=_pick(pool);
+        add.push({id:uid(),who:'Sal',dateISO:dISO,job:j1.val,jobNum:j1.code,hours:h1,task:_pick(tasks),notes:'',ts:new Date().toISOString()});
+        add.push({id:uid(),who:'Sal',dateISO:dISO,job:j2.val,jobNum:j2.code,hours:h2,task:_pick(tasks),notes:'',ts:new Date().toISOString()});
+      } else { var j=_pick(pool), h=_pick([6,7,8,8,8]);
+        add.push({id:uid(),who:'Sal',dateISO:dISO,job:j.val,jobNum:j.code,hours:h,task:_pick(tasks),notes:'',ts:new Date().toISOString()}); } }
+  });
+  ENTS=ENTS.concat(add); lset(LS.ents,ENTS); lset('mra_time_seeded',1); renderTracking();
+}
+function clearAll(){ if(!confirm('Delete ALL entries on this device?')) return; ENTS=[]; lset(LS.ents,ENTS); lset('mra_time_seeded',1); renderTracking(); }
+
+/* ---------- weekly finance report (payroll format) ---------- */
+function buildFinanceReport(){
+  var rows=filtered();
+  var rangeLbl={tw:'This week',lw:'Last week',m:'This month',all:'All time'}[$('fRange').value]||'';
+  if(!rows.length){ alert('No time entries in this range to report.'); return; }
+  var dates=rows.map(function(e){return e.dateISO;}).sort();
+  var period=isoToMDY(dates[0])+' - '+isoToMDY(dates[dates.length-1]);
+  var byPay={}, byCode={}, byEmp={}, grand=0;
+  rows.forEach(function(e){
+    var pt=fPayType(e), c=fCode(e), h=e.hours||0; grand+=h;
+    byPay[pt]=(byPay[pt]||0)+h;
+    if(pt==='Work'){ if(!byCode[c]) byCode[c]={name:fCodeName(e),h:0}; byCode[c].h+=h; }
+    var who=e.who||'—'; if(!byEmp[who]) byEmp[who]={id:EMPIDS[who]||'',codes:{},leaves:{},tot:0};
+    byEmp[who].tot+=h;
+    if(pt==='Work'){ if(!byEmp[who].codes[c]) byEmp[who].codes[c]={name:fCodeName(e),h:0}; byEmp[who].codes[c].h+=h; }
+    else { byEmp[who].leaves[pt]=(byEmp[who].leaves[pt]||0)+h; }
+  });
+  function f(n){ return (Math.round((n||0)*100)/100).toFixed(2); }
+  // Totals by pay type
+  var payRows=Object.keys(byPay).sort().map(function(k){ return '<tr><td>'+esc(k)+'</td><td class="r">'+f(byPay[k])+'</td></tr>'; }).join('');
+  // Job code totals
+  var codeKeys=Object.keys(byCode).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
+  var codeRows=codeKeys.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(byCode[c].name||'')+'</td><td class="r">'+f(byCode[c].h)+'</td></tr>'; }).join('');
+  // Per employee
+  var empKeys=Object.keys(byEmp).sort(function(a,b){ return String(a).localeCompare(String(b)); });
+  var empSecs=empKeys.map(function(w){ var E=byEmp[w];
+    var lines=Object.keys(E.codes).sort().map(function(c){ return '<tr><td>Work</td><td>'+esc(c)+'</td><td>'+esc(E.codes[c].name||'')+'</td><td class="r">'+f(E.codes[c].h)+'</td></tr>'; }).join('')
+      + Object.keys(E.leaves).sort().map(function(pt){ return '<tr><td>'+esc(pt)+'</td><td></td><td></td><td class="r">'+f(E.leaves[pt])+'</td></tr>'; }).join('');
+    return '<h3>ID: '+esc(E.id||'—')+' &nbsp; '+esc(w)+'</h3><table class="t"><thead><tr><th>Pay type</th><th>Job code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'+lines+'<tr class="sub"><td colspan="3">Employee total</td><td class="r">'+f(E.tot)+'</td></tr></tbody></table>'; }).join('');
+  var d=new Date(), dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Weekly Time Summary '+period+'</title><style>'
+    +'body{font-family:Segoe UI,Arial,sans-serif;color:#1b2635;margin:0}'
+    +'.bar{background:#101827;color:#fff;padding:9px 16px}.bar button{background:#F36C21;color:#fff;border:0;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer}'
+    +'.pad{padding:22px 30px}h1{color:#F36C21;margin:0;font-size:21px}.sub2{color:#66758a;font-size:12.5px;margin:3px 0 16px}'
+    +'h2{font-size:14px;margin:20px 0 5px;border-bottom:2px solid #F36C21;padding-bottom:3px;text-transform:uppercase;letter-spacing:.4px}'
+    +'h3{font-size:13px;margin:16px 0 4px;background:#f1f4f8;padding:6px 9px;border-radius:6px}'
+    +'table.t{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px}'
+    +'table.t th{background:#101827;color:#fff;text-align:left;padding:5px 8px;font-size:10px;text-transform:uppercase}'
+    +'table.t td{padding:5px 8px;border-bottom:1px solid #e6e8eb}td.r,th.r{text-align:right}'
+    +'tr.sub td{font-weight:800;background:#faf1ea}.grand{display:inline-block;background:#faf1ea;border:1px solid #f0d3bf;border-radius:9px;padding:8px 16px;font-weight:800;margin-top:8px}'
+    +'@media print{.bar{display:none}} tr{break-inside:avoid}'
+    +'</style></head><body><div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button></div><div class="pad">'
+    +'<h1>Mobility Resource Associates Inc — Weekly Time Summary</h1>'
+    +'<div class="sub2">Pay period '+esc(period)+' ('+esc(rangeLbl)+') · Dept 210 Engineering · Generated '+dd+' · Grand total '+f(grand)+' hrs</div>'
+    +'<h2>Totals by pay type</h2><table class="t"><thead><tr><th>Pay type</th><th class="r">Hours</th></tr></thead><tbody>'+payRows+'</tbody></table>'
+    +'<h2>Job code totals</h2><table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'+codeRows+'</tbody></table>'
+    +'<div class="grand">Grand total '+f(grand)+' hrs</div>'
+    +'<h2>By employee</h2>'+empSecs
+    +'</div></body></html>';
+  var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups, then tap Finance report again.'); return; } w.document.open(); w.document.write(html); w.document.close();
+}
+
 /* ---------- theme ---------- */
 function applyTheme(){ var t=lget(LS.theme,'dark'); document.body.classList.toggle('light', t==='light'); $('themeBtn').textContent=t==='light'?'☾':'☀'; }
 function toggleTheme(){ var t=lget(LS.theme,'dark')==='light'?'dark':'light'; lset(LS.theme,t); applyTheme(); }
@@ -281,6 +372,7 @@ function boot(){
   applyTheme();
   $('fDate').value=todayISO();
   fillWho(); fillJobs(); fillHchips();
+  if(!ENTS.length && !lget('mra_time_seeded',0)) seedSampleWeek();
   renderTracking();
   // events
   $('submitBtn').onclick=submit;
@@ -290,6 +382,9 @@ function boot(){
   $('addJobBtn').onclick=addJob;  $('addJob').onkeydown=function(e){ if(e.key==='Enter') addJob(); };
   $('themeBtn').onclick=toggleTheme;
   $('csvBtn').onclick=exportCSV; $('printBtn').onclick=function(){ window.print(); };
+  $('sampleBtn').onclick=seedSampleWeek; $('clearBtn').onclick=clearAll;
+  $('finBtn').onclick=buildFinanceReport;
+  $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
   ['fRange','fPerson','fJobF'].forEach(function(id){ $(id).onchange=renderTracking; });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
   $('entRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d) delEntry(d.getAttribute('data-del')); });
@@ -298,7 +393,7 @@ function boot(){
     var t=e.target; var i;
     if((i=t.getAttribute('data-dn'))!=null){ NAMES.splice(+i,1); lset(LS.names,NAMES); fillWho(); fillPersonFilter(); renderMgr(); }
     else if((i=t.getAttribute('data-dj'))!=null){ CJOBS.splice(+i,1); lset(LS.jobs,CJOBS); fillJobs(); renderMgr(); }
-    else if((i=t.getAttribute('data-en'))!=null){ var v=prompt('Rename:',NAMES[+i]); if(v&&v.trim()){ NAMES[+i]=v.trim(); lset(LS.names,NAMES); fillWho(); fillPersonFilter(); renderMgr(); } }
+    else if((i=t.getAttribute('data-en'))!=null){ var old=NAMES[+i]; var v=prompt('Rename:',old); if(v&&v.trim()){ v=v.trim(); if(EMPIDS[old]!=null){ EMPIDS[v]=EMPIDS[old]; delete EMPIDS[old]; lset('mra_time_empids',EMPIDS);} NAMES[+i]=v; lset(LS.names,NAMES); fillWho(); fillPersonFilter(); renderMgr(); } }
     else if((i=t.getAttribute('data-ej'))!=null){ var v=prompt('Rename:',CJOBS[+i]); if(v&&v.trim()){ CJOBS[+i]=v.trim(); lset(LS.jobs,CJOBS); fillJobs(); renderMgr(); } }
   });
 }
