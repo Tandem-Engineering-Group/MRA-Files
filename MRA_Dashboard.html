@@ -3736,6 +3736,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"33.4", date:"2026-07-22", title:"\u{1F4C5} Projects screen: dates on cards + archive done projects", items:[
+    "The <b>project cards</b> at the top of the new Projects screen now show the <b>\u{1F4C5} start → finish dates</b> right on each card (under the PM line).",
+    "<b>Done projects auto-archive</b> again — a project drops off the Projects screen <b>8 days</b> after it wraps (100% complete or its trailer shipped), just like the classic board. A <b>\u{1F5C4} Show archived (N)</b> button up top brings them back when you need them." ] },
   { rev:"33.3", date:"2026-07-21", title:"\u{1F5A8} FLEETIO: pick which trailer(s) to print", items:[
     "The Open Issues <b>🖨 Print…</b> (and a new one on <b>🚛 By Trailer</b>) now opens a <b>trailer picker</b> — search, tick one or several units (or All), and print just those units\u2019 open issues with full descriptions + photos. Pick one trailer = that trailer\u2019s issues only." ] },
   { rev:"33.2", date:"2026-07-21", title:"\u{1F5A8} FLEETIO: print all open issues (with photos)", items:[
@@ -16804,7 +16807,7 @@ try{ if(new URLSearchParams(location.search).get('projv2')){ (function _pw(){ if
    It REUSES the live data (MRA_DATA.projects) and the REAL edit engine — openProjectEditor / openProjTaskEdit /
    verifyTask / sendBackTask — so every bell + edit function still works. The live Projects tab is untouched;
    this is a full-screen overlay you only see at ?projv2=1 (or ☰ menu). Flag off = zero impact on the board. */
-let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let PV2_SORT='health'; let PV2_ZOOM=1, PV2_LOD='both';
+let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let PV2_SORT='health'; let PV2_ZOOM=1, PV2_LOD='both'; let PV2_ARCH=false;
 (function(){ const st=document.createElement('style'); st.id='projV2css'; st.textContent=`
   #projV2{position:fixed;inset:0;z-index:70;overflow:auto;display:none;
     --pv-bg:#f3f6fa;--pv-card:#fff;--pv-text:#223047;--pv-muted:#66758a;--pv-line:#dfe6ef;
@@ -16834,6 +16837,7 @@ let PROJV2_OPEN=false; const PV2_OPEN=new Set(); const PV2_COLL=new Set(); let P
   #projV2 .pv-card.on{border-color:var(--pv-org);box-shadow:inset 0 0 0 1px var(--pv-org)}
   #projV2 .pv-card .pn{font-weight:800;font-size:13.5px;margin-bottom:2px;line-height:1.25}
   #projV2 .pv-card .pj{color:var(--pv-muted);font-size:11px}
+  #projV2 .pv-card .pv-cdate{color:var(--pv-text);font-size:11px;font-weight:600;margin-top:4px;opacity:.85}
   #projV2 .pv-card .pv-row2{display:flex;justify-content:space-between;align-items:center;margin-top:9px}
   #projV2 .pv-prog{height:7px;background:#8891a326;border-radius:10px;overflow:hidden;margin-top:8px}
   #projV2 .pv-prog span{display:block;height:100%;background:var(--pv-org)}
@@ -16921,7 +16925,7 @@ function _pvSortProjs(arr){ const rk={late:0,behind:1,ontrack:2,upcoming:3,parke
 function pvExpandAll(){ const D=window.MRA_DATA||{}; (D.projects||[]).forEach(x=>{ if(x&&x.name){ PV2_OPEN.add(x.name); PV2_COLL.delete(x.name); } }); renderProjV2(); }
 function pvCollapseAll(){ const D=window.MRA_DATA||{}; (D.projects||[]).forEach(x=>{ if(x&&x.name){ PV2_OPEN.add(x.name); PV2_COLL.add(x.name); } }); renderProjV2(); }
 function pvPanelCaret(name){ if(PV2_COLL.has(name)) PV2_COLL.delete(name); else PV2_COLL.add(name); renderProjV2(); }
-function pvArchive(){ alert('Project Archive isn’t wired into this preview yet — it’ll link to the archived-projects view once we build that. For now, use the live board to delete/close projects.'); }
+function pvArchive(){ PV2_ARCH=!PV2_ARCH; renderProjV2(); }
 function pvPrint(){ const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
   const projs=_pvSortProjs((D.projects||[]).filter(p=>p&&p.name));
   const openArr=projs.filter(p=>PV2_OPEN.has(p.name)&&!PV2_COLL.has(p.name)); const detail=openArr.length?openArr:projs;
@@ -16964,12 +16968,15 @@ function closeProjV2(){ PROJV2_OPEN=false; const o=document.getElementById('proj
   try{ const u=new URL(location.href); if(u.searchParams.has('projv2')){ u.searchParams.delete('projv2'); history.replaceState(null,'',u.pathname+(u.search||'')+u.hash); } }catch(e){} }
 function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) return; const D=window.MRA_DATA||{}; const _emb=(function(){ try{ return window.self!==window.top; }catch(e){ return true; } })();
   const today=D.todayISO||localISO(Date.now());
-  const projs=_pvSortProjs((D.projects||[]).filter(p=>p&&p.name));
+  const _pvIsArch=(p)=>{ try{ return typeof projArchived==='function' && projArchived(p); }catch(e){ return false; } };
+  const _pvArchN=(D.projects||[]).filter(p=>p&&p.name&&_pvIsArch(p)).length;
+  const projs=_pvSortProjs((D.projects||[]).filter(p=>p&&p.name).filter(p=>PV2_ARCH||!_pvIsArch(p)));
   // ---- cards ----
   const cards=projs.map(p=>{ const h=_pvHealth(p), open=PV2_OPEN.has(p.name), jn=(typeof projJobNum==='function')?projJobNum(p.name):(p.jobNum||'');
     return `<button class="pv-card ${open?'on':''}" onclick="pvToggle('${escJsAttr(p.name)}')">
       <div class="pn">${esc(p.name)}${p.nonOfficial?' <span class="pv-tag">🏷</span>':''}</div>
       <div class="pj">${jn?esc(jn)+' · ':''}${esc(p.pm||'No PM')}</div>
+      <div class="pv-cdate">📅 ${p.startISO?esc(fmtMDY(p.startISO)):'—'} → ${p.finishISO?esc(fmtMDY(p.finishISO)):'—'}</div>
       <div class="pv-row2"><span class="pv-chip ${h.c}">${esc(h.l)}</span><span class="pj">${p.pct||0}%</span></div>
       <div class="pv-prog"><span style="width:${Math.max(0,Math.min(100,p.pct||0))}%"></span></div></button>`; }).join('');
   // ---- verify queue ----
@@ -17030,7 +17037,7 @@ function renderProjV2(){ const o=document.getElementById('projV2'); if(!o) retur
   const pmMileHtml=`<div class="pv-h2">Team &amp; milestones</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px"><div class="pv-vq"><h3>📊 PM load <span class="pj">— open tasks by PM</span></h3>${pmRows}</div><div class="pv-vq"><h3>◆ Milestones — next 30 days <span class="pv-chip warn">${_ms.length}</span></h3>${msRows}</div></div>`;
   o.innerHTML=`<div class="pv-top">
       <div><h1>Projects ${_emb?'':'<span class="pv-prev">PREVIEW · NEW FORMAT</span>'}</h1><div class="sub">${projs.length} projects · full project planning</div></div>
-      <div class="pv-tr"><button class="pvbtn" onclick="pvPrint()">🖨 Print</button><button class="pvbtn" onclick="pvArchive()">Project Archive</button>${_emb?'':'<button class="pvbtn" id="pvTheme" onclick="pvThemeToggle()">☾ Dark</button><button class="pvbtn primary" onclick="closeProjV2()">✕ Back to board</button>'}</div></div>
+      <div class="pv-tr"><button class="pvbtn" onclick="pvPrint()">🖨 Print</button><button class="pvbtn" onclick="pvArchive()">${PV2_ARCH?'🗄 Hide archived':'🗄 Show archived'+(_pvArchN?' ('+_pvArchN+')':'')}</button>${_emb?'':'<button class="pvbtn" id="pvTheme" onclick="pvThemeToggle()">☾ Dark</button><button class="pvbtn primary" onclick="closeProjV2()">✕ Back to board</button>'}</div></div>
     <div class="pv-main">
       ${kpiHtml}
       <div class="pv-h2" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><span>Projects <span class="pj" style="font-weight:400;color:var(--pv-muted)">— tap a card to open / close</span></span><span class="pv-tr"><label class="pj" style="color:var(--pv-muted)">Sort</label><select class="pvbtn" onchange="pvSetSort(this.value)"><option value="health"${PV2_SORT==='health'?' selected':''}>Health (default)</option><option value="pm"${PV2_SORT==='pm'?' selected':''}>By PM</option><option value="date"${PV2_SORT==='date'?' selected':''}>By date</option><option value="name"${PV2_SORT==='name'?' selected':''}>A–Z</option></select><button class="pvbtn" onclick="pvExpandAll()">⊞ Expand all</button><button class="pvbtn" onclick="pvCollapseAll()">⊟ Collapse all</button></span></div>
