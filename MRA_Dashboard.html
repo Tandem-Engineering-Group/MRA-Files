@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"35.8", date:"2026-07-23", title:"🧺 Quiet sections auto-collapse (bundling) — only what's new stays open", items:[
+    "Sections with nothing new now <b>auto-collapse to just their header</b> (with the count) so the page stays short — anything with <b>new</b> content (green tile up top) stays expanded. <b>Tap a header</b> (or its top tile) to open/close; your choice sticks. Tell Claude and your Tasks stay open by default. Keeps My Work to a quick glance instead of a long scroll." ] },
   { rev:"35.7", date:"2026-07-23", title:"🟢 Section nav tiles at the top of MY WORK — light up green when something's new", items:[
     "A row of <b>section tiles</b> across the top of My Command — one per section (Waiting · Appts · Inbound · FYI · Projects · Fleetio · Tasks) with its count. When a section gets <b>something new since you last looked</b>, its tile turns <b>green with a dot + NEW</b> — tap it and it jumps you straight down to that section. No more scrolling to check each one. Tapping marks it seen (clears the green) until the next change." ] },
   { rev:"35.6", date:"2026-07-23", title:"✨ MY WORK visual refresh (research-backed) + task snooze", items:[
@@ -13983,9 +13985,15 @@ function mwMcWake(i){ var a=_mcTasks(); if(a[i]){ delete a[i].snoozeUntil; _mcSa
 var MW_SEEN_KEY='mra_mw_seen_v1';
 function _mwSeen(){ try{ return JSON.parse(localStorage.getItem(MW_SEEN_KEY)||'{}')||{}; }catch(e){ return {}; } }
 function _mwSeenSave(o){ try{ localStorage.setItem(MW_SEEN_KEY,JSON.stringify(o)); }catch(e){} }
+// section collapse state: 'open'/'closed' overrides; unset = auto (collapsed when quiet, open when new)
+var MW_COL_KEY='mra_mw_col_v1';
+function _mwColState(){ try{ return JSON.parse(localStorage.getItem(MW_COL_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function _mwColSave(c){ try{ localStorage.setItem(MW_COL_KEY,JSON.stringify(c)); }catch(e){} }
+function mwToggleSec(key){ var lane=document.querySelector('#myworkView .mw-lane[data-sec="'+key+'"]'); var isCol=!!(lane&&lane.classList.contains('mw-collapsed')); var c=_mwColState(); c[key]=isCol?'open':'closed'; _mwColSave(c); renderMyWork(); }
 function mwGoSec(key,anchor){ var s=_mwSeen(); if(window._MW_SIGS&&window._MW_SIGS[key]!==undefined){ s[key]=window._MW_SIGS[key]; _mwSeenSave(s); }
-  var el=document.getElementById(anchor); if(el&&el.scrollIntoView){ try{ el.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){ el.scrollIntoView(); } }
-  setTimeout(function(){ renderMyWork(); },450); }
+  var c=_mwColState(); c[key]='open'; _mwColSave(c);          // jumping opens the section
+  renderMyWork();
+  setTimeout(function(){ var el=document.getElementById(anchor); if(el&&el.scrollIntoView){ try{ el.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){ el.scrollIntoView(); } } },120); }
 function _mcNavTiles(A){
   var g=(typeof _mcGaps==='function')?_mcGaps():{overdue:[],notask:[],gone:[],total:0};
   var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var _tdy=(window.MRA_DATA||{}).todayISO||'';
@@ -14042,7 +14050,12 @@ function _mwFreshCss(){ if(document.getElementById('mwFreshCss')) return; var s=
   +'#myworkView #mwsec-cmdt{border-left:4px solid #3b82f6}'
   +'#myworkView #mwsec-cmdflows{border-left:4px solid #64748b}'
   +'#myworkView #mwsec-proj{border-left:4px solid #22c55e}'
-  +'#myworkView #mwsec-cmdask{border-left:4px solid var(--brand)}';
+  +'#myworkView #mwsec-cmdask{border-left:4px solid var(--brand)}'
+  +'#myworkView .mw-lane .panel h2{cursor:pointer;user-select:none}'
+  +'#myworkView .mw-lane .panel h2::after{content:"▾";font-size:10px;color:var(--muted);margin-left:6px;order:99}'
+  +'#myworkView .mw-lane.mw-collapsed .panel h2::after{content:"▸"}'
+  +'#myworkView .mw-lane.mw-collapsed .panel{padding-bottom:15px}'
+  +'#myworkView .mw-lane.mw-collapsed .panel > *:not(h2){display:none}';
   document.head.appendChild(s); }
 // 💬 Tell Claude: send a free-text instruction to Claude (routes via the mail flow, tagged; Claude reads it on the next refresh and acts).
 function mcAsk(){ var el=document.getElementById('mcAskBox'); if(!el) return; var v=(el.value||'').trim(); if(!v){ alert('Type what you want Claude to do.'); return; }
@@ -14090,16 +14103,22 @@ function mwMove(key,dir){ var o=_mcOrder(); var i=o.indexOf(key); if(i<0) return
 function _mcLanes(blocks){ var o=_mcOrder();
   var visKeys=o.filter(function(k){ return blocks[k] && _mcLaneVisible(k); });
   var bs='background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--txt);cursor:pointer;font-size:12px;min-width:26px;height:24px;line-height:1;padding:0';
+  var seen=_mwSeen(), sigs=window._MW_SIGS||{}, col=_mwColState();
+  var alwaysOpen={tellClaude:1,tasks:1};   // input + your task list stay open by default; brief sections auto-collapse when quiet
   return o.map(function(key){ var html=blocks[key]; if(!html || !_mcLaneVisible(key)) return '';
     var vi=visKeys.indexOf(key);
     var top=vi>0?'<button title="Move to top" style="'+bs+'" onclick="mwMove(\''+key+'\',\'top\')">⤒</button>':'';
     var up =vi>0?'<button title="Move up" style="'+bs+'" onclick="mwMove(\''+key+'\',-1)">▲</button>':'';
     var dn =vi<visKeys.length-1?'<button title="Move down" style="'+bs+'" onclick="mwMove(\''+key+'\',1)">▼</button>':'';
     var ctrl='<div style="position:absolute;top:12px;right:12px;z-index:3;display:flex;gap:4px">'+top+up+dn+'</div>';
-    return '<div style="position:relative">'+ctrl+html+'</div>'; }).join(''); }
+    var hasNew = (sigs[key]!==undefined && seen[key]!==undefined && seen[key]!==sigs[key]);
+    var defCollapsed = !alwaysOpen[key] && !hasNew;
+    var collapsed = (col[key]==='open')?false:((col[key]==='closed')?true:defCollapsed);
+    return '<div class="mw-lane'+(collapsed?' mw-collapsed':'')+'" data-sec="'+key+'" style="position:relative">'+ctrl+html+'</div>'; }).join(''); }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
   try{ _mwFreshCss(); }catch(e){}
+  if(!box._mwSecDeleg){ box._mwSecDeleg=1; box.addEventListener('click',function(ev){ if(ev.target.closest('button,a,input,select,textarea,label')) return; var h=ev.target.closest('.mw-lane .panel h2'); if(!h) return; var lane=ev.target.closest('.mw-lane'); var k=lane&&lane.getAttribute('data-sec'); if(k) mwToggleSec(k); }); }
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
   const who=myWorkWho();
   let picker='';
