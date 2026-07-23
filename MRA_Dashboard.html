@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"35.7", date:"2026-07-23", title:"🟢 Section nav tiles at the top of MY WORK — light up green when something's new", items:[
+    "A row of <b>section tiles</b> across the top of My Command — one per section (Waiting · Appts · Inbound · FYI · Projects · Fleetio · Tasks) with its count. When a section gets <b>something new since you last looked</b>, its tile turns <b>green with a dot + NEW</b> — tap it and it jumps you straight down to that section. No more scrolling to check each one. Tapping marks it seen (clears the green) until the next change." ] },
   { rev:"35.6", date:"2026-07-23", title:"✨ MY WORK visual refresh (research-backed) + task snooze", items:[
     "Freshened the whole MY WORK look: rounded, elevated cards with more breathing room, a cleaner 3-level type hierarchy, and <b>color-coded left rails</b> on every section (red = waiting/overdue, amber = FYI/watchdog, green = inbound/projects, orange = command/appts, blue = tasks) so it scans in seconds — based on 2026 dark-dashboard best practices. Added <b>💤 Snooze</b> on any task (hides it until tomorrow into a Snoozed group, ☀ Wake to bring back). Only affects MY WORK; nothing else changed." ] },
   { rev:"35.5", date:"2026-07-23", title:"🔌 Recipient editor now saves live (MRA Config Write flow connected)", items:[
@@ -13970,13 +13972,48 @@ function _mwMcPanel(){
     +'<textarea id="mcAskBox" placeholder="Tell Claude what to do…" style="width:100%;min-height:80px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical"></textarea>'
     +'<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button style="'+BP+'" onclick="mcAsk()">Send to Claude</button><span id="mcAskMsg" class="mc-muted" style="font-size:12px;color:var(--muted)"></span></div></div>';
   var blocks={tellClaude:askH, questions:qh, waiting:wh, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th, flows:_mcFlowsPanel()};
-  return head+_mcLanes(blocks);
+  return head+_mcNavTiles(A)+_mcLanes(blocks);
 }
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
 function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ a.splice(i,1); _mcSave(a); renderMyWork(); } }
 function mwMcAdd(){ var el=document.getElementById('mwMcNew'); if(!el)return; var v=el.value.trim(); if(!v)return; var a=_mcTasks(); a.push({id:_mcId(),t:v,done:false}); _mcSave(a); renderMyWork(); }
 function mwMcSnooze(i){ var a=_mcTasks(); if(!a[i])return; var d=new Date(); d.setDate(d.getDate()+1); var z=function(n){return String(n).padStart(2,'0');}; a[i].snoozeUntil=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); _mcSave(a); if(typeof mcToast==='function') mcToast('💤 Snoozed until tomorrow'); renderMyWork(); }
 function mwMcWake(i){ var a=_mcTasks(); if(a[i]){ delete a[i].snoozeUntil; _mcSave(a); renderMyWork(); } }
+// ---- Section nav tiles at the top: count per section + green "NEW" when it changed since you last looked; tap jumps to it ----
+var MW_SEEN_KEY='mra_mw_seen_v1';
+function _mwSeen(){ try{ return JSON.parse(localStorage.getItem(MW_SEEN_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function _mwSeenSave(o){ try{ localStorage.setItem(MW_SEEN_KEY,JSON.stringify(o)); }catch(e){} }
+function mwGoSec(key,anchor){ var s=_mwSeen(); if(window._MW_SIGS&&window._MW_SIGS[key]!==undefined){ s[key]=window._MW_SIGS[key]; _mwSeenSave(s); }
+  var el=document.getElementById(anchor); if(el&&el.scrollIntoView){ try{ el.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){ el.scrollIntoView(); } }
+  setTimeout(function(){ renderMyWork(); },450); }
+function _mcNavTiles(A){
+  var g=(typeof _mcGaps==='function')?_mcGaps():{overdue:[],notask:[],gone:[],total:0};
+  var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var _tdy=(window.MRA_DATA||{}).todayISO||'';
+  var openTasks=tasks.filter(function(t){ return !t.done && !(t.snoozeUntil&&(!_tdy||t.snoozeUntil>_tdy)); });
+  var sig=function(arr,f){ arr=arr||[]; return arr.length+'|'+arr.map(f).join('~'); };
+  var defs=[
+   {k:'waiting',ic:'🔴',lab:'Waiting',anchor:'mwsec-cmdw',n:(A.waiting||[]).length,s:sig(A.waiting,function(x){return (x.who||'')+(x.subject||'');})},
+   {k:'questions',ic:'❓',lab:'Questions',anchor:'mwsec-cmdq',n:(A.questions||[]).length,s:sig(A.questions,function(x){return (x.q||'');})},
+   {k:'appts',ic:'📅',lab:'Appts',anchor:'mwsec-cmda',n:(A.appts||[]).length,s:sig(A.appts,function(x){return (x.what||'')+(x.when||'');})},
+   {k:'inbound',ic:'📦',lab:'Inbound',anchor:'mwsec-cmdi',n:(A.inbound||[]).length,s:sig(A.inbound,function(x){return (x.item||'')+(x.when||'');})},
+   {k:'fyi',ic:'📩',lab:'FYI',anchor:'mwsec-cmdfyi',n:(A.fyi||[]).length,s:sig(A.fyi,function(x){return (x.title||'');})},
+   {k:'projects',ic:'📋',lab:'Projects',anchor:'mwsec-cmdp',n:(A.projects||[]).length,s:sig(A.projects,function(x){return (x.name||'')+'|'+((x.flags||[]).length)+'|'+((x.brief||'').length);})},
+   {k:'watchdog',ic:'⚠',lab:'Fleetio',anchor:'mwsec-cmdf',n:(g.overdue.length+g.notask.length+g.gone.length),s:'o'+g.overdue.length+'n'+g.notask.length+'x'+g.gone.length},
+   {k:'tasks',ic:'✅',lab:'Tasks',anchor:'mwsec-cmdt',n:openTasks.length,s:'open'+openTasks.length+'|'+openTasks.map(function(t){return t.t;}).join('~')}
+  ];
+  defs=defs.filter(function(d){ if((d.k==='questions'||d.k==='fyi')&&d.n===0) return false; return true; });
+  var seen=_mwSeen(), firstEver=Object.keys(seen).length===0; window._MW_SIGS={};
+  var tilesHtml=defs.map(function(d){ window._MW_SIGS[d.k]=d.s;
+    var isNew = firstEver ? false : (seen[d.k]!==undefined ? seen[d.k]!==d.s : d.n>0);
+    var glow=isNew?';box-shadow:0 0 0 2px #22c55e inset;border-color:#22c55e':'';
+    return '<button onclick="mwGoSec(\''+d.k+'\',\''+d.anchor+'\')" title="Jump to '+esc(d.lab)+(isNew?' — has something new':'')+'" style="flex:0 0 auto;min-width:92px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;cursor:pointer;text-align:left;position:relative'+glow+'">'
+      +(isNew?'<span style="position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e"></span>':'')
+      +'<div style="font-size:11px;color:var(--muted);font-weight:700">'+d.ic+' '+esc(d.lab)+'</div>'
+      +'<div style="font-size:21px;font-weight:800;line-height:1;margin-top:3px;color:'+(isNew?'#22c55e':'var(--txt)')+'">'+d.n+'</div>'
+      +(isNew?'<div style="font-size:8.5px;font-weight:800;color:#22c55e;letter-spacing:.6px;margin-top:2px">NEW</div>':'')
+      +'</button>'; }).join('');
+  if(firstEver){ var b={}; defs.forEach(function(d){ b[d.k]=d.s; }); _mwSeenSave(b); }
+  return '<div style="display:flex;gap:9px;overflow-x:auto;padding:2px 2px 8px;margin:2px 0 4px">'+tilesHtml+'</div>'; }
 // Scoped visual refresh for MY WORK only (2026 dark-dashboard best practice: layered elevation, one accent,
 // 3-level type hierarchy, generous padding, color-coded section rails). Does not touch any other tab.
 function _mwFreshCss(){ if(document.getElementById('mwFreshCss')) return; var s=document.createElement('style'); s.id='mwFreshCss';
