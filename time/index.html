@@ -155,7 +155,7 @@
   <div class="card hide" id="hoursCard">
     <h2 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <span>Tracked hours</span>
-      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm" id="sampleBtn" title="Reload the real 7/13–17 demo week">🧪 Reload demo week</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
+      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm" id="refreshBtn" title="Pull the latest shared hours from everyone (reloads the shared list)">🔄 Refresh</button><button class="tbtn sm" id="sampleBtn" title="Reload the real 7/13–17 demo week">🧪 Reload demo week</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
     <div id="shareNote" class="muted" style="font-size:11.5px;margin:0 0 8px"></div>
     <div class="filtrow noprint">
       <select id="fRange">
@@ -340,7 +340,7 @@ function activeEntries(){ return (isMgr() && SHARED && SHARED.length) ? SHARED :
 function applyMgr(){ var on=isMgr(); var unlocked=(SSO.user||PINOK); var hc=$('hoursCard'), hl=$('hoursLocked'); if(hc) hc.classList.toggle('hide',!on); if(hl) hl.classList.toggle('hide',on);
   var b=$('mgrLoginBtn'); if(b) b.textContent = (unlocked? '🔓 Sign out' : '🔒 Sign in');
   var lm=$('lockMsg'); if(lm) lm.textContent = (SSO.user && !on) ? ('Signed in as '+SSO.email()+' — this account doesn\u2019t have access to hours/reports.') : '';
-  if(on && !SHARED) loadShared(function(){ renderTracking(); });
+  if(on) loadShared(function(){ renderTracking(); });   // always pull the latest shared list (was cached once -> stale after new entries)
   renderTracking();
 }
 function pinUnlock(){ var p=prompt('Manager code:'); if(p==null) return; if(p==='1974'){ PINOK=true; sessionStorage.setItem('mra_time_mgr','1'); applyMgr(); var hc=$('hoursCard'); if(hc) hc.scrollIntoView({behavior:'smooth',block:'start'}); } else alert('Wrong code.'); }
@@ -509,6 +509,7 @@ function boot(){
   $('csvBtn').onclick=exportCSV; $('printBtn').onclick=function(){ window.print(); };
   $('sampleBtn').onclick=seedRealWeek; $('clearBtn').onclick=clearAll;
   $('finBtn').onclick=buildFinanceReport;
+  { var rb=$('refreshBtn'); if(rb) rb.onclick=function(){ rb.textContent='⏳ …'; loadShared(function(){ rb.textContent='🔄 Refresh'; renderTracking(); }); }; }
   $('helpBtn').onclick=function(){ $('helpModal').classList.add('on'); };
   var _hc=function(){ $('helpModal').classList.remove('on'); }; $('helpClose').onclick=_hc; $('helpGot').onclick=_hc;
   $('helpModal').addEventListener('click',function(e){ if(e.target===$('helpModal')) _hc(); });
