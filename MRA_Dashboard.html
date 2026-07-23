@@ -3852,6 +3852,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.30", date:"2026-07-23", title:"📥 File project mail — stop showing non-project noise (temp, pending full sweep)", items:[
+    "The File-mail panel was grabbing inbound shipment/delivery notices and showing junk (a FedEx tracking email as a fake “Boston DX”). It now only lists <b>real project emails</b> (must have a subject + be an actual message). <b>Note:</b> the panel still only shows what's in your daily brief — the <b>full every-project-email sweep is a scan-side job still being wired up</b>, so the list stays short until that lands." ] },
   { rev:"36.29", date:"2026-07-23", title:"🛑 FIX: closed tasks stay closed — no more resurrecting auto-tasks", items:[
     "<b>Root cause found:</b> the scan re-words the same commitment every run (e.g. #1244 as “quote decision (Brace Installation)” one time, “a quote (generator mount)” the next), and the old de-dup matched on exact wording — so each rewording looked brand-new and came back, even after you X'd it.",
     "<b>Fixed:</b> tasks are now tracked by a <b>stable key</b> (the Fleetio # when there is one, otherwise a date/wording-proof signature). When you <b>✕ delete or ✓ complete</b> a task, it's remembered as closed and <b>never re-seeded</b> — no matter how the next scan re-words it. A task only reappears if it's a genuinely <b>new</b> item. Duplicates already piled up on your list are auto-collapsed to one.",
@@ -18407,7 +18409,9 @@ function _mcProjectMail(){ var A=(typeof _MC_AGENT!=='undefined'&&_MC_AGENT)?_MC
     if(id && filed.indexOf(id)>=0) return;   // already filed — don't show again
     out.push({ id:id, project:_mcProjName(x.project), from:x.from||x.email||x.who||'', subject:x.subject||'', when:x.when||'', pm:x.pm||'' }); };
   (A.projectMail||[]).forEach(push);
-  if(!(A.projectMail&&A.projectMail.length)){ [].concat(A.waiting||[], A.inbound||[], A.fyi||[]).forEach(push); }
+  // Fallback until the scan writes a full projectMail sweep: only real project EMAILS (must have a message id +
+  // subject) from waiting/fyi — NOT inbound shipments/deliveries (that was showing a FedEx as a fake "Boston DX").
+  if(!(A.projectMail&&A.projectMail.length)){ [].concat(A.waiting||[], A.fyi||[]).forEach(function(x){ if(x&&x.id&&x.subject) push(x); }); }
   return out; }
 function _mcFilePost(id, project){ if(!id) return; try{ fetch(MAIL_FILE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({action:'fileEmail', id:id, folder:project, project:project, pin:(typeof CLOSE_PIN!=='undefined'&&CLOSE_PIN)||'1974'})}); }catch(e){} }
 function mcFileMail(id, project){ if(!MAIL_FILE_URL){ alert('The email-filer flow isn’t connected yet. Ask me to “build the email filer” and I’ll give you the 5-minute steps.'); return; }
