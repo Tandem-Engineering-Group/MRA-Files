@@ -1290,10 +1290,13 @@
   .sp-cap-h{font-size:11px;letter-spacing:.6px;font-weight:800;color:var(--muted);margin-bottom:8px}
   .sp-cap-row{display:flex;align-items:center;gap:9px;margin-bottom:4px;font-size:11.5px}
   .sp-cap-row .n{flex:0 0 110px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .sp-cap-row .t{flex:1;background:var(--panel2);border-radius:4px;height:12px;overflow:hidden}
-  .sp-cap-row .b{display:block;height:100%;background:#3b82f6;border-radius:4px}
-  .sp-cap-row .c{flex:0 0 18px;text-align:right;font-weight:800}
+  .sp-cap-row .t{flex:1;display:flex;background:var(--panel2);border-radius:4px;height:12px;overflow:hidden}
+  .sp-cap-row .b{display:block;height:100%;background:#3b82f6}
+  .sp-cap-row .b.bsim{background:repeating-linear-gradient(45deg,#8b5cf6,#8b5cf6 4px,rgba(139,92,246,.30) 4px,rgba(139,92,246,.30) 8px)}
+  .sp-cap-row .c{flex:0 0 auto;min-width:18px;text-align:right;font-weight:800}
+  .sp-cap-row .c .simn{color:#8b5cf6;font-weight:800;margin-left:2px;font-size:.85em}
   .sp-cap-row .f{flex:0 0 auto;color:var(--muted)}
+  .sp-cap-h .sp-cx{color:var(--muted);font-size:.8em}
   .sp-form{background:var(--panel);border:1.5px solid #8b5cf6;border-radius:12px;padding:14px 16px;margin-bottom:12px}
   .sp-fh{font-weight:800;margin-bottom:10px}
   .sp-fsub{color:var(--muted);font-weight:600;font-size:10.5px}
@@ -3825,6 +3828,14 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.17", date:"2026-07-23", title:"🧾 Quote reads like a real quote (Scope of Work + all-inclusive total)", items:[
+    "The customer quote is now professional: a <b>Scope of Work</b> block (fully editable — pulling a Fleetio issue fills a <b>clean</b> scope, not the raw internal request), a <b>“Price includes all labor, materials and shop supplies”</b> line, and the <b>all-inclusive Total</b> at the bottom. No more raw dump." ] },
+  { rev:"36.16", date:"2026-07-23", title:"📈 Sales & Planning — PM simulate, build-type start dates, 5% steps, collapsible load, no missing projects", items:[
+    "<b>Missing projects fixed</b> — the pipeline timeline now shows <b>every active project</b> (even ones with a partial or no date, flagged “⚠ no dates set”), so nothing drops off. PM LOAD “frees up” dates now show the <b>year</b> so they match the rest of the board.",
+    "<b>Simulate PM assignment</b> — on a prospect, pick <b>Consider PM</b> (Al / Megan / …); it adds a <b>dashed</b> segment to that PM's load bar so you can play with who to give the work to. Pipeline stays <b>planning-only</b> — it never touches the Projects board.",
+    "<b>Build-type start dates</b> — set the finish date, pick <b>Full (140d) · Partial (105d) · Graphics wrap (~1mo) · Small (13wks)</b>, and the start date auto-fills. <b>Probability</b> now steps in <b>5%</b>. <b>PM LOAD is collapsible</b> (click the header)." ] },
+  { rev:"36.15", date:"2026-07-23", title:"🧾 Quote Generator — ready for a shared dashboard quote store", items:[
+    "Groundwork for saving quotes to the <b>dashboard itself</b> (visible from any device, not just the one you built it on): once the one-time <b>“MRA Quote Write”</b> flow is connected, 💾 Save writes to a shared <b>quotes.json</b> and the list loads it on open. Until then it stays on your device (no change)." ] },
   { rev:"36.14", date:"2026-07-23", title:"📈 Sales & Planning — default back to Fit-all so ALL prospects show", items:[
     "Fixed: the timeline was opening zoomed-in, which pushed some prospects/jobs “outside range.” It now opens <b>Fit-all</b> (every prospect + committed job visible, out to 2027); use the 🔍 zoom + ↔ scroll to focus a period." ] },
   { rev:"36.13", date:"2026-07-23", title:"🧾 Quote Generator — editable description, Fleetio auto-fill, MI tax default", items:[
@@ -11070,6 +11081,8 @@ function printProdMeeting(){
 const SALES_TAG='[SALES]';
 let SP_OPEN=false, SP_FORM=null;
 let SP_ZOOM=1, SP_PAN=0, SP_SORT='date';   // Sales & Planning timeline: zoom (1=fit all → higher=narrower window), pan (0-100 across the span), sort mode. Default = fit all so every prospect + committed job shows on open; zoom in + scroll to focus a period.
+let SP_CAP_OPEN=true;   // PM LOAD strip open/collapsed
+function spToggleCap(){ SP_CAP_OPEN=!SP_CAP_OPEN; try{ renderSalesPlan(); }catch(e){} }
 function setSpZoom(v){ SP_ZOOM=Math.max(1,Math.min(6,+v||1)); try{ spRenderGantt(); }catch(e){} }
 function setSpPan(v){ SP_PAN=Math.max(0,Math.min(100,+v||0)); try{ spRenderGantt(); }catch(e){} }
 function spPanArrow(dir){ setSpPan(SP_PAN+dir*15); const el=document.getElementById('spPan'); if(el) el.value=SP_PAN; }
@@ -11090,11 +11103,11 @@ function _spCmp(kind, isPros){ return (a,b)=>{
 function spRenderGantt(){
   const D=window.MRA_DATA||{}; const g=document.getElementById('spGantt'); if(!g) return;
   const today=D.todayISO||localISO(Date.now());
-  const committed=(D.projects||[]).filter(p=>projStatus(p,today)!=='done'&&p.startISO&&p.finishISO);
+  const committed=(D.projects||[]).filter(p=>projStatus(p,today)!=='done');   // include ALL active projects (even date-partial / undated) so none go missing
   const pros=_spProspects();
   // full span across everything
   let tlo=Date.parse(today)-7*DAY, thi=tlo; const dts=[];
-  committed.forEach(p=>{ dts.push(p.startISO,p.finishISO); });
+  committed.forEach(p=>{ if(p.startISO) dts.push(p.startISO); if(p.finishISO) dts.push(p.finishISO); });
   pros.forEach(p=>{ if(p.st) dts.push(p.st); if(p.ln) dts.push(p.ln); });
   dts.forEach(iso=>{ const d=parseISO(iso); if(!d) return; if(d.getTime()<tlo) tlo=d.getTime(); if(d.getTime()>thi) thi=d.getTime(); });
   const fullDays=Math.min(1500, Math.max(60, Math.ceil((thi+14*DAY-tlo)/DAY)));   // was capped at 430 → cut off bars past ~14 months (couldn't scroll to 2027)
@@ -11116,8 +11129,9 @@ function spRenderGantt(){
   });
   rows.push({label:'COMMITTED', sub:committed.length+' project'+(committed.length===1?'':'s')+' on the board', noBar:true, cls:'g-phaserow sp-hdr sp-hdr2'});
   committed.slice().sort(_spCmp(SP_SORT,false)).forEach(p=>{
-    rows.push({ label:(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+p.name, sub:(p.pm||'—')+(p.pct!=null?(' · '+p.pct+'%'):''),
-      startISO:p.startISO, endISO:p.finishISO, color:p._color||'#3b82f6', pct:p.pct, barLabel:'', milestones:p.milestones||[],
+    const noDates=!(p.startISO||p.finishISO);
+    rows.push({ label:(p.parked?'⏸ ':'')+(p.nonOfficial?'🏷 ':'')+p.name, sub:(p.pm||'—')+(p.pct!=null?(' · '+p.pct+'%'):'')+(noDates?' · ⚠ no dates set':''),
+      startISO:(p.startISO||p.finishISO||''), endISO:(p.finishISO||p.startISO||''), noBar:noDates, color:p._color||'#3b82f6', pct:p.pct, barLabel:'', milestones:p.milestones||[],
       cls:'clickable'+(p.nonOfficial?' g-nonoff':'')+(p.parked?' g-parked':''),
       barClick:`openProjectDetail(event,'${escJsAttr(p.name)}')` });
   });
@@ -11129,8 +11143,15 @@ function _spProspects(){ const gj=_spGeneralJob(); if(!gj) return [];
   return (gj.tasks||[]).filter(t=>!t.done&&isSalesT(t)).map(t=>{ let m={};
     try{ const s=String(t.cm||''), i=s.indexOf('[sales]'); if(i>=0) m=JSON.parse(s.slice(i+7)); }catch(e){}
     return { raw:t.t, name:String(t.t).slice(SALES_TAG.length).trim(), tsk:t,
-      v:m.v||'', sc:m.sc||'', st:m.st||'', ln:m.ln||t.due||'', pr:(m.pr!=null?+m.pr:50), no:m.no||'' }; });
+      v:m.v||'', sc:m.sc||'', st:m.st||'', ln:m.ln||t.due||'', pr:(m.pr!=null?+m.pr:50), no:m.no||'', pm:m.pm||'', bt:m.bt||'' }; });
 }
+// Build-type → target duration (finish date drives it): full trailer 140 days, partial ¾, graphics wrap ~1 mo, small 13 wks.
+const SP_BUILD={ full:{d:140,l:'Full build — 140 days'}, partial:{d:105,l:'Partial build — 105 days (¾)'}, wrap:{d:30,l:'Graphics wrap — ~1 month'}, small:{d:91,l:'Small build — 13 weeks'} };
+function _spPMs(){ const D=window.MRA_DATA||{}; const set={}; (D.projects||[]).forEach(p=>{ if(p.pm) set[String(p.pm).trim()]=1; }); ['Al Karloff','Megan Fraser','Luciana Giglio','Niko Solomos'].forEach(n=>set[n]=1); return Object.keys(set).filter(Boolean).sort(); }
+// From the finish (launch) date, walk back the build-type's days to auto-fill the start date.
+function spBtCalc(){ const btEl=document.getElementById('spfBt'), lnEl=document.getElementById('spfLn'), stEl=document.getElementById('spfSt'); if(!btEl||!lnEl||!stEl) return;
+  const bt=btEl.value, ln=lnEl.value; if(!bt||!SP_BUILD[bt]||!ln) return; const d=parseISO(ln); if(!d) return;
+  stEl.value=localISO(d.getTime()-SP_BUILD[bt].d*DAY); }
 function openSalesPlan(){ if(typeof closeDrops==='function') closeDrops(); SP_OPEN=true; SP_FORM=null; renderSalesPlan(); document.getElementById('spOverlay').classList.add('show'); }
 function closeSalesPlan(){ SP_OPEN=false; SP_FORM=null; document.getElementById('spOverlay').classList.remove('show'); }
 // ============================ 🧾 Quote Generator (rev 36.11) ============================
@@ -11144,7 +11165,8 @@ function _qSaveCfg(patch){ const c=Object.assign(_qCfg(), patch||{}); try{ local
 let QUOTE=null;
 function openQuote(){ if(typeof closeDrops==='function') closeDrops();
   if(!QUOTE){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{}}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); }
-  renderQuote(); document.getElementById('quoteOverlay').classList.add('show'); }
+  renderQuote(); document.getElementById('quoteOverlay').classList.add('show');
+  if(QUOTE_STORE_URL && !_qSharedTried){ _qLoadShared(function(){ var q=document.getElementById('quoteOverlay'); if(q&&q.classList.contains('show')) renderQuote(); }); } }
 function closeQuote(){ document.getElementById('quoteOverlay').classList.remove('show'); }
 function _money(n){ return '$'+(Math.round((+n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function _qParseMats(text){ return String(text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
@@ -11186,8 +11208,17 @@ function qSaveLetterhead(){ const g=id=>{ const e=document.getElementById(id); r
   const s=document.getElementById('qfSaved'); if(s){ s.textContent='✓ saved on this device'; setTimeout(()=>{s.textContent='';},2500); } }
 // 💾 Saved quotes (per device) — so a quote you built is still here next time.
 const QUOTE_SAVE_KEY='mra_quotes_v1';
-function _qSaved(){ try{ return JSON.parse(localStorage.getItem(QUOTE_SAVE_KEY)||'[]'); }catch(e){ return []; } }
-function _qSaveList(a){ try{ localStorage.setItem(QUOTE_SAVE_KEY, JSON.stringify(a||[])); }catch(e){} }
+// Shared quote store: when QUOTE_STORE_URL (the "MRA Quote Write" flow) is set, quotes save to quotes.json on the
+// dashboard (visible from any device); until then it's per-device localStorage. Same pattern as email-settings.json.
+var QUOTE_STORE_URL='';
+var _QUOTES_SHARED=null, _qSharedTried=false;
+function _qLoadShared(cb){ _qSharedTried=true; function done(a){ if(Array.isArray(a)) _QUOTES_SHARED=a; if(cb)cb(); }
+  fetch('../quotes.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(done)
+  .catch(function(){ fetch('quotes.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(done).catch(function(){ if(cb)cb(); }); }); }
+function _qSaved(){ if(_QUOTES_SHARED&&Array.isArray(_QUOTES_SHARED)) return _QUOTES_SHARED;
+  try{ return JSON.parse(localStorage.getItem(QUOTE_SAVE_KEY)||'[]'); }catch(e){ return []; } }
+function _qSaveList(a){ a=a||[]; try{ localStorage.setItem(QUOTE_SAVE_KEY, JSON.stringify(a)); }catch(e){}
+  if(QUOTE_STORE_URL){ _QUOTES_SHARED=a; try{ fetch(QUOTE_STORE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({json:JSON.stringify(a)})}); }catch(e){} } }
 function qSaveQuote(){ _qRead(); const t=_qCompute();
   if(!QUOTE.cust && !QUOTE.mats && !QUOTE.hours){ alert('Nothing to save yet — fill in the quote first.'); return; }
   const a=_qSaved();
@@ -11205,9 +11236,10 @@ function qPullFleetio(){ _qRead(); const num=String(QUOTE.fio||'').replace(/[^0-
   if(!num){ alert('Enter a Fleetio issue # first (e.g. 1244), then Pull.'); return; }
   const D=window.MRA_DATA||{}; const it=((D.fleetio&&D.fleetio.issues)||[]).find(x=>String(x.num)===num);
   if(!it){ alert('No open Fleetio issue #'+num+' is on the board right now. Check the number, or type the description in by hand.'); return; }
-  if(!QUOTE.proj) QUOTE.proj=it.summary||('Fleetio #'+num);
-  const parts=[]; if(it.summary) parts.push(it.summary); if(it.detail) parts.push(String(it.detail).trim()); if(it.asset) parts.push('Unit: '+it.asset);
-  QUOTE.desc=parts.join('\n');
+  // Clean, customer-facing scope from the issue summary (strip internal "Estimate -/Quote -/Pricing" prefixes); do NOT dump the raw internal request text.
+  const clean=String(it.summary||'').replace(/^\s*(estimate|quote|pricing|est\.?)\s*[-:—]?\s*/i,'').trim()||('Fleetio #'+num);
+  QUOTE.proj=clean;
+  QUOTE.desc=clean;
   renderQuote(); }
 function renderQuote(){ const body=document.getElementById('quoteBody'); if(!body) return; const c=_qCfg();
   const inp='padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:13px';
@@ -11215,7 +11247,7 @@ function renderQuote(){ const body=document.getElementById('quoteBody'); if(!bod
   body.innerHTML=
    '<div class="q-wrap"><div class="q-form">'
    + (function(){ var s=_qSaved(); var chips=s.length?s.map(function(r){ return '<span class="q-schip"><a onclick="qLoadQuote(\''+r.id+'\')" title="Load this quote back into the form">'+esc(r.cust||'Untitled')+' · '+_money(r.total)+'</a><span class="x" onclick="qDelQuote(\''+r.id+'\')" title="Delete this saved quote">✕</span></span>'; }).join(''):'<span class="q-hint">none yet — build one and hit 💾 Save</span>';
-      return '<div class="q-fsec q-savedbar"><div class="q-lab" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">💾 Saved quotes <button class="expandbtn" onclick="qSaveQuote()" title="Save this quote on your device so you can pull it back up later">💾 Save this quote</button> <button class="expandbtn" onclick="qNewQuote()" title="Clear the form for a fresh quote">＋ New</button> <span id="qSavedMsg" style="color:#22c55e;font-size:12px;font-weight:400"></span></div><div class="q-saved">'+chips+'</div></div>'; })()
+      return '<div class="q-fsec q-savedbar"><div class="q-lab" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">💾 Saved quotes <span class="q-hint" style="font-weight:400">'+(QUOTE_STORE_URL?'· stored on the dashboard (any device)':'· stored on this device')+'</span> <button class="expandbtn" onclick="qSaveQuote()" title="Save this quote so you can pull it back up later">💾 Save this quote</button> <button class="expandbtn" onclick="qNewQuote()" title="Clear the form for a fresh quote">＋ New</button> <span id="qSavedMsg" style="color:#22c55e;font-size:12px;font-weight:400"></span></div><div class="q-saved">'+chips+'</div></div>'; })()
    + '<div class="q-fsec"><div class="q-lab">Customer / job</div><div class="q-grid2"><input id="qCust" placeholder="Customer name" value="'+escA(QUOTE.cust)+'" oninput="qUpdate()" style="'+inp+'"><input id="qProj" placeholder="Project / vehicle (short title)" value="'+escA(QUOTE.proj)+'" oninput="qUpdate()" style="'+inp+'"></div></div>'
    + '<div class="q-fsec"><div class="q-lab">Work description <span class="q-hint">this is what shows on the customer quote — fully editable · link a Fleetio issue to auto-fill it</span></div><div class="q-inline" style="margin:0 0 7px"><label>🔧 Fleetio issue #<input id="qFio" type="text" value="'+escA(QUOTE.fio||'')+'" placeholder="1244" style="width:90px;'+inp+'"></label><button class="expandbtn" onclick="qPullFleetio()" title="Pull this Fleetio issue&#39;s summary, detail and asset into the description">↧ Pull from Fleetio</button></div><textarea id="qDesc" rows="3" placeholder="Describe the work for the customer (or link a Fleetio issue above and hit Pull)" oninput="qUpdate()" style="width:100%;box-sizing:border-box;'+inp+'">'+esc(QUOTE.desc||'')+'</textarea></div>'
    + '<div class="q-fsec"><div class="q-lab">Labor</div><div class="q-inline"><label>Hours <input id="qHours" type="number" step="0.5" value="'+QUOTE.hours+'" oninput="qUpdate()" style="width:74px;'+inp+'"></label><label>Rate $<input id="qRate" type="number" value="'+QUOTE.rate+'" oninput="qUpdate()" style="width:74px;'+inp+'"> /hr</label></div></div>'
@@ -11235,8 +11267,10 @@ function _qCustomerHtml(t,c,detailed){
   const meta='<div class="q-meta"><div class="q-to"><span>QUOTED TO</span><b>'+esc(QUOTE.cust||'—')+'</b>'+(QUOTE.proj?('<div class="q-re">'+esc(QUOTE.proj)+'</div>'):'')+'</div><div class="q-no"><div>Quote '+esc(qno)+'</div><div>'+d+'</div></div></div>';
   let tbl;
   if(!detailed){
-    const _qd=(esc(QUOTE.desc||QUOTE.proj||'').replace(/\n/g,'<br>'))||'Labor, materials and shop supplies as discussed';
-    tbl='<table class="q-t"><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead><tbody><tr><td>'+_qd+'</td><td class="r">'+_money(t.total)+'</td></tr></tbody></table><div class="q-grand"><span>Total</span><span>'+_money(t.total)+'</span></div>';
+    const _qd=(esc(QUOTE.desc||QUOTE.proj||'').replace(/\n/g,'<br>'))||'Furnish all labor and materials for the work described.';
+    tbl='<div class="q-scope"><div class="q-sh">Scope of Work</div><div class="q-sb">'+_qd+'</div></div>'
+      +'<div class="q-incl">✓ Price includes all labor, materials and shop supplies.</div>'
+      +'<div class="q-grand"><span>Total — all inclusive</span><span>'+_money(t.total)+'</span></div>';
   } else {
     let rows='<tr><td>Labor — '+QUOTE.hours+' hr × '+_money(QUOTE.rate)+'/hr</td><td class="r">'+_money(t.laborTotal)+'</td></tr>';
     if(t.mats.length){ rows+='<tr class="q-grp"><td colspan="2">Materials (incl. '+QUOTE.markup+'% markup)</td></tr>'; t.mats.forEach(r=>{ rows+='<tr><td>'+esc(r.d||'material')+'</td><td class="r">'+_money(r.line)+'</td></tr>'; }); }
@@ -11257,7 +11291,9 @@ function _qCustomerHtml(t,c,detailed){
     +'.q-t td{padding:8px 10px;border-bottom:1px solid #eceef1}.q-t .r{text-align:right;white-space:nowrap}'
     +'.q-t .q-grp td{background:#fafbfc;font-weight:700;font-size:11px;color:#8a94a2;text-transform:uppercase;letter-spacing:.5px;padding-top:10px}'
     +'.q-t .q-tsub td{font-weight:700;border-top:1px solid #d5dae0}'
-    +'.q-grand{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;padding:12px 14px;background:#fff5f2;border:1px solid #f6c9bb;border-radius:8px;font-size:15px;font-weight:800}.q-grand span:last-child{font-size:24px;color:#e04826}'
+    +'.q-scope{margin:6px 0 12px}.q-sh{font-size:11px;font-weight:800;letter-spacing:.8px;color:#8a94a2;text-transform:uppercase;margin-bottom:5px}.q-sb{font-size:14px;color:#1b2531;line-height:1.5}'
+    +'.q-incl{font-size:12.5px;color:#15803d;font-weight:700;margin:0 0 14px}'
+    +'.q-grand{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;padding:14px 16px;background:#fff5f2;border:1px solid #f6c9bb;border-radius:8px;font-size:15px;font-weight:800}.q-grand span:last-child{font-size:26px;color:#e04826}'
     +'.q-terms{font-size:10.5px;color:#8a94a2;margin-top:22px;border-top:1px solid #eceef1;padding-top:10px;line-height:1.5}.q-sig{font-size:11px;color:#556;margin-top:12px}';
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Quote — '+esc(QUOTE.cust||qno)+'</title><style>'+css+'</style></head><body>'
     +'<div class="pbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button>'+(detailed?' &nbsp; <span style="color:#f0b445">INTERNAL — shows the full breakdown</span>':'')+'</div>'
@@ -11273,15 +11309,18 @@ function spFormHtml(){
   const val=k=>esc((p&&p[k])||'');
   const scopes=['TBD','Quick rewrap','Graphics update','Partial build','Full gut rebuild'];
   const scSel=scopes.map(s=>`<option${(p&&p.sc===s)?' selected':''}>${s}</option>`).join('');
-  const prSel=[10,25,50,75,90].map(n=>`<option value="${n}"${(p?(+p.pr===n):(n===50))?' selected':''}>${n}% likely</option>`).join('');
-  return `<div class="sp-form"><div class="sp-fh">${SP_FORM.mode==='edit'?'✎ Edit prospect':'➕ New prospect'} <span class="sp-fsub">just the basics — it drops straight onto the timeline</span></div>
+  const pmSel=`<option value="">— consider a PM (simulate) —</option>`+_spPMs().map(n=>`<option${(p&&p.pm===n)?' selected':''}>${esc(n)}</option>`).join('');
+  const btSel=`<option value="">— pick to auto-set start —</option>`+Object.keys(SP_BUILD).map(k=>`<option value="${k}"${(p&&p.bt===k)?' selected':''}>${esc(SP_BUILD[k].l)}</option>`).join('');
+  return `<div class="sp-form"><div class="sp-fh">${SP_FORM.mode==='edit'?'✎ Edit prospect':'➕ New prospect'} <span class="sp-fsub">planning only — never touches the Projects board</span></div>
     <div class="sp-fgrid">
       <div><label>Name *</label><input id="spfName" type="text" value="${val('name')}" placeholder="e.g. AWS Revamp" ${SP_FORM.mode==='edit'?'disabled':''}></div>
       <div><label>Vehicle / trailer</label><input id="spfV" type="text" value="${val('v')}" placeholder="53ft trailer, RV, double-expandable…"></div>
       <div><label>Scope</label><select id="spfSc">${scSel}</select></div>
-      <div><label>Est. start</label><input id="spfSt" type="date" value="${val('st')}"></div>
-      <div><label>Est. launch</label><input id="spfLn" type="date" value="${val('ln')}"></div>
-      <div><label>Probability</label><select id="spfPr">${prSel}</select></div>
+      <div><label>Consider PM <span class="sp-fsub">(simulate load)</span></label><select id="spfPm">${pmSel}</select></div>
+      <div><label>Build type <span class="sp-fsub">(sets start from finish)</span></label><select id="spfBt" onchange="spBtCalc()">${btSel}</select></div>
+      <div><label>Est. finish / launch</label><input id="spfLn" type="date" value="${val('ln')}" onchange="spBtCalc()"></div>
+      <div><label>Est. start <span class="sp-fsub">(auto)</span></label><input id="spfSt" type="date" value="${val('st')}"></div>
+      <div><label>Probability %</label><input id="spfPr" type="number" min="0" max="100" step="5" value="${p?(+p.pr):50}"></div>
       <div class="sp-fwide"><label>Notes (driver team, chase vehicle, special needs…)</label><input id="spfNo" type="text" value="${val('no')}"></div>
     </div>
     <div class="sp-fbtns">
@@ -11294,7 +11333,7 @@ function spSave(){
   const g=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   const name=SP_FORM.mode==='edit'?SP_FORM.name:g('spfName');
   if(!name){ alert('Give the prospect a name.'); return; }
-  const meta={v:g('spfV'), sc:g('spfSc'), st:g('spfSt'), ln:g('spfLn'), pr:+g('spfPr')||50, no:g('spfNo')};
+  const meta={v:g('spfV'), sc:g('spfSc'), st:g('spfSt'), ln:g('spfLn'), pr:(g('spfPr')!==''?+g('spfPr'):50), no:g('spfNo'), pm:g('spfPm'), bt:g('spfBt')};
   const cm='[sales]'+JSON.stringify(meta);
   const task=SALES_TAG+' '+name;
   const gj=_spGeneralJob();
@@ -11360,17 +11399,20 @@ function renderSalesPlan(){
   const D=window.MRA_DATA||{}; if(!SP_OPEN) return;
   const body=document.getElementById('spBody'); if(!body) return;
   const today=D.todayISO||localISO(Date.now());
-  const committed=(D.projects||[]).filter(p=>projStatus(p,today)!=='done'&&p.startISO&&p.finishISO);
+  const committed=(D.projects||[]).filter(p=>projStatus(p,today)!=='done');   // ALL active projects (matches the timeline) so none go missing
   const pros=_spProspects();
   const st=document.getElementById('spStamp');
   if(st) st.textContent=fmtMDY(today)+' · '+committed.length+' committed on the board · '+pros.length+' prospect'+(pros.length===1?'':'s')+' in the pipeline';
-  // 👥 PM load strip — who has capacity / when they free up (Gino: "I need PM capacity")
+  // 👥 PM LOAD — committed projects per PM + a SIMULATION of any pipeline prospects tagged with a PM (dashed add-on).
   const byPM={};
-  committed.forEach(p=>{ const pm=(p.pm||'TBD'); if(!byPM[pm]) byPM[pm]={pm,n:0,free:''};
+  committed.forEach(p=>{ const pm=(p.pm||'TBD'); if(!byPM[pm]) byPM[pm]={pm,n:0,free:'',sim:0,simFree:''};
     byPM[pm].n++; if(String(p.finishISO||'')>byPM[pm].free) byPM[pm].free=p.finishISO||''; });
-  const caps=Object.values(byPM).sort((a,b)=>b.n-a.n);
-  const capMax=Math.max.apply(null,caps.map(c=>c.n).concat([1]));
-  const capHtml=caps.map(c=>`<div class="sp-cap-row" title="${esc(c.pm)}: ${c.n} active project${c.n===1?'':'s'} — last one targets ${c.free?fmtMDY(c.free):'TBD'}"><span class="n">${esc(c.pm)}</span><span class="t"><span class="b" style="width:${Math.round(c.n/capMax*100)}%"></span></span><span class="c">${c.n}</span><span class="f">frees up ~${c.free?fmtMD(c.free):'TBD'}</span></div>`).join('');
+  pros.forEach(pr=>{ if(!pr.pm) return; if(!byPM[pr.pm]) byPM[pr.pm]={pm:pr.pm,n:0,free:'',sim:0,simFree:''};
+    byPM[pr.pm].sim++; const f=pr.ln||pr.st||''; if(f>byPM[pr.pm].simFree) byPM[pr.pm].simFree=f; });
+  const caps=Object.values(byPM).sort((a,b)=>(b.n+b.sim)-(a.n+a.sim));
+  const capMax=Math.max.apply(null,caps.map(c=>c.n+c.sim).concat([1]));
+  const capHtml=caps.map(c=>{ const freeAll=[c.free,c.simFree].filter(Boolean).sort().slice(-1)[0]||'';
+    return `<div class="sp-cap-row" title="${esc(c.pm)}: ${c.n} committed${c.sim?(' + '+c.sim+' simulated from the pipeline'):''} — frees up ${freeAll?fmtMDY(freeAll):'TBD'}"><span class="n">${esc(c.pm)}</span><span class="t"><span class="b" style="width:${Math.round(c.n/capMax*100)}%"></span>${c.sim?`<span class="b bsim" style="width:${Math.round(c.sim/capMax*100)}%"></span>`:''}</span><span class="c">${c.n}${c.sim?`<span class="simn" title="${c.sim} simulated pipeline project(s)">+${c.sim}</span>`:''}</span><span class="f">frees ~${freeAll?fmtMDY(freeAll):'TBD'}</span></div>`; }).join('');
   // (the timeline window + sorted rows are built + painted by spRenderGantt() — driven by the zoom/pan/sort controls)
   const wsum=pros.reduce((a,p)=>a+(+p.pr||0),0)/100;
   const freeSoon=caps.filter(c=>c.free).slice().sort((a,b)=>String(a.free).localeCompare(String(b.free)))[0];
@@ -11382,7 +11424,7 @@ function renderSalesPlan(){
     + xtile(freeSoon?fmtMD(freeSoon.free):'—', 'NEXT PM FREE'+(freeSoon?(' — '+esc(freeSoon.pm).toUpperCase()):''),'#22c55e', freeSoon?(freeSoon.pm+' finishes their current slate ~'+fmtMDY(freeSoon.free)):'')
     + `</div></div></div>`;
   body.innerHTML = band
-    + `<div class="sp-cap"><div class="sp-cap-h">👥 PM LOAD — who has capacity <span class="sp-fsub">(active projects each · when their last one targets)</span></div>${capHtml||'<div class="sp-fsub">no active projects</div>'}</div>`
+    + `<div class="sp-cap"><div class="sp-cap-h" onclick="spToggleCap()" style="cursor:pointer" title="Click to collapse / expand"><span class="sp-cx">${SP_CAP_OPEN?'▾':'▸'}</span> 👥 PM LOAD — who has capacity <span class="sp-fsub">(committed each · dashed = simulated pipeline · when they free up)</span></div>${SP_CAP_OPEN?(capHtml||'<div class="sp-fsub">no active projects</div>'):''}</div>`
     + spFormHtml()
     + `<div class="sp-gpanel"><div class="sp-gh">📊 Program + Pipeline Timeline<span class="sp-leg"><span class="lg"><i class="sw solid"></i>committed</span><span class="lg"><i class="sw hatch"></i>🔮 prospect — not signed</span><span class="lg"><i class="sw today"></i>today</span><span class="lg">% on a purple bar = chance it lands</span></span></div>`
       + `<div class="sp-gctl"><span class="gwinwrap" title="Zoom the time scale in (fewer months, wider bars) / out">🔍<input id="spZoom" type="range" min="1" max="6" step="0.1" value="${SP_ZOOM}" oninput="setSpZoom(this.value)" class="gwinslider"></span>`
