@@ -1702,6 +1702,7 @@
     </div>
     <div class="tabs">
       <div class="tab active" data-view="floor" onclick="setView('floor')">FLOOR</div>
+      <div class="tab" data-view="floordetail" onclick="setView('floordetail')" title="The detailed floor — tasks listed under each bay">FLOOR DETAIL</div>
       <div class="tab" data-view="mywork" onclick="setView('mywork')">MY WORK</div>
       <div class="tab" data-view="projects" onclick="setView('projects')">PROJECTS</div>
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
@@ -3764,6 +3765,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.0", date:"2026-07-23", title:"🏭 Two floor tabs: FLOOR (compact, max task space) + FLOOR DETAIL", items:[
+    "The shop floor is now <b>two tabs</b>. <b>FLOOR</b> = a compact view (default + the no-login shop TV): small bay cards showing bay · job · status, slim KPIs, no in-card task lists or layout controls — so the <b>Open Tasks by Assignee</b> panel gets the room as task counts grow. <b>FLOOR DETAIL</b> = exactly today's view (tasks listed under each bay) for when you want the full picture. Same data + engine — DETAIL is just the compact skin turned off, so zero risk to how anything works. Signed-in folks see both tabs; the shop TV shows only the compact FLOOR." ] },
   { rev:"35.8", date:"2026-07-23", title:"🧺 Quiet sections auto-collapse (bundling) — only what's new stays open", items:[
     "Sections with nothing new now <b>auto-collapse to just their header</b> (with the count) so the page stays short — anything with <b>new</b> content (green tile up top) stays expanded. <b>Tap a header</b> (or its top tile) to open/close; your choice sticks. Tell Claude and your Tasks stay open by default. Keeps My Work to a quick glance instead of a long scroll." ] },
   { rev:"35.7", date:"2026-07-23", title:"🟢 Section nav tiles at the top of MY WORK — light up green when something's new", items:[
@@ -5864,14 +5867,14 @@ const ROLE_BY_NAME = (function(){ const m={}, g={
   for(const role in g) g[role].forEach(n=>{ m[_nmKey(n)]=role; }); return m; })();
 const _ADMINONLY=['throughput','deadtrackers'];
 const ROLE_CAPS = {
-  anon:  { tabs:['floor'],                                            hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
-  staff: { tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
-  closer:{ tabs:['floor','mywork','fleetio','assets'],                hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
-  shopedit:{ tabs:['floor','mywork','fleetio','assets'],              hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
-  design:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
-  exec:  { tabs:['floor','mywork','projects','fleetio','assets'],     hide:['ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
-  editor:{ tabs:['floor','mywork','projects','fleetio','assets'],     hide:['logins'].concat(_ADMINONLY) },
-  admin: { tabs:['floor','mywork','projects','fleetio','assets'],     hide:[] }
+  anon:  { tabs:['floor'],                                                        hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
+  staff: { tabs:['floor','floordetail','mywork','fleetio','assets'],               hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
+  closer:{ tabs:['floor','floordetail','mywork','fleetio','assets'],               hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
+  shopedit:{ tabs:['floor','floordetail','mywork','fleetio','assets'],             hide:['builder','sales','ghost','logins','holidays','eotm','safety'].concat(_ADMINONLY) },
+  design:{ tabs:['floor','floordetail','mywork','projects','fleetio','assets'],    hide:['builder','sales','ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  exec:  { tabs:['floor','floordetail','mywork','projects','fleetio','assets'],    hide:['ghost','logins','holidays','eotm'].concat(_ADMINONLY) },
+  editor:{ tabs:['floor','floordetail','mywork','projects','fleetio','assets'],    hide:['logins'].concat(_ADMINONLY) },
+  admin: { tabs:['floor','floordetail','mywork','projects','fleetio','assets'],    hide:[] }
 };
 // MY WORK tab is limited to this group for now (Rich 2026-07-17) — everyone else who signs in keeps
 // their role's OTHER tabs, just not My Work. Matched by email (reliable) or display name; Rich (super-admin)
@@ -5943,7 +5946,7 @@ function ssoCaps(){ const r=ssoRole(); return r?ROLE_CAPS[r]:null; }
 // Apply tab + menu visibility for the current role (no-op when not gating).
 function applyRoleUI(){
   const caps=ssoCaps();
-  ['floor','projects','fleetio','assets'].forEach(tv=>{
+  ['floor','floordetail','projects','fleetio','assets'].forEach(tv=>{
     const el=document.querySelector('.tab[data-view="'+tv+'"]'); if(!el) return;
     el.style.display = (!caps || caps.tabs.indexOf(tv)>=0) ? '' : 'none';
   });
@@ -15622,6 +15625,23 @@ function closeUnitMap(e){ if(!e || (e.target && (e.target.id==='mapModal' || (e.
 function mapToUnit(f){ const el=document.getElementById('mapModal'); if(el) el.classList.remove('show');
   if(typeof searchGoUnit==='function') searchGoUnit(f); }
 
+// Compact Floor skin (the "Floor" tab + the no-login TV): shrink the top (KPIs + bay cards, no in-card task
+// lists, no layout controls, no pipeline) so the "Open Tasks by Assignee" panel gets the room. Pure CSS —
+// same render engine as "Floor Detail"; nothing about the data or logic changes.
+function _floorCompactCss(){ if(document.getElementById('floorCompactCss')) return; var s=document.createElement('style'); s.id='floorCompactCss';
+  s.textContent=
+   '#floorView.floor-compact .bay .tasklist{display:none!important}'
+  +'#floorView.floor-compact #pipePanel{display:none}'
+  +'#floorView.floor-compact .kpis{gap:8px}'
+  +'#floorView.floor-compact .kpis .kpi{padding:8px 12px}'
+  +'#floorView.floor-compact .kpis .kpi .n{font-size:22px}'
+  +'#floorView.floor-compact .kpis .kpi .kgo{display:none}'
+  +'#floorView.floor-compact #bayStatusPanel .bayallbtn{display:none}'
+  +'#floorView.floor-compact #baySortSel{display:none}'
+  +'#floorView.floor-compact #bayStatusPanel{padding-bottom:12px}'
+  +'#floorView.floor-compact .bay{padding-bottom:8px}'
+  +'#floorView.floor-compact #openTasksPanel{margin-top:12px}';
+  document.head.appendChild(s); }
 function setView(v){
   if(v==='fleet'||v==='equipment') v='assets';   // FLEET + EQUIPMENT merged into the ASSETS tab
   // 🔐 role gate: a locked tab either prompts sign-in (nobody signed in) or falls back to floor.
@@ -15632,7 +15652,7 @@ function setView(v){
   // 'history' has no tab of its own — it opens via ☰ Actions ▸ 🔎 Search closed / history (or the 🔍 modal's footer link)
   VIEW=v; try{localStorage.setItem('mra_view',v);}catch(e){}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
-  document.getElementById('floorView').classList.toggle('hidden',v!=='floor');
+  { const _fl=(v==='floor'||v==='floordetail'); const _fv=document.getElementById('floorView'); if(_fv){ try{ _floorCompactCss(); }catch(e){} _fv.classList.toggle('hidden',!_fl); _fv.classList.toggle('floor-compact', v==='floor'); } }
   document.getElementById('projectsView').classList.toggle('hidden',v!=='projects');
   document.getElementById('fleetioView').classList.toggle('hidden',v!=='fleetio');
   document.getElementById('assetsView').classList.toggle('hidden',v!=='assets');
