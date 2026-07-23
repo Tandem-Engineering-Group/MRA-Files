@@ -1326,6 +1326,8 @@
   .q-grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .q-inline{display:flex;gap:16px;align-items:center;margin-top:8px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
   .q-inline label{display:flex;gap:5px;align-items:center}
+  .q-supmode{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--txt);margin-bottom:8px}
+  .q-supmode label{display:flex;gap:5px;align-items:center}
   .q-cons{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px}
   .q-conline{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--txt)}
   .q-conline>span{color:var(--muted)}
@@ -3828,6 +3830,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.20", date:"2026-07-23", title:"🧾 Quote — 30% default markup + supplies as itemized OR a flat %", items:[
+    "Default <b>material markup is now 30%</b>. Shop supplies can be done two ways — pick <b>Itemized</b> (tick the presets) or <b>Percent</b> (a flat % of labor + materials, default 8%). Both flow into the total and the internal breakdown. Change the defaults any time in ⚙ Letterhead." ] },
   { rev:"36.19", date:"2026-07-23", title:"🧾 Quote history is LIVE on the dashboard (any device)", items:[
     "The <b>“MRA Quote Write”</b> flow is connected — saved quotes now live on the dashboard's <b>quotes.json</b>, so 💾 Save shows up from <b>any device</b> (not just the one you built it on). Your <b>Siemens / Mammo Mandy</b> quote is seeded as the first record." ] },
   { rev:"36.18", date:"2026-07-23", title:"📈 Sales & Planning — rename a prospect · NEXT PM FREE shows the year", items:[
@@ -11164,11 +11168,11 @@ function closeSalesPlan(){ SP_OPEN=false; SP_FORM=null; document.getElementById(
 const QUOTE_CFG_KEY='mra_quote_cfg_v1';
 const QUOTE_CONS=[['sand','Sandpaper / abrasives',25],['paint','Paint & primer',60],['weld','Welding rod & gas',45],['fast','Fasteners & hardware',30],['adh','Adhesive & sealant',25],['misc','Misc shop supplies',40]];
 function _qCfg(){ let c={}; try{ c=JSON.parse(localStorage.getItem(QUOTE_CFG_KEY)||'{}'); }catch(e){}
-  return Object.assign({ company:'MRA', tag:'Mobile Experiential — Detroit, MI · Windsor, ON', addr:'', city:'', phone:'1.800.676.3520', email:'info@gomra.com', rate:80, markup:20, tax:6, terms:'Quote valid 30 days from the date above. Pricing subject to material availability at time of order. Taxes and freight extra unless noted.' }, c); }
+  return Object.assign({ company:'MRA', tag:'Mobile Experiential — Detroit, MI · Windsor, ON', addr:'', city:'', phone:'1.800.676.3520', email:'info@gomra.com', rate:80, markup:30, tax:6, supMode:'items', supPct:8, terms:'Quote valid 30 days from the date above. Pricing subject to material availability at time of order. Taxes and freight extra unless noted.' }, c); }
 function _qSaveCfg(patch){ const c=Object.assign(_qCfg(), patch||{}); try{ localStorage.setItem(QUOTE_CFG_KEY, JSON.stringify(c)); }catch(e){} return c; }
 let QUOTE=null;
 function openQuote(){ if(typeof closeDrops==='function') closeDrops();
-  if(!QUOTE){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{}}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); }
+  if(!QUOTE){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{},supMode:c.supMode||'items',supPct:(c.supPct!=null?c.supPct:8)}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); }
   renderQuote(); document.getElementById('quoteOverlay').classList.add('show');
   if(QUOTE_STORE_URL && !_qSharedTried){ _qLoadShared(function(){ var q=document.getElementById('quoteOverlay'); if(q&&q.classList.contains('show')) renderQuote(); }); } }
 function closeQuote(){ document.getElementById('quoteOverlay').classList.remove('show'); }
@@ -11180,16 +11184,19 @@ function _qParseMats(text){ return String(text||'').split('\n').map(l=>l.trim())
   return {d:d||l, c}; }); }
 function _qRead(){ const g=id=>{ const e=document.getElementById(id); return e?e.value:''; };
   QUOTE.cust=g('qCust'); QUOTE.proj=g('qProj'); QUOTE.desc=g('qDesc'); QUOTE.fio=g('qFio'); QUOTE.hours=parseFloat(g('qHours'))||0; QUOTE.rate=parseFloat(g('qRate'))||0; QUOTE.markup=parseFloat(g('qMarkup'))||0; QUOTE.tax=parseFloat(g('qTax'))||0; QUOTE.mats=g('qMats');
-  QUOTE_CONS.forEach(x=>{ const chk=document.getElementById('qc_'+x[0]); const amt=document.getElementById('qca_'+x[0]); if(chk) QUOTE.cons[x[0]].on=chk.checked; if(amt) QUOTE.cons[x[0]].amt=parseFloat(amt.value)||0; }); }
+  QUOTE_CONS.forEach(x=>{ const chk=document.getElementById('qc_'+x[0]); const amt=document.getElementById('qca_'+x[0]); if(chk) QUOTE.cons[x[0]].on=chk.checked; if(amt) QUOTE.cons[x[0]].amt=parseFloat(amt.value)||0; });
+  const md=document.querySelector('input[name="qsupmode"]:checked'); if(md) QUOTE.supMode=md.value;
+  const sp=document.getElementById('qSupPct'); if(sp) QUOTE.supPct=parseFloat(sp.value)||0; }
 function _qCompute(){ const mk=1+(QUOTE.markup/100);
   const laborTotal=QUOTE.hours*QUOTE.rate;
   const mats=_qParseMats(QUOTE.mats).map(r=>({d:r.d,c:r.c,line:r.c*mk}));
   const matsLine=mats.reduce((a,r)=>a+r.line,0);
-  const cons=QUOTE_CONS.filter(x=>QUOTE.cons[x[0]]&&QUOTE.cons[x[0]].on).map(x=>({d:x[1],c:QUOTE.cons[x[0]].amt}));
-  const consLine=cons.reduce((a,r)=>a+r.c,0);
+  let cons=[], consLine=0; const consPct=(+QUOTE.supPct||0);
+  if(QUOTE.supMode==='pct'){ consLine=(laborTotal+matsLine)*consPct/100; }
+  else { cons=QUOTE_CONS.filter(x=>QUOTE.cons[x[0]]&&QUOTE.cons[x[0]].on).map(x=>({d:x[1],c:QUOTE.cons[x[0]].amt})); consLine=cons.reduce((a,r)=>a+r.c,0); }
   const subtotal=laborTotal+matsLine+consLine;
   const taxAmt=subtotal*(QUOTE.tax/100);
-  return {laborTotal,mats,matsLine,cons,consLine,subtotal,taxAmt,total:subtotal+taxAmt}; }
+  return {laborTotal,mats,matsLine,cons,consLine,consPct,subtotal,taxAmt,total:subtotal+taxAmt}; }
 function qUpdate(){ _qRead(); const t=_qCompute(); const el=document.getElementById('qDetail'); if(el) el.innerHTML=_qDetailHtml(t); }
 function _qDetailHtml(t){
   const row=(d,v,cls)=>'<div class="q-row '+(cls||'')+'"><span>'+d+'</span><span>'+v+'</span></div>';
@@ -11198,7 +11205,8 @@ function _qDetailHtml(t){
   if(t.mats.length){ h+='<div class="q-sub">Materials (cost → +'+QUOTE.markup+'%)</div>';
     t.mats.forEach(r=>{ h+=row(esc(r.d||'material')+' <span class="q-c">('+_money(r.c)+')</span>', _money(r.line)); });
     h+=row('Materials subtotal', _money(t.matsLine),'q-st'); }
-  if(t.cons.length){ h+='<div class="q-sub">Shop supplies</div>';
+  if(QUOTE.supMode==='pct'){ if(t.consLine>0){ h+='<div class="q-sub">Shop supplies</div>'+row(t.consPct+'% of labor + materials', _money(t.consLine)); } }
+  else if(t.cons.length){ h+='<div class="q-sub">Shop supplies</div>';
     t.cons.forEach(r=>{ h+=row(esc(r.d), _money(r.c)); });
     h+=row('Supplies subtotal', _money(t.consLine),'q-st'); }
   h+=row('Subtotal', _money(t.subtotal),'q-st');
@@ -11226,15 +11234,15 @@ function _qSaveList(a){ a=a||[]; try{ localStorage.setItem(QUOTE_SAVE_KEY, JSON.
 function qSaveQuote(){ _qRead(); const t=_qCompute();
   if(!QUOTE.cust && !QUOTE.mats && !QUOTE.hours){ alert('Nothing to save yet — fill in the quote first.'); return; }
   const a=_qSaved();
-  const rec={ id:'q'+Date.now().toString(36), cust:QUOTE.cust, proj:QUOTE.proj, desc:QUOTE.desc, fio:QUOTE.fio, hours:QUOTE.hours, rate:QUOTE.rate, markup:QUOTE.markup, tax:QUOTE.tax, mats:QUOTE.mats, cons:JSON.parse(JSON.stringify(QUOTE.cons||{})), total:t.total, savedAt:Date.now() };
+  const rec={ id:'q'+Date.now().toString(36), cust:QUOTE.cust, proj:QUOTE.proj, desc:QUOTE.desc, fio:QUOTE.fio, hours:QUOTE.hours, rate:QUOTE.rate, markup:QUOTE.markup, tax:QUOTE.tax, mats:QUOTE.mats, cons:JSON.parse(JSON.stringify(QUOTE.cons||{})), supMode:QUOTE.supMode, supPct:QUOTE.supPct, total:t.total, savedAt:Date.now() };
   a.unshift(rec); if(a.length>60) a.length=60; _qSaveList(a); renderQuote();
   const s=document.getElementById('qSavedMsg'); if(s){ s.textContent='✓ quote saved on this device'; setTimeout(()=>{s.textContent='';},2600); } }
 function qLoadQuote(id){ const r=_qSaved().find(x=>x.id===id); if(!r) return;
-  QUOTE={cust:r.cust||'',proj:r.proj||'',desc:r.desc||'',fio:r.fio||'',hours:r.hours||0,rate:r.rate||80,markup:r.markup||20,tax:r.tax||0,mats:r.mats||'',cons:r.cons||{}};
+  QUOTE={cust:r.cust||'',proj:r.proj||'',desc:r.desc||'',fio:r.fio||'',hours:r.hours||0,rate:r.rate||80,markup:(r.markup!=null?r.markup:30),tax:(r.tax!=null?r.tax:6),mats:r.mats||'',cons:r.cons||{},supMode:r.supMode||'items',supPct:(r.supPct!=null?r.supPct:8)};
   QUOTE_CONS.forEach(x=>{ if(!QUOTE.cons[x[0]]) QUOTE.cons[x[0]]={on:false,amt:x[2]}; });
   renderQuote(); }
 function qDelQuote(id){ if(!confirm('Delete this saved quote?')) return; _qSaveList(_qSaved().filter(x=>x.id!==id)); renderQuote(); }
-function qNewQuote(){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{}}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); renderQuote(); }
+function qNewQuote(){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{},supMode:c.supMode||'items',supPct:(c.supPct!=null?c.supPct:8)}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); renderQuote(); }
 // 🔧 Pull a Fleetio issue's info straight into the quote description (the board already has every issue in memory).
 function qPullFleetio(){ _qRead(); const num=String(QUOTE.fio||'').replace(/[^0-9]/g,'');
   if(!num){ alert('Enter a Fleetio issue # first (e.g. 1244), then Pull.'); return; }
@@ -11256,7 +11264,12 @@ function renderQuote(){ const body=document.getElementById('quoteBody'); if(!bod
    + '<div class="q-fsec"><div class="q-lab">Work description <span class="q-hint">this is what shows on the customer quote — fully editable · link a Fleetio issue to auto-fill it</span></div><div class="q-inline" style="margin:0 0 7px"><label>🔧 Fleetio issue #<input id="qFio" type="text" value="'+escA(QUOTE.fio||'')+'" placeholder="1244" style="width:90px;'+inp+'"></label><button class="expandbtn" onclick="qPullFleetio()" title="Pull this Fleetio issue&#39;s summary, detail and asset into the description">↧ Pull from Fleetio</button></div><textarea id="qDesc" rows="3" placeholder="Describe the work for the customer (or link a Fleetio issue above and hit Pull)" oninput="qUpdate()" style="width:100%;box-sizing:border-box;'+inp+'">'+esc(QUOTE.desc||'')+'</textarea></div>'
    + '<div class="q-fsec"><div class="q-lab">Labor</div><div class="q-inline"><label>Hours <input id="qHours" type="number" step="0.5" value="'+QUOTE.hours+'" oninput="qUpdate()" style="width:74px;'+inp+'"></label><label>Rate $<input id="qRate" type="number" value="'+QUOTE.rate+'" oninput="qUpdate()" style="width:74px;'+inp+'"> /hr</label></div></div>'
    + '<div class="q-fsec"><div class="q-lab">Materials <span class="q-hint">paste one item per line — the last number on each line is read as the cost (paste your Alro cart straight in)</span></div><textarea id="qMats" rows="6" placeholder=".190 5052-H32 Alum 48 x 120 Paper Interleave     998.74&#10;4 x 2 x .125 6061-T6 Alum Tubing 24 ft     371.30" oninput="qUpdate()" style="width:100%;box-sizing:border-box;'+inp+'">'+esc(QUOTE.mats)+'</textarea><div class="q-inline"><label>Material markup <input id="qMarkup" type="number" value="'+QUOTE.markup+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label><label>Tax <input id="qTax" type="number" step="0.01" value="'+QUOTE.tax+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label></div></div>'
-   + '<div class="q-fsec"><div class="q-lab">Shop supplies <span class="q-hint">tick what applies · added after markup · edit the $</span></div><div class="q-cons">'+consRows+'</div></div>'
+   + '<div class="q-fsec"><div class="q-lab">Shop supplies <span class="q-hint">itemize it, or add a flat % of labor + materials</span></div>'
+     + '<div class="q-supmode"><label><input type="radio" name="qsupmode" value="items" '+(QUOTE.supMode!=='pct'?'checked':'')+' onchange="qUpdate();renderQuote()"> Itemized</label> <label><input type="radio" name="qsupmode" value="pct" '+(QUOTE.supMode==='pct'?'checked':'')+' onchange="qUpdate();renderQuote()"> Percent</label>'
+     + (QUOTE.supMode==='pct'?(' <label style="margin-left:6px">Supplies <input id="qSupPct" type="number" step="0.5" min="0" value="'+(QUOTE.supPct!=null?QUOTE.supPct:8)+'" oninput="qUpdate()" style="width:62px;'+inp+'"> % of labor + materials</label>'):'')
+     + '</div>'
+     + (QUOTE.supMode==='pct'?'':('<div class="q-cons">'+consRows+'</div>'))
+     + '</div>'
    + '<details class="q-fsec"><summary class="q-lab" style="cursor:pointer">⚙ Letterhead &amp; defaults <span class="q-hint">(saved on this device)</span></summary><div class="q-grid2" style="margin-top:9px"><input id="qfCompany" placeholder="Company" value="'+escA(c.company)+'" style="'+inp+'"><input id="qfTag" placeholder="Tagline" value="'+escA(c.tag)+'" style="'+inp+'"><input id="qfAddr" placeholder="Street address" value="'+escA(c.addr)+'" style="'+inp+'"><input id="qfCity" placeholder="City / region (if not in tagline)" value="'+escA(c.city)+'" style="'+inp+'"><input id="qfPhone" placeholder="Phone" value="'+escA(c.phone)+'" style="'+inp+'"><input id="qfEmail" placeholder="Email" value="'+escA(c.email)+'" style="'+inp+'"></div><div class="q-inline" style="margin-top:10px"><label>Default rate $<input id="qfRate" type="number" value="'+c.rate+'" style="width:72px;'+inp+'"> /hr</label><label>Default markup <input id="qfMarkup" type="number" step="5" value="'+c.markup+'" style="width:64px;'+inp+'"> %</label><label>Default tax <input id="qfTax" type="number" step="0.01" value="'+c.tax+'" style="width:64px;'+inp+'"> %</label></div><div style="margin-top:9px;display:flex;gap:10px;align-items:center"><button class="expandbtn" onclick="qSaveLetterhead()">💾 Save defaults</button><span id="qfSaved" style="color:#22c55e;font-size:12px"></span></div></details>'
    + '</div><div class="q-detail" id="qDetail"></div></div>';
   qUpdate(); }
@@ -11278,7 +11291,8 @@ function _qCustomerHtml(t,c,detailed){
   } else {
     let rows='<tr><td>Labor — '+QUOTE.hours+' hr × '+_money(QUOTE.rate)+'/hr</td><td class="r">'+_money(t.laborTotal)+'</td></tr>';
     if(t.mats.length){ rows+='<tr class="q-grp"><td colspan="2">Materials (incl. '+QUOTE.markup+'% markup)</td></tr>'; t.mats.forEach(r=>{ rows+='<tr><td>'+esc(r.d||'material')+'</td><td class="r">'+_money(r.line)+'</td></tr>'; }); }
-    if(t.cons.length){ rows+='<tr class="q-grp"><td colspan="2">Shop supplies</td></tr>'; t.cons.forEach(r=>{ rows+='<tr><td>'+esc(r.d)+'</td><td class="r">'+_money(r.c)+'</td></tr>'; }); }
+    if(QUOTE.supMode==='pct'){ if(t.consLine>0) rows+='<tr class="q-grp"><td colspan="2">Shop supplies</td></tr><tr><td>'+t.consPct+'% of labor + materials</td><td class="r">'+_money(t.consLine)+'</td></tr>'; }
+    else if(t.cons.length){ rows+='<tr class="q-grp"><td colspan="2">Shop supplies</td></tr>'; t.cons.forEach(r=>{ rows+='<tr><td>'+esc(r.d)+'</td><td class="r">'+_money(r.c)+'</td></tr>'; }); }
     tbl='<table class="q-t"><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead><tbody>'+rows+'<tr class="q-tsub"><td>Subtotal</td><td class="r">'+_money(t.subtotal)+'</td></tr>'+(QUOTE.tax?'<tr><td>Tax ('+QUOTE.tax+'%)</td><td class="r">'+_money(t.taxAmt)+'</td></tr>':'')+'</tbody></table><div class="q-grand"><span>Total</span><span>'+_money(t.total)+'</span></div>';
   }
   const css='@page{size:letter portrait;margin:.6in}*{box-sizing:border-box}body{font-family:"Segoe UI",Arial,sans-serif;color:#1b2531;margin:0}'
