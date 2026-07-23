@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"34.6", date:"2026-07-23", title:"💬 Tell-Claude box · assign Fleetio from a task · fixed Open-email link", items:[
+    "New <b>💬 Tell Claude</b> box in MY WORK — type a request in plain English (“find a time for Al, Luc &amp; Megan Wed for Medtronic and set a Teams meeting”) and I act on the next refresh. Any <b>task that references a Fleetio issue</b> (#1234) now has a <b>👤 Assign</b> button right on the line — pick a crew, it writes to the board. Fixed the <b>📧 Open email</b> link (it now uses the message’s real Outlook link, so no more “message might have been moved or deleted”)." ] },
   { rev:"34.5", date:"2026-07-23", title:"🧠 One place: My Command lives fully inside MY WORK (separate tab removed)", items:[
     "Consolidated to <b>one place for all your work</b>. The separate 🧠 COMMAND tab is gone — the <b>full brief now renders right inside MY WORK</b>: ❓ Questions, 🔴 Waiting (✉ Reply + 📧 Open email), 📅 Appointments, 📦 Inbound, 📋 Project brief, ⚠ Fleetio watchdog (👤 Assign in place), and your one synced task list — plus ✉ New email / 📅 Schedule / 🔄 Refresh right there. No more “go to My Command.”" ] },
   { rev:"34.4", date:"2026-07-23", title:"🧠 My Command folded into MY WORK + one synced task list + auto-tasks", items:[
@@ -13772,7 +13774,7 @@ function _mwMcPanel(){
   var waiting=A.waiting||[];
   var kb=function(k){ return k==='client'?'<span class="badge red">CLIENT</span>':k==='vendor'?'<span class="badge amber">VENDOR</span>':k==='internal'?'<span class="badge grey">INTERNAL</span>':''; };
   var wh='<div class="panel" id="mwsec-cmdw"><h2>🔴 Waiting on you <span class="count">'+waiting.length+'</span></h2>'
-    +(waiting.length?waiting.map(function(w,i){ var open=(w.link||w.id)?'<a href="'+esc(_mcMailHref(w))+'" target="_blank" rel="noopener" style="'+B+'">📧 Open email</a>':'';
+    +(waiting.length?waiting.map(function(w,i){ var _mh=_mcMailHref(w); var open=_mh?'<a href="'+esc(_mh)+'" target="_blank" rel="noopener" style="'+B+'">📧 Open email</a>':'';
         return '<div class="row" style="display:block"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div class="lead">'+kb(w.kind)+' '+esc(w.who||'')+'</div>'+(w.project?'<span class="badge grey">'+esc(w.project)+'</span>':'')+'</div>'
           +'<div class="meta">'+esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(w.when)):'')+'</div>'
           +'<div style="font-size:13px;margin:4px 0">'+esc(w.need||'')+'</div>'
@@ -13781,7 +13783,7 @@ function _mwMcPanel(){
   // 📅 Appointments
   var appts=A.appts||[];
   var ah='<div class="panel" id="mwsec-cmda"><h2>📅 Appointments &amp; scheduled visits <span class="count">'+appts.length+'</span></h2>'
-    +(appts.length?appts.map(function(x){ var hot=x.today?' style="border-left:3px solid var(--brand);padding-left:8px"':''; var open=(x.link||x.id)?' <a href="'+esc(_mcMailHref(x))+'" target="_blank" rel="noopener" style="color:#7aa2d6">📧</a>':'';
+    +(appts.length?appts.map(function(x){ var hot=x.today?' style="border-left:3px solid var(--brand);padding-left:8px"':''; var _mh=_mcMailHref(x); var open=_mh?' <a href="'+esc(_mh)+'" target="_blank" rel="noopener" style="color:#7aa2d6">📧</a>':'';
         return '<div class="row"'+hot+'><div style="min-width:0"><div class="lead">📅 '+esc(x.when||'')+(x.today?' · TODAY':'')+' — '+esc(x.what||'')+open+'</div><div class="meta">'+esc(x.who||'')+(x.where?(' · '+esc(x.where)):'')+(x.note?(' · '+esc(x.note)):'')+'</div></div></div>'; }).join(''):'<div class="empty">No appointments in the brief.</div>')
     +'</div>';
   // 📦 Inbound
@@ -13809,14 +13811,27 @@ function _mwMcPanel(){
   var wdh='<div class="panel" id="mwsec-cmdf"><h2>⚠ Fleetio watchdog <span class="count">'+g.total+' scanned</span></h2>'+wd+'</div>';
   // ✅ Tasks (one synced list; auto-tasks from your email commitments)
   var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var openN=tasks.filter(function(t){return !t.done;}).length;
-  var tl=tasks.length?tasks.map(function(t,i){ return '<div class="row" style="align-items:center"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;margin-right:8px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';opacity:.5;text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div><button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'; }).join(''):'<div class="empty">No tasks yet — add one below.</div>';
+  var tl=tasks.length?tasks.map(function(t,i){ var mnum=String(t.t||'').match(/#(\d{2,6})/);
+      var asgB=mnum?'<button style="'+B+';margin-right:6px" onclick="mcAssignIss(\''+mnum[1]+'\',event)" title="Assign this Fleetio issue to the board (pick a crew)">👤 Assign</button>':'';
+      return '<div class="row" style="align-items:center"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;margin-right:8px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';opacity:.5;text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div>'+asgB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'; }).join(''):'<div class="empty">No tasks yet — add one below.</div>';
   var th='<div class="panel" id="mwsec-cmdt"><h2>✅ Tasks <span class="count">'+openN+' open</span></h2>'+tl
     +'<div style="display:flex;gap:8px;margin-top:8px"><input id="mwMcNew" placeholder="Add a task…" style="flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px"><button style="'+BP+'" onclick="mwMcAdd()">Add</button></div></div>';
-  return head+qh+wh+ah+ih+ph+wdh+th;
+  // 💬 Tell Claude — free-text command box; routes to Claude, acted on the next refresh
+  var askH='<div class="panel" id="mwsec-cmdask"><h2>💬 Tell Claude <span class="count">I act on the next refresh</span></h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Type a request in plain English — e.g. “find a time for Al, Luc &amp; Megan Wednesday for Medtronic and set a Teams meeting,” “draft a reply to Taylor,” “add a task to…”. I read these and do them on the next refresh (or right away if you ping me).</div>'
+    +'<textarea id="mcAskBox" placeholder="Tell Claude what to do…" style="width:100%;min-height:80px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical"></textarea>'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button style="'+BP+'" onclick="mcAsk()">Send to Claude</button><span id="mcAskMsg" class="mc-muted" style="font-size:12px;color:var(--muted)"></span></div></div>';
+  return head+askH+qh+wh+ah+ih+ph+wdh+th;
 }
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
 function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ a.splice(i,1); _mcSave(a); renderMyWork(); } }
 function mwMcAdd(){ var el=document.getElementById('mwMcNew'); if(!el)return; var v=el.value.trim(); if(!v)return; var a=_mcTasks(); a.push({id:_mcId(),t:v,done:false}); _mcSave(a); renderMyWork(); }
+// 💬 Tell Claude: send a free-text instruction to Claude (routes via the mail flow, tagged; Claude reads it on the next refresh and acts).
+function mcAsk(){ var el=document.getElementById('mcAskBox'); if(!el) return; var v=(el.value||'').trim(); if(!v){ alert('Type what you want Claude to do.'); return; }
+  var when=''; try{ when=new Date().toLocaleString(); }catch(e){}
+  var html='<b>MyCommand ask</b>'+(when?(' — '+esc(when)):'')+'<br>'+esc(v).replace(/\n/g,'<br>');
+  try{ if(typeof MC_MAILSEND!=='undefined') fetch(MC_MAILSEND,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({to:'rmiller@gomra.com',subject:'[MyCommand ask] '+v.slice(0,70),html:html})}); }catch(e){}
+  el.value=''; var m=document.getElementById('mcAskMsg'); if(m) m.textContent='✓ Sent to Claude — I’ll handle it on the next refresh (or ping me to do it now).'; }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
@@ -17340,7 +17355,10 @@ function mcAssignIss(num,ev){
 }
 function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ var t=_mcIssTask(num); var lab=t?'👤 Re-assign crew':'👤 Add to board + assign';
     _mcModal('<h3>🔧 Fleetio issue #'+esc(num)+'</h3><div style="max-height:60vh;overflow:auto">'+fioIssueDetailHtml(num)+'</div><div class="foot"><button class="mc-btn primary" onclick="mcAssignIss(\''+esc(num)+'\',event)">'+lab+'</button><button class="mc-btn" onclick="_mcModalClose()">Close</button><span id="mcIssMsg" class="mc-muted"></span></div>'); } else { alert('Issue #'+num); } }
-function _mcMailHref(x){ if(x&&x.id){ return 'https://outlook.office.com/mail/deeplink/read/'+encodeURIComponent(x.id); } var l=(x&&x.link)||''; return l.replace(/&exvsurl=1/,''); }
+// Build a working "open this email" link. Use the message's verbatim Graph webLink (correct ItemID),
+// forced to open in Outlook-on-the-web by stripping exvsurl. The Graph `id` is URL-safe base64 and is
+// NOT usable in an OWA open-link, so if there's no webLink we return '' (hide the button) rather than a broken one.
+function _mcMailHref(x){ var l=(x&&x.link)?String(x.link):''; if(!l) return ''; return l.replace(/&exvsurl=1/i,'').replace(/&exvsurl=0/i,''); }
 function renderMyCmd(){
   var o=document.getElementById('myCmd'); if(!o) return; var D=window.MRA_DATA||{}; var A=_MC_AGENT||{};
   var g=_mcGaps(); var tasks=_mcTasks();
