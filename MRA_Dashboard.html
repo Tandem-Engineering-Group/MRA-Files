@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"35.0", date:"2026-07-23", title:"↕ Reorder My Command sections yourself (▲ ▼ ⤒), saved per device", items:[
+    "Every My Command section now has <b>▲ / ▼ / ⤒</b> controls (move up · move down · jump to top) so you can arrange the layout however you want as we build it — Waiting on top, Tasks first, whatever. Your order is <b>saved on your device</b>; <b>↺ Reset layout</b> puts it back to default." ] },
   { rev:"34.9", date:"2026-07-23", title:"📩 FYI / Updates lane in My Command (notes, not tasks)", items:[
     "New <b>📩 FYI / Updates</b> section in My Command for status notes that need no action from you — e.g. a teammate handling a vendor thread (the Alro J1553 parts update now lives here, not in Waiting). Keeps decisions and to-dos clean and separate from “just so you know” items." ] },
   { rev:"34.8", date:"2026-07-23", title:"🔧 Fleetio tasks show full detail inline + Assign works to the General list", items:[
@@ -13772,8 +13774,8 @@ function _mwMcPanel(){
   if(A&&A.generatedAt){ try{ refT=new Date(A.generatedAt).toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' ET'; }catch(e){ refT=''; } }
   if(!refT&&A) refT=A.generatedText||'';
   var head='<div class="panel"><h2>🧠 My Command'+(refT?' <span class="count">🕒 Last scanned '+esc(refT)+'</span>':'')+'</h2>'
-    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Your private command brief — email triage, appointments, inbound &amp; the Fleetio watchdog, cross-checked with the board. <b>Auto-scans your inbox 4× a weekday (~6a · 10a · 2p · 6p ET).</b> 🔄 re-pulls the latest brief; <b>brand-new email only appears after the next scan</b> (or ping me to scan now).</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button style="'+B+'" onclick="mcCompose()">✉ New email</button><button style="'+B+'" onclick="mcSchedule()">📅 Schedule</button><button style="'+B+'" onclick="loadAgent(function(){renderMyWork();})">🔄 Refresh brief</button></div></div>';
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Your private command brief — email triage, appointments, inbound &amp; the Fleetio watchdog, cross-checked with the board. <b>Auto-scans your inbox 4× a weekday (~6a · 10a · 2p · 6p ET).</b> 🔄 re-pulls the latest brief; <b>brand-new email only appears after the next scan</b> (or ping me to scan now). Use <b>▲ ▼ ⤒</b> on any section to reorder it — your layout is saved on this device.</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button style="'+B+'" onclick="mcCompose()">✉ New email</button><button style="'+B+'" onclick="mcSchedule()">📅 Schedule</button><button style="'+B+'" onclick="loadAgent(function(){renderMyWork();})">🔄 Refresh brief</button><button style="'+B+'" onclick="mwResetOrder()" title="Reset the section order back to default">↺ Reset layout</button></div></div>';
   if(!A) return head+'<div class="panel" id="mwsec-cmd"><div class="empty">Loading your brief…</div></div>';
   // ❓ Questions
   var qs=A.questions||[];
@@ -13838,7 +13840,8 @@ function _mwMcPanel(){
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Type a request in plain English — e.g. “find a time for Al, Luc &amp; Megan Wednesday for Medtronic and set a Teams meeting,” “draft a reply to Taylor,” “add a task to…”. I read these and do them on the next refresh (or right away if you ping me).</div>'
     +'<textarea id="mcAskBox" placeholder="Tell Claude what to do…" style="width:100%;min-height:80px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical"></textarea>'
     +'<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button style="'+BP+'" onclick="mcAsk()">Send to Claude</button><span id="mcAskMsg" class="mc-muted" style="font-size:12px;color:var(--muted)"></span></div></div>';
-  return head+askH+qh+wh+ah+ih+fh+ph+wdh+th;
+  var blocks={tellClaude:askH, questions:qh, waiting:wh, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th};
+  return head+_mcLanes(blocks);
 }
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
 function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ a.splice(i,1); _mcSave(a); renderMyWork(); } }
@@ -13868,6 +13871,31 @@ function _mcFioDetail(num){
     +(files?'<div style="margin-top:3px">'+files+'</div>':'')
     +(it.reporter?'<div class="meta">✍ '+esc(it.reporter)+'</div>':'')
     +'</div>'; }
+// ---- My Command: personal section order (drag-free reorder with ▲▼⤒), saved per device ----
+var MC_ORDER_KEY='mra_mycmd_order_v1';
+var MC_LANES_DEFAULT=['tellClaude','questions','waiting','appts','inbound','fyi','projects','watchdog','tasks'];
+function _mcOrder(){ var d=MC_LANES_DEFAULT.slice(); var s=null; try{ s=JSON.parse(localStorage.getItem(MC_ORDER_KEY)||'null'); }catch(e){}
+  if(!Array.isArray(s)) return d;
+  var out=s.filter(function(k){return d.indexOf(k)>=0;}); d.forEach(function(k){ if(out.indexOf(k)<0) out.push(k); }); return out; }
+function _mcSaveOrder(o){ try{ localStorage.setItem(MC_ORDER_KEY,JSON.stringify(o)); }catch(e){} }
+function mwResetOrder(){ try{ localStorage.removeItem(MC_ORDER_KEY); }catch(e){} renderMyWork(); }
+function _mcLaneVisible(k){ var A=_MC_AGENT||{}; if(k==='questions') return (A.questions||[]).length>0; if(k==='fyi') return (A.fyi||[]).length>0; return true; }
+function mwMove(key,dir){ var o=_mcOrder(); var i=o.indexOf(key); if(i<0) return;
+  if(dir==='top'){ o.splice(i,1); o.unshift(key); _mcSaveOrder(o); renderMyWork(); return; }
+  var step=dir<0?-1:1; var j=i+step;
+  while(j>=0 && j<o.length && !_mcLaneVisible(o[j])) j+=step;   // skip hidden lanes so a click always moves visibly
+  if(j<0||j>=o.length) return;
+  var tmp=o[i]; o[i]=o[j]; o[j]=tmp; _mcSaveOrder(o); renderMyWork(); }
+function _mcLanes(blocks){ var o=_mcOrder();
+  var visKeys=o.filter(function(k){ return blocks[k] && _mcLaneVisible(k); });
+  var bs='background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--txt);cursor:pointer;font-size:12px;min-width:26px;height:24px;line-height:1;padding:0';
+  return o.map(function(key){ var html=blocks[key]; if(!html || !_mcLaneVisible(key)) return '';
+    var vi=visKeys.indexOf(key);
+    var top=vi>0?'<button title="Move to top" style="'+bs+'" onclick="mwMove(\''+key+'\',\'top\')">⤒</button>':'';
+    var up =vi>0?'<button title="Move up" style="'+bs+'" onclick="mwMove(\''+key+'\',-1)">▲</button>':'';
+    var dn =vi<visKeys.length-1?'<button title="Move down" style="'+bs+'" onclick="mwMove(\''+key+'\',1)">▼</button>':'';
+    var ctrl='<div style="position:absolute;top:12px;right:12px;z-index:3;display:flex;gap:4px">'+top+up+dn+'</div>';
+    return '<div style="position:relative">'+ctrl+html+'</div>'; }).join(''); }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
