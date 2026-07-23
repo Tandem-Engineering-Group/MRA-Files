@@ -3606,7 +3606,7 @@ const GENERAL_HELP = `
     <p><b>Click any task</b> on your page to open it in the <span class="k">✎ Edit task</span> editor — the <b>same single-task editor</b> whether it's a shop or a project task (it no longer lands you on the whole job or the whole project list).</p>
     <p><b>⚙ Customize:</b> at the bottom, pin any project with <span class="k">➕ Follow</span> and it shows up on your page (health, milestones, past-due count) even if it isn't assigned to you — handy for watching a job that isn't strictly yours. (Saved on your device.)</p>
     <p>The <b>daily email</b> everyone gets is this exact page — a link to your live My Work (<span class="k">?mywork=Your Name</span>) that always opens fresh. <b>Rich (admin)</b> gets a <b>View person</b> picker to open anyone's page.</p>
-    <p><b>🖨 Print</b> (top-right of the page) opens a clean one-page version and pops the print / Save-as-PDF dialog. In the <b>🧠 My Command</b> block (Rich only), <span class="k">🕒 Last scanned</span> shows the <b>real time</b> the brief was last published in Eastern time plus how long ago (e.g. “28 min ago”), and flags <span class="k">⚠</span> if an auto-scan looks like it stalled.</p>
+    <p><b>🖨 Print</b> (top-right of the page) opens a clean one-page version and pops the print / Save-as-PDF dialog. In the <b>🧠 My Command</b> block (Rich only), <span class="k">🕒 Last scanned</span> shows the <b>real time</b> the brief was last published in Eastern time plus how long ago (e.g. “28 min ago”), and flags <span class="k">⚠</span> if an auto-scan looks like it stalled. On each <b>🔴 Waiting on you</b> item, <span class="k">📧 Open email</span> opens the <b>full thread in Outlook</b> (the back-and-forth), <span class="k">✉ Reply</span> sends with the ready draft, and <span class="k">✓ Not for me</span> hides it — hidden items stay hidden through re-scans and can be brought back with the <span class="k">“N hidden · show”</span> link (each has ↩ Restore).</p>
     <p><i>The MY WORK tab currently shows for the group that uses it — the PMs, design team and shop crew (Megan, Al, Luciana, Brandon, Mark, Sarah, Sal, Jeff, Josh, Doug &amp; Stephanie), plus Rich. Ask Rich to add anyone else.</i></p></div>
 
   <div class="hsec"><h4>②ʳ ⏩ Pushing &amp; sliding due dates</h4>
@@ -3837,6 +3837,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.23", date:"2026-07-23", title:"🔴 Waiting on you — read the full email thread + ✓ Not for me to dismiss", items:[
+    "Every <b>Waiting on you</b> item now shows a <b>📧 Open email</b> button that opens the <b>full thread</b> (all the back-and-forth) in Outlook — it builds the link straight from the message, so it always works even when the brief didn't include a prebuilt link.",
+    "New <b>✓ Not for me</b> button on each item — tap it to hide something you're not going to action. It <b>stays hidden</b> through the 4×/day re-scans (keyed to the email), and you can recover any you hid via the <b>“N hidden · show”</b> link at the bottom (each shows a ↩ Restore)." ] },
   { rev:"36.22", date:"2026-07-23", title:"📈 Sales & Planning — prospects get an on-tour launch window (🚀 teal tail)", items:[
     "A prospect can now carry an <b>Est. launch end</b> date. The build bar still runs start → launch date; after that a <b>🚀 teal-hatched \"launch / on tour\" tail</b> extends to the launch-end date — a distinct look (opposite-angle hatch) so it reads clearly even where it overlaps a committed project bar below. <b>Pipeline only.</b> Shows on the live timeline, the legend, and the executive 🖨 print. Leave the field blank and nothing changes.",
     "Small fix: the <b>◀ ▶</b> week-nudge on a prospect no longer drops its <b>PM</b> and <b>build type</b> (they were being cleared each slide)." ] },
@@ -14272,12 +14275,21 @@ function _mwMcPanel(){
   // 🔴 Waiting on you
   var waiting=A.waiting||[];
   var kb=function(k){ return k==='client'?'<span class="badge red">CLIENT</span>':k==='vendor'?'<span class="badge amber">VENDOR</span>':k==='internal'?'<span class="badge grey">INTERNAL</span>':''; };
-  var wh='<div class="panel" id="mwsec-cmdw"><h2>🔴 Waiting on you <span class="count">'+waiting.length+'</span></h2>'
-    +(waiting.length?waiting.map(function(w,i){ var _mh=_mcMailHref(w); var open=_mh?'<a href="'+esc(_mh)+'" target="_blank" rel="noopener" style="'+B+'">📧 Open email</a>':'';
-        return '<div class="row" style="display:block"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div class="lead">'+kb(w.kind)+' '+esc(w.who||'')+'</div>'+(w.project?'<span class="badge grey">'+esc(w.project)+'</span>':'')+'</div>'
-          +'<div class="meta">'+esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(w.when)):'')+'</div>'
-          +'<div style="font-size:13px;margin:4px 0">'+esc(w.need||'')+'</div>'
-          +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+(w.draft||w.email?('<button style="'+BP+'" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button>'):'')+open+'</div></div>'; }).join(''):'<div class="empty">Nobody’s waiting on you. 🎉</div>')
+  var Bmut=B+';opacity:.9';
+  var _dm=_mcDismissed(); var _visN=0, _hidN=0;
+  var wrows=waiting.map(function(w,i){ var k=_mcWaitKey(w); var isDm=(_dm.indexOf(k)>=0);
+      if(isDm){ _hidN++; if(!_MC_SHOW_DISMISSED) return ''; } else { _visN++; }
+      var _mh=_mcMailHref(w); var open=_mh?'<a href="'+esc(_mh)+'" target="_blank" rel="noopener" style="'+B+'" title="Opens the full email thread (all the back-and-forth) in Outlook">📧 Open email</a>':'';
+      var dz=isDm?('<button style="'+Bmut+'" onclick="mcRestoreWaitKey(\''+escJsAttr(k)+'\')" title="Put this back in your list">↩ Restore</button>')
+                 :('<button style="'+Bmut+'" onclick="mcDismissWaitKey(\''+escJsAttr(k)+'\')" title="Not for me / already handled — hide it from your list. Stays hidden after re-scans; recover with “show hidden” below.">✓ Not for me</button>');
+      return '<div class="row" style="display:block'+(isDm?';opacity:.55':'')+'"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div class="lead">'+kb(w.kind)+' '+esc(w.who||'')+'</div>'+(w.project?'<span class="badge grey">'+esc(w.project)+'</span>':'')+'</div>'
+        +'<div class="meta">'+esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(w.when)):'')+'</div>'
+        +'<div style="font-size:13px;margin:4px 0">'+esc(w.need||'')+'</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+(w.draft||w.email?('<button style="'+BP+'" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button>'):'')+open+dz+'</div></div>'; }).join('');
+  var wfoot=_hidN?('<div style="margin-top:8px;font-size:12px;color:var(--muted)"><a onclick="mcToggleShowDismissed()" style="cursor:pointer;text-decoration:underline">'+(_MC_SHOW_DISMISSED?('▲ hide '+_hidN+' dismissed'):('▾ '+_hidN+' hidden · show')) +'</a></div>'):'';
+  var wh='<div class="panel" id="mwsec-cmdw"><h2>🔴 Waiting on you <span class="count">'+_visN+'</span></h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin:-2px 0 8px">📧 <b>Open email</b> = read the full thread in Outlook · ✉ <b>Reply</b> = send with the ready draft · ✓ <b>Not for me</b> = hide it from your list.</div>'
+    +((_visN||(_MC_SHOW_DISMISSED&&_hidN))?wrows:'<div class="empty">Nobody’s waiting on you. 🎉</div>')+wfoot
     +'</div>';
   // 📅 Appointments
   var appts=A.appts||[];
@@ -18209,7 +18221,21 @@ function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ var t=_mcIssTas
 // Build a working "open this email" link. Use the message's verbatim Graph webLink (correct ItemID),
 // forced to open in Outlook-on-the-web by stripping exvsurl. The Graph `id` is URL-safe base64 and is
 // NOT usable in an OWA open-link, so if there's no webLink we return '' (hide the button) rather than a broken one.
-function _mcMailHref(x){ var l=(x&&x.link)?String(x.link):''; if(!l) return ''; return l.replace(/&exvsurl=1/i,'').replace(/&exvsurl=0/i,''); }
+function _mcMailHref(x){ var l=(x&&x.link)?String(x.link):''; if(l) return l.replace(/&exvsurl=1/i,'').replace(/&exvsurl=0/i,'');
+  // Fallback: build an Outlook-web deep link straight from the message id (every scanned item carries one) so
+  // "📧 Open email" always works and opens the FULL thread even when the brief didn't include a prebuilt link.
+  var id=(x&&x.id)?String(x.id):''; return id?('https://outlook.office.com/mail/deeplink/read/'+encodeURIComponent(id)):''; }
+// ✋ Dismiss ("not for me" / already handled) — hide a Waiting-on-you item. Keyed by the stable message id so it
+// stays hidden across the 4×/day re-scans; per-device localStorage; recoverable via the "N hidden · show" toggle.
+var _MC_DISMISS_KEY='mra_mc_dismiss_v1'; var _MC_SHOW_DISMISSED=false;
+function _mcWaitKey(w){ return String((w&&(w.id||((w.who||'')+'|'+(w.subject||''))))||''); }
+function _mcDismissed(){ try{ return JSON.parse(localStorage.getItem(_MC_DISMISS_KEY)||'[]')||[]; }catch(e){ return []; } }
+function _mcSaveDismissed(a){ try{ localStorage.setItem(_MC_DISMISS_KEY, JSON.stringify(a||[])); }catch(e){} }
+function _mcRerenderMC(){ try{ var v=document.getElementById('myworkView'); if(v && !v.classList.contains('hidden') && typeof renderMyWork==='function'){ renderMyWork(); return; } }catch(e){}
+  try{ if(document.getElementById('myCmd') && typeof renderMyCmd==='function') renderMyCmd(); }catch(e){} }
+function mcDismissWaitKey(k){ if(!k) return; var a=_mcDismissed(); if(a.indexOf(k)<0){ a.push(k); _mcSaveDismissed(a); } _mcRerenderMC(); }
+function mcRestoreWaitKey(k){ var a=_mcDismissed().filter(function(x){ return x!==k; }); _mcSaveDismissed(a); _mcRerenderMC(); }
+function mcToggleShowDismissed(){ _MC_SHOW_DISMISSED=!_MC_SHOW_DISMISSED; _mcRerenderMC(); }
 function renderMyCmd(){
   var o=document.getElementById('myCmd'); if(!o) return; var D=window.MRA_DATA||{}; var A=_MC_AGENT||{};
   var g=_mcGaps(); var tasks=_mcTasks();
@@ -18222,13 +18248,19 @@ function renderMyCmd(){
         +'<div class="acts"><button class="mc-btn primary" onclick="mcAnswer('+i+')">✍ Answer</button></div></div>';
     }).join(''):'<div class="mc-muted">No open questions from me right now.</div>';
   var waiting=A.waiting||[];
-  var wh=waiting.length?waiting.map(function(w,i){
-      var openBtn=(w.link||w.id)?('<a class="mc-btn" href="'+esc(_mcMailHref(w))+'" target="_blank" rel="noopener">📧 Open email</a>'):'';
+  var _dmc=_mcDismissed(); var _cVis=0, _cHid=0;
+  var _wrows=waiting.map(function(w,i){ var k=_mcWaitKey(w); var isDm=(_dmc.indexOf(k)>=0);
+      if(isDm){ _cHid++; if(!_MC_SHOW_DISMISSED) return ''; } else { _cVis++; }
+      var openBtn=_mcMailHref(w)?('<a class="mc-btn" href="'+esc(_mcMailHref(w))+'" target="_blank" rel="noopener" title="Opens the full email thread in Outlook">📧 Open email</a>'):'';
+      var dz=isDm?('<button class="mc-btn" onclick="mcRestoreWaitKey(\''+escJsAttr(k)+'\')" title="Put this back in your list">↩ Restore</button>')
+                 :('<button class="mc-btn" onclick="mcDismissWaitKey(\''+escJsAttr(k)+'\')" title="Not for me / already handled — hide it from your list">✓ Not for me</button>');
       var sub=esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(w.when)):'');
-      return '<div class="mc-wait"><div class="w1"><span class="who">'+_kb(w.kind)+' '+esc(w.who||'')+'</span>'+(w.project?'<span class="proj">'+esc(w.project)+'</span>':'')+'</div>'
+      return '<div class="mc-wait"'+(isDm?' style="opacity:.55"':'')+'><div class="w1"><span class="who">'+_kb(w.kind)+' '+esc(w.who||'')+'</span>'+(w.project?'<span class="proj">'+esc(w.project)+'</span>':'')+'</div>'
         +'<div class="subj">'+sub+'</div><div class="need">'+esc(w.need||'')+'</div>'
-        +'<div class="acts"><button class="mc-btn primary" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button>'+openBtn+'</div></div>';
-    }).join(''):'<div class="mc-muted">'+(A.generatedText?'Nobody’s waiting on you right now. 🎉':'Your brief hasn’t been generated yet — ask me to “refresh my command.”')+'</div>';
+        +'<div class="acts"><button class="mc-btn primary" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button>'+openBtn+dz+'</div></div>';
+    }).join('');
+  var _wfoot=_cHid?('<div class="mc-muted" style="margin-top:6px"><a onclick="mcToggleShowDismissed()" style="cursor:pointer;text-decoration:underline">'+(_MC_SHOW_DISMISSED?('▲ hide '+_cHid+' dismissed'):('▾ '+_cHid+' hidden · show'))+'</a></div>'):'';
+  var wh=((_cVis||(_MC_SHOW_DISMISSED&&_cHid))?_wrows:'<div class="mc-muted">'+(A.generatedText?'Nobody’s waiting on you right now. 🎉':'Your brief hasn’t been generated yet — ask me to “refresh my command.”')+'</div>')+_wfoot;
   // 📅 Appointments & scheduled visits (service techs, deliveries with a set date, meetings booked)
   var appts=A.appts||[];
   var ah=appts.length?appts.map(function(x){
