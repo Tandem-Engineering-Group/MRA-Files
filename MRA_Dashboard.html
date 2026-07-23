@@ -3852,6 +3852,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.29", date:"2026-07-23", title:"🛑 FIX: closed tasks stay closed — no more resurrecting auto-tasks", items:[
+    "<b>Root cause found:</b> the scan re-words the same commitment every run (e.g. #1244 as “quote decision (Brace Installation)” one time, “a quote (generator mount)” the next), and the old de-dup matched on exact wording — so each rewording looked brand-new and came back, even after you X'd it.",
+    "<b>Fixed:</b> tasks are now tracked by a <b>stable key</b> (the Fleetio # when there is one, otherwise a date/wording-proof signature). When you <b>✕ delete or ✓ complete</b> a task, it's remembered as closed and <b>never re-seeded</b> — no matter how the next scan re-words it. A task only reappears if it's a genuinely <b>new</b> item. Duplicates already piled up on your list are auto-collapsed to one.",
+    "Auto-tasks now show the <b>date they were added</b>, and everything's timestamped under the hood (added / done times) so state is tracked, not guessed." ] },
   { rev:"36.28", date:"2026-07-23", title:"✅ Tasks tidy themselves — done clears after 48h + resolved-Fleetio auto-drop", items:[
     "Checked-off tasks now move to a <b>✓ Done</b> section and <b>auto-clear 48 hours</b> after you check them (so you can still see what got knocked out, then they vanish). New <b>🗑 Clear done</b> button wipes them all instantly.",
     "A task tied to a <b>Fleetio issue that's since been resolved/closed</b> (like #1244, the Mammo Mandy brace) now <b>auto-checks itself done</b> (marked “✓ issue closed”) and clears on the 48h timer — no more lingering to-dos with a ⚠ for work that's already done." ] },
@@ -14422,7 +14426,7 @@ function _mwMcPanel(){
       var snzB=(!t.done)?'<button style="background:none;border:0;color:var(--muted);cursor:pointer;font-size:14px;margin-right:2px" onclick="event.stopPropagation();mwMcSnooze('+i+')" title="Snooze until tomorrow">💤</button>':'';
       var det=(mnum&&!t.done)?_mcFioDetail(mnum[1]):'';
       return '<div class="row" style="display:block'+(t.done?';opacity:.55':'')+'">'
-        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div>'+asgB+snzB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
+        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+(t.seededAt?' <span class="meta" style="font-size:10px">· '+new Date(t.seededAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric'})+'</span>':'')+'</div>'+asgB+snzB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
         +det+'</div>'; };
   var openRows=tasks.map(function(t,i){ return (t.done||_snz(t))?'':_mcTaskRow(t,i); }).join('');
   var snzRows=tasks.map(function(t,i){ if(t.done||!_snz(t)) return ''; return '<div class="row" style="align-items:center;opacity:.7"><span style="flex:1;min-width:0">💤 '+esc(t.t)+' <span class="meta">until '+esc(t.snoozeUntil)+'</span></span><button onclick="mwMcWake('+i+')" style="'+B+'">☀ Wake</button></div>'; }).join('');
@@ -14444,11 +14448,14 @@ function _mwMcPanel(){
   var blocks={tellClaude:askH, questions:qh, myplate:mineH, waiting:wh, filemail:fileH, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th, flows:_mcFlowsPanel()};
   return head+_mcNavTiles(A)+_mcLanes(blocks);
 }
-function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; a[i].doneAt=a[i].done?Date.now():0; _mcSave(a); renderMyWork(); } }
-function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ a.splice(i,1); _mcSave(a); renderMyWork(); } }
-function mwMcAdd(){ var el=document.getElementById('mwMcNew'); if(!el)return; var v=el.value.trim(); if(!v)return; var a=_mcTasks(); a.push({id:_mcId(),t:v,done:false}); _mcSave(a); renderMyWork(); }
-function mwMcClearDone(){ var a=_mcTasks(); var n=a.filter(function(t){return t.done;}).length; if(!n) return;
-  if(!confirm('Clear '+n+' completed task'+(n===1?'':'s')+' now?')) return; _mcSave(a.filter(function(t){return !t.done;})); renderMyWork(); }
+function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; a[i].doneAt=a[i].done?Date.now():0;
+    if(a[i].done){ _mcKill(a[i]); } else { _mcUnkill(a[i]); }   // done = remembered closed; un-check = allow it back
+    _mcSave(a); renderMyWork(); } }
+function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ _mcKill(a[i]); a.splice(i,1); _mcSave(a); renderMyWork(); } }   // X = never resurrect
+function mwMcAdd(){ var el=document.getElementById('mwMcNew'); if(!el)return; var v=el.value.trim(); if(!v)return; var a=_mcTasks(); a.push({id:_mcId(),key:_mcKey(v),t:v,done:false,seededAt:Date.now()}); _mcSave(a); renderMyWork(); }
+function mwMcClearDone(){ var a=_mcTasks(); var done=a.filter(function(t){return t.done;}); if(!done.length) return;
+  if(!confirm('Clear '+done.length+' completed task'+(done.length===1?'':'s')+' now?')) return;
+  done.forEach(_mcKill); _mcSave(a.filter(function(t){return !t.done;})); renderMyWork(); }
 // Auto-tidy the task list: (1) drop done items after 48h; (2) an OPEN Fleetio task whose issue is now resolved
 // (its #NNNN is gone from a loaded export) auto-marks done → drops to the Done section → clears with the 48h rule.
 var _MC_DONE_TTL=48*3600*1000;
@@ -14456,11 +14463,17 @@ function _mcAutoClean(){ var a=_mcTasks(); if(!a||!a.length) return; var now=Dat
   var D=window.MRA_DATA||{}; var iss=(D.fleetio&&D.fleetio.issues)||[]; var openNums=null;
   if(iss.length){ openNums={}; iss.forEach(function(it){ openNums[String(it.num)]=1; }); }
   var kept=a.filter(function(t){
-    if(t.done){ var dA=+t.doneAt||0; if(dA && (now-dA)>_MC_DONE_TTL){ changed=true; return false; } return true; }
-    if(openNums && !t.fioAutoDone){ var m=/fleetio[^#]*#(\d{3,6})/i.exec(String(t.t||''));   // resolved-Fleetio auto-done (once)
-      if(m && !openNums[m[1]]){ t.done=true; t.doneAt=now; t.fioAutoDone=1; if(!/issue closed/i.test(String(t.t))) t.t=t.t+' ✓ (issue closed)'; changed=true; } }
+    if(t.done){ var dA=+t.doneAt||0; if(dA && (now-dA)>_MC_DONE_TTL){ _mcKill(t); changed=true; return false; } return true; }   // 48h drop → stays dead
+    var fk=t.key||_mcKey(t.t);
+    if(openNums && fk && fk.indexOf('fio:')===0 && !t.fioAutoDone){ var num=fk.slice(4);   // resolved-Fleetio auto-done (once)
+      if(!openNums[num]){ t.done=true; t.doneAt=now; t.fioAutoDone=1; if(!/issue closed/i.test(String(t.t))) t.t=t.t+' ✓ (issue closed)'; _mcKill(t); changed=true; } }
     return true; });
-  if(changed) _mcSave(kept); }
+  // collapse duplicate keys already on the list (the old text-dedup let the same commitment pile up) — keep one, prefer a done copy
+  var byKey={}, deduped=[];
+  kept.forEach(function(t){ var k=t.key||_mcKey(t.t); if(!k){ deduped.push(t); return; }
+    if(byKey[k]==null){ byKey[k]=deduped.length; deduped.push(t); }
+    else { changed=true; var ex=deduped[byKey[k]]; if(t.done && !ex.done){ deduped[byKey[k]]=t; } } });
+  if(changed) _mcSave(deduped); }
 function mwMcSnooze(i){ var a=_mcTasks(); if(!a[i])return; var d=new Date(); d.setDate(d.getDate()+1); var z=function(n){return String(n).padStart(2,'0');}; a[i].snoozeUntil=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); _mcSave(a); if(typeof mcToast==='function') mcToast('💤 Snoozed until tomorrow'); renderMyWork(); }
 function mwMcWake(i){ var a=_mcTasks(); if(a[i]){ delete a[i].snoozeUntil; _mcSave(a); renderMyWork(); } }
 // ---- Section nav tiles at the top: count per section + green "NEW" when it changed since you last looked; tap jumps to it ----
@@ -18227,18 +18240,36 @@ function loadAgent(cb){ function done(a){ _MC_AGENT=a||null; try{ _mcSeedTasks()
   // Capture the blob's real Last-Modified (the true publish/scan moment) — the brief's own generatedAt is self-stamped and can be a rounded placeholder.
   function pull(url,next){ fetch(url,{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; var mod=r.headers.get('Last-Modified'); return r.json().then(function(a){ if(a&&mod){ try{ a._blobMod=mod; }catch(e){} } done(a); }); }).catch(next); }
   pull('../agent.json?t='+Date.now(), function(){ pull('agent.json?t='+Date.now(), function(){ if(cb)cb(); }); }); }
-// Auto-task: seed commitments the agent detected in your email (e.g. "Jesica update by 4pm") into your one task list.
-// Seed-once (tracked in mra_mycmd_seeded) so deleting one won't resurrect it, and it never duplicates.
+// ── Stable task keys ──────────────────────────────────────────────────────────
+// The scan REWORDS the same commitment run-to-run (e.g. #1244 as "quote decision (Brace Installation)"
+// then "a quote (generator mount)"). Keying dedup/kill on raw TEXT made every rewording look new → tasks
+// resurrected. So we key on a STABLE signature: a Fleetio #NNNN if present, else the text with dates/times/
+// parentheticals stripped down to its core words. Anything you close is remembered by KEY and never re-seeded.
+function _mcKey(t){ var s=String(t||''); var m=/#(\d{3,6})/.exec(s);
+  if(m) return 'fio:'+m[1];   // Fleetio-issue tasks collapse to one key per issue #
+  var core=s.toLowerCase()
+    .replace(/[✓✔✅]/g,' ')                 // check marks
+    .replace(/\([^)]*\)/g,' ')                            // parentheticals
+    .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g,' ')     // dates 7/25
+    .replace(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi,' ')      // times 4pm
+    .replace(/\b(by|due|before|on)\s+(mon|tue|wed|thu|fri|sat|sun)\w*/gi,' ')  // "by Friday"
+    .replace(/[^a-z0-9]+/g,' ').trim().split(' ').filter(Boolean).slice(0,6).join(' ');   // first 6 core words → stable across rewordings
+  return core?('s:'+core):''; }
+function _mcKeySet(name){ try{ var a=JSON.parse(localStorage.getItem(name)||'[]'); var o={}; (a||[]).forEach(function(k){ if(k) o[k]=1; }); return o; }catch(e){ return {}; } }
+function _mcSaveKeySet(name,o){ try{ localStorage.setItem(name, JSON.stringify(Object.keys(o||{}))); }catch(e){} }
+// Remember a task as "killed" (closed/deleted/cleared) so no future scan can bring it back — until it's a
+// genuinely NEW commitment (different key). Keyed by stable signature, immune to the scan's rewording.
+function _mcKill(t){ var k=(t&&t.key)||_mcKey(t&&t.t); if(!k) return; var s=_mcKeySet('mra_mycmd_killed'); if(!s[k]){ s[k]=1; _mcSaveKeySet('mra_mycmd_killed',s); } }
+function _mcUnkill(t){ var k=(t&&t.key)||_mcKey(t&&t.t); if(!k) return; var s=_mcKeySet('mra_mycmd_killed'); if(s[k]){ delete s[k]; _mcSaveKeySet('mra_mycmd_killed',s); } }
+// Auto-task: seed commitments the agent detected in your email into your one task list — by stable KEY, and
+// never re-adding anything you've closed (killed set). New email = new key = it shows; closed = stays closed.
 function _mcSeedTasks(){ var A=_MC_AGENT||{}; var seed=A.tasks||[]; if(!seed.length) return;
-  var norm=function(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); };
-  var seen; try{ seen=JSON.parse(localStorage.getItem('mra_mycmd_seeded')||'[]'); }catch(e){ seen=[]; }
-  var seenN={}; seen.forEach(function(x){ seenN[x]=1; });
-  var tasks=_mcTasks(); var have={}; tasks.forEach(function(t){ have[norm(t.t)]=1; });
+  var killed=_mcKeySet('mra_mycmd_killed');
+  var tasks=_mcTasks(); var have={}; tasks.forEach(function(t){ var k=t.key||_mcKey(t.t); if(k) have[k]=1; });
   var changed=false;
-  seed.forEach(function(x){ var n=norm(x.t); if(!n||seenN[n]) return; seen.push(n); seenN[n]=1;
-    if(!have[n]){ tasks.push({id:_mcId(),t:x.t,done:false,auto:true}); have[n]=1; changed=true; } });
-  if(changed) _mcSave(tasks);
-  try{ localStorage.setItem('mra_mycmd_seeded',JSON.stringify(seen)); }catch(e){} }
+  seed.forEach(function(x){ var k=x.key||_mcKey(x.t); if(!k||killed[k]||have[k]) return;   // prefer a stable key the scan supplies
+    tasks.push({id:_mcId(),key:k,t:x.t,done:false,auto:true,seededAt:Date.now()}); have[k]=1; changed=true; });
+  if(changed) _mcSave(tasks); }
 function _mcInjectCss(){ if(document.getElementById('myCmdCss')) return; var s=document.createElement('style'); s.id='myCmdCss';
   s.textContent='#myCmd{position:fixed;inset:0;z-index:1200;background:var(--bg);color:var(--txt);display:none;overflow:auto}'
    +'#myCmd.show{display:block}'
