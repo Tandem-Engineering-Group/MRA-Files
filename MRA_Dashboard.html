@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"35.6", date:"2026-07-23", title:"✨ MY WORK visual refresh (research-backed) + task snooze", items:[
+    "Freshened the whole MY WORK look: rounded, elevated cards with more breathing room, a cleaner 3-level type hierarchy, and <b>color-coded left rails</b> on every section (red = waiting/overdue, amber = FYI/watchdog, green = inbound/projects, orange = command/appts, blue = tasks) so it scans in seconds — based on 2026 dark-dashboard best practices. Added <b>💤 Snooze</b> on any task (hides it until tomorrow into a Snoozed group, ☀ Wake to bring back). Only affects MY WORK; nothing else changed." ] },
   { rev:"35.5", date:"2026-07-23", title:"🔌 Recipient editor now saves live (MRA Config Write flow connected)", items:[
     "The <b>MRA Config Write</b> flow is wired in — editing the daily-email recipients (on/off, add/remove) on the dash now <b>saves live</b> to the settings file the email flow reads. Seeded with your current 13 recipients." ] },
   { rev:"35.4", date:"2026-07-23", title:"📋 Copy-paste flow-setup values on the dash (iPad-friendly)", items:[
@@ -13890,7 +13892,7 @@ function _mwMcPanel(){
   var refT='';
   if(A&&A.generatedAt){ try{ refT=new Date(A.generatedAt).toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' ET'; }catch(e){ refT=''; } }
   if(!refT&&A) refT=A.generatedText||'';
-  var head='<div class="panel"><h2>🧠 My Command'+(refT?' <span class="count">🕒 Last scanned '+esc(refT)+'</span>':'')+'</h2>'
+  var head='<div class="panel" id="mwsec-cmd"><h2>🧠 My Command'+(refT?' <span class="count">🕒 Last scanned '+esc(refT)+'</span>':'')+'</h2>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Your private command brief — email triage, appointments, inbound &amp; the Fleetio watchdog, cross-checked with the board. <b>Auto-scans your inbox 4× a weekday (~6a · 10a · 2p · 6p ET).</b> 🔄 re-pulls the latest brief; <b>brand-new email only appears after the next scan</b> (or ping me to scan now). Use <b>▲ ▼ ⤒</b> on any section to reorder it — your layout is saved on this device.</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button style="'+B+'" onclick="mcCompose()">✉ New email</button><button style="'+B+'" onclick="mcSchedule()">📅 Schedule</button><button style="'+B+'" onclick="loadAgent(function(){renderMyWork();})">🔄 Refresh brief</button><button style="'+B+'" onclick="mwResetOrder()" title="Reset the section order back to default">↺ Reset layout</button></div></div>';
   if(!A) return head+'<div class="panel" id="mwsec-cmd"><div class="empty">Loading your brief…</div></div>';
@@ -13943,16 +13945,22 @@ function _mwMcPanel(){
   if(!wd) wd='<div class="empty">✓ Nothing slipping — every open Fleetio issue is on the board.</div>';
   var wdh='<div class="panel" id="mwsec-cmdf"><h2>⚠ Fleetio watchdog <span class="count">'+g.total+' scanned</span></h2>'+wd+'</div>';
   // ✅ Tasks (one synced list; auto-tasks from your email commitments)
-  var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var openN=tasks.filter(function(t){return !t.done;}).length;
+  var tasks=(typeof _mcTasks==='function')?_mcTasks():[];
+  var _tdy=(window.MRA_DATA||{}).todayISO||'';
+  var _snz=function(t){ return t.snoozeUntil && (!_tdy || t.snoozeUntil>_tdy); };
+  var openN=tasks.filter(function(t){return !t.done && !_snz(t);}).length;
   var _mcTaskRow=function(t,i){ var mnum=String(t.t||'').match(/#(\d{2,6})/);
       var asgB=(mnum&&!t.done)?'<button style="'+B+';margin-right:6px" onclick="event.stopPropagation();mcAssignIss(\''+mnum[1]+'\',event)" title="Assign to the board / General list (pick a crew)">👤 Assign</button>':'';
+      var snzB=(!t.done)?'<button style="background:none;border:0;color:var(--muted);cursor:pointer;font-size:14px;margin-right:2px" onclick="event.stopPropagation();mwMcSnooze('+i+')" title="Snooze until tomorrow">💤</button>':'';
       var det=(mnum&&!t.done)?_mcFioDetail(mnum[1]):'';
       return '<div class="row" style="display:block'+(t.done?';opacity:.55':'')+'">'
-        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div>'+asgB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
+        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div>'+asgB+snzB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
         +det+'</div>'; };
-  var openRows=tasks.map(function(t,i){ return t.done?'':_mcTaskRow(t,i); }).join('');
+  var openRows=tasks.map(function(t,i){ return (t.done||_snz(t))?'':_mcTaskRow(t,i); }).join('');
+  var snzRows=tasks.map(function(t,i){ if(t.done||!_snz(t)) return ''; return '<div class="row" style="align-items:center;opacity:.7"><span style="flex:1;min-width:0">💤 '+esc(t.t)+' <span class="meta">until '+esc(t.snoozeUntil)+'</span></span><button onclick="mwMcWake('+i+')" style="'+B+'">☀ Wake</button></div>'; }).join('');
   var doneRows=tasks.map(function(t,i){ return t.done?_mcTaskRow(t,i):''; }).join('');
   var tl=(openRows||'<div class="empty">Nothing open — you’re clear. 🎉</div>')
+        +(snzRows?('<div class="meta" style="font-weight:700;margin:12px 0 2px;color:#93b4e0">💤 Snoozed</div>'+snzRows):'')
         +(doneRows?('<div class="meta" style="font-weight:700;margin:12px 0 2px;color:#4ade80">✓ Done</div>'+doneRows):'');
   var th='<div class="panel" id="mwsec-cmdt"><h2>✅ Tasks <span class="count">'+openN+' open</span></h2>'+tl
     +'<div style="display:flex;gap:8px;margin-top:8px"><input id="mwMcNew" placeholder="Add a task…" style="flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px"><button style="'+BP+'" onclick="mwMcAdd()">Add</button></div></div>';
@@ -13967,6 +13975,38 @@ function _mwMcPanel(){
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
 function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ a.splice(i,1); _mcSave(a); renderMyWork(); } }
 function mwMcAdd(){ var el=document.getElementById('mwMcNew'); if(!el)return; var v=el.value.trim(); if(!v)return; var a=_mcTasks(); a.push({id:_mcId(),t:v,done:false}); _mcSave(a); renderMyWork(); }
+function mwMcSnooze(i){ var a=_mcTasks(); if(!a[i])return; var d=new Date(); d.setDate(d.getDate()+1); var z=function(n){return String(n).padStart(2,'0');}; a[i].snoozeUntil=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); _mcSave(a); if(typeof mcToast==='function') mcToast('💤 Snoozed until tomorrow'); renderMyWork(); }
+function mwMcWake(i){ var a=_mcTasks(); if(a[i]){ delete a[i].snoozeUntil; _mcSave(a); renderMyWork(); } }
+// Scoped visual refresh for MY WORK only (2026 dark-dashboard best practice: layered elevation, one accent,
+// 3-level type hierarchy, generous padding, color-coded section rails). Does not touch any other tab.
+function _mwFreshCss(){ if(document.getElementById('mwFreshCss')) return; var s=document.createElement('style'); s.id='mwFreshCss';
+  s.textContent=
+   '#myworkView{padding-bottom:44px}'
+  +'#myworkView .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 10px 26px rgba(0,0,0,.16)}'
+  +'#myworkView .panel h2{font-size:15px;font-weight:800;letter-spacing:.2px;display:flex;align-items:center;gap:9px;margin:0 0 13px;flex-wrap:wrap}'
+  +'#myworkView .panel h2 .count{font-size:10.5px;font-weight:700;color:var(--muted);background:var(--panel2);padding:3px 10px;border-radius:999px;letter-spacing:.3px}'
+  +'#myworkView .row{padding:11px 12px;border-radius:11px;border-bottom:1px solid var(--line);transition:background .12s}'
+  +'#myworkView .row:last-child{border-bottom:0}'
+  +'#myworkView .row:hover{background:var(--panel2)}'
+  +'#myworkView .lead{font-weight:650;font-size:13.5px;line-height:1.4}'
+  +'#myworkView .meta{color:var(--muted);font-size:11.5px;line-height:1.55}'
+  +'#myworkView .empty{color:var(--muted);font-size:12.5px;padding:10px 4px}'
+  +'#myworkView .mwtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:12px}'
+  +'#myworkView .mwtile{background:var(--panel2);border:1px solid var(--line);border-left-width:3px;border-radius:13px;padding:13px 15px}'
+  +'#myworkView .mwtile .n{font-size:27px;font-weight:800;line-height:1}'
+  +'#myworkView .mwtile .l{font-size:9.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:5px;font-weight:700}'
+  +'#myworkView #mwsec-cmd{border-left:4px solid var(--brand)}'
+  +'#myworkView #mwsec-cmdw,#myworkView #mwsec-od{border-left:4px solid #ef4444}'
+  +'#myworkView #mwsec-due,#myworkView #mwsec-cmdf{border-left:4px solid #f59e0b}'
+  +'#myworkView #mwsec-cmdq,#myworkView #mwsec-verify{border-left:4px solid #a855f7}'
+  +'#myworkView #mwsec-cmda{border-left:4px solid var(--brand)}'
+  +'#myworkView #mwsec-cmdi{border-left:4px solid #22c55e}'
+  +'#myworkView #mwsec-cmdfyi{border-left:4px solid #eab308}'
+  +'#myworkView #mwsec-cmdt{border-left:4px solid #3b82f6}'
+  +'#myworkView #mwsec-cmdflows{border-left:4px solid #64748b}'
+  +'#myworkView #mwsec-proj{border-left:4px solid #22c55e}'
+  +'#myworkView #mwsec-cmdask{border-left:4px solid var(--brand)}';
+  document.head.appendChild(s); }
 // 💬 Tell Claude: send a free-text instruction to Claude (routes via the mail flow, tagged; Claude reads it on the next refresh and acts).
 function mcAsk(){ var el=document.getElementById('mcAskBox'); if(!el) return; var v=(el.value||'').trim(); if(!v){ alert('Type what you want Claude to do.'); return; }
   var when=''; try{ when=new Date().toLocaleString(); }catch(e){}
@@ -14022,6 +14062,7 @@ function _mcLanes(blocks){ var o=_mcOrder();
     return '<div style="position:relative">'+ctrl+html+'</div>'; }).join(''); }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
+  try{ _mwFreshCss(); }catch(e){}
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
   const who=myWorkWho();
   let picker='';
