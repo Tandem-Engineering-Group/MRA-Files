@@ -3852,6 +3852,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.28", date:"2026-07-23", title:"✅ Tasks tidy themselves — done clears after 48h + resolved-Fleetio auto-drop", items:[
+    "Checked-off tasks now move to a <b>✓ Done</b> section and <b>auto-clear 48 hours</b> after you check them (so you can still see what got knocked out, then they vanish). New <b>🗑 Clear done</b> button wipes them all instantly.",
+    "A task tied to a <b>Fleetio issue that's since been resolved/closed</b> (like #1244, the Mammo Mandy brace) now <b>auto-checks itself done</b> (marked “✓ issue closed”) and clears on the 48h timer — no more lingering to-dos with a ⚠ for work that's already done." ] },
   { rev:"36.27", date:"2026-07-23", title:"📥 File project mail is LIVE — one-tap files into the Outlook folder", items:[
     "The <b>MRA Email Filer</b> flow is connected, so the <b>📁 File</b> / <b>📁 File all</b> buttons now actually <b>move the email into that project's Outlook folder</b> (routes by project → your folders under Luc/Megan/Al; anything unmatched lands in <b>To File</b>). Verified end-to-end. Next scan will fill the panel with every project email." ] },
   { rev:"36.26", date:"2026-07-23", title:"📈 Sales & Planning — toggle between PM Pipeline (Al) and VP Pipeline (Gino)", items:[
@@ -14331,6 +14334,7 @@ function _mwMcPanel(){
   if(typeof isSuperAdmin!=='function' || !isSuperAdmin()) return '';
   try{ _mcInjectCss(); }catch(e){}                 // so the ✉ Reply / ✍ Answer / 📅 Schedule modals are styled
   try{ _mcEnsureContacts(); }catch(e){}            // contact autocomplete for the composers
+  try{ _mcAutoClean(); }catch(e){}                 // 48h done-clear + resolved-Fleetio auto-done (once per render)
   if(typeof _MC_AGENT==='undefined' || !_MC_AGENT){ if(typeof loadAgent==='function') loadAgent(function(){ var v=document.getElementById('myworkView'); if(v && !v.classList.contains('hidden')) renderMyWork(); }); }
   var A=(typeof _MC_AGENT!=='undefined' && _MC_AGENT)?_MC_AGENT:null;
   var B='padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-weight:650;font-size:12px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block';
@@ -14422,10 +14426,12 @@ function _mwMcPanel(){
         +det+'</div>'; };
   var openRows=tasks.map(function(t,i){ return (t.done||_snz(t))?'':_mcTaskRow(t,i); }).join('');
   var snzRows=tasks.map(function(t,i){ if(t.done||!_snz(t)) return ''; return '<div class="row" style="align-items:center;opacity:.7"><span style="flex:1;min-width:0">💤 '+esc(t.t)+' <span class="meta">until '+esc(t.snoozeUntil)+'</span></span><button onclick="mwMcWake('+i+')" style="'+B+'">☀ Wake</button></div>'; }).join('');
+  var doneN=tasks.filter(function(t){return t.done;}).length;
   var doneRows=tasks.map(function(t,i){ return t.done?_mcTaskRow(t,i):''; }).join('');
+  var doneHdr='<div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 2px"><span class="meta" style="font-weight:700;color:#4ade80">✓ Done <span style="color:var(--muted);font-weight:400">· auto-clears 48h after you check it</span></span><button style="'+B+';padding:3px 9px;font-size:11px" onclick="mwMcClearDone()" title="Remove all completed tasks now">🗑 Clear done</button></div>';
   var tl=(openRows||'<div class="empty">Nothing open — you’re clear. 🎉</div>')
         +(snzRows?('<div class="meta" style="font-weight:700;margin:12px 0 2px;color:#93b4e0">💤 Snoozed</div>'+snzRows):'')
-        +(doneRows?('<div class="meta" style="font-weight:700;margin:12px 0 2px;color:#4ade80">✓ Done</div>'+doneRows):'');
+        +(doneRows?(doneHdr+doneRows):'');
   var th='<div class="panel" id="mwsec-cmdt"><h2>✅ Tasks <span class="count">'+openN+' open</span></h2>'+tl
     +'<div style="display:flex;gap:8px;margin-top:8px"><input id="mwMcNew" placeholder="Add a task…" style="flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px"><button style="'+BP+'" onclick="mwMcAdd()">Add</button></div></div>';
   // 💬 Tell Claude — free-text command box; routes to Claude, acted on the next refresh
@@ -14438,9 +14444,23 @@ function _mwMcPanel(){
   var blocks={tellClaude:askH, questions:qh, myplate:mineH, waiting:wh, filemail:fileH, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th, flows:_mcFlowsPanel()};
   return head+_mcNavTiles(A)+_mcLanes(blocks);
 }
-function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
+function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; a[i].doneAt=a[i].done?Date.now():0; _mcSave(a); renderMyWork(); } }
 function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ a.splice(i,1); _mcSave(a); renderMyWork(); } }
 function mwMcAdd(){ var el=document.getElementById('mwMcNew'); if(!el)return; var v=el.value.trim(); if(!v)return; var a=_mcTasks(); a.push({id:_mcId(),t:v,done:false}); _mcSave(a); renderMyWork(); }
+function mwMcClearDone(){ var a=_mcTasks(); var n=a.filter(function(t){return t.done;}).length; if(!n) return;
+  if(!confirm('Clear '+n+' completed task'+(n===1?'':'s')+' now?')) return; _mcSave(a.filter(function(t){return !t.done;})); renderMyWork(); }
+// Auto-tidy the task list: (1) drop done items after 48h; (2) an OPEN Fleetio task whose issue is now resolved
+// (its #NNNN is gone from a loaded export) auto-marks done → drops to the Done section → clears with the 48h rule.
+var _MC_DONE_TTL=48*3600*1000;
+function _mcAutoClean(){ var a=_mcTasks(); if(!a||!a.length) return; var now=Date.now(); var changed=false;
+  var D=window.MRA_DATA||{}; var iss=(D.fleetio&&D.fleetio.issues)||[]; var openNums=null;
+  if(iss.length){ openNums={}; iss.forEach(function(it){ openNums[String(it.num)]=1; }); }
+  var kept=a.filter(function(t){
+    if(t.done){ var dA=+t.doneAt||0; if(dA && (now-dA)>_MC_DONE_TTL){ changed=true; return false; } return true; }
+    if(openNums && !t.fioAutoDone){ var m=/fleetio[^#]*#(\d{3,6})/i.exec(String(t.t||''));   // resolved-Fleetio auto-done (once)
+      if(m && !openNums[m[1]]){ t.done=true; t.doneAt=now; t.fioAutoDone=1; if(!/issue closed/i.test(String(t.t))) t.t=t.t+' ✓ (issue closed)'; changed=true; } }
+    return true; });
+  if(changed) _mcSave(kept); }
 function mwMcSnooze(i){ var a=_mcTasks(); if(!a[i])return; var d=new Date(); d.setDate(d.getDate()+1); var z=function(n){return String(n).padStart(2,'0');}; a[i].snoozeUntil=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); _mcSave(a); if(typeof mcToast==='function') mcToast('💤 Snoozed until tomorrow'); renderMyWork(); }
 function mwMcWake(i){ var a=_mcTasks(); if(a[i]){ delete a[i].snoozeUntil; _mcSave(a); renderMyWork(); } }
 // ---- Section nav tiles at the top: count per section + green "NEW" when it changed since you last looked; tap jumps to it ----
