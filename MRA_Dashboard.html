@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"35.3", date:"2026-07-23", title:"⚙ Flows & Agents panel — see every automation + edit daily-email recipients from the dash", items:[
+    "New <b>⚙ Flows & Agents</b> section in My Command (Rich only): a directory of every automation behind the board — name, what it does, trigger — plus <b>↗ Open Power Automate</b>. And the <b>Daily “My Work” email recipient list is editable right here</b> — toggle people on/off, add/remove, or turn the whole send off. (Pushes live once the one-time MRA Config Write flow is connected; until then it saves on your device.)" ] },
   { rev:"35.2", date:"2026-07-23", title:"✅ Assigning an auto-task completes it — falls off the open list into ✓ Done", items:[
     "When you assign a “add #NNNN to the board” task, it's now <b>marked complete and drops off your open list</b> into a ✓ Done group (with undo) — since assigning it was the whole point. Open Tasks now shows only what's actually open; finished ones tuck into ✓ Done below." ] },
   { rev:"35.1", date:"2026-07-23", title:"✅ Assign feedback — toast + the task flips to “On the board · <crew>” live", items:[
@@ -13765,6 +13767,76 @@ function _mwRow(x, today){
   const canClose=(x.kind==='shop' && _mwCanClose(x.proj, x.raw));
   const closeBtn=canClose?(' <button onclick="event.stopPropagation();mwCloseTask(\''+escJsAttr(x.proj)+'\',\''+escJsAttr(x.raw)+'\')" style="padding:3px 9px;border-radius:7px;border:1px solid #16a34a;background:#16a34a;color:#fff;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px" title="Mark this task done">✓ close</button>'):'';
   return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+fnumline+'</div><div class="meta">'+esc(x.where)+rng+'</div>'+det+fio+(media?('<div style="margin-top:4px">'+media+'</div>'):'')+'</div><div class="right" style="white-space:nowrap">'+d+closeBtn+nav.chevron+'</div></div>'; }
+// ---- ⚙ Flows & Agents: directory of every automation + a dash-editable daily-email recipient list ----
+var CONFIG_WRITE_URL='';  // set to the "MRA Config Write" flow URL once built → recipient edits push live to the flow
+var MC_EMAILCFG_KEY='mra_email_cfg_v1';
+var MC_EMAIL_DEFAULTS=[
+ {name:'Rich (CC on all)',to:'rmiller@gomra.com',on:true},
+ {name:'Sal',to:'shopsupport@gomra.com',on:true},
+ {name:'Doug / Maintenance',to:'dcooley@gomra.com;spearce@gomra.com',on:true},
+ {name:'Jeff Sellers',to:'jsellers@gomra.com',on:true},
+ {name:'Josh Eberhart',to:'jeberhart@gomra.com',on:true},
+ {name:'Electricians (Beyer)',to:'bec@beyerelectric.com',on:true},
+ {name:'Wrap Team',to:'masterwraps1@yahoo.com;jeff@w2graphic.com',on:true},
+ {name:'Al Karloff',to:'akarloff@gomra.com',on:true},
+ {name:'Megan Fraser',to:'megan.fraser@gomra.com',on:true},
+ {name:'Luciana Giglio',to:'luciana.giglio@gomra.com',on:true},
+ {name:'Sarah Williams',to:'swilliams@gomra.com',on:true},
+ {name:'Mark Mustonen',to:'markm@gomra.com',on:true},
+ {name:'Brandon Choy',to:'bchoy@gomra.com',on:true}
+];
+var MC_FLOWS=[
+ {name:'MRA Mail Send',does:'Sends an email from the dashboard (My Command reply / new email)',trig:'HTTP · dashboard',id:'7ba4c775'},
+ {name:'MRA Create Meeting',does:'Books a Teams / calendar meeting with attendees',trig:'HTTP · dashboard',id:'f556f729'},
+ {name:'Agent Publish',does:'Publishes your My Command brief (agent.json)',trig:'HTTP · Claude',id:'71b277ea'},
+ {name:'MRA Lists to JSON',does:'Reads the SharePoint Lists to lists.json + kicks the export',trig:'Recurrence (2 min)'},
+ {name:'MRA Lists Write 2',does:'Saves board edits (tasks / jobs) back to the SharePoint Lists',trig:'HTTP · dashboard'},
+ {name:'MRA Email',does:'Emails the assignee when a new project task is created',trig:'On item created · MRA Project Tasks'},
+ {name:'MRA Daily My Work Emails',does:'Mon-Fri 6 AM — sends each person their My Work email',trig:'Recurrence (6 AM ET)'},
+ {name:'MRA Fleetio Write',does:'Resolve / comment a Fleetio issue from the board',trig:'HTTP · dashboard',id:'9734da2f'},
+ {name:'MRA EOTM',does:'Sets Employee of the Month name + photo',trig:'HTTP · dashboard',id:'67107217'},
+ {name:'MRA Safety Upload',does:'Uploads a file to the OSHASafety SharePoint site',trig:'HTTP · dashboard'},
+ {name:'MRA File Upload',does:'Uploads task photos / PDFs to web storage',trig:'HTTP · dashboard'},
+ {name:'MRA Time Write',does:'Saves time-tracking entries',trig:'HTTP · dashboard'},
+ {name:'MRA Design Board',does:'Saves design-board cards (design.json)',trig:'HTTP · dashboard'},
+ {name:'MRA workbook shuttle',does:'(Legacy) copies the Excel workbook to blob + triggers export',trig:'Recurrence (15 min)',legacy:true},
+ {name:'MRA Sync V2',does:'(Legacy) Office-Script write-back to the workbook',trig:'HTTP',legacy:true}
+];
+function _mcEcObj(){ if(!window._MC_EMAILCFG||!window._MC_EMAILCFG.dailyMyWork){
+    var l=null; try{ l=JSON.parse(localStorage.getItem(MC_EMAILCFG_KEY)||'null'); }catch(e){}
+    window._MC_EMAILCFG=(l&&l.dailyMyWork)?l:{dailyMyWork:{on:true,recipients:MC_EMAIL_DEFAULTS.map(function(r){return {name:r.name,to:r.to,on:r.on!==false};})}}; }
+  return window._MC_EMAILCFG; }
+function _mcEcPersist(){ try{ localStorage.setItem(MC_EMAILCFG_KEY,JSON.stringify(window._MC_EMAILCFG)); }catch(e){} }
+function _mcLoadEmailCfg(cb){ function done(j){ if(j&&j.dailyMyWork) window._MC_EMAILCFG=j; if(cb)cb(); }
+  fetch('../email-settings.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(done)
+  .catch(function(){ fetch('email-settings.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(done).catch(function(){ if(cb)cb(); }); }); }
+function mcEcToggle(i){ var o=_mcEcObj(); if(o.dailyMyWork.recipients[i]){ o.dailyMyWork.recipients[i].on=!o.dailyMyWork.recipients[i].on; _mcEcPersist(); renderMyWork(); } }
+function mcEcDel(i){ var o=_mcEcObj(); if(i>-1&&i<o.dailyMyWork.recipients.length){ o.dailyMyWork.recipients.splice(i,1); _mcEcPersist(); renderMyWork(); } }
+function mcEcMaster(){ var o=_mcEcObj(); o.dailyMyWork.on=!o.dailyMyWork.on; _mcEcPersist(); renderMyWork(); }
+function mcEcAdd(){ var n=document.getElementById('mcEcName'), e=document.getElementById('mcEcEmail'); if(!n||!e) return; var nm=(n.value||'').trim(), em=(e.value||'').trim(); if(!nm||!em){ alert('Add a name and an email.'); return; } var o=_mcEcObj(); o.dailyMyWork.recipients.push({name:nm,to:em,on:true}); _mcEcPersist(); renderMyWork(); }
+function mcEcSave(){ var o=_mcEcObj(); _mcEcPersist();
+  if(!CONFIG_WRITE_URL){ if(typeof mcToast==='function') mcToast('Saved on this device — connect the MRA Config Write flow to push it live (send Rich the flow URL).'); return; }
+  try{ fetch(CONFIG_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({json:JSON.stringify(o)})}); }catch(e){}
+  if(typeof mcToast==='function') mcToast('✓ Saved — the daily email uses this list on the next send.'); }
+function _mcFlowsPanel(){
+  if(!window._mcEcFetched){ window._mcEcFetched=true; if(typeof _mcLoadEmailCfg==='function') _mcLoadEmailCfg(function(){ var v=document.getElementById('myworkView'); if(v&&!v.classList.contains('hidden')) renderMyWork(); }); }
+  var o=_mcEcObj();
+  var B='padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-weight:650;font-size:12px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block';
+  var BP=B+';background:var(--brand);color:#fff;border-color:var(--brand)';
+  var dir=MC_FLOWS.map(function(f){ return '<div class="row"><div style="min-width:0"><div class="lead">'+esc(f.name)+(f.legacy?' <span class="badge grey" style="font-size:9px">legacy</span>':'')+'</div><div class="meta">'+esc(f.does)+' · <span style="color:var(--muted)">'+esc(f.trig)+'</span>'+(f.id?(' · id '+esc(f.id)+'…'):'')+'</div></div></div>'; }).join('');
+  var reps=o.dailyMyWork.recipients||[];
+  var rows=reps.map(function(r,i){ return '<div class="row" style="align-items:center"><label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer"><input type="checkbox" '+(r.on!==false?'checked':'')+' onchange="mcEcToggle('+i+')" style="width:16px;height:16px;flex:0 0 auto"><span style="min-width:0'+(r.on===false?';opacity:.5;text-decoration:line-through':'')+'"><b>'+esc(r.name)+'</b> <span class="meta">'+esc(r.to)+'</span></span></label><button onclick="mcEcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'; }).join('');
+  var onN=reps.filter(function(r){return r.on!==false;}).length;
+  return '<div class="panel" id="mwsec-cmdflows"><h2>⚙ Flows &amp; Agents <span class="count">manage your automations</span></h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Every automation running behind the board. Change a flow’s <b>steps</b> in Power Automate; the <b>recipient list</b> below you can edit right here.</div>'
+    +'<a href="https://make.powerautomate.com/" target="_blank" rel="noopener" style="'+B+';margin-bottom:10px">↗ Open Power Automate</a>'
+    +dir
+    +'<div style="font-weight:800;font-size:13px;margin:14px 0 4px">📧 Daily “My Work” email — recipients <span class="meta">('+onN+' on)</span></div>'
+    +'<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">Toggle who gets the 6 AM email, or add/remove people. '+(o.dailyMyWork.on?'':'<b style="color:#fbbf24">The whole daily email is OFF. </b>')+'<button onclick="mcEcMaster()" style="'+B+';padding:2px 8px;font-size:11px">'+(o.dailyMyWork.on?'Turn daily email OFF':'Turn daily email ON')+'</button></div>'
+    +rows
+    +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><input id="mcEcName" placeholder="Name" style="width:110px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px"><input id="mcEcEmail" placeholder="email@gomra.com (use ; for multiple)" style="flex:1;min-width:160px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px"><button style="'+B+'" onclick="mcEcAdd()">+ Add</button></div>'
+    +'<div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button style="'+BP+'" onclick="mcEcSave()">Save recipients</button><span class="meta">'+(CONFIG_WRITE_URL?'saves live to the flow':'saves on this device until the Config Write flow is connected')+'</span></div>'
+    +'</div>'; }
 // 🧠 My Command folded into My Work (Rich only): the live email brief + one synced task list.
 function _mwMcPanel(){
   if(typeof isSuperAdmin!=='function' || !isSuperAdmin()) return '';
@@ -13848,7 +13920,7 @@ function _mwMcPanel(){
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Type a request in plain English — e.g. “find a time for Al, Luc &amp; Megan Wednesday for Medtronic and set a Teams meeting,” “draft a reply to Taylor,” “add a task to…”. I read these and do them on the next refresh (or right away if you ping me).</div>'
     +'<textarea id="mcAskBox" placeholder="Tell Claude what to do…" style="width:100%;min-height:80px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical"></textarea>'
     +'<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button style="'+BP+'" onclick="mcAsk()">Send to Claude</button><span id="mcAskMsg" class="mc-muted" style="font-size:12px;color:var(--muted)"></span></div></div>';
-  var blocks={tellClaude:askH, questions:qh, waiting:wh, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th};
+  var blocks={tellClaude:askH, questions:qh, waiting:wh, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th, flows:_mcFlowsPanel()};
   return head+_mcLanes(blocks);
 }
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
@@ -13884,7 +13956,7 @@ function _mcFioDetail(num){
     +'</div>'; }
 // ---- My Command: personal section order (drag-free reorder with ▲▼⤒), saved per device ----
 var MC_ORDER_KEY='mra_mycmd_order_v1';
-var MC_LANES_DEFAULT=['tellClaude','questions','waiting','appts','inbound','fyi','projects','watchdog','tasks'];
+var MC_LANES_DEFAULT=['tellClaude','questions','waiting','appts','inbound','fyi','projects','watchdog','tasks','flows'];
 function _mcOrder(){ var d=MC_LANES_DEFAULT.slice(); var s=null; try{ s=JSON.parse(localStorage.getItem(MC_ORDER_KEY)||'null'); }catch(e){}
   if(!Array.isArray(s)) return d;
   var out=s.filter(function(k){return d.indexOf(k)>=0;}); d.forEach(function(k){ if(out.indexOf(k)<0) out.push(k); }); return out; }
