@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"35.4", date:"2026-07-23", title:"📋 Copy-paste flow-setup values on the dash (iPad-friendly)", items:[
+    "Added a <b>🛠 One-time flow setup</b> drop-down inside ⚙ Flows & Agents with every value you need to build the two flows (blob name, the fx expressions, the HTTP URL, the Parse-JSON schema, the field references) — each with a <b>📋 Copy</b> button so you can copy on the iPad and paste straight into Power Automate." ] },
   { rev:"35.3", date:"2026-07-23", title:"⚙ Flows & Agents panel — see every automation + edit daily-email recipients from the dash", items:[
     "New <b>⚙ Flows & Agents</b> section in My Command (Rich only): a directory of every automation behind the board — name, what it does, trigger — plus <b>↗ Open Power Automate</b>. And the <b>Daily “My Work” email recipient list is editable right here</b> — toggle people on/off, add/remove, or turn the whole send off. (Pushes live once the one-time MRA Config Write flow is connected; until then it saves on your device.)" ] },
   { rev:"35.2", date:"2026-07-23", title:"✅ Assigning an auto-task completes it — falls off the open list into ✓ Done", items:[
@@ -13802,6 +13804,42 @@ var MC_FLOWS=[
  {name:'MRA workbook shuttle',does:'(Legacy) copies the Excel workbook to blob + triggers export',trig:'Recurrence (15 min)',legacy:true},
  {name:'MRA Sync V2',does:'(Legacy) Office-Script write-back to the workbook',trig:'HTTP',legacy:true}
 ];
+// Copy-paste values for building the two flows (tap-to-copy on iPad).
+var MC_COPY={
+ folder:'/$web',
+ blobname:'email-settings.json',
+ content:"json(triggerBody())?['json']",
+ url:'https://mrashopdash.z13.web.core.windows.net/email-settings.json',
+ schema:'{ "type":"object", "properties":{ "dailyMyWork":{ "type":"object", "properties":{ "on":{"type":"boolean"}, "recipients":{"type":"array","items":{"type":"object","properties":{ "name":{"type":"string"}, "to":{"type":"string"}, "on":{"type":"boolean"} }}} } } } }',
+ filterFrom:"body('Parse_JSON')?['dailyMyWork']?['recipients']",
+ filterItem:"item()?['on']",
+ applyFrom:"body('Filter_array')",
+ toRef:"items('Apply_to_each')?['to']",
+ nameRef:"items('Apply_to_each')?['name']",
+ masterOn:"body('Parse_JSON')?['dailyMyWork']?['on']"
+};
+function _mcCopyFallback(t){ try{ var ta=document.createElement('textarea'); ta.value=t; ta.style.cssText='position:fixed;left:-9999px;top:0'; document.body.appendChild(ta); ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }catch(e){} }
+function mcCopyKey(k,btn){ var t=(MC_COPY&&MC_COPY[k])||''; var ok=function(){ if(btn){ if(!btn.getAttribute('data-l')) btn.setAttribute('data-l',btn.textContent); btn.textContent='✓ Copied'; setTimeout(function(){ btn.textContent=btn.getAttribute('data-l'); },1200); } };
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(ok,function(){ _mcCopyFallback(t); ok(); }); return; } }catch(e){}
+  _mcCopyFallback(t); ok(); }
+function _mcCpRow(label,key){ var cb='padding:6px 12px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;font-weight:700;font-size:12px;cursor:pointer;flex:0 0 auto';
+  return '<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><div style="flex:1;min-width:0"><div class="meta" style="font-weight:700">'+esc(label)+'</div><code style="display:block;font-size:11px;color:var(--txt);word-break:break-all;white-space:pre-wrap;background:var(--panel);padding:5px 7px;border-radius:5px;margin-top:3px">'+esc((MC_COPY&&MC_COPY[key])||'')+'</code></div><button onclick="mcCopyKey(\''+key+'\',this)" style="'+cb+'">📋 Copy</button></div>'; }
+function _mcSetupHtml(){ return '<details style="margin-top:14px"><summary style="cursor:pointer;font-weight:800;font-size:13px">🛠 One-time flow setup — copy-paste values</summary>'
+  +'<div style="font-size:11.5px;color:var(--muted);margin:6px 0 8px">Tap 📋 to copy each value, then paste into Power Automate. The full step-by-step is in your chat with Claude.</div>'
+  +'<div style="font-weight:800;margin:6px 0 2px;color:var(--brand)">Flow A — MRA Config Write</div>'
+  +_mcCpRow('Create blob → Folder path','folder')
+  +_mcCpRow('Create blob → Blob name','blobname')
+  +_mcCpRow('Create blob → Blob content (fx)','content')
+  +'<div style="font-weight:800;margin:14px 0 2px;color:var(--brand)">Flow B — MRA Daily My Work Emails</div>'
+  +_mcCpRow('HTTP → GET URI','url')
+  +_mcCpRow('Parse JSON → Schema','schema')
+  +_mcCpRow('Filter array → From','filterFrom')
+  +_mcCpRow('Filter array → condition (left side)','filterItem')
+  +_mcCpRow('Apply to each → From','applyFrom')
+  +_mcCpRow('Send email → To','toRef')
+  +_mcCpRow('Send email → Name (for the link)','nameRef')
+  +_mcCpRow('Master on/off → Condition (left side)','masterOn')
+  +'</details>'; }
 function _mcEcObj(){ if(!window._MC_EMAILCFG||!window._MC_EMAILCFG.dailyMyWork){
     var l=null; try{ l=JSON.parse(localStorage.getItem(MC_EMAILCFG_KEY)||'null'); }catch(e){}
     window._MC_EMAILCFG=(l&&l.dailyMyWork)?l:{dailyMyWork:{on:true,recipients:MC_EMAIL_DEFAULTS.map(function(r){return {name:r.name,to:r.to,on:r.on!==false};})}}; }
@@ -13836,6 +13874,7 @@ function _mcFlowsPanel(){
     +rows
     +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><input id="mcEcName" placeholder="Name" style="width:110px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px"><input id="mcEcEmail" placeholder="email@gomra.com (use ; for multiple)" style="flex:1;min-width:160px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px"><button style="'+B+'" onclick="mcEcAdd()">+ Add</button></div>'
     +'<div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button style="'+BP+'" onclick="mcEcSave()">Save recipients</button><span class="meta">'+(CONFIG_WRITE_URL?'saves live to the flow':'saves on this device until the Config Write flow is connected')+'</span></div>'
+    +_mcSetupHtml()
     +'</div>'; }
 // 🧠 My Command folded into My Work (Rich only): the live email brief + one synced task list.
 function _mwMcPanel(){
