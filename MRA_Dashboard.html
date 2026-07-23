@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"35.1", date:"2026-07-23", title:"✅ Assign feedback — toast + the task flips to “On the board · <crew>” live", items:[
+    "When you assign a Fleetio item, you now get an instant <b>✓ toast</b> and the task <b>updates in front of you</b> to <b>“✓ On the board · Sal”</b> (My Work re-renders itself) — no more wondering if it took. Fixed the bug where assigning re-drew the old (unused) command screen instead of My Work, so it looked like nothing happened." ] },
   { rev:"35.0", date:"2026-07-23", title:"↕ Reorder My Command sections yourself (▲ ▼ ⤒), saved per device", items:[
     "Every My Command section now has <b>▲ / ▼ / ⤒</b> controls (move up · move down · jump to top) so you can arrange the layout however you want as we build it — Waiting on top, Tasks first, whatever. Your order is <b>saved on your device</b>; <b>↺ Reset layout</b> puts it back to default." ] },
   { rev:"34.9", date:"2026-07-23", title:"📩 FYI / Updates lane in My Command (notes, not tasks)", items:[
@@ -13863,8 +13865,11 @@ function _mcFioDetail(num){
      .map(function(d){return '<a href="'+escA(d.url)+'" target="_blank" rel="noopener"><img src="'+escA(d.url)+'" style="height:56px;border-radius:6px;margin:5px 5px 0 0"></a>';}).join(''));
   var files=((it.docs||[]).filter(function(d){return !/^image\//i.test(d.mime||'');}).slice(0,3)
      .map(function(d){return '<a href="'+escA(d.url)+'" target="_blank" rel="noopener" style="color:#7aa2d6;font-size:11px;margin-right:8px">📎 '+esc(String(d.n||'file').slice(0,40))+'</a>';}).join(''));
+  var onb=(typeof _mcIssTask==='function')?_mcIssTask(it.num):null;
+  var stat=onb?('<div class="meta" style="color:#4ade80;font-weight:700">✓ On the board'+(onb.task&&onb.task.who?(' · '+esc(String(onb.task.who).split('/')[0].trim())):' · unassigned')+'</div>'):'<div class="meta" style="color:#fbbf24;font-weight:700">⚠ not on the board yet</div>';
   return '<div style="margin:5px 0 2px 24px;padding:7px 11px;border-left:2px solid var(--brand);background:var(--panel2);border-radius:6px">'
     +'<div class="meta" style="font-weight:700;color:var(--txt)">🔧 #'+esc(it.num)+' '+esc(it.summary||'')+'</div>'
+    +stat
     +'<div class="meta">'+esc(String(it.asset||''))+(it.jobNum?(' · '+esc(it.jobNum)):'')+pr+op+who+'</div>'
     +(it.detail?'<div class="meta" style="white-space:pre-wrap;margin-top:2px">'+esc(String(it.detail))+'</div>':'')
     +(imgs?'<div>'+imgs+'</div>':'')
@@ -17414,10 +17419,17 @@ function mcAssignIss(num,ev){
       if(existing){ if(typeof qaReassign==='function') qaReassign(existing.job.project, existing.task.t, who); }
       else if(typeof addFleetioTask==='function'){ addFleetioTask(j.row, String(num), who); }
     }catch(e){}
-    setTimeout(function(){ renderMyCmd(); },500);
-    var mm=document.getElementById('mcIssMsg'); if(mm) mm.textContent=(who?('✓ assigned to '+who):'✓ added to board')+' on '+(j.project||j.jobNum);
+    var where=(j.project||j.jobNum||'General list');
+    if(typeof mcToast==='function') mcToast('✓ #'+num+(who?(' → '+who):' added')+' · '+where);
+    var mm=document.getElementById('mcIssMsg'); if(mm) mm.textContent=(who?('✓ assigned to '+who):'✓ added to board')+' on '+where;
+    // the write is async (fire-and-forget) — re-render My Work a couple times so the row flips to "✓ On the board · <crew>" once it lands
+    [250,1400].forEach(function(ms){ setTimeout(function(){ if(typeof renderMyWork==='function') renderMyWork(); if(typeof renderMyCmd==='function') renderMyCmd(); },ms); });
   });
 }
+// Small green confirmation toast (so an action visibly "took" without an alert box).
+function mcToast(msg){ var t=document.getElementById('mcToast');
+  if(!t){ t=document.createElement('div'); t.id='mcToast'; t.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2000;background:#16a34a;color:#fff;font-weight:700;padding:11px 18px;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.4);font-size:14px;max-width:90vw;text-align:center;opacity:0;transition:opacity .18s'; document.body.appendChild(t); }
+  t.textContent=msg; t.style.opacity='1'; clearTimeout(t._h); t._h=setTimeout(function(){ t.style.opacity='0'; },2600); }
 function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ var t=_mcIssTask(num); var lab=t?'👤 Re-assign crew':'👤 Add to board + assign';
     _mcModal('<h3>🔧 Fleetio issue #'+esc(num)+'</h3><div style="max-height:60vh;overflow:auto">'+fioIssueDetailHtml(num)+'</div><div class="foot"><button class="mc-btn primary" onclick="mcAssignIss(\''+esc(num)+'\',event)">'+lab+'</button><button class="mc-btn" onclick="_mcModalClose()">Close</button><span id="mcIssMsg" class="mc-muted"></span></div>'); } else { alert('Issue #'+num); } }
 // Build a working "open this email" link. Use the message's verbatim Graph webLink (correct ItemID),
