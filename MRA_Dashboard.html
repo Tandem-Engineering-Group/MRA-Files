@@ -3825,6 +3825,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.13", date:"2026-07-23", title:"🧾 Quote Generator — editable description, Fleetio auto-fill, MI tax default", items:[
+    "New <b>editable Work description</b> box — this is exactly what prints on the customer quote, fully editable. <b>🔧 Link a Fleetio issue #</b> and hit <b>↧ Pull from Fleetio</b> to auto-fill the description from that issue (summary · detail · unit). Tax now <b>defaults to 6% (Michigan)</b> — change it per quote or in ⚙ defaults." ] },
   { rev:"36.12", date:"2026-07-23", title:"🧾 Quote Generator — save & recall quotes", items:[
     "Quotes now <b>save on your device</b> — hit <b>💾 Save this quote</b> and it appears as a chip up top (customer · total); click it any time to pull the whole quote back into the form, or <b>✕</b> to remove it. <b>＋ New</b> clears the form for a fresh one. (Before this the tool started blank every time and kept no history.)" ] },
   { rev:"36.11", date:"2026-07-23", title:"🧾 NEW: Quote Generator — labor + materials + supplies → an MRA quote", items:[
@@ -11135,11 +11137,11 @@ function closeSalesPlan(){ SP_OPEN=false; SP_FORM=null; document.getElementById(
 const QUOTE_CFG_KEY='mra_quote_cfg_v1';
 const QUOTE_CONS=[['sand','Sandpaper / abrasives',25],['paint','Paint & primer',60],['weld','Welding rod & gas',45],['fast','Fasteners & hardware',30],['adh','Adhesive & sealant',25],['misc','Misc shop supplies',40]];
 function _qCfg(){ let c={}; try{ c=JSON.parse(localStorage.getItem(QUOTE_CFG_KEY)||'{}'); }catch(e){}
-  return Object.assign({ company:'MRA', tag:'Mobile Experiential — Detroit, MI · Windsor, ON', addr:'', city:'', phone:'1.800.676.3520', email:'info@gomra.com', rate:80, markup:20, tax:0, terms:'Quote valid 30 days from the date above. Pricing subject to material availability at time of order. Taxes and freight extra unless noted.' }, c); }
+  return Object.assign({ company:'MRA', tag:'Mobile Experiential — Detroit, MI · Windsor, ON', addr:'', city:'', phone:'1.800.676.3520', email:'info@gomra.com', rate:80, markup:20, tax:6, terms:'Quote valid 30 days from the date above. Pricing subject to material availability at time of order. Taxes and freight extra unless noted.' }, c); }
 function _qSaveCfg(patch){ const c=Object.assign(_qCfg(), patch||{}); try{ localStorage.setItem(QUOTE_CFG_KEY, JSON.stringify(c)); }catch(e){} return c; }
 let QUOTE=null;
 function openQuote(){ if(typeof closeDrops==='function') closeDrops();
-  if(!QUOTE){ const c=_qCfg(); QUOTE={cust:'',proj:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{}}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); }
+  if(!QUOTE){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{}}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); }
   renderQuote(); document.getElementById('quoteOverlay').classList.add('show'); }
 function closeQuote(){ document.getElementById('quoteOverlay').classList.remove('show'); }
 function _money(n){ return '$'+(Math.round((+n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -11149,7 +11151,7 @@ function _qParseMats(text){ return String(text||'').split('\n').map(l=>l.trim())
   let d=m?l.slice(0,m.index).replace(/[\s|\-:$]+$/,'').trim():l;
   return {d:d||l, c}; }); }
 function _qRead(){ const g=id=>{ const e=document.getElementById(id); return e?e.value:''; };
-  QUOTE.cust=g('qCust'); QUOTE.proj=g('qProj'); QUOTE.hours=parseFloat(g('qHours'))||0; QUOTE.rate=parseFloat(g('qRate'))||0; QUOTE.markup=parseFloat(g('qMarkup'))||0; QUOTE.tax=parseFloat(g('qTax'))||0; QUOTE.mats=g('qMats');
+  QUOTE.cust=g('qCust'); QUOTE.proj=g('qProj'); QUOTE.desc=g('qDesc'); QUOTE.fio=g('qFio'); QUOTE.hours=parseFloat(g('qHours'))||0; QUOTE.rate=parseFloat(g('qRate'))||0; QUOTE.markup=parseFloat(g('qMarkup'))||0; QUOTE.tax=parseFloat(g('qTax'))||0; QUOTE.mats=g('qMats');
   QUOTE_CONS.forEach(x=>{ const chk=document.getElementById('qc_'+x[0]); const amt=document.getElementById('qca_'+x[0]); if(chk) QUOTE.cons[x[0]].on=chk.checked; if(amt) QUOTE.cons[x[0]].amt=parseFloat(amt.value)||0; }); }
 function _qCompute(){ const mk=1+(QUOTE.markup/100);
   const laborTotal=QUOTE.hours*QUOTE.rate;
@@ -11187,15 +11189,24 @@ function _qSaveList(a){ try{ localStorage.setItem(QUOTE_SAVE_KEY, JSON.stringify
 function qSaveQuote(){ _qRead(); const t=_qCompute();
   if(!QUOTE.cust && !QUOTE.mats && !QUOTE.hours){ alert('Nothing to save yet — fill in the quote first.'); return; }
   const a=_qSaved();
-  const rec={ id:'q'+Date.now().toString(36), cust:QUOTE.cust, proj:QUOTE.proj, hours:QUOTE.hours, rate:QUOTE.rate, markup:QUOTE.markup, tax:QUOTE.tax, mats:QUOTE.mats, cons:JSON.parse(JSON.stringify(QUOTE.cons||{})), total:t.total, savedAt:Date.now() };
+  const rec={ id:'q'+Date.now().toString(36), cust:QUOTE.cust, proj:QUOTE.proj, desc:QUOTE.desc, fio:QUOTE.fio, hours:QUOTE.hours, rate:QUOTE.rate, markup:QUOTE.markup, tax:QUOTE.tax, mats:QUOTE.mats, cons:JSON.parse(JSON.stringify(QUOTE.cons||{})), total:t.total, savedAt:Date.now() };
   a.unshift(rec); if(a.length>60) a.length=60; _qSaveList(a); renderQuote();
   const s=document.getElementById('qSavedMsg'); if(s){ s.textContent='✓ quote saved on this device'; setTimeout(()=>{s.textContent='';},2600); } }
 function qLoadQuote(id){ const r=_qSaved().find(x=>x.id===id); if(!r) return;
-  QUOTE={cust:r.cust||'',proj:r.proj||'',hours:r.hours||0,rate:r.rate||80,markup:r.markup||20,tax:r.tax||0,mats:r.mats||'',cons:r.cons||{}};
+  QUOTE={cust:r.cust||'',proj:r.proj||'',desc:r.desc||'',fio:r.fio||'',hours:r.hours||0,rate:r.rate||80,markup:r.markup||20,tax:r.tax||0,mats:r.mats||'',cons:r.cons||{}};
   QUOTE_CONS.forEach(x=>{ if(!QUOTE.cons[x[0]]) QUOTE.cons[x[0]]={on:false,amt:x[2]}; });
   renderQuote(); }
 function qDelQuote(id){ if(!confirm('Delete this saved quote?')) return; _qSaveList(_qSaved().filter(x=>x.id!==id)); renderQuote(); }
-function qNewQuote(){ const c=_qCfg(); QUOTE={cust:'',proj:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{}}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); renderQuote(); }
+function qNewQuote(){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{}}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); renderQuote(); }
+// 🔧 Pull a Fleetio issue's info straight into the quote description (the board already has every issue in memory).
+function qPullFleetio(){ _qRead(); const num=String(QUOTE.fio||'').replace(/[^0-9]/g,'');
+  if(!num){ alert('Enter a Fleetio issue # first (e.g. 1244), then Pull.'); return; }
+  const D=window.MRA_DATA||{}; const it=((D.fleetio&&D.fleetio.issues)||[]).find(x=>String(x.num)===num);
+  if(!it){ alert('No open Fleetio issue #'+num+' is on the board right now. Check the number, or type the description in by hand.'); return; }
+  if(!QUOTE.proj) QUOTE.proj=it.summary||('Fleetio #'+num);
+  const parts=[]; if(it.summary) parts.push(it.summary); if(it.detail) parts.push(String(it.detail).trim()); if(it.asset) parts.push('Unit: '+it.asset);
+  QUOTE.desc=parts.join('\n');
+  renderQuote(); }
 function renderQuote(){ const body=document.getElementById('quoteBody'); if(!body) return; const c=_qCfg();
   const inp='padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:13px';
   const consRows=QUOTE_CONS.map(x=>{ const s=QUOTE.cons[x[0]]||{on:false,amt:x[2]}; return '<label class="q-conline"><input type="checkbox" id="qc_'+x[0]+'" '+(s.on?'checked':'')+' onchange="qUpdate()"> '+esc(x[1])+' <span>$</span><input id="qca_'+x[0]+'" type="number" value="'+s.amt+'" oninput="qUpdate()" style="width:64px;'+inp+'"></label>'; }).join('');
@@ -11203,7 +11214,8 @@ function renderQuote(){ const body=document.getElementById('quoteBody'); if(!bod
    '<div class="q-wrap"><div class="q-form">'
    + (function(){ var s=_qSaved(); var chips=s.length?s.map(function(r){ return '<span class="q-schip"><a onclick="qLoadQuote(\''+r.id+'\')" title="Load this quote back into the form">'+esc(r.cust||'Untitled')+' · '+_money(r.total)+'</a><span class="x" onclick="qDelQuote(\''+r.id+'\')" title="Delete this saved quote">✕</span></span>'; }).join(''):'<span class="q-hint">none yet — build one and hit 💾 Save</span>';
       return '<div class="q-fsec q-savedbar"><div class="q-lab" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">💾 Saved quotes <button class="expandbtn" onclick="qSaveQuote()" title="Save this quote on your device so you can pull it back up later">💾 Save this quote</button> <button class="expandbtn" onclick="qNewQuote()" title="Clear the form for a fresh quote">＋ New</button> <span id="qSavedMsg" style="color:#22c55e;font-size:12px;font-weight:400"></span></div><div class="q-saved">'+chips+'</div></div>'; })()
-   + '<div class="q-fsec"><div class="q-lab">Customer / job</div><div class="q-grid2"><input id="qCust" placeholder="Customer name" value="'+escA(QUOTE.cust)+'" oninput="qUpdate()" style="'+inp+'"><input id="qProj" placeholder="Project · vehicle · scope (shows on the customer quote)" value="'+escA(QUOTE.proj)+'" oninput="qUpdate()" style="'+inp+'"></div></div>'
+   + '<div class="q-fsec"><div class="q-lab">Customer / job</div><div class="q-grid2"><input id="qCust" placeholder="Customer name" value="'+escA(QUOTE.cust)+'" oninput="qUpdate()" style="'+inp+'"><input id="qProj" placeholder="Project / vehicle (short title)" value="'+escA(QUOTE.proj)+'" oninput="qUpdate()" style="'+inp+'"></div></div>'
+   + '<div class="q-fsec"><div class="q-lab">Work description <span class="q-hint">this is what shows on the customer quote — fully editable · link a Fleetio issue to auto-fill it</span></div><div class="q-inline" style="margin:0 0 7px"><label>🔧 Fleetio issue #<input id="qFio" type="text" value="'+escA(QUOTE.fio||'')+'" placeholder="1244" style="width:90px;'+inp+'"></label><button class="expandbtn" onclick="qPullFleetio()" title="Pull this Fleetio issue&#39;s summary, detail and asset into the description">↧ Pull from Fleetio</button></div><textarea id="qDesc" rows="3" placeholder="Describe the work for the customer (or link a Fleetio issue above and hit Pull)" oninput="qUpdate()" style="width:100%;box-sizing:border-box;'+inp+'">'+esc(QUOTE.desc||'')+'</textarea></div>'
    + '<div class="q-fsec"><div class="q-lab">Labor</div><div class="q-inline"><label>Hours <input id="qHours" type="number" step="0.5" value="'+QUOTE.hours+'" oninput="qUpdate()" style="width:74px;'+inp+'"></label><label>Rate $<input id="qRate" type="number" value="'+QUOTE.rate+'" oninput="qUpdate()" style="width:74px;'+inp+'"> /hr</label></div></div>'
    + '<div class="q-fsec"><div class="q-lab">Materials <span class="q-hint">paste one item per line — the last number on each line is read as the cost (paste your Alro cart straight in)</span></div><textarea id="qMats" rows="6" placeholder=".190 5052-H32 Alum 48 x 120 Paper Interleave     998.74&#10;4 x 2 x .125 6061-T6 Alum Tubing 24 ft     371.30" oninput="qUpdate()" style="width:100%;box-sizing:border-box;'+inp+'">'+esc(QUOTE.mats)+'</textarea><div class="q-inline"><label>Material markup <input id="qMarkup" type="number" value="'+QUOTE.markup+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label><label>Tax <input id="qTax" type="number" step="0.01" value="'+QUOTE.tax+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label></div></div>'
    + '<div class="q-fsec"><div class="q-lab">Shop supplies <span class="q-hint">tick what applies · added after markup · edit the $</span></div><div class="q-cons">'+consRows+'</div></div>'
@@ -11221,7 +11233,8 @@ function _qCustomerHtml(t,c,detailed){
   const meta='<div class="q-meta"><div class="q-to"><span>QUOTED TO</span><b>'+esc(QUOTE.cust||'—')+'</b>'+(QUOTE.proj?('<div class="q-re">'+esc(QUOTE.proj)+'</div>'):'')+'</div><div class="q-no"><div>Quote '+esc(qno)+'</div><div>'+d+'</div></div></div>';
   let tbl;
   if(!detailed){
-    tbl='<table class="q-t"><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead><tbody><tr><td>'+(esc(QUOTE.proj)||'Labor, materials and shop supplies as discussed')+'</td><td class="r">'+_money(t.total)+'</td></tr></tbody></table><div class="q-grand"><span>Total</span><span>'+_money(t.total)+'</span></div>';
+    const _qd=(esc(QUOTE.desc||QUOTE.proj||'').replace(/\n/g,'<br>'))||'Labor, materials and shop supplies as discussed';
+    tbl='<table class="q-t"><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead><tbody><tr><td>'+_qd+'</td><td class="r">'+_money(t.total)+'</td></tr></tbody></table><div class="q-grand"><span>Total</span><span>'+_money(t.total)+'</span></div>';
   } else {
     let rows='<tr><td>Labor — '+QUOTE.hours+' hr × '+_money(QUOTE.rate)+'/hr</td><td class="r">'+_money(t.laborTotal)+'</td></tr>';
     if(t.mats.length){ rows+='<tr class="q-grp"><td colspan="2">Materials (incl. '+QUOTE.markup+'% markup)</td></tr>'; t.mats.forEach(r=>{ rows+='<tr><td>'+esc(r.d||'material')+'</td><td class="r">'+_money(r.line)+'</td></tr>'; }); }
