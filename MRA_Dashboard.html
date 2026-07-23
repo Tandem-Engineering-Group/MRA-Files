@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"34.8", date:"2026-07-23", title:"🔧 Fleetio tasks show full detail inline + Assign works to the General list", items:[
+    "Any task that references a Fleetio issue (#1234) now shows the <b>full issue detail right there</b> — summary, unit/asset, priority, description, photos — so you can decide without opening the Fleetio tab. <b>👤 Assign</b> now falls back to the <b>🛠 General list</b> when the unit isn't its own trailer job (so “add to board for Chris Beyer / general list” actually lands). Dropped the duplicate Fleetio question — it's one place now, with the info + the button." ] },
   { rev:"34.7", date:"2026-07-23", title:"🕒 My Command shows real last-scanned time (Eastern) + clearer refresh", items:[
     "My Command now shows <b>🕒 Last scanned &lt;time&gt; ET</b> (real Eastern time the inbox was last read) instead of a UTC date — so you can see exactly how fresh the brief is. Clarified that <b>🔄 Refresh re-pulls the latest brief but does not re-read your inbox</b> — brand-new email appears after the next scan (~6a·10a·2p·6p ET, or ping me to scan now)." ] },
   { rev:"34.6", date:"2026-07-23", title:"💬 Tell-Claude box · assign Fleetio from a task · fixed Open-email link", items:[
@@ -13817,8 +13819,11 @@ function _mwMcPanel(){
   // ✅ Tasks (one synced list; auto-tasks from your email commitments)
   var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var openN=tasks.filter(function(t){return !t.done;}).length;
   var tl=tasks.length?tasks.map(function(t,i){ var mnum=String(t.t||'').match(/#(\d{2,6})/);
-      var asgB=mnum?'<button style="'+B+';margin-right:6px" onclick="mcAssignIss(\''+mnum[1]+'\',event)" title="Assign this Fleetio issue to the board (pick a crew)">👤 Assign</button>':'';
-      return '<div class="row" style="align-items:center"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;margin-right:8px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';opacity:.5;text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div>'+asgB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'; }).join(''):'<div class="empty">No tasks yet — add one below.</div>';
+      var asgB=mnum?'<button style="'+B+';margin-right:6px" onclick="event.stopPropagation();mcAssignIss(\''+mnum[1]+'\',event)" title="Assign to the board / General list (pick a crew)">👤 Assign</button>':'';
+      var det=mnum?_mcFioDetail(mnum[1]):'';
+      return '<div class="row" style="display:block">'
+        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';opacity:.5;text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div>'+asgB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
+        +det+'</div>'; }).join(''):'<div class="empty">No tasks yet — add one below.</div>';
   var th='<div class="panel" id="mwsec-cmdt"><h2>✅ Tasks <span class="count">'+openN+' open</span></h2>'+tl
     +'<div style="display:flex;gap:8px;margin-top:8px"><input id="mwMcNew" placeholder="Add a task…" style="flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px"><button style="'+BP+'" onclick="mwMcAdd()">Add</button></div></div>';
   // 💬 Tell Claude — free-text command box; routes to Claude, acted on the next refresh
@@ -13837,6 +13842,25 @@ function mcAsk(){ var el=document.getElementById('mcAskBox'); if(!el) return; va
   var html='<b>MyCommand ask</b>'+(when?(' — '+esc(when)):'')+'<br>'+esc(v).replace(/\n/g,'<br>');
   try{ if(typeof MC_MAILSEND!=='undefined') fetch(MC_MAILSEND,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({to:'rmiller@gomra.com',subject:'[MyCommand ask] '+v.slice(0,70),html:html})}); }catch(e){}
   el.value=''; var m=document.getElementById('mcAskMsg'); if(m) m.textContent='✓ Sent to Claude — I’ll handle it on the next refresh (or ping me to do it now).'; }
+// Full Fleetio issue detail shown inline (summary, asset, description, photos) — pulled from the board's own Fleetio data.
+function _mcFioDetail(num){
+  var it=(typeof fioIssue==='function')?fioIssue(num):null;
+  if(!it) return '<div class="meta" style="margin:4px 0 0 24px;color:#fbbf24">⚠ Fleetio #'+esc(num)+' — not in the latest export (may be closed).</div>';
+  var pr=it.priority?(' · '+esc(String(it.priority))):'';
+  var op=it.openedISO?(' · opened '+esc((typeof fmtMDY==='function'?fmtMDY(it.openedISO):it.openedISO))):'';
+  var asg=(typeof fAsg==='function')?fAsg(it):[]; var who=asg.length?(' · 👤 '+esc(asg.join(', '))):'';
+  var imgs=((it.docs||[]).filter(function(d){return /^image\//i.test(d.mime||'');}).slice(0,3)
+     .map(function(d){return '<a href="'+escA(d.url)+'" target="_blank" rel="noopener"><img src="'+escA(d.url)+'" style="height:56px;border-radius:6px;margin:5px 5px 0 0"></a>';}).join(''));
+  var files=((it.docs||[]).filter(function(d){return !/^image\//i.test(d.mime||'');}).slice(0,3)
+     .map(function(d){return '<a href="'+escA(d.url)+'" target="_blank" rel="noopener" style="color:#7aa2d6;font-size:11px;margin-right:8px">📎 '+esc(String(d.n||'file').slice(0,40))+'</a>';}).join(''));
+  return '<div style="margin:5px 0 2px 24px;padding:7px 11px;border-left:2px solid var(--brand);background:var(--panel2);border-radius:6px">'
+    +'<div class="meta" style="font-weight:700;color:var(--txt)">🔧 #'+esc(it.num)+' '+esc(it.summary||'')+'</div>'
+    +'<div class="meta">'+esc(String(it.asset||''))+(it.jobNum?(' · '+esc(it.jobNum)):'')+pr+op+who+'</div>'
+    +(it.detail?'<div class="meta" style="white-space:pre-wrap;margin-top:2px">'+esc(String(it.detail))+'</div>':'')
+    +(imgs?'<div>'+imgs+'</div>':'')
+    +(files?'<div style="margin-top:3px">'+files+'</div>':'')
+    +(it.reporter?'<div class="meta">✍ '+esc(it.reporter)+'</div>':'')
+    +'</div>'; }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
@@ -17347,7 +17371,8 @@ function _mcIssTask(num){ var D=window.MRA_DATA||{}; var jobs=(D.jobs||[]);
 // Assign / add a Fleetio issue to the board right here — reuses the board's own synced write path (addFleetioTask / qaReassign).
 function mcAssignIss(num,ev){
   var existing=_mcIssTask(num); var j=existing?existing.job:_mcIssJob(num);
-  if(!j){ alert("This unit isn't an active job on the board, so there's no trailer to attach the task to (it may have shipped, or the job needs adding first)."); return; }
+  if(!j){ var D=window.MRA_DATA||{}; j=(D.jobs||[]).find(function(x){ return x&&(x.category==='general'||x.row==='general'); }); }  // no trailer job → drop it on the 🛠 General list
+  if(!j){ alert("Couldn't find a board job or the General list to attach this to."); return; }
   if(typeof qaOpen!=='function'){ alert('Assign is unavailable here.'); return; }
   qaOpen(ev||window.event, function(who){
     try{
