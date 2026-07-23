@@ -1706,7 +1706,6 @@
       <div class="tab" data-view="projects" onclick="setView('projects')">PROJECTS</div>
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
       <div class="tab" data-view="assets" onclick="setView('assets')">ASSETS</div>
-      <div class="tab" data-perm="mycmd" onclick="openMyCmd()" title="Your private command screen (just you)">🧠 COMMAND</div>
     </div>
     <button class="helpbtn" onclick="openSearch()" style="margin-left:auto" title="Search everything — jobs (open &amp; completed), projects, units, equipment, people">🔍</button>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
@@ -1727,7 +1726,7 @@
         <button class="mi" onclick="closeDrops(); openDesignTeam()" title="The design / CAD team board — what Sarah, Mark &amp; Brandon are working on, with notes + a printable one-pager each">🎨 Design Team board</button>
         <button class="mi" onclick="closeDrops(); openProdMeeting()" title="Run the Monday 10am production status meeting from the dash - PM report-out (green one-liners, yellow/red expanded), park items to discuss, tracked action items">🏭 Production Meeting</button>
         <button class="mi" data-perm="sales" onclick="closeDrops(); openSalesPlan()" title="The simple sales/planning timeline - the committed board as solid bars, potential new projects overlaid as purple hatched bars (name, vehicle, scope, dates, probability), plus PM capacity">📈 Sales &amp; Planning</button>
-        <button class="mi" data-perm="mycmd" onclick="closeDrops(); openMyCmd()" title="Your private command screen — Fleetio-vs-board watchdog, your task list, and inbox triage. Just you.">🧠 My Command</button>
+        <button class="mi" data-perm="mycmd" onclick="closeDrops(); setView('mywork')" title="Your private command brief — email triage, appointments, inbound, Fleetio watchdog, tasks — all inside MY WORK. Just you.">🧠 My Command → My Work</button>
         <button class="mi" data-perm="ghost" onclick="closeDrops(); openGhosts()" title="Admin cleanup: leftover task rows whose floor job is gone (they never show on the board). Close or delete them so they stop lurking in the Lists.">🧹 Ghost tasks</button>
         <button class="mi" data-perm="logins" onclick="closeDrops(); openUsers()" title="Add / edit / remove who can log in to edit, and set their codes (admin only)">👥 Manage logins</button>
         <button class="mi" data-perm="holidays" onclick="closeDrops(); openHolidays()" title="Add or remove company holidays flagged on every schedule (admin only)">📅 Manage holidays</button>
@@ -3765,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"34.5", date:"2026-07-23", title:"🧠 One place: My Command lives fully inside MY WORK (separate tab removed)", items:[
+    "Consolidated to <b>one place for all your work</b>. The separate 🧠 COMMAND tab is gone — the <b>full brief now renders right inside MY WORK</b>: ❓ Questions, 🔴 Waiting (✉ Reply + 📧 Open email), 📅 Appointments, 📦 Inbound, 📋 Project brief, ⚠ Fleetio watchdog (👤 Assign in place), and your one synced task list — plus ✉ New email / 📅 Schedule / 🔄 Refresh right there. No more “go to My Command.”" ] },
   { rev:"34.4", date:"2026-07-23", title:"🧠 My Command folded into MY WORK + one synced task list + auto-tasks", items:[
     "Your MY WORK tab now opens with a <b>🧠 My Command</b> panel (Rich only): today's <b>appointments</b>, counts for 🔴 waiting / ❓ questions / 📦 inbound, a button to the full command screen, and <b>one task list that's synced with My Command</b>. Commitments the agent spots in your sent email (like “Jesica update by 4 PM”) <b>auto-create a task</b> (tagged <i>auto</i>, seeded once so deleting sticks). The brief now <b>auto-refreshes 4× a weekday</b> (≈6a/10a/2p/6p) from a fresh inbox + sent sweep." ] },
   { rev:"34.3", date:"2026-07-23", title:"🧠 My Command — assign Fleetio here, ask-Rich questions, appointments, fixed email links", items:[
@@ -13753,22 +13754,65 @@ function _mwRow(x, today){
 // 🧠 My Command folded into My Work (Rich only): the live email brief + one synced task list.
 function _mwMcPanel(){
   if(typeof isSuperAdmin!=='function' || !isSuperAdmin()) return '';
+  try{ _mcInjectCss(); }catch(e){}                 // so the ✉ Reply / ✍ Answer / 📅 Schedule modals are styled
+  try{ _mcEnsureContacts(); }catch(e){}            // contact autocomplete for the composers
   if(typeof _MC_AGENT==='undefined' || !_MC_AGENT){ if(typeof loadAgent==='function') loadAgent(function(){ var v=document.getElementById('myworkView'); if(v && !v.classList.contains('hidden')) renderMyWork(); }); }
-  var open='<button onclick="openMyCmd()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;font-weight:700;font-size:12px;cursor:pointer">🧠 Open full My Command →</button>';
   var A=(typeof _MC_AGENT!=='undefined' && _MC_AGENT)?_MC_AGENT:null;
-  if(!A) return '<div class="panel" id="mwsec-cmd"><h2>🧠 My Command</h2><div class="empty">Loading your brief…</div><div style="margin-top:8px">'+open+'</div></div>';
-  var wc=(A.waiting||[]).length, qc=(A.questions||[]).length, ic=(A.inbound||[]).length;
-  var appts=(A.appts||[]);
-  var apptH=appts.length?('<div style="margin-top:6px">'+appts.map(function(x){ var hot=x.today?' style="border-left:3px solid var(--brand);padding-left:8px"':''; return '<div class="row"'+hot+'><div style="min-width:0"><div class="lead">📅 '+esc(x.when||'')+(x.today?' · TODAY':'')+' — '+esc(x.what||'')+'</div><div class="meta">'+esc(x.who||'')+(x.where?(' · '+esc(x.where)):'')+(x.note?(' · '+esc(x.note)):'')+'</div></div></div>'; }).join('')+'</div>'):'';
-  var chips='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><span class="badge '+(wc?'red':'grey')+'">🔴 '+wc+' waiting</span><span class="badge '+(qc?'amber':'grey')+'">❓ '+qc+' question'+(qc===1?'':'s')+'</span><span class="badge grey">📦 '+ic+' inbound</span></div>';
+  var B='padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-weight:650;font-size:12px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block';
+  var BP=B+';background:var(--brand);color:#fff;border-color:var(--brand)';
+  var head='<div class="panel"><h2>🧠 My Command <span class="count">'+(A&&A.generatedText?esc(A.generatedText):'')+'</span></h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Your private command brief — email triage, appointments, inbound &amp; the Fleetio watchdog, cross-checked with the board. Refreshes on its own; hit 🔄 anytime.</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button style="'+B+'" onclick="mcCompose()">✉ New email</button><button style="'+B+'" onclick="mcSchedule()">📅 Schedule</button><button style="'+B+'" onclick="loadAgent(function(){renderMyWork();})">🔄 Refresh brief</button></div></div>';
+  if(!A) return head.replace('</div></div>','</div><div class="empty">Loading your brief…</div></div>');
+  // ❓ Questions
+  var qs=A.questions||[];
+  var qh=qs.length?('<div class="panel" id="mwsec-cmdq"><h2>❓ Questions for you <span class="count">'+qs.length+'</span></h2>'
+    +qs.map(function(q,i){ return '<div class="row"><div style="min-width:0"><div class="lead">'+esc(q.q||'')+'</div>'+(q.ctx?'<div class="meta">'+esc(q.ctx)+'</div>':'')+(q.project?'<div class="meta" style="color:var(--brand)">'+esc(q.project)+'</div>':'')+'</div><div class="right"><button style="'+BP+'" onclick="mcAnswer('+i+')">✍ Answer</button></div></div>'; }).join('')+'</div>'):'';
+  // 🔴 Waiting on you
+  var waiting=A.waiting||[];
+  var kb=function(k){ return k==='client'?'<span class="badge red">CLIENT</span>':k==='vendor'?'<span class="badge amber">VENDOR</span>':k==='internal'?'<span class="badge grey">INTERNAL</span>':''; };
+  var wh='<div class="panel" id="mwsec-cmdw"><h2>🔴 Waiting on you <span class="count">'+waiting.length+'</span></h2>'
+    +(waiting.length?waiting.map(function(w,i){ var open=(w.link||w.id)?'<a href="'+esc(_mcMailHref(w))+'" target="_blank" rel="noopener" style="'+B+'">📧 Open email</a>':'';
+        return '<div class="row" style="display:block"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div class="lead">'+kb(w.kind)+' '+esc(w.who||'')+'</div>'+(w.project?'<span class="badge grey">'+esc(w.project)+'</span>':'')+'</div>'
+          +'<div class="meta">'+esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(w.when)):'')+'</div>'
+          +'<div style="font-size:13px;margin:4px 0">'+esc(w.need||'')+'</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+(w.draft||w.email?('<button style="'+BP+'" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button>'):'')+open+'</div></div>'; }).join(''):'<div class="empty">Nobody’s waiting on you. 🎉</div>')
+    +'</div>';
+  // 📅 Appointments
+  var appts=A.appts||[];
+  var ah='<div class="panel" id="mwsec-cmda"><h2>📅 Appointments &amp; scheduled visits <span class="count">'+appts.length+'</span></h2>'
+    +(appts.length?appts.map(function(x){ var hot=x.today?' style="border-left:3px solid var(--brand);padding-left:8px"':''; var open=(x.link||x.id)?' <a href="'+esc(_mcMailHref(x))+'" target="_blank" rel="noopener" style="color:#7aa2d6">📧</a>':'';
+        return '<div class="row"'+hot+'><div style="min-width:0"><div class="lead">📅 '+esc(x.when||'')+(x.today?' · TODAY':'')+' — '+esc(x.what||'')+open+'</div><div class="meta">'+esc(x.who||'')+(x.where?(' · '+esc(x.where)):'')+(x.note?(' · '+esc(x.note)):'')+'</div></div></div>'; }).join(''):'<div class="empty">No appointments in the brief.</div>')
+    +'</div>';
+  // 📦 Inbound
+  var inb=A.inbound||[];
+  var ih='<div class="panel" id="mwsec-cmdi"><h2>📦 Inbound this week <span class="count">'+inb.length+'</span></h2>'
+    +(inb.length?inb.map(function(x){ return '<div class="row"><div style="min-width:0"><div class="lead">'+esc(x.item||'')+' — '+esc(x.vendor||'')+'</div><div class="meta">'+(x.project?esc(x.project):'')+(x.gap?(' · <span style="color:#fbbf24">⚠ '+esc(x.gap)+'</span>'):'')+'</div></div><div class="right"><span class="badge green">'+esc(x.when||'—')+'</span></div></div>'; }).join(''):'<div class="empty">Nothing inbound in the brief.</div>')
+    +'</div>';
+  // 📋 Project brief
+  var projs=A.projects||[];
+  var ph='<div class="panel" id="mwsec-cmdp"><h2>📋 Project brief <span class="count">'+projs.length+'</span></h2>'
+    +(projs.length?projs.map(function(p){ var fl=(p.flags||[]).map(function(f){ return '<div class="meta" style="color:#f87171">🔴 '+esc(f)+'</div>'; }).join('');
+        return '<div class="row" style="display:block"><div class="lead">'+esc(p.name||'')+' <span class="badge grey">'+(p.jobNum?esc(p.jobNum)+' · ':'')+'PM '+esc(p.pm||'—')+'</span></div><div class="meta" style="line-height:1.5">'+esc(p.brief||'')+'</div>'+fl+'</div>'; }).join(''):'<div class="empty">No project activity in the brief.</div>')
+    +'</div>';
+  // ⚠ Fleetio watchdog (assign in place)
+  var g=(typeof _mcGaps==='function')?_mcGaps():{overdue:[],gone:[],notask:[],total:0};
+  var rowW=function(it,flag,col){ var t=(typeof _mcIssTask==='function')?_mcIssTask(it.num):null;
+    var st=t?('✓ on board'+(t.task&&t.task.who?(' · '+esc(String(t.task.who).split('/')[0].trim())):' · unassigned')):'⚠ not on board yet';
+    var asg=(typeof fAsg==='function')?fAsg(it):[]; var who=asg.length?(' · 👤 '+esc(asg.join(', '))):'';
+    return '<div class="row mw-click" onclick="mcIss(\''+esc(it.num)+'\')" style="cursor:pointer"><div style="min-width:0"><div class="lead"><span class="badge '+col+'">'+flag+'</span> #'+esc(it.num)+' '+esc(it.summary||'')+'</div><div class="meta">'+(it.jobNum?('['+esc(it.jobNum)+'] '):'')+esc(String(it.asset||'').slice(0,50))+who+' · '+st+'</div></div><div class="right"><button style="'+B+'" onclick="event.stopPropagation();mcAssignIss(\''+esc(it.num)+'\',event)">👤 '+(t?'Re-assign':'Assign')+'</button></div></div>'; };
+  var wd='';
+  if(g.overdue.length) wd+='<div class="meta" style="font-weight:700;margin-top:8px">⏰ Overdue ('+g.overdue.length+')</div>'+g.overdue.slice(0,10).map(function(it){return rowW(it,'OD','red');}).join('');
+  if(g.notask.length) wd+='<div class="meta" style="font-weight:700;margin-top:8px">📋 Not on the board ('+g.notask.length+')</div>'+g.notask.slice(0,15).map(function(it){return rowW(it,'GAP','amber');}).join('');
+  if(g.gone.length) wd+='<div class="meta" style="font-weight:700;margin-top:8px">🚚 Unit shipped, issue open ('+g.gone.length+')</div>'+g.gone.slice(0,10).map(function(it){return rowW(it,'SHIP','amber');}).join('');
+  if(!wd) wd='<div class="empty">✓ Nothing slipping — every open Fleetio issue is on the board.</div>';
+  var wdh='<div class="panel" id="mwsec-cmdf"><h2>⚠ Fleetio watchdog <span class="count">'+g.total+' scanned</span></h2>'+wd+'</div>';
+  // ✅ Tasks (one synced list; auto-tasks from your email commitments)
   var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var openN=tasks.filter(function(t){return !t.done;}).length;
-  var tl=tasks.length?tasks.map(function(t,i){ return '<div class="row" style="align-items:center"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;margin-right:8px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';opacity:.5;text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div><button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'; }).join(''):'<div class="empty">No tasks yet.</div>';
-  return '<div class="panel" id="mwsec-cmd"><h2>🧠 My Command <span class="count">'+(A.generatedText?esc(A.generatedText):'')+'</span></h2>'
-    +'<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Your private brief — email triage, inbound &amp; appointments, cross-checked with the board.</div>'
-    +chips+apptH
-    +'<div style="margin:10px 0">'+open+'</div>'
-    +'<div style="font-weight:800;font-size:13px;margin:6px 0 2px">✅ Tasks <span style="color:var(--muted);font-weight:600">('+openN+' open · synced with My Command)</span></div>'+tl
-    +'<div style="display:flex;gap:8px;margin-top:8px"><input id="mwMcNew" placeholder="Add a task…" style="flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px"><button onclick="mwMcAdd()" style="padding:8px 13px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;font-weight:700;cursor:pointer">Add</button></div></div>';
+  var tl=tasks.length?tasks.map(function(t,i){ return '<div class="row" style="align-items:center"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;margin-right:8px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';opacity:.5;text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div><button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'; }).join(''):'<div class="empty">No tasks yet — add one below.</div>';
+  var th='<div class="panel" id="mwsec-cmdt"><h2>✅ Tasks <span class="count">'+openN+' open</span></h2>'+tl
+    +'<div style="display:flex;gap:8px;margin-top:8px"><input id="mwMcNew" placeholder="Add a task…" style="flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px"><button style="'+BP+'" onclick="mwMcAdd()">Add</button></div></div>';
+  return head+qh+wh+ah+ih+ph+wdh+th;
 }
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
 function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ a.splice(i,1); _mcSave(a); renderMyWork(); } }
@@ -17200,14 +17244,8 @@ function _mcEmail(raw){ var m=String(raw||'').match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{
 function _mcEmails(raw){ var m=String(raw||'').match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g); return (m||[]).join(';'); }
 function _mcEnsureContacts(){ if(document.getElementById('mcContacts')) return; var dl=document.createElement('datalist'); dl.id='mcContacts';
   dl.innerHTML=MC_CONTACTS.map(function(c){ return '<option value="'+esc(c.n+' - '+c.e)+'">'; }).join(''); document.body.appendChild(dl); }
-function openMyCmd(){
-  if(typeof closeDrops==='function') closeDrops();
-  if(typeof ssoEnforcing==='function' && ssoEnforcing() && typeof isSuperAdmin==='function' && !isSuperAdmin()){ alert('My Command is private — just for Rich.'); return; }
-  var o=document.getElementById('myCmd');
-  if(!o){ o=document.createElement('div'); o.id='myCmd'; document.body.appendChild(o); _mcInjectCss(); }
-  _mcEnsureContacts(); o.classList.add('show'); document.body.style.overflow='hidden'; renderMyCmd();
-  loadAgent(function(){ renderMyCmd(); });
-}
+// My Command now lives INSIDE the MY WORK tab (one place). Any old entry point just lands there.
+function openMyCmd(){ if(typeof closeDrops==='function') closeDrops(); _mcEnsureContacts(); if(typeof setView==='function') setView('mywork'); }
 function closeMyCmd(){ var o=document.getElementById('myCmd'); if(o) o.classList.remove('show'); document.body.style.overflow=''; }
 function loadAgent(cb){ function done(a){ _MC_AGENT=a||null; try{ _mcSeedTasks(); }catch(e){} if(cb)cb(); }
   fetch('../agent.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done)
