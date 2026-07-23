@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"34.7", date:"2026-07-23", title:"🕒 My Command shows real last-scanned time (Eastern) + clearer refresh", items:[
+    "My Command now shows <b>🕒 Last scanned &lt;time&gt; ET</b> (real Eastern time the inbox was last read) instead of a UTC date — so you can see exactly how fresh the brief is. Clarified that <b>🔄 Refresh re-pulls the latest brief but does not re-read your inbox</b> — brand-new email appears after the next scan (~6a·10a·2p·6p ET, or ping me to scan now)." ] },
   { rev:"34.6", date:"2026-07-23", title:"💬 Tell-Claude box · assign Fleetio from a task · fixed Open-email link", items:[
     "New <b>💬 Tell Claude</b> box in MY WORK — type a request in plain English (“find a time for Al, Luc &amp; Megan Wed for Medtronic and set a Teams meeting”) and I act on the next refresh. Any <b>task that references a Fleetio issue</b> (#1234) now has a <b>👤 Assign</b> button right on the line — pick a crew, it writes to the board. Fixed the <b>📧 Open email</b> link (it now uses the message’s real Outlook link, so no more “message might have been moved or deleted”)." ] },
   { rev:"34.5", date:"2026-07-23", title:"🧠 One place: My Command lives fully inside MY WORK (separate tab removed)", items:[
@@ -13762,10 +13764,13 @@ function _mwMcPanel(){
   var A=(typeof _MC_AGENT!=='undefined' && _MC_AGENT)?_MC_AGENT:null;
   var B='padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-weight:650;font-size:12px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block';
   var BP=B+';background:var(--brand);color:#fff;border-color:var(--brand)';
-  var head='<div class="panel"><h2>🧠 My Command <span class="count">'+(A&&A.generatedText?esc(A.generatedText):'')+'</span></h2>'
-    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Your private command brief — email triage, appointments, inbound &amp; the Fleetio watchdog, cross-checked with the board. Refreshes on its own; hit 🔄 anytime.</div>'
+  var refT='';
+  if(A&&A.generatedAt){ try{ refT=new Date(A.generatedAt).toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' ET'; }catch(e){ refT=''; } }
+  if(!refT&&A) refT=A.generatedText||'';
+  var head='<div class="panel"><h2>🧠 My Command'+(refT?' <span class="count">🕒 Last scanned '+esc(refT)+'</span>':'')+'</h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Your private command brief — email triage, appointments, inbound &amp; the Fleetio watchdog, cross-checked with the board. <b>Auto-scans your inbox 4× a weekday (~6a · 10a · 2p · 6p ET).</b> 🔄 re-pulls the latest brief; <b>brand-new email only appears after the next scan</b> (or ping me to scan now).</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button style="'+B+'" onclick="mcCompose()">✉ New email</button><button style="'+B+'" onclick="mcSchedule()">📅 Schedule</button><button style="'+B+'" onclick="loadAgent(function(){renderMyWork();})">🔄 Refresh brief</button></div></div>';
-  if(!A) return head.replace('</div></div>','</div><div class="empty">Loading your brief…</div></div>');
+  if(!A) return head+'<div class="panel" id="mwsec-cmd"><div class="empty">Loading your brief…</div></div>';
   // ❓ Questions
   var qs=A.questions||[];
   var qh=qs.length?('<div class="panel" id="mwsec-cmdq"><h2>❓ Questions for you <span class="count">'+qs.length+'</span></h2>'
