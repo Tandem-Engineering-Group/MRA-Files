@@ -3828,6 +3828,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.18", date:"2026-07-23", title:"📈 Sales & Planning — rename a prospect · NEXT PM FREE shows the year", items:[
+    "You can now <b>rename a prospect</b> after creating it (the Name box was locked in edit — now it renames cleanly). The <b>NEXT PM FREE</b> tile now shows the <b>year</b> (e.g. 9/3/26) so it matches the PM-LOAD dates." ] },
   { rev:"36.17", date:"2026-07-23", title:"🧾 Quote reads like a real quote (Scope of Work + all-inclusive total)", items:[
     "The customer quote is now professional: a <b>Scope of Work</b> block (fully editable — pulling a Fleetio issue fills a <b>clean</b> scope, not the raw internal request), a <b>“Price includes all labor, materials and shop supplies”</b> line, and the <b>all-inclusive Total</b> at the bottom. No more raw dump." ] },
   { rev:"36.16", date:"2026-07-23", title:"📈 Sales & Planning — PM simulate, build-type start dates, 5% steps, collapsible load, no missing projects", items:[
@@ -11313,7 +11315,7 @@ function spFormHtml(){
   const btSel=`<option value="">— pick to auto-set start —</option>`+Object.keys(SP_BUILD).map(k=>`<option value="${k}"${(p&&p.bt===k)?' selected':''}>${esc(SP_BUILD[k].l)}</option>`).join('');
   return `<div class="sp-form"><div class="sp-fh">${SP_FORM.mode==='edit'?'✎ Edit prospect':'➕ New prospect'} <span class="sp-fsub">planning only — never touches the Projects board</span></div>
     <div class="sp-fgrid">
-      <div><label>Name *</label><input id="spfName" type="text" value="${val('name')}" placeholder="e.g. AWS Revamp" ${SP_FORM.mode==='edit'?'disabled':''}></div>
+      <div><label>Name *</label><input id="spfName" type="text" value="${val('name')}" placeholder="e.g. AWS Revamp"></div>
       <div><label>Vehicle / trailer</label><input id="spfV" type="text" value="${val('v')}" placeholder="53ft trailer, RV, double-expandable…"></div>
       <div><label>Scope</label><select id="spfSc">${scSel}</select></div>
       <div><label>Consider PM <span class="sp-fsub">(simulate load)</span></label><select id="spfPm">${pmSel}</select></div>
@@ -11331,17 +11333,20 @@ function spFormHtml(){
 }
 function spSave(){
   const g=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
-  const name=SP_FORM.mode==='edit'?SP_FORM.name:g('spfName');
+  const name=g('spfName');
   if(!name){ alert('Give the prospect a name.'); return; }
   const meta={v:g('spfV'), sc:g('spfSc'), st:g('spfSt'), ln:g('spfLn'), pr:(g('spfPr')!==''?+g('spfPr'):50), no:g('spfNo'), pm:g('spfPm'), bt:g('spfBt')};
   const cm='[sales]'+JSON.stringify(meta);
   const task=SALES_TAG+' '+name;
   const gj=_spGeneralJob();
   if(SP_FORM.mode==='edit'){
-    const t=gj&&(gj.tasks||[]).find(x=>x.t===task);
-    shopWrite({ action:'editTask', project:GENERAL_PROJ, taskOld:task, task:task, assigned:(t&&t.who)||'',
+    const oldTask=SALES_TAG+' '+SP_FORM.name;   // may differ from `task` if the name was changed → rename
+    if(name!==SP_FORM.name && _spProspects().some(x=>x.name===name)){ alert('A prospect named "'+name+'" already exists.'); return; }
+    const t=gj&&(gj.tasks||[]).find(x=>x.t===oldTask);
+    shopWrite({ action:'editTask', project:GENERAL_PROJ, taskOld:oldTask, task:task, assigned:(t&&t.who)||'',
       status:(t&&t.st)||'Open', milestone:'', comments:cm, due:meta.ln||'', pin:CLOSE_PIN, user:CURRENT_USER });
-    if(t){ t.cm=cm; t.due=meta.ln||null; }
+    if(t){ t.t=task; t.cm=cm; t.due=meta.ln||null; }
+    SP_FORM.name=name;   // keep editing the (possibly renamed) prospect
   } else {
     if(_spProspects().some(x=>x.name===name)){ alert('A prospect with that name is already on the timeline.'); return; }
     shopWrite({ action:'addTask', project:GENERAL_PROJ, jobNum:'', bay:'General', task:task, assigned:'', milestone:'', comments:cm, due:meta.ln||'', pin:CLOSE_PIN, user:CURRENT_USER });
@@ -11421,7 +11426,7 @@ function renderSalesPlan(){
     + xtile(committed.length,'COMMITTED PROJECTS','#58a6ff','Signed work on the board today')
     + xtile(pros.length,'PROSPECTS IN PIPELINE','#8b5cf6','Potential new projects — not signed yet')
     + xtile((Math.round(wsum*10)/10).toFixed(1),'EXPECTED NEW BUILDS','#c4b5fd','The pipeline weighted by probability — two prospects at 50% ≈ 1 expected build')
-    + xtile(freeSoon?fmtMD(freeSoon.free):'—', 'NEXT PM FREE'+(freeSoon?(' — '+esc(freeSoon.pm).toUpperCase()):''),'#22c55e', freeSoon?(freeSoon.pm+' finishes their current slate ~'+fmtMDY(freeSoon.free)):'')
+    + xtile(freeSoon?fmtMDY(freeSoon.free):'—', 'NEXT PM FREE'+(freeSoon?(' — '+esc(freeSoon.pm).toUpperCase()):''),'#22c55e', freeSoon?(freeSoon.pm+' finishes their current slate ~'+fmtMDY(freeSoon.free)):'')
     + `</div></div></div>`;
   body.innerHTML = band
     + `<div class="sp-cap"><div class="sp-cap-h" onclick="spToggleCap()" style="cursor:pointer" title="Click to collapse / expand"><span class="sp-cx">${SP_CAP_OPEN?'▾':'▸'}</span> 👥 PM LOAD — who has capacity <span class="sp-fsub">(committed each · dashed = simulated pipeline · when they free up)</span></div>${SP_CAP_OPEN?(capHtml||'<div class="sp-fsub">no active projects</div>'):''}</div>`
