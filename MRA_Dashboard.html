@@ -3765,6 +3765,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.2", date:"2026-07-23", title:"🏭 Compact FLOOR bay cards now dead-simple: job name · J# · dates only", items:[
+    "Rebuilt the compact bay cards to show <b>only the job name, job number, and date range</b> (like the Projects cards) — no PM, no client, no Fleetio/schedule/status pills, no task lists. Clean and easy to read. (FLOOR DETAIL keeps the full tile.)" ] },
   { rev:"36.1", date:"2026-07-23", title:"🏭 Compact FLOOR — dropped the banner + KPI row so tasks get the whole screen", items:[
     "Compact FLOOR now hides the “Coming back to MRA” banner and the KPI tiles entirely (they’re still on FLOOR DETAIL), and tightens/auto-fits the bay cards — so the Open Tasks by Assignee panel moves way up and gets the room. DETAIL is unchanged." ] },
   { rev:"36.0", date:"2026-07-23", title:"🏭 Two floor tabs: FLOOR (compact, max task space) + FLOOR DETAIL", items:[
@@ -9895,10 +9897,12 @@ function renderFloor(D){
     // so a single job (e.g. WFCU in Bay 5 Front) can be shrunk on its own.
     const jcaret = (!WALL && (j.openCount>0 || fl.length || pj.length))
       ? `<span class="job-collapse" onclick="toggleJob(${j.row})" title="Collapse / expand this job">${jOpen?'▾':'▸'}</span>` : '';
-    return `<div class="job${jc}" id="floorjob-${j.row}" ondragover="jobTileDragOver(event)" ondrop="jobTileDrop(event,${typeof j.row==='number'?j.row:`'${escJsAttr(String(j.row))}'`})"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}${j.jobNum?` <span class="jnum-t">${esc(j.jobNum)}</span>`:''}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag onto a BAY to move this trailer there — or onto ANOTHER TRAILER'S card to slot it above (re-orders the list; needs code)">⠿</span>`:''}</div>`+
+    const _cdt=(j.startISO||j.completionISO)?`${fmtMD(j.startISO)} → ${fmtMD(j.completionISO)}`:'';
+    const _mini=`<div class="jt-mini" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)"><span class="jt-mini-nm">${esc(j.project)}</span>${j.jobNum?` <span class="jt-mini-jn">${esc(j.jobNum)}</span>`:''}${_cdt?` <span class="jt-mini-dt">📅 ${_cdt}</span>`:''}</div>`;
+    return `<div class="job${jc}" id="floorjob-${j.row}" ondragover="jobTileDragOver(event)" ondrop="jobTileDrop(event,${typeof j.row==='number'?j.row:`'${escJsAttr(String(j.row))}'`})">${_mini}<div class="jt-full"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}${j.jobNum?` <span class="jnum-t">${esc(j.jobNum)}</span>`:''}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag onto a BAY to move this trailer there — or onto ANOTHER TRAILER'S card to slot it above (re-orders the list; needs code)">⠿</span>`:''}</div>`+
       `${(()=>{const _fr=jobIsSub(j)?null:_fioRange(_fioRetForJob(j.jobNum));
         if(WALL) return `<div class="pills">${_fr?`<span class="pill" title="Fleetio Back to MRA → Leaving MRA">🗓 ${esc(_fr)}</span>`:''}${pills}</div>`;   // 📺 compact: no client/PM line, MRA folds into the pill row
-        return `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div>${_fr?`<div class="jfio" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(_fr)}</div>`:''}<div class="pills">${pills}</div>`;})()}${tl}</div>`;};
+        return `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div>${_fr?`<div class="jfio" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(_fr)}</div>`:''}<div class="pills">${pills}</div>`;})()}${tl}</div></div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
   const bayCard=(bay,rawList,opts={})=>{
@@ -15632,22 +15636,30 @@ function mapToUnit(f){ const el=document.getElementById('mapModal'); if(el) el.c
 // same render engine as "Floor Detail"; nothing about the data or logic changes.
 function _floorCompactCss(){ if(document.getElementById('floorCompactCss')) return; var s=document.createElement('style'); s.id='floorCompactCss';
   s.textContent=
-   // compact = maximize task space: drop the returning-to-MRA banner, the KPI row, the pipeline, and the in-card task lists
-   '#floorView.floor-compact #returnAlarm{display:none!important}'
+   // the simple compact job card (name · J# · dates) is hidden by default; DETAIL shows the full tile
+   '#floorView .jt-mini{display:none}'
+  // COMPACT: show the simple card, hide the busy full tile entirely
+  +'#floorView.floor-compact .jt-full{display:none!important}'
+  +'#floorView.floor-compact .jt-mini{display:block;padding:8px 2px;border-bottom:1px solid var(--line);cursor:pointer;line-height:1.5}'
+  +'#floorView.floor-compact .job:last-child .jt-mini{border-bottom:0}'
+  +'#floorView.floor-compact .jt-mini-nm{font-weight:700;font-size:13.5px;color:var(--txt)}'
+  +'#floorView.floor-compact .jt-mini-jn{color:var(--brand);font-weight:800;font-size:12px;margin-left:5px}'
+  +'#floorView.floor-compact .jt-mini-dt{color:var(--muted);font-size:11.5px;margin-left:6px;white-space:nowrap}'
+  // maximize task space: drop the returning-to-MRA banner, the KPI row, the pipeline
+  +'#floorView.floor-compact #returnAlarm{display:none!important}'
   +'#floorView.floor-compact .kpis{display:none!important}'
   +'#floorView.floor-compact #pipePanel{display:none!important}'
-  +'#floorView.floor-compact .bay .tasklist{display:none!important}'
   // strip the layout-tweak controls (keep ☰ Actions + the ⚠ unassigned alert)
   +'#floorView.floor-compact #bayStatusPanel .bayallbtn{display:none}'
   +'#floorView.floor-compact #baySortSel{display:none}'
-  // tidy + auto-fit the bay cards so they read clean and hand the room to the tasks
+  +'#floorView.floor-compact .tilejobs{display:none}'
+  // clean, auto-fit bays
   +'#floorView.floor-compact #bayStatusPanel{padding:14px 16px}'
   +'#floorView.floor-compact .bays{gap:10px}'
   +'#floorView.floor-compact .baycol{gap:10px}'
   +'#floorView.floor-compact .bay{border-radius:14px}'
   +'#floorView.floor-compact .bay-head{padding:8px 12px 6px}'
-  +'#floorView.floor-compact .bay-body{padding:8px 12px 9px}'
-  +'#floorView.floor-compact .bay .pill{font-size:10px;padding:1px 6px}'
+  +'#floorView.floor-compact .bay-body{padding:4px 12px 8px}'
   +'#floorView.floor-compact #openTasksPanel{margin-top:14px}';
   document.head.appendChild(s); }
 function setView(v){
