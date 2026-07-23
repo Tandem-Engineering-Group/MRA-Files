@@ -3765,6 +3765,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"34.4", date:"2026-07-23", title:"🧠 My Command folded into MY WORK + one synced task list + auto-tasks", items:[
+    "Your MY WORK tab now opens with a <b>🧠 My Command</b> panel (Rich only): today's <b>appointments</b>, counts for 🔴 waiting / ❓ questions / 📦 inbound, a button to the full command screen, and <b>one task list that's synced with My Command</b>. Commitments the agent spots in your sent email (like “Jesica update by 4 PM”) <b>auto-create a task</b> (tagged <i>auto</i>, seeded once so deleting sticks). The brief now <b>auto-refreshes 4× a weekday</b> (≈6a/10a/2p/6p) from a fresh inbox + sent sweep." ] },
   { rev:"34.3", date:"2026-07-23", title:"🧠 My Command — assign Fleetio here, ask-Rich questions, appointments, fixed email links", items:[
     "Fleetio watchdog now shows <b>whether each issue is on the board</b> (✓ on board · crew, or ⚠ not yet) and a <b>👤 Assign / Re-assign</b> button right on the row and in the issue popup — pick a crew and it writes to the board (synced), <b>no page-hopping</b>. New <b>❓ Questions for you</b> card (I ask, you tap Answer, I act next refresh) and <b>📅 Appointments &amp; scheduled visits</b> card (service techs, set deliveries, booked meetings). 📧 <b>Open email</b> now uses a link that opens on iPad/Outlook web (the old one could 404). Waiting items show <b>who it’s from + when</b> so they’re always findable." ] },
   { rev:"34.2", date:"2026-07-22", title:"🧠 My Command — usable pass: open-the-email, contacts, inbound, richer Fleetio", items:[
@@ -13748,6 +13750,29 @@ function _mwRow(x, today){
   const canClose=(x.kind==='shop' && _mwCanClose(x.proj, x.raw));
   const closeBtn=canClose?(' <button onclick="event.stopPropagation();mwCloseTask(\''+escJsAttr(x.proj)+'\',\''+escJsAttr(x.raw)+'\')" style="padding:3px 9px;border-radius:7px;border:1px solid #16a34a;background:#16a34a;color:#fff;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px" title="Mark this task done">✓ close</button>'):'';
   return '<div class="row mw-click"'+nav.oc+nav.tip+'><div style="min-width:0"><div class="lead">'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+fnumline+'</div><div class="meta">'+esc(x.where)+rng+'</div>'+det+fio+(media?('<div style="margin-top:4px">'+media+'</div>'):'')+'</div><div class="right" style="white-space:nowrap">'+d+closeBtn+nav.chevron+'</div></div>'; }
+// 🧠 My Command folded into My Work (Rich only): the live email brief + one synced task list.
+function _mwMcPanel(){
+  if(typeof isSuperAdmin!=='function' || !isSuperAdmin()) return '';
+  if(typeof _MC_AGENT==='undefined' || !_MC_AGENT){ if(typeof loadAgent==='function') loadAgent(function(){ var v=document.getElementById('myworkView'); if(v && !v.classList.contains('hidden')) renderMyWork(); }); }
+  var open='<button onclick="openMyCmd()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;font-weight:700;font-size:12px;cursor:pointer">🧠 Open full My Command →</button>';
+  var A=(typeof _MC_AGENT!=='undefined' && _MC_AGENT)?_MC_AGENT:null;
+  if(!A) return '<div class="panel" id="mwsec-cmd"><h2>🧠 My Command</h2><div class="empty">Loading your brief…</div><div style="margin-top:8px">'+open+'</div></div>';
+  var wc=(A.waiting||[]).length, qc=(A.questions||[]).length, ic=(A.inbound||[]).length;
+  var appts=(A.appts||[]);
+  var apptH=appts.length?('<div style="margin-top:6px">'+appts.map(function(x){ var hot=x.today?' style="border-left:3px solid var(--brand);padding-left:8px"':''; return '<div class="row"'+hot+'><div style="min-width:0"><div class="lead">📅 '+esc(x.when||'')+(x.today?' · TODAY':'')+' — '+esc(x.what||'')+'</div><div class="meta">'+esc(x.who||'')+(x.where?(' · '+esc(x.where)):'')+(x.note?(' · '+esc(x.note)):'')+'</div></div></div>'; }).join('')+'</div>'):'';
+  var chips='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><span class="badge '+(wc?'red':'grey')+'">🔴 '+wc+' waiting</span><span class="badge '+(qc?'amber':'grey')+'">❓ '+qc+' question'+(qc===1?'':'s')+'</span><span class="badge grey">📦 '+ic+' inbound</span></div>';
+  var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var openN=tasks.filter(function(t){return !t.done;}).length;
+  var tl=tasks.length?tasks.map(function(t,i){ return '<div class="row" style="align-items:center"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;margin-right:8px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';opacity:.5;text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div><button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'; }).join(''):'<div class="empty">No tasks yet.</div>';
+  return '<div class="panel" id="mwsec-cmd"><h2>🧠 My Command <span class="count">'+(A.generatedText?esc(A.generatedText):'')+'</span></h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Your private brief — email triage, inbound &amp; appointments, cross-checked with the board.</div>'
+    +chips+apptH
+    +'<div style="margin:10px 0">'+open+'</div>'
+    +'<div style="font-weight:800;font-size:13px;margin:6px 0 2px">✅ Tasks <span style="color:var(--muted);font-weight:600">('+openN+' open · synced with My Command)</span></div>'+tl
+    +'<div style="display:flex;gap:8px;margin-top:8px"><input id="mwMcNew" placeholder="Add a task…" style="flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px"><button onclick="mwMcAdd()" style="padding:8px 13px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;font-weight:700;cursor:pointer">Add</button></div></div>';
+}
+function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
+function mwMcDel(i){ var a=_mcTasks(); if(i>-1&&i<a.length){ a.splice(i,1); _mcSave(a); renderMyWork(); } }
+function mwMcAdd(){ var el=document.getElementById('mwMcNew'); if(!el)return; var v=el.value.trim(); if(!v)return; var a=_mcTasks(); a.push({id:_mcId(),t:v,done:false}); _mcSave(a); renderMyWork(); }
 function renderMyWork(){
   const box=document.getElementById('myworkView'); if(!box) return;
   const isAdmin=isSuperAdmin();   // person-picker is Rich-only; other admins see their own My Work
@@ -13809,6 +13834,7 @@ function renderMyWork(){
     '<label style="font-size:12px;color:var(--muted)">➕ Follow: <select onchange="mwPickFollow(this)" style="font-size:12px;padding:3px 7px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt)"><option value="">— pick a project —</option>'+followOpts+'</select></label></div></div>';
   box.innerHTML=
     '<div class="panel"><h2>🙋 My Work — '+esc(who)+' <span class="count">'+m.total+' open</span>'+picker+'</h2>'+tiles+'</div>'+
+    _mwMcPanel()+
     awaitHtml+
     '<div class="panel" id="mwsec-od"><h2>⚠ Overdue <span class="count">'+m.od.length+'</span></h2>'+_mwList(m.od,m.today)+'</div>'+
     '<div class="panel" id="mwsec-due"><h2>📅 Due this week <span class="count">'+m.due.length+'</span></h2>'+_mwList(m.due,m.today)+'</div>'+
@@ -13818,6 +13844,7 @@ function renderMyWork(){
     doneHtml+
     '<div class="panel"><h2>🗂 Everything else open <span class="count">'+m.later.length+'</span></h2>'+_mwList(m.later,m.today)+'</div>'+
     customize;
+  var mn=document.getElementById('mwMcNew'); if(mn) mn.onkeydown=function(e){ if(e.key==='Enter') mwMcAdd(); };
 }
 // Standalone one-page report for the daily per-person email / deep link (?mywork=Name).
 // Same clean, professional look as the PM Report (shared REPORT_CSS) — personalized to one person's work.
@@ -17182,9 +17209,21 @@ function openMyCmd(){
   loadAgent(function(){ renderMyCmd(); });
 }
 function closeMyCmd(){ var o=document.getElementById('myCmd'); if(o) o.classList.remove('show'); document.body.style.overflow=''; }
-function loadAgent(cb){ function done(a){ _MC_AGENT=a||null; if(cb)cb(); }
+function loadAgent(cb){ function done(a){ _MC_AGENT=a||null; try{ _mcSeedTasks(); }catch(e){} if(cb)cb(); }
   fetch('../agent.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done)
   .catch(function(){ fetch('agent.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ if(cb)cb(); }); }); }
+// Auto-task: seed commitments the agent detected in your email (e.g. "Jesica update by 4pm") into your one task list.
+// Seed-once (tracked in mra_mycmd_seeded) so deleting one won't resurrect it, and it never duplicates.
+function _mcSeedTasks(){ var A=_MC_AGENT||{}; var seed=A.tasks||[]; if(!seed.length) return;
+  var norm=function(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); };
+  var seen; try{ seen=JSON.parse(localStorage.getItem('mra_mycmd_seeded')||'[]'); }catch(e){ seen=[]; }
+  var seenN={}; seen.forEach(function(x){ seenN[x]=1; });
+  var tasks=_mcTasks(); var have={}; tasks.forEach(function(t){ have[norm(t.t)]=1; });
+  var changed=false;
+  seed.forEach(function(x){ var n=norm(x.t); if(!n||seenN[n]) return; seen.push(n); seenN[n]=1;
+    if(!have[n]){ tasks.push({id:_mcId(),t:x.t,done:false,auto:true}); have[n]=1; changed=true; } });
+  if(changed) _mcSave(tasks);
+  try{ localStorage.setItem('mra_mycmd_seeded',JSON.stringify(seen)); }catch(e){} }
 function _mcInjectCss(){ if(document.getElementById('myCmdCss')) return; var s=document.createElement('style'); s.id='myCmdCss';
   s.textContent='#myCmd{position:fixed;inset:0;z-index:1200;background:var(--bg);color:var(--txt);display:none;overflow:auto}'
    +'#myCmd.show{display:block}'
