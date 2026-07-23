@@ -1334,6 +1334,12 @@
   .q-st{font-weight:700}
   .q-total{font-weight:900;font-size:16px;color:var(--brand);border-bottom:0;border-top:2px solid var(--line);margin-top:6px;padding-top:9px}
   .q-note{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.4}
+  .q-savedbar{border-bottom:1px solid var(--line);padding-bottom:12px}
+  .q-saved{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+  .q-schip{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:3px 6px 3px 11px;font-size:12px}
+  .q-schip a{color:#7aa2d6;cursor:pointer;text-decoration:none;font-weight:700}
+  .q-schip .x{color:var(--muted);cursor:pointer;font-size:11px}
+  .q-schip .x:hover{color:#ef4444}
   @media(max-width:640px){ .q-grid2,.q-cons{grid-template-columns:1fr} .q-detail{position:static} }
   .g-row.sp-hdr{background:rgba(139,92,246,.14);border-top:2px solid #8b5cf6}
   .g-row.sp-hdr .g-lbl{color:#c4b5fd;font-size:12px;opacity:1}
@@ -3819,6 +3825,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.12", date:"2026-07-23", title:"🧾 Quote Generator — save & recall quotes", items:[
+    "Quotes now <b>save on your device</b> — hit <b>💾 Save this quote</b> and it appears as a chip up top (customer · total); click it any time to pull the whole quote back into the form, or <b>✕</b> to remove it. <b>＋ New</b> clears the form for a fresh one. (Before this the tool started blank every time and kept no history.)" ] },
   { rev:"36.11", date:"2026-07-23", title:"🧾 NEW: Quote Generator — labor + materials + supplies → an MRA quote", items:[
     "New <b>🧾 Quote Generator</b> (☰ Menu): enter <b>labor hours × rate</b>, <b>paste your material list</b> (drop the Alro cart straight in — it reads the price off each line), and tick the <b>shop supplies</b> that apply (sandpaper, paint, welding rod, hardware…). It <b>marks materials up</b> (default 20%), adds the supplies, and shows you a <b>full internal breakdown</b>. Then <b>🧾 Customer quote</b> prints a clean <b>MRA-letterhead one-liner</b> (just the total — no breakdown) to Save-as-PDF or print. <b>🖨 Detailed</b> prints the full breakdown for your file. Rate, markup and letterhead (address/phone/email) are editable and saved on your device." ] },
   { rev:"36.10", date:"2026-07-23", title:"📋 Fleetio digest — all 4 reports listed right in the Actions menu", items:[
@@ -11169,18 +11177,37 @@ function _qDetailHtml(t){
   h+='<div class="q-note">The customer quote shows only the single total below — no breakdown.</div>';
   return h; }
 function qSaveLetterhead(){ const g=id=>{ const e=document.getElementById(id); return e?e.value:''; };
-  _qSaveCfg({company:g('qfCompany'),tag:g('qfTag'),addr:g('qfAddr'),city:g('qfCity'),phone:g('qfPhone'),email:g('qfEmail')});
+  const num=(id,d)=>{ const e=document.getElementById(id); const v=e?parseFloat(e.value):NaN; return isFinite(v)?v:d; };
+  _qSaveCfg({company:g('qfCompany'),tag:g('qfTag'),addr:g('qfAddr'),city:g('qfCity'),phone:g('qfPhone'),email:g('qfEmail'), rate:num('qfRate',80), markup:num('qfMarkup',20), tax:num('qfTax',0)});
   const s=document.getElementById('qfSaved'); if(s){ s.textContent='✓ saved on this device'; setTimeout(()=>{s.textContent='';},2500); } }
+// 💾 Saved quotes (per device) — so a quote you built is still here next time.
+const QUOTE_SAVE_KEY='mra_quotes_v1';
+function _qSaved(){ try{ return JSON.parse(localStorage.getItem(QUOTE_SAVE_KEY)||'[]'); }catch(e){ return []; } }
+function _qSaveList(a){ try{ localStorage.setItem(QUOTE_SAVE_KEY, JSON.stringify(a||[])); }catch(e){} }
+function qSaveQuote(){ _qRead(); const t=_qCompute();
+  if(!QUOTE.cust && !QUOTE.mats && !QUOTE.hours){ alert('Nothing to save yet — fill in the quote first.'); return; }
+  const a=_qSaved();
+  const rec={ id:'q'+Date.now().toString(36), cust:QUOTE.cust, proj:QUOTE.proj, hours:QUOTE.hours, rate:QUOTE.rate, markup:QUOTE.markup, tax:QUOTE.tax, mats:QUOTE.mats, cons:JSON.parse(JSON.stringify(QUOTE.cons||{})), total:t.total, savedAt:Date.now() };
+  a.unshift(rec); if(a.length>60) a.length=60; _qSaveList(a); renderQuote();
+  const s=document.getElementById('qSavedMsg'); if(s){ s.textContent='✓ quote saved on this device'; setTimeout(()=>{s.textContent='';},2600); } }
+function qLoadQuote(id){ const r=_qSaved().find(x=>x.id===id); if(!r) return;
+  QUOTE={cust:r.cust||'',proj:r.proj||'',hours:r.hours||0,rate:r.rate||80,markup:r.markup||20,tax:r.tax||0,mats:r.mats||'',cons:r.cons||{}};
+  QUOTE_CONS.forEach(x=>{ if(!QUOTE.cons[x[0]]) QUOTE.cons[x[0]]={on:false,amt:x[2]}; });
+  renderQuote(); }
+function qDelQuote(id){ if(!confirm('Delete this saved quote?')) return; _qSaveList(_qSaved().filter(x=>x.id!==id)); renderQuote(); }
+function qNewQuote(){ const c=_qCfg(); QUOTE={cust:'',proj:'',hours:8,rate:c.rate,markup:c.markup,tax:c.tax,mats:'',cons:{}}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); renderQuote(); }
 function renderQuote(){ const body=document.getElementById('quoteBody'); if(!body) return; const c=_qCfg();
   const inp='padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:13px';
   const consRows=QUOTE_CONS.map(x=>{ const s=QUOTE.cons[x[0]]||{on:false,amt:x[2]}; return '<label class="q-conline"><input type="checkbox" id="qc_'+x[0]+'" '+(s.on?'checked':'')+' onchange="qUpdate()"> '+esc(x[1])+' <span>$</span><input id="qca_'+x[0]+'" type="number" value="'+s.amt+'" oninput="qUpdate()" style="width:64px;'+inp+'"></label>'; }).join('');
   body.innerHTML=
    '<div class="q-wrap"><div class="q-form">'
+   + (function(){ var s=_qSaved(); var chips=s.length?s.map(function(r){ return '<span class="q-schip"><a onclick="qLoadQuote(\''+r.id+'\')" title="Load this quote back into the form">'+esc(r.cust||'Untitled')+' · '+_money(r.total)+'</a><span class="x" onclick="qDelQuote(\''+r.id+'\')" title="Delete this saved quote">✕</span></span>'; }).join(''):'<span class="q-hint">none yet — build one and hit 💾 Save</span>';
+      return '<div class="q-fsec q-savedbar"><div class="q-lab" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">💾 Saved quotes <button class="expandbtn" onclick="qSaveQuote()" title="Save this quote on your device so you can pull it back up later">💾 Save this quote</button> <button class="expandbtn" onclick="qNewQuote()" title="Clear the form for a fresh quote">＋ New</button> <span id="qSavedMsg" style="color:#22c55e;font-size:12px;font-weight:400"></span></div><div class="q-saved">'+chips+'</div></div>'; })()
    + '<div class="q-fsec"><div class="q-lab">Customer / job</div><div class="q-grid2"><input id="qCust" placeholder="Customer name" value="'+escA(QUOTE.cust)+'" oninput="qUpdate()" style="'+inp+'"><input id="qProj" placeholder="Project · vehicle · scope (shows on the customer quote)" value="'+escA(QUOTE.proj)+'" oninput="qUpdate()" style="'+inp+'"></div></div>'
    + '<div class="q-fsec"><div class="q-lab">Labor</div><div class="q-inline"><label>Hours <input id="qHours" type="number" step="0.5" value="'+QUOTE.hours+'" oninput="qUpdate()" style="width:74px;'+inp+'"></label><label>Rate $<input id="qRate" type="number" value="'+QUOTE.rate+'" oninput="qUpdate()" style="width:74px;'+inp+'"> /hr</label></div></div>'
    + '<div class="q-fsec"><div class="q-lab">Materials <span class="q-hint">paste one item per line — the last number on each line is read as the cost (paste your Alro cart straight in)</span></div><textarea id="qMats" rows="6" placeholder=".190 5052-H32 Alum 48 x 120 Paper Interleave     998.74&#10;4 x 2 x .125 6061-T6 Alum Tubing 24 ft     371.30" oninput="qUpdate()" style="width:100%;box-sizing:border-box;'+inp+'">'+esc(QUOTE.mats)+'</textarea><div class="q-inline"><label>Material markup <input id="qMarkup" type="number" value="'+QUOTE.markup+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label><label>Tax <input id="qTax" type="number" step="0.01" value="'+QUOTE.tax+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label></div></div>'
    + '<div class="q-fsec"><div class="q-lab">Shop supplies <span class="q-hint">tick what applies · added after markup · edit the $</span></div><div class="q-cons">'+consRows+'</div></div>'
-   + '<details class="q-fsec"><summary class="q-lab" style="cursor:pointer">⚙ Letterhead &amp; defaults <span class="q-hint">(saved on this device)</span></summary><div class="q-grid2" style="margin-top:9px"><input id="qfCompany" placeholder="Company" value="'+escA(c.company)+'" style="'+inp+'"><input id="qfTag" placeholder="Tagline" value="'+escA(c.tag)+'" style="'+inp+'"><input id="qfAddr" placeholder="Street address" value="'+escA(c.addr)+'" style="'+inp+'"><input id="qfCity" placeholder="City / region (if not in tagline)" value="'+escA(c.city)+'" style="'+inp+'"><input id="qfPhone" placeholder="Phone" value="'+escA(c.phone)+'" style="'+inp+'"><input id="qfEmail" placeholder="Email" value="'+escA(c.email)+'" style="'+inp+'"></div><div style="margin-top:9px;display:flex;gap:10px;align-items:center"><button class="expandbtn" onclick="qSaveLetterhead()">💾 Save letterhead</button><span id="qfSaved" style="color:#22c55e;font-size:12px"></span></div></details>'
+   + '<details class="q-fsec"><summary class="q-lab" style="cursor:pointer">⚙ Letterhead &amp; defaults <span class="q-hint">(saved on this device)</span></summary><div class="q-grid2" style="margin-top:9px"><input id="qfCompany" placeholder="Company" value="'+escA(c.company)+'" style="'+inp+'"><input id="qfTag" placeholder="Tagline" value="'+escA(c.tag)+'" style="'+inp+'"><input id="qfAddr" placeholder="Street address" value="'+escA(c.addr)+'" style="'+inp+'"><input id="qfCity" placeholder="City / region (if not in tagline)" value="'+escA(c.city)+'" style="'+inp+'"><input id="qfPhone" placeholder="Phone" value="'+escA(c.phone)+'" style="'+inp+'"><input id="qfEmail" placeholder="Email" value="'+escA(c.email)+'" style="'+inp+'"></div><div class="q-inline" style="margin-top:10px"><label>Default rate $<input id="qfRate" type="number" value="'+c.rate+'" style="width:72px;'+inp+'"> /hr</label><label>Default markup <input id="qfMarkup" type="number" step="5" value="'+c.markup+'" style="width:64px;'+inp+'"> %</label><label>Default tax <input id="qfTax" type="number" step="0.01" value="'+c.tax+'" style="width:64px;'+inp+'"> %</label></div><div style="margin-top:9px;display:flex;gap:10px;align-items:center"><button class="expandbtn" onclick="qSaveLetterhead()">💾 Save defaults</button><span id="qfSaved" style="color:#22c55e;font-size:12px"></span></div></details>'
    + '</div><div class="q-detail" id="qDetail"></div></div>';
   qUpdate(); }
 function _qOpenPrint(html){ const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap again.'); return; } w.document.open(); w.document.write(html); w.document.close(); }
