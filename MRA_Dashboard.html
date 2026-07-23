@@ -3764,6 +3764,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"35.2", date:"2026-07-23", title:"✅ Assigning an auto-task completes it — falls off the open list into ✓ Done", items:[
+    "When you assign a “add #NNNN to the board” task, it's now <b>marked complete and drops off your open list</b> into a ✓ Done group (with undo) — since assigning it was the whole point. Open Tasks now shows only what's actually open; finished ones tuck into ✓ Done below." ] },
   { rev:"35.1", date:"2026-07-23", title:"✅ Assign feedback — toast + the task flips to “On the board · <crew>” live", items:[
     "When you assign a Fleetio item, you now get an instant <b>✓ toast</b> and the task <b>updates in front of you</b> to <b>“✓ On the board · Sal”</b> (My Work re-renders itself) — no more wondering if it took. Fixed the bug where assigning re-drew the old (unused) command screen instead of My Work, so it looked like nothing happened." ] },
   { rev:"35.0", date:"2026-07-23", title:"↕ Reorder My Command sections yourself (▲ ▼ ⤒), saved per device", items:[
@@ -13829,12 +13831,16 @@ function _mwMcPanel(){
   var wdh='<div class="panel" id="mwsec-cmdf"><h2>⚠ Fleetio watchdog <span class="count">'+g.total+' scanned</span></h2>'+wd+'</div>';
   // ✅ Tasks (one synced list; auto-tasks from your email commitments)
   var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var openN=tasks.filter(function(t){return !t.done;}).length;
-  var tl=tasks.length?tasks.map(function(t,i){ var mnum=String(t.t||'').match(/#(\d{2,6})/);
-      var asgB=mnum?'<button style="'+B+';margin-right:6px" onclick="event.stopPropagation();mcAssignIss(\''+mnum[1]+'\',event)" title="Assign to the board / General list (pick a crew)">👤 Assign</button>':'';
-      var det=mnum?_mcFioDetail(mnum[1]):'';
-      return '<div class="row" style="display:block">'
-        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';opacity:.5;text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div>'+asgB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
-        +det+'</div>'; }).join(''):'<div class="empty">No tasks yet — add one below.</div>';
+  var _mcTaskRow=function(t,i){ var mnum=String(t.t||'').match(/#(\d{2,6})/);
+      var asgB=(mnum&&!t.done)?'<button style="'+B+';margin-right:6px" onclick="event.stopPropagation();mcAssignIss(\''+mnum[1]+'\',event)" title="Assign to the board / General list (pick a crew)">👤 Assign</button>':'';
+      var det=(mnum&&!t.done)?_mcFioDetail(mnum[1]):'';
+      return '<div class="row" style="display:block'+(t.done?';opacity:.55':'')+'">'
+        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+'</div>'+asgB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
+        +det+'</div>'; };
+  var openRows=tasks.map(function(t,i){ return t.done?'':_mcTaskRow(t,i); }).join('');
+  var doneRows=tasks.map(function(t,i){ return t.done?_mcTaskRow(t,i):''; }).join('');
+  var tl=(openRows||'<div class="empty">Nothing open — you’re clear. 🎉</div>')
+        +(doneRows?('<div class="meta" style="font-weight:700;margin:12px 0 2px;color:#4ade80">✓ Done</div>'+doneRows):'');
   var th='<div class="panel" id="mwsec-cmdt"><h2>✅ Tasks <span class="count">'+openN+' open</span></h2>'+tl
     +'<div style="display:flex;gap:8px;margin-top:8px"><input id="mwMcNew" placeholder="Add a task…" style="flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px"><button style="'+BP+'" onclick="mwMcAdd()">Add</button></div></div>';
   // 💬 Tell Claude — free-text command box; routes to Claude, acted on the next refresh
@@ -17420,6 +17426,8 @@ function mcAssignIss(num,ev){
       else if(typeof addFleetioTask==='function'){ addFleetioTask(j.row, String(num), who); }
     }catch(e){}
     var where=(j.project||j.jobNum||'General list');
+    // the "add #NNNN to the board" to-do is fulfilled the moment it's assigned → mark it complete so it falls off the open list
+    try{ var _a=_mcTasks(),_ch=false,_re=new RegExp('#'+num+'(?!\\d)'); _a.forEach(function(t){ if(!t.done && _re.test(String(t.t||''))){ t.done=true; _ch=true; } }); if(_ch) _mcSave(_a); }catch(e){}
     if(typeof mcToast==='function') mcToast('✓ #'+num+(who?(' → '+who):' added')+' · '+where);
     var mm=document.getElementById('mcIssMsg'); if(mm) mm.textContent=(who?('✓ assigned to '+who):'✓ added to board')+' on '+where;
     // the write is async (fire-and-forget) — re-render My Work a couple times so the row flips to "✓ On the board · <crew>" once it lands
