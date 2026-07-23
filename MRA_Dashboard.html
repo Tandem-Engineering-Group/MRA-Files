@@ -3776,6 +3776,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.9", date:"2026-07-23", title:"📈 S&P scrolls the full timeline (to 2027) · 📋 Jesica file breaks per person", items:[
+    "<b>Sales &amp; Planning</b>: the timeline was capped at ~14 months so bars out to 2027 were cut off and unreachable — now it spans the <b>whole program</b>, opens zoomed-in so the <b>↔ scroll works right away</b>, and you can scroll all the way to the last bar. <b>Fit all</b> still shows everything at once.",
+    "<b>Jesica's whole-team file</b>: each person (Devan · Stephanie · Daniel) now <b>starts on their own page</b> (clear orange divider on screen, a real page break when printed/saved) so nobody gets buried at the bottom." ] },
   { rev:"36.8", date:"2026-07-23", title:"📈 Sales & Planning — zoom / scroll / sort the timeline", items:[
     "The Sales &amp; Planning “Program + Pipeline Timeline” now has the same controls as the Projects Gantt: a <b>🔍 zoom</b> slider (stretch the time scale in/out), a <b>↔ scroll</b> slider + <b>‹ ›</b> arrows to move earlier/later, a <b>Fit all</b> button, and a <b>Sort picker</b> (target date · start date · name · PM · probability · % complete)." ] },
   { rev:"36.7", date:"2026-07-23", title:"📋 Jesica digest — open any of the 4 reports from the top", items:[
@@ -11007,7 +11010,7 @@ function printProdMeeting(){
    sync everywhere — and they are HIDDEN from the shop floor (tile lists + unassigned finder). */
 const SALES_TAG='[SALES]';
 let SP_OPEN=false, SP_FORM=null;
-let SP_ZOOM=1, SP_PAN=0, SP_SORT='date';   // Sales & Planning timeline: zoom (1=fit all → higher=narrower window), pan (0-100 across the span), sort mode
+let SP_ZOOM=2, SP_PAN=0, SP_SORT='date';   // Sales & Planning timeline: zoom (1=fit all → higher=narrower window), pan (0-100 across the span), sort mode. Default zoom 2 so pan has room to scroll on open.
 function setSpZoom(v){ SP_ZOOM=Math.max(1,Math.min(6,+v||1)); try{ spRenderGantt(); }catch(e){} }
 function setSpPan(v){ SP_PAN=Math.max(0,Math.min(100,+v||0)); try{ spRenderGantt(); }catch(e){} }
 function spPanArrow(dir){ setSpPan(SP_PAN+dir*15); const el=document.getElementById('spPan'); if(el) el.value=SP_PAN; }
@@ -11035,7 +11038,7 @@ function spRenderGantt(){
   committed.forEach(p=>{ dts.push(p.startISO,p.finishISO); });
   pros.forEach(p=>{ if(p.st) dts.push(p.st); if(p.ln) dts.push(p.ln); });
   dts.forEach(iso=>{ const d=parseISO(iso); if(!d) return; if(d.getTime()<tlo) tlo=d.getTime(); if(d.getTime()>thi) thi=d.getTime(); });
-  const fullDays=Math.min(430, Math.max(60, Math.ceil((thi+14*DAY-tlo)/DAY)));
+  const fullDays=Math.min(1500, Math.max(60, Math.ceil((thi+14*DAY-tlo)/DAY)));   // was capped at 430 → cut off bars past ~14 months (couldn't scroll to 2027)
   const shownDays=Math.max(30, Math.round(fullDays/SP_ZOOM));
   const maxOff=Math.max(0, fullDays-shownDays);
   const winStart=tlo + maxOff*DAY*(SP_PAN/100);
@@ -14715,10 +14718,10 @@ function _jesDetails(g){
   if(g.jc.length){ h+='<div class="jclear"><b>✓ All clear</b> — no open Fleetio issues: '+g.jc.map(x=>esc(x.nm)+' <span class="jjn">J'+esc(x.k)+'</span>').join(' · ')+'</div>'; }
   return h;
 }
-// one worker's full report block = exec overview (for them) + details following
-function _jesWorkerBlock(person, byJob){
+// one worker's full report block = exec overview (for them) + details following. brk=true → start on a new page (master file).
+function _jesWorkerBlock(person, byJob, brk){
   const g=_jesGather(person.jobs, byJob);
-  return '<div class="jsec">'+_jesOverview(esc(person.name), person.role||'', g)+'<div class="jdeth">Details</div>'+_jesDetails(g)+'</div>';
+  return '<div class="jsec'+(brk?' jbreak':'')+'">'+_jesOverview(esc(person.name), person.role||'', g)+'<div class="jdeth">Details</div>'+_jesDetails(g)+'</div>';
 }
 function buildJesFleetioHtml(scope){
   const D=window.MRA_DATA||{};
@@ -14734,13 +14737,15 @@ function buildJesFleetioHtml(scope){
     headTitle='Fleetio Digest — Jesica’s Team';
     sections=_jesOverview('Department Overview','Culture, Education & Consumer Events — all programs', g)
       +'<div class="jdivh">Details by team member</div>'
-      +JES_TEAM.map(p=>_jesWorkerBlock(p, byJob)).join('');
+      +JES_TEAM.map(p=>_jesWorkerBlock(p, byJob, true)).join('');
   } else {
     const p=JES_TEAM.find(x=>new RegExp(s,'i').test(x.key)||new RegExp(s,'i').test(x.name))||JES_TEAM[0];
     headTitle='Fleetio Digest — '+p.name;
     sections=_jesWorkerBlock(p, byJob);
   }
   const jcss='.jsec{margin:0 0 22px;padding:0 0 14px;border-bottom:2px solid #e6e8ec}.jsec:last-child{border-bottom:0}'
+    +'.jsec.jbreak{break-before:page;page-break-before:always;margin-top:30px;padding-top:22px;border-top:4px solid #e04826;border-bottom:0}'
+    +'@media print{.jsec.jbreak{margin-top:0;padding-top:6px;border-top:0}}'
     +'.jov{background:#fafbfc;border:1px solid #e6e8ec;border-left:4px solid #e04826;border-radius:9px;padding:11px 14px;margin:0 0 12px}'
     +'.jovh{margin:0 0 8px}.jovh h2{margin:0;font-size:1.26em;color:#111}.jovs{font-size:.82em;color:#7b8794;margin-top:2px}'
     +'.jtiles{display:flex;gap:7px;flex-wrap:wrap}.jtile{background:#eef1f5;border-radius:8px;padding:4px 11px;font-size:.82em;color:#444}.jtile.jodt{background:#fde8e8;color:#b91c1c}.jtile b{font-size:1.15em}'
@@ -14769,9 +14774,9 @@ function buildJesFleetioHtml(scope){
     +'<div class="foot">MRA Command Center · Fleetio-only daily digest for Culture / Education &amp; Consumer Events · <a href="'+escA(dash)+'?view=fleetio" style="color:#1a56db">open the live Fleetio board</a></div></div></body></html>';
 }
 function openJesFleetio(scope){ if(typeof closeDrops==='function') closeDrops();
-  const html=buildJesFleetioHtml(scope||'1'); if(!html) return;
-  const w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap again.'); return; }
-  w.document.open(); w.document.write(html); w.document.close();
+  // Open the REAL deep-link URL (not a document.write popup) so the tab has a proper, shareable/bookmarkable address.
+  const url=location.origin+location.pathname+'?jesfleet='+encodeURIComponent(scope||'1');
+  const w=window.open(url,'_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap again.'); return; }
 }
 // ============================ Owner throughput / cycle-time (admin) rev 27.2 ============================
 function buildThroughputHtml(){
