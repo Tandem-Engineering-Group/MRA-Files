@@ -1370,6 +1370,21 @@
   body.wall #bays .bay{margin-bottom:6px}
   .sp-gh{font-size:13px;font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
   .sp-leg{display:flex;gap:14px;font-size:10.5px;color:var(--muted);font-weight:600;align-items:center}
+  /* VP Pipeline (Gino) toggle + opportunity table */
+  .sp-modebar{display:flex;gap:6px;margin:2px 0 10px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:4px;width:max-content;max-width:100%}
+  .sp-modebtn{background:transparent;border:0;color:var(--muted);font-weight:700;font-size:13px;padding:8px 16px;border-radius:9px;cursor:pointer;white-space:nowrap}
+  .sp-modebtn span{font-weight:400;opacity:.75;font-size:12px}
+  .sp-modebtn.on{background:var(--brand);color:#fff}
+  .vp-tablewrap{overflow-x:auto;margin-top:4px}
+  .vp-table{width:100%;border-collapse:collapse;font-size:13px}
+  .vp-table th{text-align:left;font-size:11px;letter-spacing:.4px;color:var(--muted);font-weight:700;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .vp-table td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  .vp-table tr:hover td{background:var(--panel2)}
+  .vp-acct{min-width:200px}
+  .vp-opp{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .vp-prob{font-weight:800;color:#22c55e;white-space:nowrap}
+  .vp-stg{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--panel2);border:1px solid var(--line);white-space:nowrap}
+  .vp-stg.vp-hot{background:rgba(34,197,94,.16);border-color:#22c55e;color:#22c55e}
   .sp-leg .lg{display:flex;align-items:center;gap:5px}
   .sp-leg .sw{display:inline-block;width:22px;height:9px;border-radius:3px}
   .sp-leg .sw.solid{background:#3b82f6}
@@ -3837,6 +3852,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.26", date:"2026-07-23", title:"📈 Sales & Planning — toggle between PM Pipeline (Al) and VP Pipeline (Gino)", items:[
+    "New toggle at the top of Sales & Planning: <b>📅 PM Pipeline (Al)</b> is exactly what you had (timed prospect bars); <b>📋 VP Pipeline (Gino)</b> keeps the committed program, PM load and summary the same but <b>swaps the pipeline section for Gino's Active Sales Pipeline Report</b> — a ranked table (by stage → probability) with Stage · Prob % · Vehicle · MRA Staff · Market. Today's <b>17 opportunities</b> are loaded.",
+    "Gino's data refreshes with <b>⬆ Upload VP report</b> — drop in the Salesforce .xlsx export anytime and it re-reads it (owner/stage/prob/vehicle/staff/market). The summary tiles switch to VP numbers (open opportunities + expected builds) in that view." ] },
   { rev:"36.25", date:"2026-07-23", title:"⚠ On your plate — Fleetio issues assigned to you that aren't placed yet", items:[
     "New <b>⚠ On your plate — needs placing</b> section in My Command: Fleetio issues <b>assigned to you</b> (or the person you're viewing) that <b>aren't a board task yet</b> — so something like <b>#1246</b> (assigned to you, even on a shipped job) now shows up as a to-do instead of hiding. Tap <b>👤 Place</b> to turn it into real shop work; it stays until it's placed or closed. (The floor's “unassigned” finder is separate — that one means “no crew on a shop task,” which is why an issue assigned to you didn't appear there.)" ] },
   { rev:"36.24", date:"2026-07-23", title:"📥 File project mail — group inbox emails by project, one-tap file to the Outlook folder", items:[
@@ -11135,7 +11153,7 @@ function spRenderGantt(){
   const D=window.MRA_DATA||{}; const g=document.getElementById('spGantt'); if(!g) return;
   const today=D.todayISO||localISO(Date.now());
   const committed=(D.projects||[]).filter(p=>projStatus(p,today)!=='done');   // include ALL active projects (even date-partial / undated) so none go missing
-  const pros=_spProspects();
+  const pros=(SP_MODE==='vp')?[]:_spProspects();   // VP mode = committed program only (Gino's opportunities render as a table below, no dates)
   // full span across everything
   let tlo=Date.parse(today)-7*DAY, thi=tlo; const dts=[];
   committed.forEach(p=>{ if(p.startISO) dts.push(p.startISO); if(p.finishISO) dts.push(p.finishISO); });
@@ -11147,6 +11165,7 @@ function spRenderGantt(){
   const winStart=tlo + maxOff*DAY*(SP_PAN/100);
   const win=buildWindow(new Date(winStart), shownDays);
   const rows=[];
+  if(SP_MODE!=='vp'){
   rows.push({label:'PIPELINE', sub:pros.length+' prospect'+(pros.length===1?'':'s')+' — not signed', noBar:true, cls:'g-phaserow sp-hdr'});
   if(!pros.length) rows.push({label:'➕ tap here (or the Add prospect button) to drop the first one on', sub:'', noBar:true, cls:'sp-emptyrow clickable', gutterClick:'spAdd()'});
   pros.slice().sort(_spCmp(SP_SORT,true)).forEach(p=>{
@@ -11162,6 +11181,7 @@ function spRenderGantt(){
       caret:`<span class="sp-nudge" onclick="event.stopPropagation();spShift('${escJsAttr(p.name)}',-7)" title="Slide 1 week earlier">◀</span><span class="sp-nudge" onclick="event.stopPropagation();spShift('${escJsAttr(p.name)}',7)" title="Slide 1 week later">▶</span>`,
       gutterClick:`spEditP('${escJsAttr(p.name)}')`, barClick:`spEditP('${escJsAttr(p.name)}')` });
   });
+  }
   rows.push({label:'COMMITTED', sub:committed.length+' project'+(committed.length===1?'':'s')+' on the board', noBar:true, cls:'g-phaserow sp-hdr sp-hdr2'});
   committed.slice().sort(_spCmp(SP_SORT,false)).forEach(p=>{
     const noDates=!(p.startISO||p.finishISO);
@@ -11444,9 +11464,56 @@ function spShift(name,days){ if(!ensureAuth('move a prospect', ()=>spShift(name,
   if(p.tsk){ p.tsk.cm=cm; p.tsk.due=meta.ln||null; }
   renderSalesPlan();
 }
+// ===== VP Pipeline (Gino) — a second pipeline VIEW on Sales & Planning. Same page; the prospect section is
+// replaced by Gino's Salesforce "Active Sales Pipeline Report" opportunities as a ranked TABLE (no dates). =====
+let SP_MODE='pm';   // 'pm' = Al's timed prospects (today, default) · 'vp' = Gino's VP opportunity pipeline
+function setSpMode(m){ SP_MODE=(m==='vp')?'vp':'pm'; try{ renderSalesPlan(); }catch(e){} }
+const VP_PIPELINE_DEFAULT=[{"account":"FM Global","opp":"FM Global 2027 Extension","stage":"Contract Negotiation","prob":80,"vehicle":"53' Double Expandable","staff":"Driver","market":"B2B"},{"account":"Cisco Systems","opp":"Cisco- Demo Tour Upfit","stage":"Contract Negotiation","prob":80,"vehicle":"","staff":"","market":"B2B"},{"account":"BMMG - Bichsel Medical Marketing Group","opp":"BMMG - Johnson& Johnson Ottava Surgical Table Tour","stage":"Budgetary Quote","prob":75,"vehicle":"53' Double Expandable; 53' Single Expandable","staff":"Driver","market":"B2B"},{"account":"National Museum United States Navy","opp":"National Museum United States Navy-","stage":"Budgetary Quote","prob":75,"vehicle":"BizBox; 30' Double Expandable Container Glass; Coach Bus; 46' Stage Trailer (Barton Malow); 53' Double Expandable","staff":"Driver & Attendant; Tour Manager","market":"Educational Outreach"},{"account":"KION North America","opp":"KION North America-","stage":"Budgetary Quote","prob":75,"vehicle":"53' Double Expandable; 53' Single Expandable; Chase","staff":"Driver & Attendant; Tour Manager","market":"B2B"},{"account":"ABB","opp":"ABB- Drives Division Roadshow","stage":"Budgetary Quote","prob":75,"vehicle":"Custom Build","staff":"Driver","market":"B2B"},{"account":"iXplore Foundation","opp":"iXplore Foundation- Indiana Outreach Education VR","stage":"Budgetary Quote","prob":75,"vehicle":"53' Double Expandable","staff":"Driver","market":"Educational Outreach"},{"account":"The Hershey Company","opp":"Hershey - 2026-2027 Tour Extension","stage":"Budgetary Quote","prob":80,"vehicle":"","staff":"","market":"B2B"},{"account":"Ferguson","opp":"Ferguson - Industrial","stage":"Budgetary Quote","prob":75,"vehicle":"53' Single Expandable","staff":"Driver","market":"B2B"},{"account":"Baltimore Aircoil Company","opp":"BAC HVAC Tour Extension - 2026-2027","stage":"Budgetary Quote","prob":80,"vehicle":"53' Single Expandable","staff":"Driver","market":"B2B"},{"account":"Gather AI","opp":"Gather AI-","stage":"Budgetary Quote","prob":75,"vehicle":"42' Double Expandable Trailer (ABB)","staff":"Driver","market":"B2B"},{"account":"Baxter","opp":"Baxter - 2026 Trailer Repair/Replacement","stage":"Budgetary Quote","prob":75,"vehicle":"Custom Build","staff":"Driver","market":"B2B"},{"account":"Staging Solutions","opp":"Staging Solutions- Strategy Roadshow","stage":"Budgetary Quote","prob":75,"vehicle":"53' Double Expandable","staff":"Driver & Attendant","market":"B2B"},{"account":"Winnipeg Regional Health Authority","opp":"WRHA - MRI Support Services 2026 -2029","stage":"Contract Negotiation","prob":80,"vehicle":"","staff":"","market":"Military/Government"},{"account":"The Duracell Company","opp":"Duracell Lease Extension","stage":"Contract Negotiation","prob":80,"vehicle":"","staff":"","market":"B2B"},{"account":"Health Sciences North","opp":"Sudbury Mammography Unit - Operations","stage":"Contract Negotiation","prob":80,"vehicle":"","staff":"","market":"Military/Government"},{"account":"Alcor Scientific","opp":"Alcor Scientific Roadshow","stage":"Contract Negotiation","prob":75,"vehicle":"InfoWheel","staff":"Other","market":"B2B"}];
+const VP_PIPE_KEY='mra_vp_pipeline_v1';
+function _vpPipeline(){ try{ var s=JSON.parse(localStorage.getItem(VP_PIPE_KEY)||'null'); if(Array.isArray(s)&&s.length) return s; }catch(e){} return VP_PIPELINE_DEFAULT; }
+function _vpMeta(){ try{ return JSON.parse(localStorage.getItem(VP_PIPE_KEY+'_m')||'null'); }catch(e){ return null; } }
+function _vpSave(a,meta){ try{ localStorage.setItem(VP_PIPE_KEY, JSON.stringify(a||[])); if(meta) localStorage.setItem(VP_PIPE_KEY+'_m', JSON.stringify(meta)); }catch(e){} }
+function vpReset(){ if(!confirm('Reset the VP pipeline back to the built-in snapshot (drops your uploaded copy)?')) return; try{ localStorage.removeItem(VP_PIPE_KEY); localStorage.removeItem(VP_PIPE_KEY+'_m'); }catch(e){} renderSalesPlan(); }
+const VP_STAGE_ORDER=['Contract Negotiation','Proposal','Budgetary Quote','Qualification','Prospecting'];
+function _vpStageRank(s){ var i=VP_STAGE_ORDER.indexOf(String(s||'').trim()); return i<0?98:i; }
+function _vpTableHtml(){
+  var ops=_vpPipeline().slice().sort(function(a,b){ var r=_vpStageRank(a.stage)-_vpStageRank(b.stage); if(r) return r; return (b.prob||0)-(a.prob||0) || String(a.account||'').localeCompare(String(b.account||'')); });
+  var meta=_vpMeta();
+  var rows=ops.map(function(o){ return '<tr>'
+    +'<td class="vp-acct"><b>'+esc(o.account||'')+'</b>'+(o.opp&&o.opp!==o.account?'<div class="vp-opp">'+esc(o.opp)+'</div>':'')+'</td>'
+    +'<td><span class="vp-stg'+(_vpStageRank(o.stage)===0?' vp-hot':'')+'">'+esc(o.stage||'—')+'</span></td>'
+    +'<td class="vp-prob">'+(o.prob!=null?o.prob+'%':'—')+'</td>'
+    +'<td>'+esc(o.vehicle||'—')+'</td>'
+    +'<td>'+esc(o.staff||'—')+'</td>'
+    +'<td>'+esc(o.market||'—')+'</td></tr>'; }).join('');
+  return '<div class="sp-gpanel"><div class="sp-gh">📋 VP Pipeline — Active Sales Opportunities <span class="sp-fsub">'+ops.length+' open · owner Gino Bitonti'+(meta&&meta.asOf?(' · as of '+esc(meta.asOf)):'')+'</span>'
+    +'<span style="margin-left:auto;display:flex;gap:8px"><button class="sp-fitbtn" onclick="vpUploadBtn()" title="Upload the latest Active Sales Pipeline Report (the Salesforce .xlsx export)">⬆ Upload VP report</button>'+(_vpMeta()?'<button class="sp-fitbtn" onclick="vpReset()" title="Back to the built-in snapshot">↺</button>':'')+'</span></div>'
+    +'<div class="vp-tablewrap"><table class="vp-table"><thead><tr><th>Account / Opportunity</th><th>Stage</th><th>Prob</th><th>Vehicle</th><th>MRA Staff</th><th>Market</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="pmt-hint">Ranked by stage (🤝 Contract Negotiation first) then probability. This is Gino’s Salesforce report — <b>⬆ Upload VP report</b> anytime to refresh it. Committed program above is the same board as the PM view.</div></div>';
+}
+function vpUploadBtn(){ var inp=document.createElement('input'); inp.type='file'; inp.accept='.xlsx,.xls';
+  inp.onchange=function(){ var f=inp.files&&inp.files[0]; if(f) _vpImport(f); }; inp.click(); }
+function _vpImport(file){ ensureXLSX(function(){ var rd=new FileReader();
+  rd.onload=function(e){ try{
+    var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+    var ws=wb.Sheets[wb.SheetNames[0]]; var aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    var hi=-1; for(var i=0;i<aoa.length;i++){ if(aoa[i].some(function(c){return String(c).trim()==='Account Name';})){ hi=i; break; } }
+    if(hi<0){ alert('Could not find the report header (looked for “Account Name”). Is this the Active Sales Pipeline Report export?'); return; }
+    var hdr=aoa[hi].map(function(c){return String(c).trim();}); var ci={}; hdr.forEach(function(h,ix){ if(h&&ci[h]==null) ci[h]=ix; });
+    var G=function(r,n){ var ix=ci[n]; return (ix==null||r[ix]==null)?'':String(r[ix]).trim(); };
+    var out=[]; for(var j=hi+1;j<aoa.length;j++){ var r=aoa[j]; var acct=G(r,'Account Name'), opp=G(r,'Opportunity Name');
+      if(!opp||!acct||/^[\d.]+$/.test(acct)||acct.toLowerCase()==='count') continue;
+      var pr=parseInt(G(r,'Prob %'),10); out.push({account:acct,opp:opp,stage:G(r,'Stage'),prob:isNaN(pr)?null:pr,vehicle:G(r,'Vehicle Type'),staff:G(r,'MRA Staff Requirements'),market:G(r,'Market Focus')}); }
+    if(!out.length){ alert('No opportunities found in that file.'); return; }
+    var asOf=''; for(var k=0;k<Math.min(aoa.length,8);k++){ var m=aoa[k].join(' ').match(/As of\s+([\d\-]+\s+[\d:]+)/i); if(m){ asOf=m[1]; break; } }
+    _vpSave(out,{asOf:asOf, n:out.length}); SP_MODE='vp'; renderSalesPlan();
+    setTimeout(function(){ alert('✓ VP pipeline updated — '+out.length+' opportunities loaded.'); },80);
+  }catch(err){ alert('Could not read that file: '+err); } };
+  rd.readAsArrayBuffer(file); }); }
 function renderSalesPlan(){
   const D=window.MRA_DATA||{}; if(!SP_OPEN) return;
   const body=document.getElementById('spBody'); if(!body) return;
+  const isVP=(SP_MODE==='vp'); const vpops=_vpPipeline();
   const today=D.todayISO||localISO(Date.now());
   const committed=(D.projects||[]).filter(p=>projStatus(p,today)!=='done');   // ALL active projects (matches the timeline) so none go missing
   const pros=_spProspects();
@@ -11464,26 +11531,35 @@ function renderSalesPlan(){
     return `<div class="sp-cap-row" title="${esc(c.pm)}: ${c.n} committed${c.sim?(' + '+c.sim+' simulated from the pipeline'):''} — frees up ${freeAll?fmtMDY(freeAll):'TBD'}"><span class="n">${esc(c.pm)}</span><span class="t"><span class="b" style="width:${Math.round(c.n/capMax*100)}%"></span>${c.sim?`<span class="b bsim" style="width:${Math.round(c.sim/capMax*100)}%"></span>`:''}</span><span class="c">${c.n}${c.sim?`<span class="simn" title="${c.sim} simulated pipeline project(s)">+${c.sim}</span>`:''}</span><span class="f">frees ~${freeAll?fmtMDY(freeAll):'TBD'}</span></div>`; }).join('');
   // (the timeline window + sorted rows are built + painted by spRenderGantt() — driven by the zoom/pan/sort controls)
   const wsum=pros.reduce((a,p)=>a+(+p.pr||0),0)/100;
+  const wsumV=isVP?(vpops.reduce((a,o)=>a+(+o.prob||0),0)/100):wsum;
+  const prosN=isVP?vpops.length:pros.length;
   const freeSoon=caps.filter(c=>c.free).slice().sort((a,b)=>String(a.free).localeCompare(String(b.free)))[0];
   const xtile=(n,lab,col,ttl)=>`<div class="pmt-tile" style="--tc:${col}" title="${esc(ttl||'')}"><div class="tn">${n}</div><div class="tl">${lab}</div></div>`;
   const band=`<div class="pmt-band"><div class="pmt-bmain"><div class="pmt-tiles">`
     + xtile(committed.length,'COMMITTED PROJECTS','#58a6ff','Signed work on the board today')
-    + xtile(pros.length,'PROSPECTS IN PIPELINE','#8b5cf6','Potential new projects — not signed yet')
-    + xtile((Math.round(wsum*10)/10).toFixed(1),'EXPECTED NEW BUILDS','#c4b5fd','The pipeline weighted by probability — two prospects at 50% ≈ 1 expected build')
+    + xtile(prosN,isVP?'OPEN OPPORTUNITIES':'PROSPECTS IN PIPELINE',isVP?'#f59e0b':'#8b5cf6',isVP?'Gino’s open sales opportunities (≥75% probability)':'Potential new projects — not signed yet')
+    + xtile((Math.round(wsumV*10)/10).toFixed(1),'EXPECTED NEW BUILDS',isVP?'#fbbf24':'#c4b5fd','The pipeline weighted by probability — two at 50% ≈ 1 expected build')
     + xtile(freeSoon?fmtMDY(freeSoon.free):'—', 'NEXT PM FREE'+(freeSoon?(' — '+esc(freeSoon.pm).toUpperCase()):''),'#22c55e', freeSoon?(freeSoon.pm+' finishes their current slate ~'+fmtMDY(freeSoon.free)):'')
     + `</div></div></div>`;
-  body.innerHTML = band
-    + `<div class="sp-cap"><div class="sp-cap-h" onclick="spToggleCap()" style="cursor:pointer" title="Click to collapse / expand"><span class="sp-cx">${SP_CAP_OPEN?'▾':'▸'}</span> 👥 PM LOAD — who has capacity <span class="sp-fsub">(committed each · dashed = simulated pipeline · when they free up)</span></div>${SP_CAP_OPEN?(capHtml||'<div class="sp-fsub">no active projects</div>'):''}</div>`
-    + spFormHtml()
-    + `<div class="sp-gpanel"><div class="sp-gh">📊 Program + Pipeline Timeline<span class="sp-leg"><span class="lg"><i class="sw solid"></i>committed</span><span class="lg"><i class="sw hatch"></i>🔮 prospect — not signed</span><span class="lg"><i class="sw launch"></i>🚀 launch / on tour</span><span class="lg"><i class="sw today"></i>today</span><span class="lg">% on a purple bar = chance it lands</span></span></div>`
+  const modeBar=`<div class="sp-modebar"><button class="sp-modebtn${!isVP?' on':''}" onclick="setSpMode('pm')">📅 PM Pipeline <span>(Al)</span></button><button class="sp-modebtn${isVP?' on':''}" onclick="setSpMode('vp')">📋 VP Pipeline <span>(Gino)</span></button></div>`;
+  const tlHead = isVP
+    ? `<div class="sp-gh">📊 Committed Program<span class="sp-leg"><span class="lg"><i class="sw solid"></i>committed</span><span class="lg"><i class="sw today"></i>today</span></span></div>`
+    : `<div class="sp-gh">📊 Program + Pipeline Timeline<span class="sp-leg"><span class="lg"><i class="sw solid"></i>committed</span><span class="lg"><i class="sw hatch"></i>🔮 prospect — not signed</span><span class="lg"><i class="sw launch"></i>🚀 launch / on tour</span><span class="lg"><i class="sw today"></i>today</span><span class="lg">% on a purple bar = chance it lands</span></span></div>`;
+  body.innerHTML = modeBar + band
+    + `<div class="sp-cap"><div class="sp-cap-h" onclick="spToggleCap()" style="cursor:pointer" title="Click to collapse / expand"><span class="sp-cx">${SP_CAP_OPEN?'▾':'▸'}</span> 👥 PM LOAD — who has capacity <span class="sp-fsub">(committed each${isVP?'':' · dashed = simulated pipeline'} · when they free up)</span></div>${SP_CAP_OPEN?(capHtml||'<div class="sp-fsub">no active projects</div>'):''}</div>`
+    + (isVP ? '' : spFormHtml())
+    + `<div class="sp-gpanel">` + tlHead
       + `<div class="sp-gctl"><span class="gwinwrap" title="Zoom the time scale in (fewer months, wider bars) / out">🔍<input id="spZoom" type="range" min="1" max="6" step="0.1" value="${SP_ZOOM}" oninput="setSpZoom(this.value)" class="gwinslider"></span>`
       + `<span class="gwinwrap" title="Scroll the timeline left (earlier) / right (later)">↔<input id="spPan" type="range" min="0" max="100" value="${SP_PAN}" oninput="setSpPan(this.value)" class="gwinslider"></span>`
       + `<button class="sp-arw" onclick="spPanArrow(-1)" title="Scroll earlier (left)">‹</button><button class="sp-arw" onclick="spPanArrow(1)" title="Scroll later (right)">›</button>`
       + `<button class="sp-fitbtn" onclick="spFitTimeline()" title="Reset zoom/scroll to fit everything">Fit all</button>`
-      + `<label class="sp-sortlab">Sort <select id="spSort" onchange="setSpSort(this.value)">`
+      + (isVP?'':`<label class="sp-sortlab">Sort <select id="spSort" onchange="setSpSort(this.value)">`
       + ['date:Target date','start:Start date','name:Name (A–Z)','pm:PM','prob:Probability','pct:% complete'].map(o=>{const [v,l]=o.split(':'); return `<option value="${v}"${SP_SORT===v?' selected':''}>${l}</option>`;}).join('')
-      + `</select></label></div><div class="gantt" id="spGantt"></div></div>`
-    + `<div class="pmt-hint">Tap a <b>🔮 prospect</b> to edit it · <b>◀ ▶</b> slides it a week at a time · <b>➕ Add prospect</b> = name · vehicle · scope · dates · probability. Tap a committed bar for its task-level detail. Prospects sync to everyone and never show on the shop floor.</div>`;
+      + `</select></label>`)
+      + `</div><div class="gantt" id="spGantt"></div></div>`
+    + (isVP
+        ? _vpTableHtml()
+        : `<div class="pmt-hint">Tap a <b>🔮 prospect</b> to edit it · <b>◀ ▶</b> slides it a week at a time · <b>➕ Add prospect</b> = name · vehicle · scope · dates · probability. Tap a committed bar for its task-level detail. Prospects sync to everyone and never show on the shop floor.</div>`);
   spRenderGantt();
 }
 // 🖨 Sales & Planning print — executive one-pager (portrait, fit-to-1-page, with print options),
