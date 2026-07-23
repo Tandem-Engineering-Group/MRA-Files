@@ -3837,6 +3837,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.25", date:"2026-07-23", title:"⚠ On your plate — Fleetio issues assigned to you that aren't placed yet", items:[
+    "New <b>⚠ On your plate — needs placing</b> section in My Command: Fleetio issues <b>assigned to you</b> (or the person you're viewing) that <b>aren't a board task yet</b> — so something like <b>#1246</b> (assigned to you, even on a shipped job) now shows up as a to-do instead of hiding. Tap <b>👤 Place</b> to turn it into real shop work; it stays until it's placed or closed. (The floor's “unassigned” finder is separate — that one means “no crew on a shop task,” which is why an issue assigned to you didn't appear there.)" ] },
   { rev:"36.24", date:"2026-07-23", title:"📥 File project mail — group inbox emails by project, one-tap file to the Outlook folder", items:[
     "New <b>📥 File project mail</b> section in My Command (Rich only): your inbox emails <b>grouped by project</b> (Medtronic, Trumpf, Oakland…). Tap <b>📁 File</b> on one — or <b>📁 File all</b> on a whole project — and it moves into that project's Outlook folder. Filed mail is remembered so it won't come back on the next scan; 📧 Open reads it first.",
     "This needs the small <b>“MRA Email Filer”</b> Power Automate flow connected (a 5-minute build, like the Safety upload) before the buttons actually move anything — the panel says so until it's wired. Next scan will also start pulling <b>every</b> project email into this list (not just the action ones)." ] },
@@ -14354,7 +14356,8 @@ function _mwMcPanel(){
     +'<textarea id="mcAskBox" placeholder="Tell Claude what to do…" style="width:100%;min-height:80px;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical"></textarea>'
     +'<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button style="'+BP+'" onclick="mcAsk()">Send to Claude</button><span id="mcAskMsg" class="mc-muted" style="font-size:12px;color:var(--muted)"></span></div></div>';
   var fileH=_mcFileMailPanelHtml(B,BP);
-  var blocks={tellClaude:askH, questions:qh, waiting:wh, filemail:fileH, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th, flows:_mcFlowsPanel()};
+  var mineH=_mcMinePanelHtml(B,BP);
+  var blocks={tellClaude:askH, questions:qh, myplate:mineH, waiting:wh, filemail:fileH, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th, flows:_mcFlowsPanel()};
   return head+_mcNavTiles(A)+_mcLanes(blocks);
 }
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; _mcSave(a); renderMyWork(); } }
@@ -14381,6 +14384,7 @@ function _mcNavTiles(A){
   var openTasks=tasks.filter(function(t){ return !t.done && !(t.snoozeUntil&&(!_tdy||t.snoozeUntil>_tdy)); });
   var sig=function(arr,f){ arr=arr||[]; return arr.length+'|'+arr.map(f).join('~'); };
   var defs=[
+   {k:'myplate',ic:'⚠',lab:'My plate',anchor:'mwsec-cmdmine',n:(typeof _mcMine==='function'?_mcMine().length:0),s:sig((typeof _mcMine==='function'?_mcMine():[]),function(x){return String(x.num||'');})},
    {k:'waiting',ic:'🔴',lab:'Waiting',anchor:'mwsec-cmdw',n:(A.waiting||[]).length,s:sig(A.waiting,function(x){return (x.who||'')+(x.subject||'');})},
    {k:'filemail',ic:'📥',lab:'File mail',anchor:'mwsec-cmdfile',n:(typeof _mcProjectMail==='function'?_mcProjectMail().length:0),s:sig((typeof _mcProjectMail==='function'?_mcProjectMail():[]),function(x){return (x.id||x.subject||'');})},
    {k:'questions',ic:'❓',lab:'Questions',anchor:'mwsec-cmdq',n:(A.questions||[]).length,s:sig(A.questions,function(x){return (x.q||'');})},
@@ -14425,6 +14429,7 @@ function _mwFreshCss(){ if(document.getElementById('mwFreshCss')) return; var s=
   +'#myworkView #mwsec-cmd{border-left:4px solid var(--brand)}'
   +'#myworkView #mwsec-cmdw,#myworkView #mwsec-od{border-left:4px solid #ef4444}'
   +'#myworkView #mwsec-cmdfile{border-left:4px solid #14b8a6}'
+  +'#myworkView #mwsec-cmdmine{border-left:4px solid #f59e0b}'
   +'#myworkView #mwsec-due,#myworkView #mwsec-cmdf{border-left:4px solid #f59e0b}'
   +'#myworkView #mwsec-cmdq,#myworkView #mwsec-verify{border-left:4px solid #a855f7}'
   +'#myworkView #mwsec-cmda{border-left:4px solid var(--brand)}'
@@ -14470,13 +14475,13 @@ function _mcFioDetail(num){
     +'</div>'; }
 // ---- My Command: personal section order (drag-free reorder with ▲▼⤒), saved per device ----
 var MC_ORDER_KEY='mra_mycmd_order_v1';
-var MC_LANES_DEFAULT=['tellClaude','questions','waiting','filemail','appts','inbound','fyi','projects','watchdog','tasks','flows'];
+var MC_LANES_DEFAULT=['tellClaude','questions','myplate','waiting','filemail','appts','inbound','fyi','projects','watchdog','tasks','flows'];
 function _mcOrder(){ var d=MC_LANES_DEFAULT.slice(); var s=null; try{ s=JSON.parse(localStorage.getItem(MC_ORDER_KEY)||'null'); }catch(e){}
   if(!Array.isArray(s)) return d;
   var out=s.filter(function(k){return d.indexOf(k)>=0;}); d.forEach(function(k){ if(out.indexOf(k)<0) out.push(k); }); return out; }
 function _mcSaveOrder(o){ try{ localStorage.setItem(MC_ORDER_KEY,JSON.stringify(o)); }catch(e){} }
 function mwResetOrder(){ try{ localStorage.removeItem(MC_ORDER_KEY); }catch(e){} renderMyWork(); }
-function _mcLaneVisible(k){ var A=_MC_AGENT||{}; if(k==='questions') return (A.questions||[]).length>0; if(k==='fyi') return (A.fyi||[]).length>0; if(k==='filemail') return (typeof _mcProjectMail==='function') && _mcProjectMail().length>0; return true; }
+function _mcLaneVisible(k){ var A=_MC_AGENT||{}; if(k==='questions') return (A.questions||[]).length>0; if(k==='fyi') return (A.fyi||[]).length>0; if(k==='filemail') return (typeof _mcProjectMail==='function') && _mcProjectMail().length>0; if(k==='myplate') return (typeof _mcMine==='function') && _mcMine().length>0; return true; }
 function mwMove(key,dir){ var o=_mcOrder(); var i=o.indexOf(key); if(i<0) return;
   if(dir==='top'){ o.splice(i,1); o.unshift(key); _mcSaveOrder(o); renderMyWork(); return; }
   var step=dir<0?-1:1; var j=i+step;
@@ -18198,6 +18203,24 @@ function _mcIssJob(num){ var D=window.MRA_DATA||{}; var it=(((D.fleetio&&D.fleet
 // Is this issue already a Shop Task on the board? -> {job,task} else null
 function _mcIssTask(num){ var D=window.MRA_DATA||{}; var jobs=(D.jobs||[]);
   for(var i=0;i<jobs.length;i++){ var ts=jobs[i].tasks||[]; for(var t=0;t<ts.length;t++){ var m=String(ts[t].t||'').match(/#(\d{2,6})/); if(m&&m[1]===String(num)) return {job:jobs[i],task:ts[t]}; } } return null; }
+// ⚠ On your plate — needs placing: Fleetio issues assigned to the VIEWED person that aren't a board task yet
+// (e.g. #1246 assigned to Rich on a shipped job). This is the personal "assigned to me but not placed" bucket.
+function _mcMine(){ var D=window.MRA_DATA||{}; var iss=(D.fleetio&&D.fleetio.issues)||[];
+  var me=(typeof myWorkWho==='function'&&myWorkWho())||(typeof CURRENT_USER!=='undefined'&&CURRENT_USER)||'';
+  if(!me) return []; var mk=function(s){return String(s||'').toLowerCase().replace(/[^a-z]/g,'');}; var meK=mk(me);
+  if(!meK) return [];
+  var jobs=(D.jobs||[]); var onBoard={};
+  jobs.forEach(function(j){ (j.tasks||[]).forEach(function(t){ var mm=String(t.t||'').match(/#(\d{2,6})/g); if(mm)mm.forEach(function(x){ onBoard[x.replace('#','')]=1; }); }); });
+  return iss.filter(function(it){ if(onBoard[String(it.num)]) return false;   // already turned into a board task = placed
+    return (typeof fAsg==='function'?fAsg(it):[]).some(function(a){ var k=mk(a); return k && (k===meK || (meK.length>5 && k.indexOf(meK)>=0) || (k.length>5 && meK.indexOf(k)>=0)); }); }); }
+function _mcMinePanelHtml(B, BP){
+  var mine=_mcMine(); if(!mine.length) return '';
+  var who=(typeof myWorkWho==='function'&&myWorkWho())||'you';
+  var h='<div class="panel" id="mwsec-cmdmine"><h2>⚠ On your plate — needs placing <span class="count">'+mine.length+'</span></h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin:-2px 0 8px">Fleetio issues assigned to <b>'+esc(who)+'</b> that aren’t on the board yet. Tap <b>👤 Place</b> to turn one into real shop work (assign a crew) so it drops into the queues — or tap the row to read it. It stays here until it’s placed or closed.</div>';
+  mine.forEach(function(it){ var asg=(typeof fAsg==='function'?fAsg(it):[]);
+    h+='<div class="row mw-click" onclick="mcIss(\''+esc(it.num)+'\')" style="cursor:pointer"><div style="min-width:0"><div class="lead"><span class="badge amber">PLACE</span> #'+esc(it.num)+' '+esc(it.summary||'')+'</div><div class="meta">'+(it.jobNum?('['+esc(it.jobNum)+'] '):'')+esc(String(it.asset||'').slice(0,60))+(asg.length?(' · 👤 '+esc(asg.join(', '))):'')+(it.overdue?' · <span style="color:#f87171">⏰ overdue</span>':'')+'</div></div><div class="right"><button style="'+BP+'" onclick="event.stopPropagation();mcAssignIss(\''+esc(it.num)+'\',event)">👤 Place</button></div></div>'; });
+  h+='</div>'; return h; }
 // Assign / add a Fleetio issue to the board right here — reuses the board's own synced write path (addFleetioTask / qaReassign).
 function mcAssignIss(num,ev){
   var existing=_mcIssTask(num); var j=existing?existing.job:_mcIssJob(num);
