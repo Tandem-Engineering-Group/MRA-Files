@@ -3852,6 +3852,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.32", date:"2026-07-24", title:"📥 File project mail — stays put (device cache) so a scan can't wipe it", items:[
+    "The project-mail list is now <b>cached on your device (72h)</b>, so when the background scan rewrites the brief without it, the panel <b>keeps showing your project emails</b> instead of going blank. Filed items still drop off; a fresh push replaces the cache." ] },
   { rev:"36.31", date:"2026-07-24", title:"📥 File project mail — LIVE with your inbox + “no box” flags", items:[
     "Your actual project emails now show in the panel, grouped by project (Medtronic, SWC/Hawaii, Trumpf, SWC FL1…). Any group that <b>doesn't have an Outlook folder yet</b> gets a <b>⚠ NO BOX — MAKE ONE</b> flag, and its “File all” says <b>→ To File</b> so you know it'll land in the catch-all until you make the folder + add the case." ] },
   { rev:"36.30", date:"2026-07-23", title:"📥 File project mail — stop showing non-project noise (temp, pending full sweep)", items:[
@@ -18240,7 +18242,10 @@ function _mcEnsureContacts(){ if(document.getElementById('mcContacts')) return; 
 // My Command now lives INSIDE the MY WORK tab (one place). Any old entry point just lands there.
 function openMyCmd(){ if(typeof closeDrops==='function') closeDrops(); _mcEnsureContacts(); if(typeof setView==='function') setView('mywork'); }
 function closeMyCmd(){ var o=document.getElementById('myCmd'); if(o) o.classList.remove('show'); document.body.style.overflow=''; }
-function loadAgent(cb){ function done(a){ _MC_AGENT=a||null; try{ _mcSeedTasks(); }catch(e){} if(cb)cb(); }
+function loadAgent(cb){ function done(a){ _MC_AGENT=a||null;
+    // Cache the project-mail list on this device so it survives the scan overwriting agent.json without it.
+    try{ if(a&&a.projectMail&&a.projectMail.length){ localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:a.projectMail})); } }catch(e){}
+    try{ _mcSeedTasks(); }catch(e){} if(cb)cb(); }
   // Capture the blob's real Last-Modified (the true publish/scan moment) — the brief's own generatedAt is self-stamped and can be a rounded placeholder.
   function pull(url,next){ fetch(url,{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; var mod=r.headers.get('Last-Modified'); return r.json().then(function(a){ if(a&&mod){ try{ a._blobMod=mod; }catch(e){} } done(a); }); }).catch(next); }
   pull('../agent.json?t='+Date.now(), function(){ pull('agent.json?t='+Date.now(), function(){ if(cb)cb(); }); }); }
@@ -18413,10 +18418,12 @@ function _mcProjectMail(){ var A=(typeof _MC_AGENT!=='undefined'&&_MC_AGENT)?_MC
   var push=function(x){ if(!x||!x.project) return; var id=String(x.id||''); var k=id||((x.subject||'')+'|'+(x.who||x.from||'')); if(!k||seen[k]) return; seen[k]=1;
     if(id && filed.indexOf(id)>=0) return;   // already filed — don't show again
     out.push({ id:id, project:_mcProjName(x.project), from:x.from||x.email||x.who||'', subject:x.subject||'', when:x.when||'', pm:x.pm||'' }); };
-  (A.projectMail||[]).forEach(push);
-  // Fallback until the scan writes a full projectMail sweep: only real project EMAILS (must have a message id +
-  // subject) from waiting/fyi — NOT inbound shipments/deliveries (that was showing a FedEx as a fake "Boston DX").
-  if(!(A.projectMail&&A.projectMail.length)){ [].concat(A.waiting||[], A.fyi||[]).forEach(function(x){ if(x&&x.id&&x.subject) push(x); }); }
+  // Source: live projectMail from the brief → else the device cache (survives scans that drop it, 72h) → else
+  // the real project emails in waiting/fyi (id+subject only; NOT inbound shipments — that was the fake "Boston DX").
+  var src=(A.projectMail&&A.projectMail.length)?A.projectMail:null;
+  if(!src){ try{ var c=JSON.parse(localStorage.getItem('mra_mc_pmail_v1')||'null'); if(c&&c.pm&&c.pm.length&&(Date.now()-(+c.at||0))<72*3600*1000) src=c.pm; }catch(e){} }
+  (src||[]).forEach(push);
+  if(!src){ [].concat(A.waiting||[], A.fyi||[]).forEach(function(x){ if(x&&x.id&&x.subject) push(x); }); }
   return out; }
 function _mcFilePost(id, project){ if(!id) return; try{ fetch(MAIL_FILE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({action:'fileEmail', id:id, folder:project, project:project, pin:(typeof CLOSE_PIN!=='undefined'&&CLOSE_PIN)||'1974'})}); }catch(e){} }
 function mcFileMail(id, project){ if(!MAIL_FILE_URL){ alert('The email-filer flow isn’t connected yet. Ask me to “build the email filer” and I’ll give you the 5-minute steps.'); return; }
