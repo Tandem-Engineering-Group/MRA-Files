@@ -3852,6 +3852,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.35", date:"2026-07-24", title:"🔎 Top chips are tap-to-peek — see everything behind each count", items:[
+    "Tap any of the top summary chips (My plate · Waiting · File mail · Appts · Inbound · Projects · Fleetio · Tasks) and a list drops open right there showing <b>every item behind that number</b> (title + a one-line detail) — no scrolling. Tap again to close, or hit <b>Go to section →</b> for the full view. (Hover doesn't exist on the iPad, so it's tap.)" ] },
   { rev:"36.34", date:"2026-07-24", title:"📥 File project mail — fix: the preview line now actually shows", items:[
     "The body-preview line added in 36.33 wasn't appearing — the code that builds the list was dropping the preview field when it reassembled each email. Fixed; the one-line quote under each subject now shows." ] },
   { rev:"36.33", date:"2026-07-24", title:"📥 File project mail — preview line so you know what each email is", items:[
@@ -14499,6 +14501,24 @@ function mwGoSec(key,anchor){ var s=_mwSeen(); if(window._MW_SIGS&&window._MW_SI
   var c=_mwColState(); c[key]='open'; _mwColSave(c);          // jumping opens the section
   renderMyWork();
   setTimeout(function(){ var el=document.getElementById(anchor); if(el&&el.scrollIntoView){ try{ el.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){ el.scrollIntoView(); } } },120); }
+// Tap a top chip → peek at the items behind that count without scrolling to the section.
+var MW_CHIP_OPEN='';
+function mwChipToggle(k){ if(MW_CHIP_OPEN!==k){ var s=_mwSeen(); if(window._MW_SIGS&&window._MW_SIGS[k]!==undefined){ s[k]=window._MW_SIGS[k]; _mwSeenSave(s); } }
+  MW_CHIP_OPEN=(MW_CHIP_OPEN===k)?'':k; try{ renderMyWork(); }catch(e){}
+  setTimeout(function(){ var el=document.getElementById('mwChipDetail'); if(el&&el.scrollIntoView){ try{ el.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){} } },60); }
+function _mcChipItems(k){ var A=(typeof _MC_AGENT!=='undefined'&&_MC_AGENT)?_MC_AGENT:{}; var out=[];
+  var clip=function(s,n){ s=String(s||''); n=n||90; return s.length>n?s.slice(0,n)+'…':s; };
+  if(k==='myplate'){ (typeof _mcMine==='function'?_mcMine():[]).forEach(function(it){ out.push({t:'#'+it.num+' '+(it.summary||''), s:(it.jobNum?('['+it.jobNum+'] '):'')+clip(it.asset,55)}); }); }
+  else if(k==='waiting'){ (A.waiting||[]).forEach(function(w){ out.push({t:(w.who||'')+(w.subject?(' — '+w.subject):''), s:clip(w.need,110)}); }); }
+  else if(k==='filemail'){ (typeof _mcProjectMail==='function'?_mcProjectMail():[]).forEach(function(x){ out.push({t:x.project+' · '+(x.subject||''), s:clip(x.snippet||x.from,110)}); }); }
+  else if(k==='appts'){ (A.appts||[]).forEach(function(x){ out.push({t:(x.when||'')+(x.what?(' — '+x.what):''), s:(x.who||'')+(x.where?(' · '+x.where):'')}); }); }
+  else if(k==='inbound'){ (A.inbound||[]).forEach(function(x){ out.push({t:(x.item||'')+(x.vendor?(' — '+x.vendor):''), s:(x.project||'')+(x.when?(' · '+x.when):'')+(x.gap?(' · ⚠ '+x.gap):'')}); }); }
+  else if(k==='projects'){ (A.projects||[]).forEach(function(p){ out.push({t:(p.name||'')+(p.jobNum?(' · '+p.jobNum):''), s:clip(p.brief,120)}); }); }
+  else if(k==='watchdog'){ var g=(typeof _mcGaps==='function')?_mcGaps():{overdue:[],notask:[],gone:[]}; var seen={}; [].concat(g.overdue||[],g.notask||[],g.gone||[]).forEach(function(it){ if(seen[it.num])return; seen[it.num]=1; out.push({t:'#'+it.num+' '+(it.summary||''), s:clip(it.asset,55)}); }); }
+  else if(k==='tasks'){ var _t=(window.MRA_DATA||{}).todayISO||''; (typeof _mcTasks==='function'?_mcTasks():[]).filter(function(t){return !t.done && !(t.snoozeUntil&&(!_t||t.snoozeUntil>_t));}).forEach(function(t){ out.push({t:t.t||'', s:''}); }); }
+  else if(k==='questions'){ (A.questions||[]).forEach(function(q){ out.push({t:q.q||'', s:clip(q.ctx,110)}); }); }
+  else if(k==='fyi'){ (A.fyi||[]).forEach(function(x){ out.push({t:x.title||'', s:clip(x.note,110)}); }); }
+  return out; }
 function _mcNavTiles(A){
   var g=(typeof _mcGaps==='function')?_mcGaps():{overdue:[],notask:[],gone:[],total:0};
   var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var _tdy=(window.MRA_DATA||{}).todayISO||'';
@@ -14520,15 +14540,26 @@ function _mcNavTiles(A){
   var seen=_mwSeen(), firstEver=Object.keys(seen).length===0; window._MW_SIGS={};
   var tilesHtml=defs.map(function(d){ window._MW_SIGS[d.k]=d.s;
     var isNew = firstEver ? false : (seen[d.k]!==undefined ? seen[d.k]!==d.s : d.n>0);
-    var glow=isNew?';box-shadow:0 0 0 2px #22c55e inset;border-color:#22c55e':'';
-    return '<button onclick="mwGoSec(\''+d.k+'\',\''+d.anchor+'\')" title="Jump to '+esc(d.lab)+(isNew?' — has something new':'')+'" style="flex:0 0 auto;min-width:92px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;cursor:pointer;text-align:left;position:relative'+glow+'">'
-      +(isNew?'<span style="position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e"></span>':'')
-      +'<div style="font-size:11px;color:var(--muted);font-weight:700">'+d.ic+' '+esc(d.lab)+'</div>'
-      +'<div style="font-size:21px;font-weight:800;line-height:1;margin-top:3px;color:'+(isNew?'#22c55e':'var(--txt)')+'">'+d.n+'</div>'
-      +(isNew?'<div style="font-size:8.5px;font-weight:800;color:#22c55e;letter-spacing:.6px;margin-top:2px">NEW</div>':'')
+    var isOpen = (MW_CHIP_OPEN===d.k);
+    var glow=isOpen?';box-shadow:0 0 0 2px var(--brand) inset;border-color:var(--brand)':(isNew?';box-shadow:0 0 0 2px #22c55e inset;border-color:#22c55e':'');
+    return '<button onclick="mwChipToggle(\''+d.k+'\')" title="Tap to peek at '+esc(d.lab)+'" style="flex:0 0 auto;min-width:92px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;cursor:pointer;text-align:left;position:relative'+glow+'">'
+      +(isNew&&!isOpen?'<span style="position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e"></span>':'')
+      +'<div style="font-size:11px;color:var(--muted);font-weight:700">'+d.ic+' '+esc(d.lab)+' '+(isOpen?'▾':'▸')+'</div>'
+      +'<div style="font-size:21px;font-weight:800;line-height:1;margin-top:3px;color:'+(isNew&&!isOpen?'#22c55e':'var(--txt)')+'">'+d.n+'</div>'
+      +(isNew&&!isOpen?'<div style="font-size:8.5px;font-weight:800;color:#22c55e;letter-spacing:.6px;margin-top:2px">NEW</div>':'')
       +'</button>'; }).join('');
   if(firstEver){ var b={}; defs.forEach(function(d){ b[d.k]=d.s; }); _mwSeenSave(b); }
-  return '<div style="display:flex;gap:9px;overflow-x:auto;padding:2px 2px 8px;margin:2px 0 4px">'+tilesHtml+'</div>'; }
+  // Tap-to-peek detail box (shows the items behind the tapped chip, without scrolling)
+  var openDef=defs.filter(function(d){return d.k===MW_CHIP_OPEN;})[0]; var detail='';
+  if(openDef){ var items=_mcChipItems(openDef.k);
+    var BTN='padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-size:11px;font-weight:700;cursor:pointer';
+    detail='<div id="mwChipDetail" style="background:var(--panel);border:1px solid var(--brand);border-radius:12px;padding:10px 13px;margin:0 2px 10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><div style="font-weight:800;font-size:13px">'+openDef.ic+' '+esc(openDef.lab)+' <span class="count">'+items.length+'</span></div>'
+      +'<div style="display:flex;gap:6px"><button onclick="mwGoSec(\''+openDef.k+'\',\''+openDef.anchor+'\')" style="'+BTN+'">Go to section →</button><button onclick="mwChipToggle(\''+openDef.k+'\')" style="'+BTN+'">✕ close</button></div></div>'
+      +(items.length?items.map(function(i){return '<div class="row" style="display:block;padding:6px 2px"><div class="lead" style="font-size:13px">'+esc(i.t)+'</div>'+(i.s?'<div class="meta" style="margin-top:1px">'+esc(i.s)+'</div>':'')+'</div>';}).join(''):'<div class="empty">Nothing here right now.</div>')
+      +'</div>';
+  }
+  return '<div style="display:flex;gap:9px;overflow-x:auto;padding:2px 2px 8px;margin:2px 0 4px">'+tilesHtml+'</div>'+detail; }
 // Scoped visual refresh for MY WORK only (2026 dark-dashboard best practice: layered elevation, one accent,
 // 3-level type hierarchy, generous padding, color-coded section rails). Does not touch any other tab.
 function _mwFreshCss(){ if(document.getElementById('mwFreshCss')) return; var s=document.createElement('style'); s.id='mwFreshCss';
