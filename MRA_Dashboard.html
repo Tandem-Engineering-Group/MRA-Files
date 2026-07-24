@@ -3854,6 +3854,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.42", date:"2026-07-24", title:"🕐 Command times show in YOUR time (Eastern), not UTC", items:[
+    "Waiting / appointment times in My Work were showing the raw UTC timestamp — so an 7:55am item read “11:55” and could look like it was sent in the future. They now render in <b>Eastern (ET)</b> automatically, whatever the brief stored. (Free-text times like “time TBD” pass through unchanged.)" ] },
   { rev:"36.41", date:"2026-07-24", title:"📥 File-mail: JFSD, Washtenaw, AWS, SMC, Siemens boxes recognized", items:[
     "Added the Outlook folders you created as recognized boxes — <b>JFSD</b> (all JFSD-* builds), <b>Washtenaw</b>, <b>AWS</b>, <b>SMC</b> and <b>Siemens</b> (both Siemens projects) no longer flag “no box” and file into their folder." ] },
   { rev:"36.40", date:"2026-07-24", title:"📊 On-Hold no longer drags % down · 🔗 fleet unit→job · 📥 one folder per box", items:[
@@ -14424,7 +14426,7 @@ function _mwMcPanel(){
       var dz=isDm?('<button style="'+Bmut+'" onclick="mcRestoreWaitKey(\''+escJsAttr(k)+'\')" title="Put this back in your list">↩ Restore</button>')
                  :('<button style="'+Bmut+'" onclick="mcDismissWaitKey(\''+escJsAttr(k)+'\')" title="Not for me / already handled — hide it from your list. Stays hidden after re-scans; recover with “show hidden” below.">✓ Not for me</button>');
       return '<div class="row" style="display:block'+(isDm?';opacity:.55':'')+'"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div class="lead">'+kb(w.kind)+' '+esc(w.who||'')+'</div>'+(w.project?'<span class="badge grey">'+esc(w.project)+'</span>':'')+'</div>'
-        +'<div class="meta">'+esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(w.when)):'')+'</div>'
+        +'<div class="meta">'+esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(_mcWhen(w.when))):'')+'</div>'
         +'<div style="font-size:13px;margin:4px 0">'+esc(w.need||'')+'</div>'
         +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+(w.draft||w.email?('<button style="'+BP+'" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button>'):'')+open+dz+'</div></div>'; }).join('');
   var wfoot=_hidN?('<div style="margin-top:8px;font-size:12px;color:var(--muted)"><a onclick="mcToggleShowDismissed()" style="cursor:pointer;text-decoration:underline">'+(_MC_SHOW_DISMISSED?('▲ hide '+_hidN+' dismissed'):('▾ '+_hidN+' hidden · show')) +'</a></div>'):'';
@@ -14436,7 +14438,7 @@ function _mwMcPanel(){
   var appts=A.appts||[];
   var ah='<div class="panel" id="mwsec-cmda"><h2>📅 Appointments &amp; scheduled visits <span class="count">'+appts.length+'</span></h2>'
     +(appts.length?appts.map(function(x){ var hot=x.today?' style="border-left:3px solid var(--brand);padding-left:8px"':''; var _mh=_mcMailHref(x); var open=_mh?' <a href="'+esc(_mh)+'" target="_blank" rel="noopener" style="color:#7aa2d6">📧</a>':'';
-        return '<div class="row"'+hot+'><div style="min-width:0"><div class="lead">📅 '+esc(x.when||'')+(x.today?' · TODAY':'')+' — '+esc(x.what||'')+open+'</div><div class="meta">'+esc(x.who||'')+(x.where?(' · '+esc(x.where)):'')+(x.note?(' · '+esc(x.note)):'')+'</div></div></div>'; }).join(''):'<div class="empty">No appointments in the brief.</div>')
+        return '<div class="row"'+hot+'><div style="min-width:0"><div class="lead">📅 '+esc(_mcWhen(x.when||''))+(x.today?' · TODAY':'')+' — '+esc(x.what||'')+open+'</div><div class="meta">'+esc(x.who||'')+(x.where?(' · '+esc(x.where)):'')+(x.note?(' · '+esc(x.note)):'')+'</div></div></div>'; }).join(''):'<div class="empty">No appointments in the brief.</div>')
     +'</div>';
   // 📦 Inbound
   var inb=A.inbound||[];
@@ -18550,7 +18552,7 @@ function renderMyCmd(){
       var openBtn=_mcMailHref(w)?('<a class="mc-btn" href="'+esc(_mcMailHref(w))+'" target="_blank" rel="noopener" title="Opens the full email thread in Outlook">📧 Open email</a>'):'';
       var dz=isDm?('<button class="mc-btn" onclick="mcRestoreWaitKey(\''+escJsAttr(k)+'\')" title="Put this back in your list">↩ Restore</button>')
                  :('<button class="mc-btn" onclick="mcDismissWaitKey(\''+escJsAttr(k)+'\')" title="Not for me / already handled — hide it from your list">✓ Not for me</button>');
-      var sub=esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(w.when)):'');
+      var sub=esc(w.subject||'')+(w.from?(' · from '+esc(w.from)):'')+(w.when?(' · '+esc(_mcWhen(w.when))):'');
       return '<div class="mc-wait"'+(isDm?' style="opacity:.55"':'')+'><div class="w1"><span class="who">'+_kb(w.kind)+' '+esc(w.who||'')+'</span>'+(w.project?'<span class="proj">'+esc(w.project)+'</span>':'')+'</div>'
         +'<div class="subj">'+sub+'</div><div class="need">'+esc(w.need||'')+'</div>'
         +'<div class="acts"><button class="mc-btn primary" onclick="mcReply('+i+')">✉ Reply'+(w.draft?' · draft ready':'')+'</button>'+openBtn+dz+'</div></div>';
@@ -18562,7 +18564,7 @@ function renderMyCmd(){
   var ah=appts.length?appts.map(function(x){
       var open=(x.link||x.id)?('<a class="mc-btn" style="padding:5px 10px;font-size:12px" href="'+esc(_mcMailHref(x))+'" target="_blank" rel="noopener">📧 Email</a>'):'';
       var hot=x.today?' style="border-left:3px solid var(--brand);padding-left:8px"':'';
-      return '<div class="mc-wait"'+hot+'><div class="w1"><span class="who">📅 '+esc(x.when||'')+(x.today?' · TODAY':'')+' — '+esc(x.what||'')+'</span>'+(x.project?'<span class="proj">'+esc(x.project)+'</span>':'')+'</div>'
+      return '<div class="mc-wait"'+hot+'><div class="w1"><span class="who">📅 '+esc(_mcWhen(x.when||''))+(x.today?' · TODAY':'')+' — '+esc(x.what||'')+'</span>'+(x.project?'<span class="proj">'+esc(x.project)+'</span>':'')+'</div>'
         +'<div class="subj">'+esc(x.who||'')+(x.where?(' · '+esc(x.where)):'')+'</div>'+(x.note?('<div class="need">'+esc(x.note)+'</div>'):'')
         +(open?('<div class="acts">'+open+'</div>'):'')+'</div>';
     }).join(''):'<div class="mc-muted">No appointments or scheduled visits in the brief.</div>';
