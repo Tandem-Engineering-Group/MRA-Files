@@ -3854,6 +3854,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.43", date:"2026-07-24", title:"📥 Mail moved to its OWN file so the auto-refresh can't wipe it (the real fix)", items:[
+    "The File-mail kept vanishing because it lived inside the brief file (agent.json) that the 4×/day auto-refresh fully rewrites. It now reads from a dedicated <b>mail.json</b> that the refresh never touches — so it physically can't be wiped anymore. (Falls back to the previous behavior until the mail-publish flow is switched on.)" ] },
   { rev:"36.42", date:"2026-07-24", title:"🕐 Command times show in YOUR time (Eastern), not UTC", items:[
     "Waiting / appointment times in My Work were showing the raw UTC timestamp — so an 7:55am item read “11:55” and could look like it was sent in the future. They now render in <b>Eastern (ET)</b> automatically, whatever the brief stored. (Free-text times like “time TBD” pass through unchanged.)" ] },
   { rev:"36.41", date:"2026-07-24", title:"📥 File-mail: JFSD, Washtenaw, AWS, SMC, Siemens boxes recognized", items:[
@@ -18323,6 +18325,14 @@ function loadAgent(cb){ function done(a){ _MC_AGENT=a||null;
     // Cache the project-mail list on this device so it survives the scan overwriting agent.json without it.
     try{ if(a&&a.projectMail&&a.projectMail.length){ localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:a.projectMail})); }
       else { var _pc=JSON.parse(localStorage.getItem('mra_mc_pmail_v1')||'null'); if(_pc&&_pc.pm&&_pc.pm.length) localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:_pc.pm})); } }catch(e){}   // scan dropped projectMail -> re-stamp the cache so it never ages out on an active device
+    // SCAN-IMMUNE MAIL: projectMail also lives in its OWN blob (mail.json) that the brief-scan NEVER rewrites,
+    // so it can't be wiped. Pull it and override — it's the authoritative source whenever present. 404s harmlessly
+    // (falls back to agent.json / cache) until the "MRA Mail Publish" flow exists.
+    (function(){ function tryMail(u,nx){ fetch(u,{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(mj){
+        if(mj&&mj.projectMail&&mj.projectMail.length){ if(_MC_AGENT) _MC_AGENT.projectMail=mj.projectMail;
+          try{ localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:mj.projectMail})); }catch(e){}
+          try{ if(typeof _mcRerenderMC==='function') _mcRerenderMC(); }catch(e){} } }).catch(function(){ if(nx) nx(); }); }
+      tryMail('../mail.json?t='+Date.now(), function(){ tryMail('mail.json?t='+Date.now(), null); }); })();
     try{ _mcSeedTasks(); }catch(e){} if(cb)cb(); }
   // Capture the blob's real Last-Modified (the true publish/scan moment) — the brief's own generatedAt is self-stamped and can be a rounded placeholder.
   function pull(url,next){ fetch(url,{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; var mod=r.headers.get('Last-Modified'); return r.json().then(function(a){ if(a&&mod){ try{ a._blobMod=mod; }catch(e){} } done(a); }); }).catch(next); }
