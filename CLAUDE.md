@@ -1130,6 +1130,30 @@ that CHANGELOG. This logs the 2026-07-09 session's features + the gotchas worth 
   add/edit/delete/close/reopen ProjectTask). Matches rows by Project + Task ID, falls back to task text.
 
 
+## 📥 File project mail — `agent.projectMail` in the brief (KEEP IT ALIVE — do NOT drop it)
+The dashboard "File project mail" panel (My Work) reads **`agent.json` → `projectMail`** = an array of
+`{project,id,link,subject,from,when,pm,snippet}` (id/link are the real Outlook message id + webLink). It groups by
+project, shows **📁 File all** (bulk move) per project + per-email **📁 File →**, and flags projects with no Outlook
+folder as **⚠ NO BOX**. Recognized folders = `MAIL_BOXES` in `MRA_Dashboard.html`
+(`medtronic, trumpf, oakland, cisco, on cloud, swc`) — add a substring when Rich makes a new folder.
+
+⚠️ **THE BUG THAT KEEPS BITING RICH ("my mail disappeared"):** the scheduled brief-refresh republishes `agent.json`
+**without** `projectMail`, wiping it. **Any session/scan that republishes `agent.json` MUST preserve + refresh
+`projectMail`.** Rule:
+1. **Fetch the CURRENT live `agent.json` first** (`https://mrashopdash.z13.web.core.windows.net/agent.json`).
+2. **Refresh** `projectMail`: scan **rmiller@gomra.com** inbox (M365 `outlook_email_search`, I'm signed in there) for
+   CLIENT/VENDOR project emails, ~last 21 days, grouped by the active projects (`data.js` `projects[].name`). Classify by
+   the `[Project]` / `| Project` subject markers + client domain. **EXCLUDE:** "MRA Command Center — you have a new task",
+   Fleetio notifications, "Sales Pipeline"/Salesforce report, the Monday exec snapshot, auto accept/decline. Dedup by
+   subject (strip `RE:`/`FW:`), keep newest per thread, ≤8 per project. Copy id/link/subject/from/when **verbatim**.
+3. If you **can't** refresh (no M365) → **carry forward** the existing `projectMail` from step 1 — never publish without it.
+4. Publish via the **Agent Publish** flow (id `71b277ea`) as **`{json: JSON.stringify(agent)}` text/plain** (shape B — raw
+   JSON returns 202 but silently doesn't write). URL in scratchpad `agent_publish_url.txt`.
+Dashboard-side safety net (rev 36.37): the device keeps a **self-renewing 30-day cache** of `projectMail`
+(`mra_mc_pmail_v1`, re-stamped every load even when `agent.json` lacks it), so it can't blank on an active device — but
+that's a net, not the fix. The fix is step 1–4 above every refresh. (Filed items track in `mra_mc_filed_v1` + the
+"MRA Email Filer" flow, `MAIL_FILE_URL`; they correctly drop off after filing.)
+
 ## 📧 Daily task-email routing (Rich confirmed 2026-07-16) — wire when building the per-person email step
 Rich CC'd on ALL. ⚠ TWO Jeffs: "Jeff" board column = Jeff Sellers (jsellers@gomra.com); Wrap Team's Jeff = W2 Graphic (jeff@w2graphic.com) — keep separate.
 - **Sal** → shopsupport@gomra.com

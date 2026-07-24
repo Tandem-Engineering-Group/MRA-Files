@@ -3852,6 +3852,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.37", date:"2026-07-24", title:"📥 File project mail — can no longer blank out on you", items:[
+    "Hardened so the mail list <b>can't disappear</b> when the overnight brief-refresh rewrites without it: your device now keeps a <b>self-renewing 30-day copy</b> (re-stamped every time you open the board), so it survives a scan drop instead of aging out. Paired with the list being republished to the server, it stays put across your devices." ] },
   { rev:"36.36", date:"2026-07-24", title:"📥 File project mail — now reads your LIVE inbox + SWC box + Open-email fix", items:[
     "The File-mail list was running off a one-time snapshot, so newer project emails (e.g. yesterday's Medtronic threads) never showed. It's now rebuilt from a <b>full live scan of your inbox</b>, grouped across all active projects, with the dashboard-notification / Fleetio / pipeline noise filtered out.",
     "Added <b>SWC</b> as a recognized folder (you made the box + wired the filer), so SWC mail no longer flags “no box.”",
@@ -18283,7 +18285,8 @@ function openMyCmd(){ if(typeof closeDrops==='function') closeDrops(); _mcEnsure
 function closeMyCmd(){ var o=document.getElementById('myCmd'); if(o) o.classList.remove('show'); document.body.style.overflow=''; }
 function loadAgent(cb){ function done(a){ _MC_AGENT=a||null;
     // Cache the project-mail list on this device so it survives the scan overwriting agent.json without it.
-    try{ if(a&&a.projectMail&&a.projectMail.length){ localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:a.projectMail})); } }catch(e){}
+    try{ if(a&&a.projectMail&&a.projectMail.length){ localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:a.projectMail})); }
+      else { var _pc=JSON.parse(localStorage.getItem('mra_mc_pmail_v1')||'null'); if(_pc&&_pc.pm&&_pc.pm.length) localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:_pc.pm})); } }catch(e){}   // scan dropped projectMail -> re-stamp the cache so it never ages out on an active device
     try{ _mcSeedTasks(); }catch(e){} if(cb)cb(); }
   // Capture the blob's real Last-Modified (the true publish/scan moment) — the brief's own generatedAt is self-stamped and can be a rounded placeholder.
   function pull(url,next){ fetch(url,{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; var mod=r.headers.get('Last-Modified'); return r.json().then(function(a){ if(a&&mod){ try{ a._blobMod=mod; }catch(e){} } done(a); }); }).catch(next); }
@@ -18460,7 +18463,7 @@ function _mcProjectMail(){ var A=(typeof _MC_AGENT!=='undefined'&&_MC_AGENT)?_MC
   // Source: live projectMail from the brief → else the device cache (survives scans that drop it, 72h) → else
   // the real project emails in waiting/fyi (id+subject only; NOT inbound shipments — that was the fake "Boston DX").
   var src=(A.projectMail&&A.projectMail.length)?A.projectMail:null;
-  if(!src){ try{ var c=JSON.parse(localStorage.getItem('mra_mc_pmail_v1')||'null'); if(c&&c.pm&&c.pm.length&&(Date.now()-(+c.at||0))<72*3600*1000) src=c.pm; }catch(e){} }
+  if(!src){ try{ var c=JSON.parse(localStorage.getItem('mra_mc_pmail_v1')||'null'); if(c&&c.pm&&c.pm.length&&(Date.now()-(+c.at||0))<30*24*3600*1000) src=c.pm; }catch(e){} }
   (src||[]).forEach(push);
   if(!src){ [].concat(A.waiting||[], A.fyi||[]).forEach(function(x){ if(x&&x.id&&x.subject) push(x); }); }
   return out; }
