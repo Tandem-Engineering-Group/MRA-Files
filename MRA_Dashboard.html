@@ -2839,6 +2839,7 @@
         <select class="projwhosel" id="peWhoSel" onchange="setPeWho(this.value)" title="Filter to one assignee — handy for reassigning a person's tasks (e.g. Steve K / MRA Design)" style="font-size:11px; padding:3px 8px; max-width:170px"></select>
         <span style="margin-left:auto; display:flex; gap:6px">
           <button class="btn-ghost" id="peHideDoneBtn" style="padding:3px 9px; font-size:11px" onclick="peToggleHideDone()" title="Hide completed tasks to make scrolling easier">✓ Hide completed</button>
+          <button class="btn-ghost" id="peOverdueBtn" style="padding:3px 9px; font-size:11px" onclick="peToggleOverdue()" title="Show ONLY past-due tasks (open, with a finish date before today)">⚠ Overdue only</button>
           <button class="btn-ghost" style="padding:3px 9px; font-size:11px" onclick="peCollapseAll()" title="Collapse every phase">⊟ Collapse all</button>
           <button class="btn-ghost" style="padding:3px 9px; font-size:11px" onclick="peExpandAll()" title="Expand every phase">⊞ Expand all</button>
         </span>
@@ -3543,9 +3544,10 @@ let PD_HIDEDONE=false; try{ PD_HIDEDONE=localStorage.getItem('mra_pd_hidedone')=
 // Detailed-view task filter (Al): All → Hide completed → Completed only. 'done'-only shows just what's finished.
 let PD_TASKVIEW='all'; try{ PD_TASKVIEW=localStorage.getItem('mra_pd_taskview')|| (PD_HIDEDONE?'open':'all'); }catch(e){ PD_TASKVIEW=PD_HIDEDONE?'open':'all'; }
 function pdSetTaskView(v){ PD_TASKVIEW=v; PD_HIDEDONE=(v==='open'); try{ localStorage.setItem('mra_pd_taskview',v); localStorage.setItem('mra_pd_hidedone',PD_HIDEDONE?'1':'0'); }catch(e){} if(typeof renderGanttFS==='function') renderGanttFS(); }
-function pdCycleTaskView(){ pdSetTaskView(PD_TASKVIEW==='all'?'open':PD_TASKVIEW==='open'?'done':'all'); }
+function pdCycleTaskView(){ pdSetTaskView(PD_TASKVIEW==='all'?'open':PD_TASKVIEW==='open'?'overdue':PD_TASKVIEW==='overdue'?'done':'all'); }
 // True if a task passes the current detailed-view filter.
-function pdTaskPass(t){ if(PD_TASKVIEW==='open') return !projIsDone(t); if(PD_TASKVIEW==='done') return projIsDone(t); return true; }
+function projTaskOverdue(t){ if(!t||projIsDone(t)||projIsPendingVerify(t)) return false; var f=t.finISO||''; if(!f) return false; var today=(window.MRA_DATA||{}).todayISO||''; return !!today && f<today; }   // open + finish before today = past-due (matches the red bars)
+function pdTaskPass(t){ if(PD_TASKVIEW==='open') return !projIsDone(t); if(PD_TASKVIEW==='done') return projIsDone(t); if(PD_TASKVIEW==='overdue') return projTaskOverdue(t); return true; }
 function pdToggleHideDone(){ pdCycleTaskView(); }   // legacy entry point → now cycles the 3-way filter
 let PD_SORT='date'; try{ const _s=localStorage.getItem('mra_pd_sort'); if(_s==='manual'||_s==='date') PD_SORT=_s; }catch(e){}   // detailed Gantt order: by date, or keep the list/entry order
 function setPdSort(v){ PD_SORT=(v==='manual')?'manual':'date'; try{localStorage.setItem('mra_pd_sort',PD_SORT);}catch(e){} if(GFS==='project'&&typeof renderGanttFS==='function') renderGanttFS(); }
@@ -3852,6 +3854,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.38", date:"2026-07-24", title:"⚠ Overdue-only task filter + File mail is one spot", items:[
+    "New <b>⚠ Overdue only</b> filter — in the <b>detailed project Gantt</b> (⚙ View → All · Open only · <b>⚠ Overdue only</b> · ✓ Completed only) and in <b>Edit Project Tasks</b> (next to ✓ Hide completed). Shows just the <b>past-due</b> tasks (open, with a finish date before today) so you can zero in on what's late.",
+    "<b>File mail</b> is now <b>one spot</b>: removed the duplicate top chip — the full 📥 File mail panel (with its count) is the single place to file project email." ] },
   { rev:"36.37", date:"2026-07-24", title:"📥 File project mail — can no longer blank out on you", items:[
     "Hardened so the mail list <b>can't disappear</b> when the overnight brief-refresh rewrites without it: your device now keeps a <b>self-renewing 30-day copy</b> (re-stamped every time you open the board), so it survives a scan drop instead of aging out. Paired with the list being republished to the server, it stays put across your devices." ] },
   { rev:"36.36", date:"2026-07-24", title:"📥 File project mail — now reads your LIVE inbox + SWC box + Open-email fix", items:[
@@ -7527,7 +7532,9 @@ const PROJ_TYPE_SEED = ['Design','Engineering','Production','Graphics','Fabricat
 let PE_EXPANDED = new Set();   // phase sections currently expanded in the editor (default: all collapsed)
 let PE_SUBCLOSED = new Set();  // parent tasks whose subtasks are collapsed
 let PE_HIDEDONE = false; try{ PE_HIDEDONE = localStorage.getItem('mra_pe_hidedone')==='1'; }catch(e){}  // hide completed tasks in the editor
-function peToggleHideDone(){ PE_HIDEDONE=!PE_HIDEDONE; try{localStorage.setItem('mra_pe_hidedone',PE_HIDEDONE?'1':'0');}catch(e){} renderProjTaskList(); }
+let PE_OVERDUE = false; try{ PE_OVERDUE = localStorage.getItem('mra_pe_overdue')==='1'; }catch(e){}    // show ONLY past-due tasks
+function peToggleHideDone(){ PE_HIDEDONE=!PE_HIDEDONE; if(PE_HIDEDONE) PE_OVERDUE=false; try{localStorage.setItem('mra_pe_hidedone',PE_HIDEDONE?'1':'0'); localStorage.setItem('mra_pe_overdue',PE_OVERDUE?'1':'0');}catch(e){} renderProjTaskList(); }
+function peToggleOverdue(){ PE_OVERDUE=!PE_OVERDUE; if(PE_OVERDUE) PE_HIDEDONE=false; try{localStorage.setItem('mra_pe_overdue',PE_OVERDUE?'1':'0'); localStorage.setItem('mra_pe_hidedone',PE_HIDEDONE?'1':'0');}catch(e){} renderProjTaskList(); }
 let PE_WHO='';   // Edit-Project-Tasks: filter to one assignee (in-memory; self-resets when it's not in the project)
 function setPeWho(v){ PE_WHO=v||''; renderProjTaskList(); }
 let PE_SEARCH='';   // Edit-Project-Tasks: free-text task search
@@ -8247,8 +8254,9 @@ function renderProjTaskList(){
   }
   const tot=[]; if(p.budget) tot.push('$'+Number(p.budget).toLocaleString()); if(p.estDays) tot.push(p.estDays+'d'); if(p.estHours) tot.push(p.estHours+'h');
   { const _mtgN=tasks.filter(isMeetingTask).length, _workN=tasks.length-_mtgN;
-    cnt.textContent = _workN+" task"+(_workN===1?"":"s")+" · "+p.doneCount+" done ("+p.pct+"%)"+(_mtgN?(" · "+_mtgN+" 🗓"):"")+(tot.length?(' · '+tot.join(' · ')):'')+(PE_HIDEDONE?" · hiding completed":"")+((PE_WHO||_peq)?(" · "+fTasks.length+" shown"):""); }
+    cnt.textContent = _workN+" task"+(_workN===1?"":"s")+" · "+p.doneCount+" done ("+p.pct+"%)"+(_mtgN?(" · "+_mtgN+" 🗓"):"")+(tot.length?(' · '+tot.join(' · ')):'')+(PE_HIDEDONE?" · hiding completed":"")+(PE_OVERDUE?" · overdue only":"")+((PE_WHO||_peq)?(" · "+fTasks.length+" shown"):""); }
   const hb=document.getElementById('peHideDoneBtn'); if(hb){ hb.textContent=PE_HIDEDONE?'✓ Show completed':'✓ Hide completed'; hb.classList.toggle('on',PE_HIDEDONE); }
+  const ob=document.getElementById('peOverdueBtn'); if(ob){ ob.classList.toggle('on',PE_OVERDUE); }
   const byId={}; tasks.forEach(t=>{ if(t.id!=null && t.id!=='') byId[String(t.id)]=t; });
   const order=[], groups={};
   fTasks.forEach(t=>{ const ph=((t.phase||'').trim())||'(no phase)'; if(!groups[ph]){ groups[ph]=[]; order.push(ph); } groups[ph].push(t); });
@@ -8258,8 +8266,8 @@ function renderProjTaskList(){
   const _pfStrip=_pfDocs.length?(`<div class="pe-projfiles">📎 <b>Project files:</b> ${mediaHtml(_pfDocs)}</div>`):'';
   list.innerHTML = _pfStrip + order.map(ph=>{
     const gAll=groups[ph], doneN=gAll.filter(projIsDone).length;
-    const g = PE_HIDEDONE ? gAll.filter(t=>!projIsDone(t)) : gAll;
-    if(!g.length) return '';   // phase fully completed -> hidden when "Hide completed" is on
+    const g = PE_OVERDUE ? gAll.filter(t=>projTaskOverdue(t)) : (PE_HIDEDONE ? gAll.filter(t=>!projIsDone(t)) : gAll);
+    if(!g.length) return '';   // phase with nothing left after the filter (completed / no overdue) -> hidden
     const open=PE_EXPANDED.has(ph);
     const peRow=(t,opt)=>{ opt=opt||{};
       const predT=(t.pred!=null&&t.pred!=='' && byId[String(t.pred)])?byId[String(t.pred)]:null;
@@ -14533,7 +14541,6 @@ function _mcNavTiles(A){
   var defs=[
    {k:'myplate',ic:'⚠',lab:'My plate',anchor:'mwsec-cmdmine',n:(typeof _mcMine==='function'?_mcMine().length:0),s:sig((typeof _mcMine==='function'?_mcMine():[]),function(x){return String(x.num||'');})},
    {k:'waiting',ic:'🔴',lab:'Waiting',anchor:'mwsec-cmdw',n:(A.waiting||[]).length,s:sig(A.waiting,function(x){return (x.who||'')+(x.subject||'');})},
-   {k:'filemail',ic:'📥',lab:'File mail',anchor:'mwsec-cmdfile',n:(typeof _mcProjectMail==='function'?_mcProjectMail().length:0),s:sig((typeof _mcProjectMail==='function'?_mcProjectMail():[]),function(x){return (x.id||x.subject||'');})},
    {k:'questions',ic:'❓',lab:'Questions',anchor:'mwsec-cmdq',n:(A.questions||[]).length,s:sig(A.questions,function(x){return (x.q||'');})},
    {k:'appts',ic:'📅',lab:'Appts',anchor:'mwsec-cmda',n:(A.appts||[]).length,s:sig(A.appts,function(x){return (x.what||'')+(x.when||'');})},
    {k:'inbound',ic:'📦',lab:'Inbound',anchor:'mwsec-cmdi',n:(A.inbound||[]).length,s:sig(A.inbound,function(x){return (x.item||'')+(x.when||'');})},
@@ -17250,6 +17257,7 @@ function renderGanttFS(){
       + `<span class="rb-group" title="Which tasks to show in this view">`
         + `<div class="rb${PD_TASKVIEW==='all'?' active':''}" onclick="pdSetTaskView('all')" title="Show all tasks">All</div>`
         + `<div class="rb${PD_TASKVIEW==='open'?' active':''}" onclick="pdSetTaskView('open')" title="Hide completed — just what's left">Open only</div>`
+        + `<div class="rb${PD_TASKVIEW==='overdue'?' active':''}" onclick="pdSetTaskView('overdue')" title="Show ONLY past-due tasks — open, with a finish date before today">⚠ Overdue only</div>`
         + `<div class="rb${PD_TASKVIEW==='done'?' active':''}" onclick="pdSetTaskView('done')" title="Show ONLY completed tasks">✓ Completed only</div>`
       + `</span>`
       + `<div class="rb${PD_SORT==='date'?' active':''}" onclick="setPdSort('date')" title="Order tasks by date">📅 By date</div>`
@@ -18480,7 +18488,7 @@ function _mcFileMailPanelHtml(B, BP){
   var groups={}; mail.forEach(function(x){ (groups[x.project]=groups[x.project]||[]).push(x); });
   var names=Object.keys(groups).sort();
   var Bf=B+';border-color:var(--brand);color:var(--brand)';
-  var h='<div class="panel" id="mwsec-cmdfile"><h2>📥 File project mail <span class="count">'+mail.length+'</span></h2>'
+  var h='<div class="panel" id="mwsec-cmdfile"><h2>📥 File mail <span class="count">'+mail.length+'</span></h2>'
     +'<div style="font-size:12px;color:var(--muted);margin:-2px 0 8px">Your inbox mail grouped by project. Tap <b>📁 File</b> on one — or <b>📁 File all</b> on a whole project — to move it into that project’s Outlook folder. Filed mail won’t come back on the next scan.'+(MAIL_FILE_URL?'':' <b style="color:#fbbf24">⚠ Filing isn’t wired up yet — say “build the email filer” for the steps.</b>')+'</div>';
   var _nobox=function(pn){ var k=String(pn||'').toLowerCase(); for(var i=0;i<MAIL_BOXES.length;i++){ if(k.indexOf(MAIL_BOXES[i])>=0) return false; } return true; };
   names.forEach(function(pn){ var items=groups[pn]; var fileable=items.filter(function(x){return x.id;}).length; var nb=_nobox(pn);
