@@ -3852,6 +3852,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.33", date:"2026-07-24", title:"📥 File project mail — preview line so you know what each email is", items:[
+    "Each email now shows a <b>one-line preview of the body</b> under the subject, plus the sender and a <b>readable date</b> (e.g. “Jul 23, 8:34 AM ET”), so you can tell what it is without opening it." ] },
   { rev:"36.32", date:"2026-07-24", title:"📥 File project mail — stays put (device cache) so a scan can't wipe it", items:[
     "The project-mail list is now <b>cached on your device (72h)</b>, so when the background scan rewrites the brief without it, the panel <b>keeps showing your project emails</b> instead of going blank. Filed items still drop off; a fresh push replaces the cache." ] },
   { rev:"36.31", date:"2026-07-24", title:"📥 File project mail — LIVE with your inbox + “no box” flags", items:[
@@ -18432,6 +18434,7 @@ function mcFileProject(project){ if(!MAIL_FILE_URL){ alert('The email-filer flow
   var items=_mcProjectMail().filter(function(x){ return x.project===project && x.id; }); if(!items.length) return;
   if(!confirm('File all '+items.length+' '+project+' email'+(items.length===1?'':'s')+' into the '+project+' folder?')) return;
   var f=_mcFiled(); items.forEach(function(x){ _mcFilePost(x.id, project); if(f.indexOf(x.id)<0) f.push(x.id); }); _mcSaveFiled(f); _mcRerenderMC(); }
+function _mcWhen(w){ try{ var d=new Date(w); if(isNaN(d.getTime())) return String(w||''); return d.toLocaleString('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' ET'; }catch(e){ return String(w||''); } }
 function _mcFileMailPanelHtml(B, BP){
   var mail=_mcProjectMail(); if(!mail.length) return '';
   var groups={}; mail.forEach(function(x){ (groups[x.project]=groups[x.project]||[]).push(x); });
@@ -18445,8 +18448,10 @@ function _mcFileMailPanelHtml(B, BP){
       +(fileable?'<button style="'+Bf+'" onclick="mcFileProject(\''+escJsAttr(pn)+'\')" title="'+(nb?('No '+esc(pn)+' folder yet — these will land in “To File” until you make one'):('File all '+fileable+' into the '+esc(pn)+' folder'))+'">📁 File all '+fileable+(nb?' → To File':'')+'</button>':'')+'</div>';
     items.forEach(function(x){ var mh=_mcMailHref(x); var open=mh?'<a href="'+esc(mh)+'" target="_blank" rel="noopener" style="'+B+'" title="Read it in Outlook">📧 Open</a>':'';
       var fileBtn=x.id?('<button style="'+BP+'" onclick="mcFileMail(\''+escJsAttr(x.id)+'\',\''+escJsAttr(pn)+'\')">📁 File → '+esc(pn)+'</button>'):'';
-      h+='<div class="row" style="display:block"><div class="meta">'+esc(x.subject||'(no subject)')+(x.from?(' · '+esc(x.from)):'')+(x.when?(' · '+esc(x.when)):'')+'</div>'
-        +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">'+fileBtn+open+'</div></div>'; }); });
+      h+='<div class="row" style="display:block"><div class="lead" style="font-size:13.5px">'+esc(x.subject||'(no subject)')+'</div>'
+        +'<div class="meta" style="margin-top:1px">'+(x.from?esc(x.from):'')+(x.when?(' · '+esc(_mcWhen(x.when))):'')+'</div>'
+        +(x.snippet?'<div style="font-size:12px;color:var(--muted);margin:4px 0 1px;line-height:1.45">“'+esc(x.snippet)+'”</div>':'')
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px">'+fileBtn+open+'</div></div>'; }); });
   h+='</div>'; return h; }
 function renderMyCmd(){
   var o=document.getElementById('myCmd'); if(!o) return; var D=window.MRA_DATA||{}; var A=_MC_AGENT||{};
