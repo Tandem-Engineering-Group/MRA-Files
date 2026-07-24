@@ -3854,9 +3854,12 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.39", date:"2026-07-24", title:"📧 Open (email) fixed — it now actually opens", items:[
+    "The <b>📧 Open</b> buttons on File mail (and Waiting) weren't opening anything — the link was dropping a parameter Outlook needs to jump to the message. Now it opens the exact email in Outlook.",
+    "The <b>File mail card</b> is back up top and now <b>jumps straight to the one panel below</b> when tapped (no duplicate peek list) — card up top, one list below." ] },
   { rev:"36.38", date:"2026-07-24", title:"⚠ Overdue-only task filter + File mail is one spot", items:[
     "New <b>⚠ Overdue only</b> filter — in the <b>detailed project Gantt</b> (⚙ View → All · Open only · <b>⚠ Overdue only</b> · ✓ Completed only) and in <b>Edit Project Tasks</b> (next to ✓ Hide completed). Shows just the <b>past-due</b> tasks (open, with a finish date before today) so you can zero in on what's late.",
-    "<b>File mail</b> is now <b>one spot</b>: removed the duplicate top chip — the full 📥 File mail panel (with its count) is the single place to file project email." ] },
+    "<b>File mail</b> is now <b>one spot</b>: the top card jumps straight to the single 📥 File mail panel below." ] },
   { rev:"36.37", date:"2026-07-24", title:"📥 File project mail — can no longer blank out on you", items:[
     "Hardened so the mail list <b>can't disappear</b> when the overnight brief-refresh rewrites without it: your device now keeps a <b>self-renewing 30-day copy</b> (re-stamped every time you open the board), so it survives a scan drop instead of aging out. Paired with the list being republished to the server, it stays put across your devices." ] },
   { rev:"36.36", date:"2026-07-24", title:"📥 File project mail — now reads your LIVE inbox + SWC box + Open-email fix", items:[
@@ -14541,6 +14544,7 @@ function _mcNavTiles(A){
   var defs=[
    {k:'myplate',ic:'⚠',lab:'My plate',anchor:'mwsec-cmdmine',n:(typeof _mcMine==='function'?_mcMine().length:0),s:sig((typeof _mcMine==='function'?_mcMine():[]),function(x){return String(x.num||'');})},
    {k:'waiting',ic:'🔴',lab:'Waiting',anchor:'mwsec-cmdw',n:(A.waiting||[]).length,s:sig(A.waiting,function(x){return (x.who||'')+(x.subject||'');})},
+   {k:'filemail',ic:'📥',lab:'File mail',anchor:'mwsec-cmdfile',jump:true,n:(typeof _mcProjectMail==='function'?_mcProjectMail().length:0),s:sig((typeof _mcProjectMail==='function'?_mcProjectMail():[]),function(x){return (x.id||x.subject||'');})},
    {k:'questions',ic:'❓',lab:'Questions',anchor:'mwsec-cmdq',n:(A.questions||[]).length,s:sig(A.questions,function(x){return (x.q||'');})},
    {k:'appts',ic:'📅',lab:'Appts',anchor:'mwsec-cmda',n:(A.appts||[]).length,s:sig(A.appts,function(x){return (x.what||'')+(x.when||'');})},
    {k:'inbound',ic:'📦',lab:'Inbound',anchor:'mwsec-cmdi',n:(A.inbound||[]).length,s:sig(A.inbound,function(x){return (x.item||'')+(x.when||'');})},
@@ -14555,7 +14559,8 @@ function _mcNavTiles(A){
     var isNew = firstEver ? false : (seen[d.k]!==undefined ? seen[d.k]!==d.s : d.n>0);
     var isOpen = (MW_CHIP_OPEN===d.k);
     var glow=isOpen?';box-shadow:0 0 0 2px var(--brand) inset;border-color:var(--brand)':(isNew?';box-shadow:0 0 0 2px #22c55e inset;border-color:#22c55e':'');
-    return '<button onclick="mwChipToggle(\''+d.k+'\')" title="Tap to peek at '+esc(d.lab)+'" style="flex:0 0 auto;min-width:92px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;cursor:pointer;text-align:left;position:relative'+glow+'">'
+    var _tap = d.jump ? ('mwGoSec(\''+d.k+'\',\''+d.anchor+'\')') : ('mwChipToggle(\''+d.k+'\')');
+    return '<button onclick="'+_tap+'" title="'+(d.jump?('Open '+esc(d.lab)+' below'):('Tap to peek at '+esc(d.lab)))+'" style="flex:0 0 auto;min-width:92px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;cursor:pointer;text-align:left;position:relative'+glow+'">'
       +(isNew&&!isOpen?'<span style="position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e"></span>':'')
       +'<div style="font-size:11px;color:var(--muted);font-weight:700">'+d.ic+' '+esc(d.lab)+' '+(isOpen?'▾':'▸')+'</div>'
       +'<div style="font-size:21px;font-weight:800;line-height:1;margin-top:3px;color:'+(isNew&&!isOpen?'#22c55e':'var(--txt)')+'">'+d.n+'</div>'
@@ -18438,7 +18443,7 @@ function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ var t=_mcIssTas
 // Build a working "open this email" link. Use the message's verbatim Graph webLink (correct ItemID),
 // forced to open in Outlook-on-the-web by stripping exvsurl. The Graph `id` is URL-safe base64 and is
 // NOT usable in an OWA open-link, so if there's no webLink we return '' (hide the button) rather than a broken one.
-function _mcMailHref(x){ var l=(x&&x.link)?String(x.link):''; if(l) return l.replace(/&exvsurl=1/i,'').replace(/&exvsurl=0/i,'');
+function _mcMailHref(x){ var l=(x&&x.link)?String(x.link):''; if(l) return l;   // use Outlook's webLink VERBATIM — stripping &exvsurl=1 was breaking the OWA deep link (it wouldn't open the message)
   // Fallback: build an Outlook-web deep link straight from the message id (every scanned item carries one) so
   // "📧 Open email" always works and opens the FULL thread even when the brief didn't include a prebuilt link.
   var id=(x&&x.id)?String(x.id):''; return id?('https://outlook.office.com/mail/deeplink/read/'+encodeURIComponent(id)):''; }
