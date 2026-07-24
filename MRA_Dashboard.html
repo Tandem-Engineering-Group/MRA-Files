@@ -3854,6 +3854,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.40", date:"2026-07-24", title:"📊 On-Hold no longer drags % down · 🔗 fleet unit→job · 📥 one folder per box", items:[
+    "<b>Project % complete now ignores On-Hold tasks</b> — they're dropped from the calc entirely (top and bottom), so a held task no longer counts as 0% and pulls the number down. Example: 5 done of 10 with 2 On Hold now reads <b>63%</b> (5 of 8), not 50%. Shows on load, everywhere the % appears.",
+    "<b>Fleet roster → click a unit's Job/Tour to open its job.</b> Any unit whose Tour carries a real J# (a build) is now a link straight to that job on the board. Rental/deployment units with no J# (e.g. “Rental Fleet (AAM)”) just show their deployment.",
+    "<b>File mail groups by Outlook FOLDER, not project name</b> — all SWC projects now collapse into your single <b>SWC</b> box and file there (same for On Cloud Airstream + InfoWheels → one <b>On Cloud</b>). No more filing to a folder that doesn't exist." ] },
   { rev:"36.39", date:"2026-07-24", title:"📧 Open (email) fixed — it now actually opens", items:[
     "The <b>📧 Open</b> buttons on File mail (and Waiting) weren't opening anything — the link was dropping a parameter Outlook needs to jump to the message. Now it opens the exact email in Outlook.",
     "The <b>File mail card</b> is back up top and now <b>jumps straight to the one panel below</b> when tapped (no duplicate peek list) — card up top, one list below." ] },
@@ -7550,6 +7554,14 @@ function projTaskPct(st){ st=String(st||''); const m=st.match(/(\d{1,3})\s*%/);
   if(m) return Math.max(0,Math.min(100,parseInt(m[1],10)));
   if(/^completed$/i.test(st.trim())) return 100;
   return null; }   // null = no explicit % (Not Started / plain In Progress / On Hold / blank)
+function isProjOnHold(t){ return /on\s*hold/i.test(String((t&&t.st)||'')); }
+// Overall % = AVERAGE of each task's own % (done=100, explicit "NN%" counts, rest=0), EXCLUDING On-Hold tasks
+// entirely (they don't count in the numerator OR denominator) — so a parked/held task no longer drags % down.
+function projPctCalc(p){ var tasks=(p&&p.tasks)||[];
+  var base=tasks.filter(function(t){ return !isMeetingTask(t) && !isProjOnHold(t); });
+  if(!base.length) return 0;
+  var sum=base.reduce(function(a,t){ if(projIsDone(t)) return a+100; var pc=projTaskPct(t.st); return a+(pc!=null?pc:0); },0);
+  return Math.round(sum/base.length); }
 function projBaseStatus(st){ st=String(st||'').replace(/\s*\d{1,3}\s*%\s*/,' ').trim();   // drop the "25%"
   const f=PROJ_STATUS_OPTIONS.find(s=>s.toLowerCase()===st.toLowerCase()); return f||st; }
 // ===== Design-task VERIFICATION workflow (rev 8.5) =====
@@ -7741,9 +7753,7 @@ function oRecomputeProject(p){
   p.estDays=work.reduce((a,t)=>a+(Number.isFinite(+t.eD)?+t.eD:0),0);     // sum of task estimates / budget
   p.estHours=work.reduce((a,t)=>a+(Number.isFinite(+t.eH)?+t.eH:0),0);
   p.budget=work.reduce((a,t)=>a+(Number.isFinite(+t.bud)?+t.bud:0),0);
-  // Overall % = AVERAGE of each task's own % (done=100, an explicit "NN%" counts, rest=0) — mirrors Export-Data.ps1.
-  const pctSum=work.reduce((a,t)=>{ if(projIsDone(t)) return a+100; const pc=projTaskPct(t.st); return a+(pc!=null?pc:0); },0);
-  p.pct=p.taskCount?Math.round(pctSum/p.taskCount):0;
+  p.pct=projPctCalc(p);   // % excludes On-Hold tasks (top + bottom) — see projPctCalc
   let mn=null,mx=null;
   work.forEach(t=>{ if(t.startISO&&(!mn||t.startISO<mn)) mn=t.startISO; if(t.finISO&&(!mx||t.finISO>mx)) mx=t.finISO; });
   p.startISO=mn; p.finishISO=mx;
@@ -13198,6 +13208,15 @@ function eqPop(e){ _eqIndex();
 function showEqDetail(i,ev){ const e=_eqList[i]; const pop=document.getElementById('barPop'); if(!e||!pop) return;
   pop.innerHTML=eqPop(e); pop.classList.add('show'); positionPop(ev); ev.stopPropagation(); }
 
+// Resolve a fleet unit's board job from a J# in its Tour/Job text (e.g. "…J1554…" or "…/ 1454").
+// Only links when the digits match a REAL board job's J# — rental/tour text with no J# (e.g. "Rental Fleet (AAM)") returns null.
+function _fleetJobRow(r){ var D=window.MRA_DATA||{}, jobs=D.jobs||[]; var s=String((r&&r.j)||'');
+  var nums=s.toUpperCase().match(/\d{3,4}/g)||[]; if(!nums.length) return null;
+  var nj=function(x){ return String(x||'').replace(/[^0-9]/g,''); };
+  for(var i=0;i<nums.length;i++){ var k=nums[i];
+    var j=jobs.find(function(x){ return x && x.category!=='leave' && typeof x.row==='number' && nj(x.jobNum)===k; });
+    if(j) return j; }
+  return null; }
 function renderFleet(){
   const tb=document.getElementById('fleetBody'); if(!tb) return;
   const RO=(window.MRA_DATA&&window.MRA_DATA.fleetio&&window.MRA_DATA.fleetio.fleet)||[];
@@ -13246,7 +13265,7 @@ function renderFleet(){
       `<td><span class="typ">${esc(r.t||'?')}</span></td>`+
       `<td class="mut">${esc(r.y||'')}</td>`+
       `<td>${esc(r.m||'')}</td>`+
-      `<td>${esc(r.j||'—')}</td>`+
+      `<td>${(function(){ var jb=_fleetJobRow(r); var txt=esc(r.j||'—'); return jb?('<span onclick="openEditJob('+jb.row+')" title="On the board: '+escA(((jb.project||'')+' '+(jb.jobNum||'')).trim())+' — click to open its job" style="color:var(--brand);cursor:pointer;text-decoration:underline dotted">'+txt+' ↗</span>'):txt; })()}</td>`+
       `<td class="loc"${l?` title="${locTitle}"`:''}>${locTxt}${mapPin(l)}</td>`+
       `<td>${fleetStatPill(r.stat)}</td>`+
       `<td class="fmi">${fmtMiles(r.mi,r.mu)}</td>`+
@@ -17768,7 +17787,7 @@ function renderAll(){
   try{ ((window.MRA_DATA||{}).jobs||[]).forEach(j=>{ if(j.tasks&&j.tasks.length) oRecompute(j); }); }catch(e){}
   try{ _pjRebuild(); }catch(e){}   // 📋 schedule-tasks-per-card map, once per paint (perf)
   try{ ((window.MRA_DATA||{}).projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ t.files=_taskFiles(t.cm); })); }catch(e){}   // 📎 derive project-task attachments from the [files:] comment tag (source of truth)
-  try{ ((window.MRA_DATA||{}).projects||[]).forEach(p=>{ if((p.tasks||[]).some(isMeetingTask)) oRecomputeProject(p); }); }catch(e){}   // 🗓 recompute ONLY projects that contain meetings so meetings never skew %/count/dates (meeting-free projects keep server numbers)
+  try{ ((window.MRA_DATA||{}).projects||[]).forEach(p=>{ if((p.tasks||[]).some(isMeetingTask)) oRecomputeProject(p); p.pct=projPctCalc(p); }); }catch(e){}   // 🗓 recompute meeting-projects fully; recompute EVERY project's % on paint so the On-Hold-excluded % is right on load, not just after an edit never skew %/count/dates (meeting-free projects keep server numbers)
   const D=window.MRA_DATA;
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
   try{ _staleCheck(D); }catch(_){}
@@ -18465,6 +18484,10 @@ var MAIL_FILE_URL='https://default57714027b784449484126e3b00c9bf.2c.environment.
 // Projects that HAVE an Outlook folder + a case in the MRA Email Filer flow (lowercase, substring match).
 // A File-mail group NOT matching any of these shows a "⚠ no box — make one" flag. Add here when you add a flow case.
 var MAIL_BOXES=['medtronic','trumpf','oakland','cisco','on cloud','swc'];
+// One Outlook folder can hold several projects (e.g. every SWC-* project files into the single "SWC" folder).
+// Map the box substring -> the real folder name; _mcBoxFolder(project) returns that folder ('' = no box yet).
+var MAIL_BOX_FOLDER={'medtronic':'Medtronic','trumpf':'Trumpf','oakland':'Oakland','cisco':'Cisco','on cloud':'On Cloud','swc':'SWC'};
+function _mcBoxFolder(pn){ var k=String(pn||'').toLowerCase(); for(var i=0;i<MAIL_BOXES.length;i++){ if(k.indexOf(MAIL_BOXES[i])>=0) return MAIL_BOX_FOLDER[MAIL_BOXES[i]]||MAIL_BOXES[i]; } return ''; }
 var _MC_FILED_KEY='mra_mc_filed_v1';
 function _mcFiled(){ try{ return JSON.parse(localStorage.getItem(_MC_FILED_KEY)||'[]')||[]; }catch(e){ return []; } }
 function _mcSaveFiled(a){ try{ localStorage.setItem(_MC_FILED_KEY, JSON.stringify(a||[])); }catch(e){} }
@@ -18484,13 +18507,13 @@ function _mcFilePost(id, project){ if(!id) return; try{ fetch(MAIL_FILE_URL,{met
 function mcFileMail(id, project){ if(!MAIL_FILE_URL){ alert('The email-filer flow isn’t connected yet. Ask me to “build the email filer” and I’ll give you the 5-minute steps.'); return; }
   if(!id){ return; } _mcFilePost(id, project); var f=_mcFiled(); if(f.indexOf(id)<0){ f.push(id); _mcSaveFiled(f); } _mcRerenderMC(); }
 function mcFileProject(project){ if(!MAIL_FILE_URL){ alert('The email-filer flow isn’t connected yet — ask me to “build the email filer.”'); return; }
-  var items=_mcProjectMail().filter(function(x){ return x.project===project && x.id; }); if(!items.length) return;
+  var items=_mcProjectMail().filter(function(x){ return (_mcBoxFolder(x.project)||x.project)===project && x.id; }); if(!items.length) return;
   if(!confirm('File all '+items.length+' '+project+' email'+(items.length===1?'':'s')+' into the '+project+' folder?')) return;
   var f=_mcFiled(); items.forEach(function(x){ _mcFilePost(x.id, project); if(f.indexOf(x.id)<0) f.push(x.id); }); _mcSaveFiled(f); _mcRerenderMC(); }
 function _mcWhen(w){ try{ var d=new Date(w); if(isNaN(d.getTime())) return String(w||''); return d.toLocaleString('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' ET'; }catch(e){ return String(w||''); } }
 function _mcFileMailPanelHtml(B, BP){
   var mail=_mcProjectMail(); if(!mail.length) return '';
-  var groups={}; mail.forEach(function(x){ (groups[x.project]=groups[x.project]||[]).push(x); });
+  var groups={}; mail.forEach(function(x){ var g=_mcBoxFolder(x.project)||x.project; (groups[g]=groups[g]||[]).push(x); });   // collapse all projects sharing one folder (SWC-*, On Cloud *…) into a single group/box
   var names=Object.keys(groups).sort();
   var Bf=B+';border-color:var(--brand);color:var(--brand)';
   var h='<div class="panel" id="mwsec-cmdfile"><h2>📥 File mail <span class="count">'+mail.length+'</span></h2>'
