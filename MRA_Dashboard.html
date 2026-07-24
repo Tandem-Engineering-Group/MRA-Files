@@ -3854,6 +3854,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.46", date:"2026-07-24", title:"✏️ Ask Claude to revise a reply draft — right in the composer", items:[
+    "Every reply composer (Waiting → Reply) now has an <b>✏️ Ask Claude to revise this draft</b> box: type how you want it changed (“shorter,” “more formal,” “add the lead time”) and Claude rewrites the draft. It comes back on your next refresh — reopen the reply to see the new wording." ] },
   { rev:"36.45", date:"2026-07-24", title:"📧 Open (email) fixed for real — Waiting-item links now open in Outlook", items:[
     "📧 Open on “Waiting on you” / appointment emails was building a <span class=\"k\">/mail/deeplink/read/</span> link the new Outlook couldn't open (“message might have been moved or deleted”) — even though the email is fine. It now builds the exact <span class=\"k\">?ItemID=</span> link Outlook uses (verified against Graph's own link, incl. the swapped-base64 id encoding), so those opens land on the real message. (File-mail opens already used real links.)" ] },
   { rev:"36.44", date:"2026-07-24", title:"🧑‍🔧 My Work / daily email: open work grouped BY JOB (dash-style) + crew-name match", items:[
@@ -18640,7 +18642,27 @@ function mcCompose(to,subject,body){
     +'<label>To (type a name — e.g. meg)</label><input id="mcTo" list="mcContacts" value="'+esc(to||'')+'" placeholder="Type a name or email">'
     +'<label>Subject</label><input id="mcSubj" value="'+esc(subject||'')+'">'
     +'<label>Message</label><textarea id="mcBody" placeholder="Type your reply…">'+esc(body||'')+'</textarea>'
+    +'<div style="margin-top:8px;border-top:1px dashed var(--line);padding-top:8px">'
+      +'<label style="color:var(--brand)">✏️ Ask Claude to revise this draft</label>'
+      +'<div style="display:flex;gap:6px"><input id="mcRev" placeholder="e.g. shorter · more formal · add the lead time · friendlier" style="flex:1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();mcAskRevise();}">'
+      +'<button class="mc-btn" onclick="mcAskRevise()">✏️ Revise</button></div>'
+      +'<div id="mcRevMsg" class="mc-muted" style="font-size:11px;margin-top:4px">Type how you want it changed — Claude rewrites the draft and it comes back on your next refresh.</div></div>'
     +'<div class="foot"><button class="mc-btn primary" onclick="mcSendMail()">Send</button><button class="mc-btn" onclick="_mcModalClose()">Cancel</button><span id="mcMailMsg" class="mc-muted"></span></div>');
+}
+// ✏️ Ask Claude to revise the current draft — rides the same async "Tell Claude" channel (I act on the next
+// refresh, rewriting the draft on the matching Waiting item so it re-opens with the new wording).
+function mcAskRevise(){
+  var ins=((document.getElementById('mcRev')||{}).value||'').trim();
+  if(!ins){ var mm=document.getElementById('mcRevMsg'); if(mm){ mm.style.color='var(--red)'; mm.textContent='Tell Claude how to change it — e.g. "shorter", "add the lead time".'; } return; }
+  var to=((document.getElementById('mcTo')||{}).value||''), subj=((document.getElementById('mcSubj')||{}).value||''), body=((document.getElementById('mcBody')||{}).value||'');
+  var when=''; try{ when=new Date().toLocaleString('en-US',{timeZone:'America/New_York'}); }catch(e){}
+  var html='<b>MyCommand revise draft</b>'+(when?(' — '+esc(when)):'')
+    +'<br><b>Instruction:</b> '+esc(ins)
+    +'<br><br><b>To:</b> '+esc(to)+'<br><b>Subject:</b> '+esc(subj)
+    +'<br><b>Current draft:</b><br>'+esc(body).replace(/\n/g,'<br>');
+  try{ if(typeof MC_MAILSEND!=='undefined') fetch(MC_MAILSEND,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({to:'rmiller@gomra.com',subject:'[MyCommand revise draft] '+ins.slice(0,60),html:html})}); }catch(e){}
+  var m=document.getElementById('mcRevMsg'); if(m){ m.style.color='var(--brand)'; m.textContent='✓ Sent to Claude — the revised draft comes back on your next refresh; reopen this reply to see it.'; }
+  var r=document.getElementById('mcRev'); if(r) r.value='';
 }
 function mcSendMail(){
   var to=_mcEmail(document.getElementById('mcTo').value), subj=(document.getElementById('mcSubj').value||'').trim(), body=(document.getElementById('mcBody').value||'').trim();
