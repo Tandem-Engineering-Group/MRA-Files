@@ -3854,6 +3854,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.45", date:"2026-07-24", title:"📧 Open (email) fixed for real — Waiting-item links now open in Outlook", items:[
+    "📧 Open on “Waiting on you” / appointment emails was building a <span class=\"k\">/mail/deeplink/read/</span> link the new Outlook couldn't open (“message might have been moved or deleted”) — even though the email is fine. It now builds the exact <span class=\"k\">?ItemID=</span> link Outlook uses (verified against Graph's own link, incl. the swapped-base64 id encoding), so those opens land on the real message. (File-mail opens already used real links.)" ] },
   { rev:"36.44", date:"2026-07-24", title:"🧑‍🔧 My Work / daily email: open work grouped BY JOB (dash-style) + crew-name match", items:[
     "The per-person page & daily email (?mywork=) now list <b>all open work grouped by trailer / job</b> — overdue jobs first, overdue tasks flagged red — the way the board shows a crew's work, instead of flat due-date buckets. Overdue is still called out up top as its own section.",
     "Fixed the name match so a labeled recipient like <b>Electricians (Beyer)</b> catches the board's <b>Electricians</b> tasks (the “(…)” label is stripped for matching) — so nothing on the board is missing from their email." ] },
@@ -18498,7 +18500,12 @@ function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ var t=_mcIssTas
 function _mcMailHref(x){ var l=(x&&x.link)?String(x.link):''; if(l) return l;   // use Outlook's webLink VERBATIM — stripping &exvsurl=1 was breaking the OWA deep link (it wouldn't open the message)
   // Fallback: build an Outlook-web deep link straight from the message id (every scanned item carries one) so
   // "📧 Open email" always works and opens the FULL thread even when the brief didn't include a prebuilt link.
-  var id=(x&&x.id)?String(x.id):''; return id?('https://outlook.office.com/mail/deeplink/read/'+encodeURIComponent(id)):''; }
+  // Fallback (item has no prebuilt webLink — e.g. Waiting/Appt items): build the SAME OWA "?ItemID=" link
+  // Graph itself uses. Graph ids come url-safe-base64 (-,_); the OWA ItemID needs standard base64 (+,/), so convert.
+  // (The old /mail/deeplink/read/<id> format could NOT open a REST id in the new Outlook → "message moved or deleted".)
+  var id=(x&&x.id)?String(x.id):''; if(!id) return '';
+  var std=id.replace(/_/g,'+').replace(/-/g,'/');   // VERIFIED against Graph's own webLink: id's _ ↔ + and - ↔ / (swapped base64 variant)
+  return 'https://outlook.office365.com/owa/?ItemID='+encodeURIComponent(std)+'&exvsurl=1&viewmodel=ReadMessageItem'; }
 // ✋ Dismiss ("not for me" / already handled) — hide a Waiting-on-you item. Keyed by the stable message id so it
 // stays hidden across the 4×/day re-scans; per-device localStorage; recoverable via the "N hidden · show" toggle.
 var _MC_DISMISS_KEY='mra_mc_dismiss_v1'; var _MC_SHOW_DISMISSED=false;
