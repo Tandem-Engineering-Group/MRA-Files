@@ -3854,6 +3854,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.44", date:"2026-07-24", title:"🧑‍🔧 My Work / daily email: open work grouped BY JOB (dash-style) + crew-name match", items:[
+    "The per-person page & daily email (?mywork=) now list <b>all open work grouped by trailer / job</b> — overdue jobs first, overdue tasks flagged red — the way the board shows a crew's work, instead of flat due-date buckets. Overdue is still called out up top as its own section.",
+    "Fixed the name match so a labeled recipient like <b>Electricians (Beyer)</b> catches the board's <b>Electricians</b> tasks (the “(…)” label is stripped for matching) — so nothing on the board is missing from their email." ] },
   { rev:"36.43", date:"2026-07-24", title:"📥 Mail moved to its OWN file so the auto-refresh can't wipe it (the real fix)", items:[
     "The File-mail kept vanishing because it lived inside the brief file (agent.json) that the 4×/day auto-refresh fully rewrites. It now reads from a dedicated <b>mail.json</b> that the refresh never touches — so it physically can't be wiped anymore. (Falls back to the previous behavior until the mail-publish flow is switched on.)" ] },
   { rev:"36.42", date:"2026-07-24", title:"🕐 Command times show in YOUR time (Eastern), not UTC", items:[
@@ -14195,6 +14198,7 @@ function mwPickFollow(sel){ const v=sel&&sel.value; if(v) mwToggleFollow(v); if(
 function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub|by|due0|files|pfiles)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
 function myWorkFor(name){
   const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
+  const mn=String(name||'').replace(/\s*\([^)]*\)\s*$/,'').trim()||String(name||'');   // strip a trailing label like "(Beyer)" so "Electricians (Beyer)" matches the board's "Electricians" tasks
   const soon=localISO(Date.parse(today)+7*86400000);
   const ms30=localISO(Date.parse(today)+30*86400000);
   const cut7=localISO(Date.parse(today)-7*86400000);
@@ -14203,11 +14207,11 @@ function myWorkFor(name){
   // --- open tasks assigned to me (shop + project), WITH full detail (comments, Fleetio info+photos, subproject) ---
   (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
     (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
-      if(_whoMatch(t.who,name)){ const fm=String(t.t||'').match(/🔧\s*#(\d+)/);
+      if(_whoMatch(t.who,mn)){ const fm=String(t.t||'').match(/🔧\s*#(\d+)/);
         items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, due0:_taskDue0(t.cm), kind:'shop', proj:j.project, raw:t.t, files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row,proj:j.project,raw:t.t}}); } }); });
   (D.projects||[]).forEach(p=>{ const ts=p.tasks||[]; ts.forEach((t,i)=>{ if(/yes/i.test(t.ml||'')) return;
       if(isDoneT(t) || projIsPendingVerify(t)) return;   // pending-verify shows in its own section
-      if(_whoMatch(t.who,name)){ let parent=''; if(t.sub){ for(let k=i-1;k>=0;k--){ if(!ts[k].sub){ parent=ts[k].t||''; break; } } }
+      if(_whoMatch(t.who,mn)){ let parent=''; if(t.sub){ for(let k=i-1;k>=0;k--){ if(!ts[k].sub){ parent=ts[k].t||''; break; } } }
         items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, due0:_taskDue0(t.cm), st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name,h:projTaskHandle(t)}}); } }); });
   items=items.filter(x=>!isMeetingTask(x));   // 🗓 meetings show on the project schedule/Gantt, not as personal My Work to-dos
   const od=items.filter(x=>x.due&&x.due<today).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
@@ -14220,13 +14224,13 @@ function myWorkFor(name){
   const pendingMine=[], awaitingMe=[];
   (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(!projIsPendingVerify(t)) return;
       const h=(typeof projTaskHandle==='function')?projTaskHandle(t):String(t.id||t.t||'');
-      if(_whoMatch(t.who,name)) pendingMine.push({t:String(t.t||''), where:p.name, pm:p.pm||'', handle:h, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim()});
+      if(_whoMatch(t.who,mn)) pendingMine.push({t:String(t.t||''), where:p.name, pm:p.pm||'', handle:h, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim()});
       if(pmMatch(p.pm)||iAmAdmin) awaitingMe.push({t:String(t.t||''), where:p.name, who:t.who||'', due:t.finISO||t.startISO||'', handle:h, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim()}); }));
   awaitingMe.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
   // --- ✅ completed in the last 7 days (mine) ---
   const doneRecent=[];
-  (D.jobs||[]).forEach(j=>{ if(j.category==='leave') return; (j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut7&&!isSalesT(t)&&_whoMatch(t.who,name)) doneRecent.push({t:cleanTask(t.t,false), where:(j.project||''), d:t.cl, kind:'shop', nav:{k:'shop',row:j.row,proj:j.project,raw:t.t}}); }); });
-  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; if(isDoneT(t)&&fin&&fin>cut7&&fin<=today&&_whoMatch(t.who,name)) doneRecent.push({t:String(t.t||''), where:p.name, d:fin, kind:'proj', nav:{k:'proj',proj:p.name,h:projTaskHandle(t)}}); }));
+  (D.jobs||[]).forEach(j=>{ if(j.category==='leave') return; (j.tasks||[]).forEach(t=>{ if(t.done&&t.cl&&t.cl>cut7&&!isSalesT(t)&&_whoMatch(t.who,mn)) doneRecent.push({t:cleanTask(t.t,false), where:(j.project||''), d:t.cl, kind:'shop', nav:{k:'shop',row:j.row,proj:j.project,raw:t.t}}); }); });
+  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ const fin=t.finISO||''; if(isDoneT(t)&&fin&&fin>cut7&&fin<=today&&_whoMatch(t.who,mn)) doneRecent.push({t:String(t.t||''), where:p.name, d:fin, kind:'proj', nav:{k:'proj',proj:p.name,h:projTaskHandle(t)}}); }));
   doneRecent.sort((a,b)=>String(b.d).localeCompare(String(a.d)));
   // --- 📊 my projects (I'm PM) + any I follow ---
   const follow=mwGetFollow(name); const seen={}; const myProjects=[];
@@ -14808,6 +14812,20 @@ function buildMyWorkHtml(name){
     const badge=x.due?(od?'<span class="od">'+strk+'OVERDUE '+fmt(x.due)+'</span>':'<span class="dt">'+strk+fmt(x.due)+'</span>'):'';
     const rng=(x.kind==='proj'&&x.st0)?('<div class="ctx">▶ '+fmt(x.st0)+' → '+(x.due?fmt(x.due):'…')+'</div>'):'';
     return '<li'+(od?' class="hot"':'')+'>'+(x.kind==='proj'?'📋 ':'🔧 ')+'<b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span> '+badge+rng+detailOf(x)+'</li>'; };
+  // job line = same as li but WITHOUT the trailing job name (the job IS the group header)
+  const jli=x=>{ const od=x.due&&x.due<m.today;
+    const strk=(x.due0&&x.due&&x.due0!==x.due)?('<span style="text-decoration:line-through;opacity:.6">'+fmt(x.due0)+'</span> → '):'';
+    const badge=x.due?(od?'<span class="od">'+strk+'OVERDUE '+fmt(x.due)+'</span>':'<span class="dt">'+strk+fmt(x.due)+'</span>'):'';
+    const rng=(x.kind==='proj'&&x.st0)?('<div class="ctx">▶ '+fmt(x.st0)+' → '+(x.due?fmt(x.due):'…')+'</div>'):'';
+    return '<li'+(od?' class="hot"':'')+'>'+(x.kind==='proj'?'📋 ':'🔧 ')+'<b>'+esc(x.t)+'</b> '+badge+rng+detailOf(x)+'</li>'; };
+  // ALL open work grouped by trailer/job (dash-style) — overdue jobs first, overdue tasks flagged red inline
+  const byJobHtml=items=>{ if(!items.length) return '<div class="empty">— nothing open —</div>';
+    const jg={}; items.forEach(x=>{ const k=x.where||'(no job)'; (jg[k]=jg[k]||[]).push(x); });
+    const minDue=arr=>arr.reduce((mm,x)=>{ const d=x.due||'9999'; return d<mm?d:mm; },'9999');
+    const names=Object.keys(jg).sort((a,b)=>minDue(jg[a]).localeCompare(minDue(jg[b]))||a.localeCompare(b));
+    return names.map(nm=>{ const arr=jg[nm].slice().sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
+      const odc=arr.filter(x=>x.due&&x.due<m.today).length;
+      return '<div style="margin:14px 0 3px;padding:6px 10px;background:#eef2f7;border-left:3px solid '+(odc?'#b91c1c':'#1d4ed8')+';border-radius:4px;font-weight:700;color:#1e293b">🏭 '+esc(nm)+' <span style="font-weight:400;font-size:11px;color:#64748b">'+arr.length+' open'+(odc?(' · '+odc+' overdue'):'')+'</span></div><ul>'+arr.map(jli).join('')+'</ul>'; }).join(''); };
   const dli=x=>'<li>'+(x.kind==='proj'?'📋 ':'🔧 ')+esc(x.t)+' <span class="src">'+esc(x.where)+'</span> <span class="dt">'+fmt(x.d)+'</span></li>';
   const pli=x=>'<li>🟡 <b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span>'+(x.pm?(' <span class="who">PM '+esc(x.pm)+'</span>'):'')+' <span class="pend">pending PM</span>'+detailOf(x)+'</li>';
   const ali=x=>{ const od=x.due&&x.due<m.today; return '<li>🟡 <b>'+esc(x.t)+'</b> <span class="src">'+esc(x.where)+'</span>'+(x.who?(' <span class="who">marked by '+esc(x.who)+'</span>'):'')+(x.due?(od?' <span class="od">due '+fmt(x.due)+'</span>':' <span class="dt">due '+fmt(x.due)+'</span>'):'')+' <span class="pv">verify</span>'+detailOf(x)+'</li>'; };
@@ -14829,12 +14847,13 @@ function buildMyWorkHtml(name){
   let body='';
   if(m.awaitingMe.length) body+=sec('✅ Awaiting your sign-off',m.awaitingMe,ali,'Nothing waiting on you.');
   body+=sec('⚠ Overdue',m.od,li,'Nothing overdue — nice.');
-  body+=sec('📅 Due this week',m.due,li,'Nothing due in the next 7 days.');
+  const _allOpen=[...m.od,...m.due,...m.later];
+  body+='<h2>📋 All open work — by trailer / job <span style="font-weight:400;font-size:10px;color:#7b8794">('+_allOpen.length+')</span></h2>'+byJobHtml(_allOpen);
   if(m.pendingMine.length) body+=sec('🟡 Marked ready — awaiting PM',m.pendingMine,pli);
   if(m.myProjects.length) body+='<h2>📊 My projects <span style="font-weight:400;font-size:10px;color:#7b8794">('+m.myProjects.length+')</span></h2><ul>'+m.myProjects.map(projLi).join('')+'</ul>';
   if(m.milestones.length) body+='<h2>◆ Milestones — next 30 days</h2><ul>'+m.milestones.map(x=>'<li>◆ <b>'+esc(x.txt)+'</b> <span class="src">'+esc(x.where)+'</span> <span class="dt">'+fmt(x.d)+'</span></li>').join('')+'</ul>';
   if(m.doneRecent.length) body+=sec('✅ Completed — last 7 days',m.doneRecent,dli);
-  body+=sec('🗂 Everything else open',m.later,li,'Nothing else on your plate.');
+  // (open work now shown grouped by job above — no separate "everything else" bucket)
   const dash=location.origin+location.pathname;
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My Work — '+esc(name)+' — '+rDate+'</title><style>'+REPORT_CSS+'</style></head><body>'
     +'<div class="printbar"><button onclick="window.print()">🖨 Print / Save PDF</button><span style="color:#aeb6c2">My Work · '+esc(name)+' · refresh for live data</span></div>'
