@@ -3852,6 +3852,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.31", date:"2026-07-24", title:"📥 File project mail — LIVE with your inbox + “no box” flags", items:[
+    "Your actual project emails now show in the panel, grouped by project (Medtronic, SWC/Hawaii, Trumpf, SWC FL1…). Any group that <b>doesn't have an Outlook folder yet</b> gets a <b>⚠ NO BOX — MAKE ONE</b> flag, and its “File all” says <b>→ To File</b> so you know it'll land in the catch-all until you make the folder + add the case." ] },
   { rev:"36.30", date:"2026-07-23", title:"📥 File project mail — stop showing non-project noise (temp, pending full sweep)", items:[
     "The File-mail panel was grabbing inbound shipment/delivery notices and showing junk (a FedEx tracking email as a fake “Boston DX”). It now only lists <b>real project emails</b> (must have a subject + be an actual message). <b>Note:</b> the panel still only shows what's in your daily brief — the <b>full every-project-email sweep is a scan-side job still being wired up</b>, so the list stays short until that lands." ] },
   { rev:"36.29", date:"2026-07-23", title:"🛑 FIX: closed tasks stay closed — no more resurrecting auto-tasks", items:[
@@ -18400,6 +18402,9 @@ function mcToggleShowDismissed(){ _MC_SHOW_DISMISSED=!_MC_SHOW_DISMISSED; _mcRer
 // the PM) via the "MRA Email Filer" flow (Move email V2, routed by project). Filed ids are remembered so a filed
 // email doesn't reappear on the next scan. MAIL_FILE_URL is set once the flow is built.
 var MAIL_FILE_URL='https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/18/workflows/180ae285c9b84a7cb0e48a171ee80420/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RuFQP3R9uD47YhGV7LAINCFOiQ2H3Vv8dMGijdfndDY';
+// Projects that HAVE an Outlook folder + a case in the MRA Email Filer flow (lowercase, substring match).
+// A File-mail group NOT matching any of these shows a "⚠ no box — make one" flag. Add here when you add a flow case.
+var MAIL_BOXES=['medtronic','trumpf','oakland','cisco','on cloud'];
 var _MC_FILED_KEY='mra_mc_filed_v1';
 function _mcFiled(){ try{ return JSON.parse(localStorage.getItem(_MC_FILED_KEY)||'[]')||[]; }catch(e){ return []; } }
 function _mcSaveFiled(a){ try{ localStorage.setItem(_MC_FILED_KEY, JSON.stringify(a||[])); }catch(e){} }
@@ -18427,9 +18432,10 @@ function _mcFileMailPanelHtml(B, BP){
   var Bf=B+';border-color:var(--brand);color:var(--brand)';
   var h='<div class="panel" id="mwsec-cmdfile"><h2>📥 File project mail <span class="count">'+mail.length+'</span></h2>'
     +'<div style="font-size:12px;color:var(--muted);margin:-2px 0 8px">Your inbox mail grouped by project. Tap <b>📁 File</b> on one — or <b>📁 File all</b> on a whole project — to move it into that project’s Outlook folder. Filed mail won’t come back on the next scan.'+(MAIL_FILE_URL?'':' <b style="color:#fbbf24">⚠ Filing isn’t wired up yet — say “build the email filer” for the steps.</b>')+'</div>';
-  names.forEach(function(pn){ var items=groups[pn]; var fileable=items.filter(function(x){return x.id;}).length;
-    h+='<div style="margin:8px 0 2px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div class="lead" style="color:var(--brand)">📁 '+esc(pn)+' <span class="count">'+items.length+'</span></div>'
-      +(fileable?'<button style="'+Bf+'" onclick="mcFileProject(\''+escJsAttr(pn)+'\')" title="File all '+fileable+' into the '+esc(pn)+' folder">📁 File all '+fileable+'</button>':'')+'</div>';
+  var _nobox=function(pn){ var k=String(pn||'').toLowerCase(); for(var i=0;i<MAIL_BOXES.length;i++){ if(k.indexOf(MAIL_BOXES[i])>=0) return false; } return true; };
+  names.forEach(function(pn){ var items=groups[pn]; var fileable=items.filter(function(x){return x.id;}).length; var nb=_nobox(pn);
+    h+='<div style="margin:8px 0 2px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div class="lead" style="color:var(--brand)">📁 '+esc(pn)+' <span class="count">'+items.length+'</span>'+(nb?' <span class="badge" style="background:#3a2e12;color:#fbbf24;font-size:9px">⚠ NO BOX — MAKE ONE</span>':'')+'</div>'
+      +(fileable?'<button style="'+Bf+'" onclick="mcFileProject(\''+escJsAttr(pn)+'\')" title="'+(nb?('No '+esc(pn)+' folder yet — these will land in “To File” until you make one'):('File all '+fileable+' into the '+esc(pn)+' folder'))+'">📁 File all '+fileable+(nb?' → To File':'')+'</button>':'')+'</div>';
     items.forEach(function(x){ var mh=_mcMailHref(x); var open=mh?'<a href="'+esc(mh)+'" target="_blank" rel="noopener" style="'+B+'" title="Read it in Outlook">📧 Open</a>':'';
       var fileBtn=x.id?('<button style="'+BP+'" onclick="mcFileMail(\''+escJsAttr(x.id)+'\',\''+escJsAttr(pn)+'\')">📁 File → '+esc(pn)+'</button>'):'';
       h+='<div class="row" style="display:block"><div class="meta">'+esc(x.subject||'(no subject)')+(x.from?(' · '+esc(x.from)):'')+(x.when?(' · '+esc(x.when)):'')+'</div>'
