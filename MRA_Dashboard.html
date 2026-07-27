@@ -3856,6 +3856,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.50", date:"2026-07-27", title:"📋 Design Review report — “needs a name” callout", items:[
+    "The 📋 Design Review report now has a callout up top for the generic <b>MRA Design</b> lane, broken down by project (e.g. “Trumpf (12) · Cisco (8) need a name”), so you can see at a glance which tasks still need a specific designer assigned." ] },
   { rev:"36.49", date:"2026-07-27", title:"📋 Design board Review report + Steve K removed", items:[
     "New <b>📋 Review report</b> button on the 🎨 Design Team board: an <b>overview-by-person</b> table up top (open · overdue · due ≤7d · awaiting verify · next due) then a <b>per-designer detail</b> list of every open task with its <b>status</b> (In Progress %, On Hold, Pending Verify, ◆ Milestone), project/phase, due date, and any notes — a clean one-pager to sit down and review status/issues with the team. 🖨 Print / Save PDF.",
     "<b>Steve K removed</b> from the design team board and his login — no longer with MRA." ] },
@@ -16132,7 +16134,17 @@ function buildDesignReportHtml(){
     p.open.forEach(x=>{ if(x.bucket.k!==lastK){ rows+='<div class="dgrp'+(x.bucket.k==='overdue'?' od':'')+'">'+GLAB[x.bucket.k]+'</div>'; lastK=x.bucket.k; } rows+=li(x); });
     return '<div class="pblk"><h2><span class="dot" style="background:'+p.color+'"></span>'+esc(p.name)+' <span style="font-weight:400;font-size:10px;color:#7b8794">'+p.open.length+' open'+(p.od.length?(' · '+p.od.length+' overdue'):'')+'</span></h2><ul>'+rows+'</ul></div>';
   }).join('');
-  const extraCss='table.ov{width:100%;border-collapse:collapse;margin:2px 0 6px;font-size:11px}'
+  // ⚠ Callout: the generic "MRA Design" lane = tasks with no specific designer assigned yet.
+  // Break it down by project so Rich can see which ones need a real name (e.g. "Trumpf (12) · Cisco (8)").
+  const mraLane=people.find(p=>p.name===DESIGN_TEAM_LANE);
+  let callout='';
+  if(mraLane && mraLane.open.length){
+    const byProj={}; mraLane.open.forEach(x=>{ const k=x.proj||'(no project)'; byProj[k]=(byProj[k]||0)+1; });
+    const parts=Object.keys(byProj).sort((a,b)=>byProj[b]-byProj[a]||a.localeCompare(b)).map(k=>esc(k)+' <b>('+byProj[k]+')</b>');
+    callout='<div class="callout">⚠ <b>'+mraLane.open.length+' task'+(mraLane.open.length===1?'':'s')+' need a name assigned</b> — these sit on the generic <b>MRA Design</b> lane with no specific designer yet. Give each an owner: '+parts.join(' · ')+'.</div>';
+  }
+  const extraCss='.callout{background:#fff8e6;border:1px solid #f0c869;border-left:4px solid #f59e0b;border-radius:8px;padding:9px 12px;font-size:11.5px;line-height:1.5;margin:2px 0 10px;color:#7a5b00}'
+    +'table.ov{width:100%;border-collapse:collapse;margin:2px 0 6px;font-size:11px}'
     +'table.ov th{background:#f8fafc;text-align:left;padding:5px 8px;border-bottom:2px solid #e04826;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:#7b8794}'
     +'table.ov td{padding:5px 8px;border-bottom:1px solid #e6eaef}table.ov td.c,table.ov th.c{text-align:center}'
     +'table.ov tr.tot td{border-top:2px solid #cbd5e1;font-weight:800;background:#f8fafc}'
@@ -16142,6 +16154,7 @@ function buildDesignReportHtml(){
     +'<div class="printbar"><button onclick="window.print()">\u{1F5A8} Print / Save PDF</button><span style="color:#aeb6c2">Design team review · refresh the board for live data</span></div>'
     +'<div class="wrap"><h1><span class="mra">MRA</span> Design — Team Review</h1><div class="sub">'+rDate+' · board data as of '+esc(D.generatedText||'')+'</div>'
     +'<div class="stats">'+tile(people.length,'DESIGNERS','#1d4ed8')+tile(totOpen,'OPEN TASKS','#0ea5e9')+tile(totOd,'OVERDUE','#b91c1c')+tile(totPend,'AWAITING VERIFY','#7c3aed')+'</div>'
+    +callout
     +'<h2>\u{1F4CA} Overview by person</h2>'+(people.length?ovTable:'<div class="empty">No open design tasks right now. \u{1F389}</div>')
     +(people.length?('<h2>\u{1F4CB} Detail — open work &amp; status</h2>'+detail):'')
     +'<div class="foot">MRA Command Center · design team review · '+rDate+' · open the \u{1F3A8} Design board for live detail</div></div></body></html>';
