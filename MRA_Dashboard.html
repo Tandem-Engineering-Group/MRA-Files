@@ -3856,6 +3856,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.52", date:"2026-07-27", title:"🐛 Meeting views no longer jump to the top while you sit in them", items:[
+    "The <b>Production Status Meeting</b> and <b>Maintenance Meeting</b> screens kept snapping back to the top every ~30 seconds (the live refresh re-rendered them and reset the scroll). They now <b>hold your scroll position</b> through the refresh, so you can sit on the Gantt or a card during a meeting without getting bumped up." ] },
   { rev:"36.51", date:"2026-07-27", title:"🧾 Quote Generator — scope line items + full-transparency detailed quote", items:[
     "The Quote Generator now takes <b>multiple labor scope line items</b> — one line per scope, each with its own hours × rate. Hit <b>＋ Add scope line</b> for as many as you need.",
     "The <b>Detailed (internal) quote</b> is now full transparency — every scope line (hrs × rate), materials (cost → +markup), shop supplies, subtotals, tax and total, plus the scope narrative and a new <b>Assumptions &amp; exclusions</b> block. The customer copy still shows just the single all-inclusive total.",
@@ -10895,6 +10897,12 @@ function _pmtDrawGantt(items,today){
   renderGantt(el, rows, win, {dates:true, showDays:true});
 }
 function pmtOdMore(btn){ const m=btn.previousElementSibling; if(!m) return; const o=(m.style.display==='none'); m.style.display=o?'block':'none'; btn.textContent=o?'− show less':(btn.getAttribute('data-more')||'+ more'); }
+// Re-render a full-screen overlay WITHOUT snapping its scroll to the top (the 30s poll used to bump
+// the meeting views back up while you were sitting in them). Captures + restores the overlay's scrollTop,
+// with a rAF pass to survive any late layout shift (e.g. the Program Gantt sizing after the innerHTML swap).
+function _preserveScroll(id, fn){ const ov=document.getElementById(id); const y=ov?ov.scrollTop:0;
+  try{ fn(); }catch(_){}
+  if(ov){ ov.scrollTop=y; requestAnimationFrame(()=>{ try{ ov.scrollTop=y; }catch(_){} }); } }
 function renderProdMeeting(){
   const D=window.MRA_DATA||{}; if(!(D.projects&&D.projects.length)) return;
   const today=D.todayISO||localISO(Date.now());
@@ -11865,7 +11873,7 @@ function renderSal(D){
   const today=D.todayISO||localISO(Date.now());
   renderReturnAlarm(D);
   renderPipeline(D);
-  if(MTG_OPEN) renderMeeting();   // meeting view stays live while assignments are made
+  if(MTG_OPEN) _preserveScroll('mtgOverlay', renderMeeting);   // meeting view stays live while assignments are made (without jumping scroll to top)
   if(YN_OPEN) renderYardNext();   // 🚦 What's Next stays live/in-sync while edits are made
   { const ss=document.getElementById('salSortSel'); if(ss && ss.value!==SAL_SORT) ss.value=SAL_SORT; }   // reflect the saved sort choice
   // A task passes the timeframe filter if its DUE date is on/before the window's ceiling (overdue counts).
@@ -17958,7 +17966,7 @@ function renderAll(){
   eotmSetup();
   try{ updateUnasChip(); if(UNAS_OPEN) renderUnas(); }catch(_){}
   try{ if(PROJV2_OPEN) renderProjV2(); }catch(_){}   // 🆕 Projects V2 preview reflects live edits
-  try{ if(PMT_OPEN && !_pmtBusy()) renderProdMeeting(); }catch(_){}   // don't wipe a half-typed add row / open edit on the poll
+  try{ if(PMT_OPEN && !_pmtBusy()) _preserveScroll('pmtOverlay', renderProdMeeting); }catch(_){}   // don't wipe a half-typed add row / open edit on the poll — and don't jump scroll to top
   try{ if(SP_OPEN && !SP_FORM) renderSalesPlan(); }catch(_){}   // 📈 sales/planning view live-syncs too (not while typing in the form)   // ⚠ unassigned-task finder chip + live list
   if(VIEW==='history') renderHistory();
   if(VIEW==='mywork') try{ renderMyWork(); }catch(e){}
