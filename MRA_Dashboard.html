@@ -3856,6 +3856,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.53", date:"2026-07-27", title:"🧾 Quote Generator — searchable saved-quotes list", items:[
+    "Saved quotes are now a <b>searchable list</b> instead of a row of chips — type a <b>customer or project</b> in the 🔍 box to filter, and click any row (customer · project · total · date) to load it. Scales cleanly as you save more; ✕ still deletes." ] },
   { rev:"36.52", date:"2026-07-27", title:"🐛 Meeting views no longer jump to the top while you sit in them", items:[
     "The <b>Production Status Meeting</b> and <b>Maintenance Meeting</b> screens kept snapping back to the top every ~30 seconds (the live refresh re-rendered them and reset the scroll). They now <b>hold your scroll position</b> through the refresh, so you can sit on the Gantt or a card during a meeting without getting bumped up." ] },
   { rev:"36.51", date:"2026-07-27", title:"🧾 Quote Generator — scope line items + full-transparency detailed quote", items:[
@@ -11384,6 +11386,20 @@ function qLoadQuote(id){ const r=_qSaved().find(x=>x.id===id); if(!r) return;
   QUOTE_CONS.forEach(x=>{ if(!QUOTE.cons[x[0]]) QUOTE.cons[x[0]]={on:false,amt:x[2]}; });
   renderQuote(); }
 function qDelQuote(id){ if(!confirm('Delete this saved quote?')) return; _qSaveList(_qSaved().filter(x=>x.id!==id)); renderQuote(); }
+// Searchable saved-quotes list (scales as the count grows — type a customer/project to filter).
+function _qSavedListHtml(filter){
+  var s=_qSaved(); var f=String(filter||'').toLowerCase().trim();
+  if(!s.length) return '<span class="q-hint" style="padding:8px;display:block">none yet — build one and hit 💾 Save</span>';
+  var rows=s.filter(function(r){ return !f || (((r.cust||'')+' '+(r.proj||'')).toLowerCase().indexOf(f)>=0); });
+  if(!rows.length) return '<span class="q-hint" style="padding:8px;display:block">no saved quote matches “'+esc(filter)+'”</span>';
+  return rows.map(function(r){
+    var d=''; try{ if(r.savedAt){ var dt=new Date(r.savedAt); d=(dt.getMonth()+1)+'/'+dt.getDate()+'/'+String(dt.getFullYear()).slice(2); } }catch(e){}
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 9px;border-bottom:1px solid var(--line)">'
+      +'<a onclick="qLoadQuote(\''+r.id+'\')" title="Load this quote into the form" style="cursor:pointer;flex:1;font-size:12.5px;line-height:1.35"><b>'+esc(r.cust||'Untitled')+'</b>'+(r.proj?' <span style="color:var(--muted)">· '+esc(r.proj)+'</span>':'')+' <span style="color:var(--brand);font-weight:700">'+_money(r.total)+'</span>'+(d?' <span style="color:var(--muted);font-size:11px">'+d+'</span>':'')+'</a>'
+      +'<span onclick="qDelQuote(\''+r.id+'\')" title="Delete this saved quote" style="cursor:pointer;color:#f87171;font-weight:800;padding:0 4px">✕</span></div>';
+  }).join('');
+}
+function qFilterSaved(v){ var el=document.getElementById('qSavedList'); if(el) el.innerHTML=_qSavedListHtml(v); }
 function qNewQuote(){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,lines:[{d:'',hours:8,rate:c.rate}],notes:'',markup:c.markup,tax:c.tax,mats:'',cons:{},supMode:c.supMode||'items',supPct:(c.supPct!=null?c.supPct:8)}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); renderQuote(); }
 // ＋/✕ scope line items (each its own hours × rate). Read the form first so typed-but-unsaved values survive the re-render.
 function qAddLine(){ _qRead(); if(!Array.isArray(QUOTE.lines)) QUOTE.lines=_qLines(); const last=QUOTE.lines[QUOTE.lines.length-1]; QUOTE.lines.push({d:'',hours:0,rate:(last&&last.rate)||_qCfg().rate||120}); renderQuote(); }
@@ -11403,8 +11419,9 @@ function renderQuote(){ const body=document.getElementById('quoteBody'); if(!bod
   const consRows=QUOTE_CONS.map(x=>{ const s=QUOTE.cons[x[0]]||{on:false,amt:x[2]}; return '<label class="q-conline"><input type="checkbox" id="qc_'+x[0]+'" '+(s.on?'checked':'')+' onchange="qUpdate()"> '+esc(x[1])+' <span>$</span><input id="qca_'+x[0]+'" type="number" value="'+s.amt+'" oninput="qUpdate()" style="width:64px;'+inp+'"></label>'; }).join('');
   body.innerHTML=
    '<div class="q-wrap"><div class="q-form">'
-   + (function(){ var s=_qSaved(); var chips=s.length?s.map(function(r){ return '<span class="q-schip"><a onclick="qLoadQuote(\''+r.id+'\')" title="Load this quote back into the form">'+esc(r.cust||'Untitled')+' · '+_money(r.total)+'</a><span class="x" onclick="qDelQuote(\''+r.id+'\')" title="Delete this saved quote">✕</span></span>'; }).join(''):'<span class="q-hint">none yet — build one and hit 💾 Save</span>';
-      return '<div class="q-fsec q-savedbar"><div class="q-lab" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">💾 Saved quotes <span class="q-hint" style="font-weight:400">'+(QUOTE_STORE_URL?'· stored on the dashboard (any device)':'· stored on this device')+'</span> <button class="expandbtn" onclick="qSaveQuote()" title="Save this quote so you can pull it back up later">💾 Save this quote</button> <button class="expandbtn" onclick="qNewQuote()" title="Clear the form for a fresh quote">＋ New</button> <span id="qSavedMsg" style="color:#22c55e;font-size:12px;font-weight:400"></span></div><div class="q-saved">'+chips+'</div></div>'; })()
+   + '<div class="q-fsec q-savedbar"><div class="q-lab" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">💾 Saved quotes <span class="q-hint" style="font-weight:400">'+(QUOTE_STORE_URL?'· stored on the dashboard (any device)':'· stored on this device')+'</span> <button class="expandbtn" onclick="qSaveQuote()" title="Save this quote so you can pull it back up later">💾 Save this quote</button> <button class="expandbtn" onclick="qNewQuote()" title="Clear the form for a fresh quote">＋ New</button> <span id="qSavedMsg" style="color:#22c55e;font-size:12px;font-weight:400"></span></div>'
+      + '<input id="qSearch" placeholder="🔍 find a saved quote — type a customer or project…" oninput="qFilterSaved(this.value)" style="width:100%;box-sizing:border-box;margin:8px 0 6px;'+inp+'">'
+      + '<div id="qSavedList" class="q-saved" style="max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:9px">'+_qSavedListHtml('')+'</div></div>'
    + '<div class="q-fsec"><div class="q-lab">Customer / job</div><div class="q-grid2"><input id="qCust" placeholder="Customer name" value="'+escA(QUOTE.cust)+'" oninput="qUpdate()" style="'+inp+'"><input id="qProj" placeholder="Project / vehicle (short title)" value="'+escA(QUOTE.proj)+'" oninput="qUpdate()" style="'+inp+'"></div></div>'
    + '<div class="q-fsec"><div class="q-lab">Work description <span class="q-hint">this is what shows on the customer quote — fully editable · link a Fleetio issue to auto-fill it</span></div><div class="q-inline" style="margin:0 0 7px"><label>🔧 Fleetio issue #<input id="qFio" type="text" value="'+escA(QUOTE.fio||'')+'" placeholder="1244" style="width:90px;'+inp+'"></label><button class="expandbtn" onclick="qPullFleetio()" title="Pull this Fleetio issue&#39;s summary, detail and asset into the description">↧ Pull from Fleetio</button></div><textarea id="qDesc" rows="3" placeholder="Describe the work for the customer (or link a Fleetio issue above and hit Pull)" oninput="qUpdate()" style="width:100%;box-sizing:border-box;'+inp+'">'+esc(QUOTE.desc||'')+'</textarea></div>'
    + (function(){ var L=_qLines();
