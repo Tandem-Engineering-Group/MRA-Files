@@ -3872,6 +3872,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.63", date:"2026-07-28", title:"🐛 Fixed the new board-tasks digest — wrong job matched + real duplicates", items:[
+    "Rich caught 3 real bugs in yesterday's board-tasks addition, verified against live data and fixed: <b>(1)</b> a J# with two board rows (e.g. an old shipped job + the current one) picked the wrong one — now ranks the live, non-shipped row first; <b>(2)</b> tasks turned into real shop tasks via ⚒ were being listed TWICE — once as the shop task, once as the project-schedule line it came from — now deduped using the board's own coverage rule, same as the floor cards; <b>(3)</b> a J# shared by several distinct projects (JFSD has 4) only pulled the first one — now every one of them is included, labeled by sub-project." ] },
   { rev:"36.62", date:"2026-07-28", title:"📋 Jesica's team digest now includes board tasks, not just Fleetio", items:[
     "Some of the team's programs aren't tracked in Fleetio at all (Fleetio is vehicle-maintenance issues only), so a program with zero Fleetio issues used to just read \"all clear\" even when there was real open work on it. The digest now also pulls each program's <b>open shop + project tasks straight off the board</b> — assignee, due date, and notes — same J#-based linking the floor cards use.",
     "A program only drops into the terse \"✓ All clear\" line when it has <b>neither</b> Fleetio issues <b>nor</b> board tasks. New <b>board tasks</b> stat tile + per-program count on all 3 reports (Jes/Devan/Heather, Stephanie, Daniel)." ] },
@@ -15436,9 +15438,17 @@ const JES_TEAM=[
 ];
 const JES_DIRECTOR={key:'Jesica', name:'Jesica Wasczenski', to:'jesicaw@gomra.com'};
 const JES_JOBNAMES={'1217':'American Welding Society (AWS)','1408':'ASICS (SGK)','1538':'Catholic Charities USA','1535':'Dolce & Gabbana','1559':'ON Cloud','1560':'Climate Action Campaign','1508':'Impact XM-PSEG','1526':'Jewish Federation of San Diego (JFSD)','1553':'Medtronic','1428':'MOTT Community College','1420':'Oakland Schools (OS)','1422':'SWC IL1','1564':'SWC IL2','1486':'SWC CA','1487':'SWC NY 1','1488':'SWC NY 2','1514':'SWC FL 1','1515':'SWC FL 2','1552':'SWC MA','1512':'SWC HI','1543':'Washtenaw Community College'};
-function _jesJobName(k){ const D=window.MRA_DATA||{};
-  const j=(D.jobs||[]).find(x=>x&&x.category!=='leave'&&((String(x.jobNum||'').match(/\d{3,}/)||[])[0])===k);
-  return (j&&j.project)||JES_JOBNAMES[k]||('J'+k); }
+// A job# can have MORE THAN ONE row on the board (an old shipped job + the current one, e.g. AWS
+// Maintenance vs AWS Revamp both under J1217) — picking the first match grabbed the wrong (shipped,
+// nearly-empty) one. Rank like _projMainJob does: never-shipped first, then most open tasks (the one
+// people actually mean).
+function _jesJobObj(k){ const D=window.MRA_DATA||{};
+  const cands=(D.jobs||[]).filter(x=>x&&x.category!=='leave'&&((String(x.jobNum||'').match(/\d{3,}/)||[])[0])===k);
+  if(!cands.length) return null; if(cands.length===1) return cands[0];
+  const openCt=j=>(j.tasks||[]).filter(t=>!t.done).length;
+  return cands.slice().sort((a,b)=> (/shipped/i.test(a.status||'')?1:0)-(/shipped/i.test(b.status||'')?1:0) || openCt(b)-openCt(a))[0];
+}
+function _jesJobName(k){ const j=_jesJobObj(k); return (j&&j.project)||JES_JOBNAMES[k]||('J'+k); }
 function _jesIssuesByJob(){ const D=window.MRA_DATA||{}; const by={};
   ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ const k=((String(it.jobNum||'').match(/\d{3,}/)||[])[0]); if(k){ (by[k]=by[k]||[]).push(it); } });
   return by; }
@@ -15446,19 +15456,37 @@ function _jesIssuesByJob(){ const D=window.MRA_DATA||{}; const by={};
 // (Fleetio is vehicle-maintenance issues only — general project work never shows up there), so the
 // digest was silently reading "no Fleetio issues" as "nothing happening" on those programs. Pull the
 // REAL open shop + project tasks for the job# too — same J#-first linking the floor cards already use.
+// Two things this MUST get right (both caught live on J1217/J1526, rev 36.62 got wrong):
+//  1. Several DISTINCT projects can share one J# (JFSD has 4 sub-projects all tagged J1526) — aggregate
+//     every one of them, not just the first match.
+//  2. A shop task made by ⚒ "break into shop tasks" mirrors a project-schedule line ([pt:proj|handle]
+//     in its comments) — the board's own _ptCov/_ptCovered already knows which project lines are
+//     covered by a real shop task; skip those so the same work doesn't print twice.
 function _jesBoardTasksForJob(k){
   const D=window.MRA_DATA||{};
-  const jobObj=(D.jobs||[]).find(x=>x&&x.category!=='leave'&&((String(x.jobNum||'').match(/\d{3,}/)||[])[0])===k);
-  const shop=((jobObj&&jobObj.tasks)||[]).filter(t=>!t.done).map(t=>({t:t.t||'',who:t.who||'',due:t.due||'',cm:t.cm||''}));
-  let proj=(D.projects||[]).find(p=>((String(p.jobNum||'').match(/\d{3,}/)||[])[0])===k);
-  if(!proj && jobObj && jobObj.project) proj=(D.projects||[]).find(p=>p.name===jobObj.project);
-  const projTasks=proj?(proj.tasks||[]).filter(t=>!projIsDone(t)&&!/yes/i.test(String(t.ml||''))).map(t=>({t:t.t||'',who:t.who||'',due:t.finISO||t.startISO||'',cm:t.cm||'',phase:t.phase||''})):[];
+  const jobObj=_jesJobObj(k);
+  const openFleetioNums=new Set((_jesIssuesByJob()[k]||[]).map(i=>String(i.num)));
+  const shop=((jobObj&&jobObj.tasks)||[]).filter(t=>{
+    if(t.done) return false;
+    const m=String(t.t||'').match(/\u{1F527}\s*#(\d+)/u);   // 🔧 #NNN — already shown as a Fleetio issue card above, don't double-list
+    if(m && openFleetioNums.has(m[1])) return false;
+    return true;
+  }).map(t=>({t:t.t||'',who:t.who||'',due:t.due||'',cm:t.cm||''}));
+  const projs=(D.projects||[]).filter(p=>((String(p.jobNum||'').match(/\d{3,}/)||[])[0])===k);
+  if(!projs.length && jobObj && jobObj.project){ const byName=(D.projects||[]).find(p=>p.name===jobObj.project); if(byName) projs.push(byName); }
+  const projTasks=[];
+  projs.forEach(p=>{ (p.tasks||[]).forEach(t=>{
+    if(projIsDone(t) || /yes/i.test(String(t.ml||''))) return;
+    if(jobObj && typeof _ptCovered==='function' && _ptCovered(p.name, (typeof projTaskHandle==='function'?projTaskHandle(t):''), t.t, jobObj.row)) return;   // already a real shop task — don't list twice
+    projTasks.push({t:t.t||'',who:t.who||'',due:t.finISO||t.startISO||'',cm:t.cm||'',phase:t.phase||'',proj:(projs.length>1?p.name:'')});
+  }); });
   return {shop, proj:projTasks};
 }
 function _jesBoardCard(t,kind){
   const cm=(typeof _mwCleanCm==='function')?_mwCleanCm(t.cm||''):String(t.cm||'');
+  const ctx=[t.proj||'',t.phase||''].filter(Boolean).join(' · ');
   return '<div class="jbrd"><div class="jbrdh">'+(kind==='proj'?'\u{1F4CB}':'\u{1F527}')+' <b>'+esc(t.t||'(task)')+'</b>'+(t.who?(' <span class="jbwho">— '+esc(t.who)+'</span>'):'')+(t.due?(' <span class="jbdue">due '+esc(fmtMDY(t.due))+'</span>'):'')+'</div>'
-    +(t.phase?('<div class="jbph">'+esc(t.phase)+'</div>'):'')
+    +(ctx?('<div class="jbph">'+esc(ctx)+'</div>'):'')
     +(cm?('<div class="jbnote">\u{1F4DD} '+esc(cm)+'</div>'):'')+'</div>';
 }
 function _jesBoardHtml(board){
