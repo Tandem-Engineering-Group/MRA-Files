@@ -3867,6 +3867,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.56", date:"2026-07-27", title:"🐛 Fixed: 🗑 Delete missing on some project tasks", items:[
+    "The <b>✎ Edit task</b> popup's <b>🗑 Delete</b> (bottom-left) was silently hiding itself on project tasks that never got a TaskID stamped (a known gap for some dashboard-added tasks) — even though deleting them works fine. It now always shows when you're editing an existing task." ] },
+  { rev:"36.55", date:"2026-07-27", title:"🧾 Quote Generator — Materials are now line items too", items:[
+    "Materials work just like the Labor scope lines now: <b>one line per item</b> (description + cost), with <b>＋ Add material line</b> and ✕ to remove each. Every material still shows its own line on the Detailed quote.",
+    "The old paste-your-Alro-cart trick is still there — hit <b>📋 Paste a list</b>, drop in the cart (one item per line, last number = cost), and it adds each as its own editable line. Older saved quotes (pasted-text materials) still load and convert automatically." ] },
   { rev:"36.54", date:"2026-07-27", title:"🎨 Wrap Team calendar — editable, right off the board", items:[
     "New <b>📅 Calendar</b> link next to <b>Wrap Team</b> in Open Work by Assignee. Opens a full <b>month-by-month schedule</b> — each trailer its own color, with INT/EXT and ✈ departure markers — built from the plan you sketched.",
     "<b>Fully editable:</b> add / edit / delete schedule entries (trailer · phase · from → to), add key dates (departures, milestones), and add your own trailers with a color. Click any strip on the calendar to edit it. <b>🖨 Print</b> gives a clean one-pager to send the wrap crew.",
@@ -8572,7 +8577,7 @@ function openProjTaskEdit(id, projOverride){
   document.getElementById('ptComments').value=stripFiles(stripPFiles(stripDue0(stripBy(t.cm||"")))); window._ptBy=_taskBy(t.cm||"");
   ATT_STAGE.pt=_taskFiles(t.cm||"").slice(); attRender('pt'); window._ptPFiles=_taskPFiles(t.cm||"");   // keep project-level [pfiles:] through an anchor-task edit
   window._ptDue0=_taskDue0(t.cm||""); window._ptFinOld=t.finISO||"";   // keep the original finish when it's pushed out
-  document.getElementById('ptDelete').style.display=(t.id!=null&&t.id!=='')?'':'none';
+  document.getElementById('ptDelete').style.display='';   // always show when editing an existing task — delete works by TaskID or by the SharePoint row id, so it doesn't need a stamped TaskID (some project tasks never get one)
   document.getElementById('ptMsg').textContent=""; const b=document.getElementById('ptSubmit'); b.disabled=false; b.textContent="Save";
   try{ ptDurFromDates(); }catch(e){}
   document.getElementById('projTaskModal').classList.add('show');
@@ -11322,7 +11327,7 @@ function _qCfg(){ let c={}; try{ c=JSON.parse(localStorage.getItem(QUOTE_CFG_KEY
 function _qSaveCfg(patch){ const c=Object.assign(_qCfg(), patch||{}); try{ localStorage.setItem(QUOTE_CFG_KEY, JSON.stringify(c)); }catch(e){} return c; }
 let QUOTE=null;
 function openQuote(){ if(typeof closeDrops==='function') closeDrops();
-  if(!QUOTE){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,lines:[{d:'',hours:8,rate:c.rate}],notes:'',markup:c.markup,tax:c.tax,mats:'',cons:{},supMode:c.supMode||'items',supPct:(c.supPct!=null?c.supPct:8)}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); }
+  if(!QUOTE){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,lines:[{d:'',hours:8,rate:c.rate}],notes:'',markup:c.markup,tax:c.tax,matLines:[],cons:{},supMode:c.supMode||'items',supPct:(c.supPct!=null?c.supPct:8)}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); }
   renderQuote(); document.getElementById('quoteOverlay').classList.add('show');
   if(QUOTE_STORE_URL && !_qSharedTried){ _qLoadShared(function(){ var q=document.getElementById('quoteOverlay'); if(q&&q.classList.contains('show')) renderQuote(); }); } }
 function closeQuote(){ document.getElementById('quoteOverlay').classList.remove('show'); }
@@ -11333,20 +11338,25 @@ function _qParseMats(text){ return String(text||'').split('\n').map(l=>l.trim())
   let d=m?l.slice(0,m.index).replace(/[\s|\-:$]+$/,'').trim():l;
   return {d:d||l, c}; }); }
 function _qRead(){ const g=id=>{ const e=document.getElementById(id); return e?e.value:''; };
-  QUOTE.cust=g('qCust'); QUOTE.proj=g('qProj'); QUOTE.desc=g('qDesc'); QUOTE.fio=g('qFio'); QUOTE.markup=parseFloat(g('qMarkup'))||0; QUOTE.tax=parseFloat(g('qTax'))||0; QUOTE.mats=g('qMats'); QUOTE.notes=g('qNotes');
+  QUOTE.cust=g('qCust'); QUOTE.proj=g('qProj'); QUOTE.desc=g('qDesc'); QUOTE.fio=g('qFio'); QUOTE.markup=parseFloat(g('qMarkup'))||0; QUOTE.tax=parseFloat(g('qTax'))||0; QUOTE.notes=g('qNotes');
   const lr=document.querySelectorAll('#qLines .q-lrow');
   if(lr.length){ const L=[]; lr.forEach(row=>{ const d=(row.querySelector('.q-ld')||{}).value||''; const h=parseFloat((row.querySelector('.q-lh')||{}).value)||0; const r=parseFloat((row.querySelector('.q-lr')||{}).value)||0; L.push({d:d,hours:h,rate:r}); }); QUOTE.lines=L;
     QUOTE.hours=L.reduce((a,l)=>a+(+l.hours||0),0); QUOTE.rate=(L[0]&&L[0].rate)||QUOTE.rate||0; }
+  const mr=document.querySelectorAll('#qMatLines .q-mrow');
+  { const M=[]; mr.forEach(row=>{ const d=(row.querySelector('.q-md')||{}).value||''; const c=parseFloat((row.querySelector('.q-mc')||{}).value)||0; M.push({d:d,c:c}); }); QUOTE.matLines=M; }
   QUOTE_CONS.forEach(x=>{ if(!QUOTE.cons[x[0]]) QUOTE.cons[x[0]]={on:false,amt:x[2]}; const chk=document.getElementById('qc_'+x[0]); const amt=document.getElementById('qca_'+x[0]); if(chk) QUOTE.cons[x[0]].on=chk.checked; if(amt) QUOTE.cons[x[0]].amt=parseFloat(amt.value)||0; });
   const md=document.querySelector('input[name="qsupmode"]:checked'); if(md) QUOTE.supMode=md.value;
   const sp=document.getElementById('qSupPct'); if(sp) QUOTE.supPct=parseFloat(sp.value)||0; }
 // Effective labor scope lines: the QUOTE.lines array if present, else the legacy single hours/rate as one line.
 function _qLines(){ if(Array.isArray(QUOTE.lines)&&QUOTE.lines.length) return QUOTE.lines;
   return [{d:'Labor',hours:(+QUOTE.hours||0),rate:(+QUOTE.rate||0)}]; }
+// Effective material line items: QUOTE.matLines if present, else parsed from the legacy pasted-text QUOTE.mats (older saved quotes).
+function _qMatLines(){ if(Array.isArray(QUOTE.matLines)) return QUOTE.matLines;
+  return QUOTE.mats?_qParseMats(QUOTE.mats):[]; }
 function _qCompute(){ const mk=1+(QUOTE.markup/100);
   const lines=_qLines().map(l=>({d:l.d||'',hours:(+l.hours||0),rate:(+l.rate||0),amt:(+l.hours||0)*(+l.rate||0)}));
   const laborTotal=lines.reduce((a,l)=>a+l.amt,0);
-  const mats=_qParseMats(QUOTE.mats).map(r=>({d:r.d,c:r.c,line:r.c*mk}));
+  const mats=_qMatLines().map(r=>({d:r.d||'',c:(+r.c||0),line:(+r.c||0)*mk}));
   const matsLine=mats.reduce((a,r)=>a+r.line,0);
   let cons=[], consLine=0; const consPct=(+QUOTE.supPct||0);
   if(QUOTE.supMode==='pct'){ consLine=(laborTotal+matsLine)*consPct/100; }
@@ -11391,13 +11401,13 @@ function _qSaved(){ if(_QUOTES_SHARED&&Array.isArray(_QUOTES_SHARED)) return _QU
 function _qSaveList(a){ a=a||[]; try{ localStorage.setItem(QUOTE_SAVE_KEY, JSON.stringify(a)); }catch(e){}
   if(QUOTE_STORE_URL){ _QUOTES_SHARED=a; try{ fetch(QUOTE_STORE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({json:JSON.stringify(a)})}); }catch(e){} } }
 function qSaveQuote(){ _qRead(); const t=_qCompute();
-  if(!QUOTE.cust && !QUOTE.mats && !QUOTE.hours){ alert('Nothing to save yet — fill in the quote first.'); return; }
+  if(!QUOTE.cust && !_qMatLines().length && !QUOTE.hours){ alert('Nothing to save yet — fill in the quote first.'); return; }
   const a=_qSaved();
-  const rec={ id:'q'+Date.now().toString(36), cust:QUOTE.cust, proj:QUOTE.proj, desc:QUOTE.desc, fio:QUOTE.fio, hours:QUOTE.hours, rate:QUOTE.rate, lines:JSON.parse(JSON.stringify(_qLines())), notes:(QUOTE.notes||''), markup:QUOTE.markup, tax:QUOTE.tax, mats:QUOTE.mats, cons:JSON.parse(JSON.stringify(QUOTE.cons||{})), supMode:QUOTE.supMode, supPct:QUOTE.supPct, total:t.total, savedAt:Date.now() };
+  const rec={ id:'q'+Date.now().toString(36), cust:QUOTE.cust, proj:QUOTE.proj, desc:QUOTE.desc, fio:QUOTE.fio, hours:QUOTE.hours, rate:QUOTE.rate, lines:JSON.parse(JSON.stringify(_qLines())), notes:(QUOTE.notes||''), markup:QUOTE.markup, tax:QUOTE.tax, matLines:JSON.parse(JSON.stringify(_qMatLines())), cons:JSON.parse(JSON.stringify(QUOTE.cons||{})), supMode:QUOTE.supMode, supPct:QUOTE.supPct, total:t.total, savedAt:Date.now() };
   a.unshift(rec); if(a.length>60) a.length=60; _qSaveList(a); renderQuote();
   const s=document.getElementById('qSavedMsg'); if(s){ s.textContent='✓ quote saved on this device'; setTimeout(()=>{s.textContent='';},2600); } }
 function qLoadQuote(id){ const r=_qSaved().find(x=>x.id===id); if(!r) return;
-  QUOTE={cust:r.cust||'',proj:r.proj||'',desc:r.desc||'',fio:r.fio||'',hours:r.hours||0,rate:r.rate||120,lines:(Array.isArray(r.lines)&&r.lines.length?JSON.parse(JSON.stringify(r.lines)):[{d:(r.proj||'Labor'),hours:(r.hours||0),rate:(r.rate||120)}]),notes:(r.notes||''),markup:(r.markup!=null?r.markup:30),tax:(r.tax!=null?r.tax:6),mats:r.mats||'',cons:r.cons||{},supMode:r.supMode||'items',supPct:(r.supPct!=null?r.supPct:8)};
+  QUOTE={cust:r.cust||'',proj:r.proj||'',desc:r.desc||'',fio:r.fio||'',hours:r.hours||0,rate:r.rate||120,lines:(Array.isArray(r.lines)&&r.lines.length?JSON.parse(JSON.stringify(r.lines)):[{d:(r.proj||'Labor'),hours:(r.hours||0),rate:(r.rate||120)}]),notes:(r.notes||''),markup:(r.markup!=null?r.markup:30),tax:(r.tax!=null?r.tax:6),matLines:(Array.isArray(r.matLines)?JSON.parse(JSON.stringify(r.matLines)):(r.mats?_qParseMats(r.mats):[])),cons:r.cons||{},supMode:r.supMode||'items',supPct:(r.supPct!=null?r.supPct:8)};
   QUOTE_CONS.forEach(x=>{ if(!QUOTE.cons[x[0]]) QUOTE.cons[x[0]]={on:false,amt:x[2]}; });
   renderQuote(); }
 function qDelQuote(id){ if(!confirm('Delete this saved quote?')) return; _qSaveList(_qSaved().filter(x=>x.id!==id)); renderQuote(); }
@@ -11415,10 +11425,17 @@ function _qSavedListHtml(filter){
   }).join('');
 }
 function qFilterSaved(v){ var el=document.getElementById('qSavedList'); if(el) el.innerHTML=_qSavedListHtml(v); }
-function qNewQuote(){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,lines:[{d:'',hours:8,rate:c.rate}],notes:'',markup:c.markup,tax:c.tax,mats:'',cons:{},supMode:c.supMode||'items',supPct:(c.supPct!=null?c.supPct:8)}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); renderQuote(); }
+function qNewQuote(){ const c=_qCfg(); QUOTE={cust:'',proj:'',desc:'',fio:'',hours:8,rate:c.rate,lines:[{d:'',hours:8,rate:c.rate}],notes:'',markup:c.markup,tax:c.tax,matLines:[],cons:{},supMode:c.supMode||'items',supPct:(c.supPct!=null?c.supPct:8)}; QUOTE_CONS.forEach(x=>{ QUOTE.cons[x[0]]={on:false,amt:x[2]}; }); renderQuote(); }
 // ＋/✕ scope line items (each its own hours × rate). Read the form first so typed-but-unsaved values survive the re-render.
 function qAddLine(){ _qRead(); if(!Array.isArray(QUOTE.lines)) QUOTE.lines=_qLines(); const last=QUOTE.lines[QUOTE.lines.length-1]; QUOTE.lines.push({d:'',hours:0,rate:(last&&last.rate)||_qCfg().rate||120}); renderQuote(); }
 function qDelLine(i){ _qRead(); if(!Array.isArray(QUOTE.lines)) QUOTE.lines=_qLines(); QUOTE.lines.splice(i,1); if(!QUOTE.lines.length) QUOTE.lines=[{d:'',hours:0,rate:_qCfg().rate||120}]; renderQuote(); }
+// ＋/✕ material line items (each its own cost) — plus a 📋 paste box that bulk-parses a pasted list
+// (e.g. an Alro cart) into individual lines, same convenience as before, one-time not per-keystroke.
+function qAddMat(){ _qRead(); QUOTE.matLines=_qMatLines(); QUOTE.matLines.push({d:'',c:0}); renderQuote(); }
+function qDelMat(i){ _qRead(); QUOTE.matLines=_qMatLines(); QUOTE.matLines.splice(i,1); renderQuote(); }
+function qTogglePaste(){ _qRead(); QUOTE._pasteOpen=!QUOTE._pasteOpen; renderQuote(); if(QUOTE._pasteOpen){ var t=document.getElementById('qMatPaste'); if(t) t.focus(); } }
+function qParsePaste(){ _qRead(); var raw=(document.getElementById('qMatPaste')||{}).value||''; var parsed=_qParseMats(raw); if(!parsed.length) return;
+  QUOTE.matLines=_qMatLines(); parsed.forEach(function(r){ QUOTE.matLines.push({d:r.d,c:r.c}); }); QUOTE._pasteOpen=false; renderQuote(); }
 // 🔧 Pull a Fleetio issue's info straight into the quote description (the board already has every issue in memory).
 function qPullFleetio(){ _qRead(); const num=String(QUOTE.fio||'').replace(/[^0-9]/g,'');
   if(!num){ alert('Enter a Fleetio issue # first (e.g. 1244), then Pull.'); return; }
@@ -11449,7 +11466,17 @@ function renderQuote(){ const body=document.getElementById('quoteBody'); if(!bod
        return '<div class="q-fsec"><div class="q-lab">Labor — scope line items <span class="q-hint">one line per scope; each prints its own hours × rate on the detailed quote</span></div>'
          +'<div id="qLines">'+rows+'</div>'
          +'<button class="expandbtn" onclick="qAddLine()" title="Add another scope line">＋ Add scope line</button></div>'; })()
-   + '<div class="q-fsec"><div class="q-lab">Materials <span class="q-hint">paste one item per line — the last number on each line is read as the cost (paste your Alro cart straight in)</span></div><textarea id="qMats" rows="6" placeholder=".190 5052-H32 Alum 48 x 120 Paper Interleave     998.74&#10;4 x 2 x .125 6061-T6 Alum Tubing 24 ft     371.30" oninput="qUpdate()" style="width:100%;box-sizing:border-box;'+inp+'">'+esc(QUOTE.mats)+'</textarea><div class="q-inline"><label>Material markup <input id="qMarkup" type="number" value="'+QUOTE.markup+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label><label>Tax <input id="qTax" type="number" step="0.01" value="'+QUOTE.tax+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label></div></div>'
+   + (function(){ var M=_qMatLines();
+       var mrows=M.map(function(m,i){ return '<div class="q-mrow" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'
+         +'<input class="q-md" placeholder="Material / item" value="'+escA(m.d||'')+'" oninput="qUpdate()" style="flex:1;min-width:110px;'+inp+'">'
+         +'<span class="q-hint">$</span>'
+         +'<input class="q-mc" type="number" step="0.01" value="'+(m.c||0)+'" oninput="qUpdate()" title="Cost" style="width:84px;'+inp+'">'
+         +'<button class="expandbtn" onclick="qDelMat('+i+')" title="Remove this material line" style="padding:4px 9px">✕</button></div>'; }).join('');
+       return '<div class="q-fsec"><div class="q-lab">Materials <span class="q-hint">one line per item; each prints its own cost on the detailed quote — or 📋 paste your Alro cart to add several at once</span></div>'
+         +'<div id="qMatLines">'+(mrows||'<span class="q-hint" style="padding:4px 0;display:block">none yet</span>')+'</div>'
+         +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 8px"><button class="expandbtn" onclick="qAddMat()">＋ Add material line</button><button class="expandbtn" onclick="qTogglePaste()">📋 Paste a list</button></div>'
+         +'<div id="qMatPasteWrap" style="'+(QUOTE._pasteOpen?'':'display:none')+'"><textarea id="qMatPaste" rows="3" placeholder="Paste your Alro cart — one item per line, last number on each = cost" style="width:100%;box-sizing:border-box;margin-bottom:6px;'+inp+'"></textarea><button class="expandbtn" onclick="qParsePaste()">↧ Add these lines</button></div>'
+         +'<div class="q-inline" style="margin-top:8px"><label>Material markup <input id="qMarkup" type="number" value="'+QUOTE.markup+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label><label>Tax <input id="qTax" type="number" step="0.01" value="'+QUOTE.tax+'" oninput="qUpdate()" style="width:64px;'+inp+'"> %</label></div></div>'; })()
    + '<div class="q-fsec"><div class="q-lab">Shop supplies <span class="q-hint">itemize it, or add a flat % of labor + materials</span></div>'
      + '<div class="q-supmode"><label><input type="radio" name="qsupmode" value="items" '+(QUOTE.supMode!=='pct'?'checked':'')+' onchange="qUpdate();renderQuote()"> Itemized</label> <label><input type="radio" name="qsupmode" value="pct" '+(QUOTE.supMode==='pct'?'checked':'')+' onchange="qUpdate();renderQuote()"> Percent</label>'
      + (QUOTE.supMode==='pct'?(' <label style="margin-left:6px">Supplies <input id="qSupPct" type="number" step="0.5" min="0" value="'+(QUOTE.supPct!=null?QUOTE.supPct:8)+'" oninput="qUpdate()" style="width:62px;'+inp+'"> % of labor + materials</label>'):'')
