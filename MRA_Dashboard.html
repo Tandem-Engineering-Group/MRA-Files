@@ -3872,6 +3872,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.66", date:"2026-07-29", title:"🐛 Mail link tenant mismatch + 🔧 Fleetio link on your task checklist too", items:[
+    "Rich still hit the mail link after 36.65 (calendar started working, mail didn't) — turned out to be a SECOND, different problem: he's signed into TWO Microsoft accounts (his @tandemeng.com and his @gomra.com), and a plain Outlook link opens against whichever one is already active in that browser — so a perfectly good gomra.com link can still land on the wrong mailbox and show \"moved or deleted.\" Added <b>login_hint</b> (Microsoft's standard sign-in hint) so email/appointment links now specify your signed-in gomra.com address, so they open in the right mailbox. Also: the ✓/✕ items in your <b>Tasks checklist</b> that reference a 🔧 Fleetio issue now get the same <b>🔧 Open ↗</b> link the watchdog card has — before, clicking one of those just re-showed the same already-visible description with nowhere to go." ] },
   { rev:"36.65", date:"2026-07-29", title:"🐛 Fixed the real bug behind \"message might have been moved or deleted\" + 🔧 Fleetio issue link", items:[
     "Rich caught this one for real: the 📧 Open email / 📅 appointment links in My Work were landing on Outlook's \"moved or deleted\" error page — every time, on both mail AND calendar. Root cause: those items never had a real Outlook link stored, so the button was guessing a link from the raw message id — and calendar events especially were being pointed at a MAIL-reading link, which can never work for a calendar item. <b>Fixed:</b> stopped guessing — the button now only appears when there's a real, verified working link (no more dead-end clicks); the current items have been re-matched against the real mailbox/calendar with working links restored. Also added a <b>🔧 Open in Fleetio ↗</b> link right on the Fleetio issue card in the watchdog panel — opens the real issue on Fleetio's site." ] },
   { rev:"36.64", date:"2026-07-29", title:"🔎 My Work deep-dive verification — one small cleanup, everything else checked out", items:[
@@ -14713,6 +14715,14 @@ function _mwMcPanel(){
   var fh=fyi.length?('<div class="panel" id="mwsec-cmdfyi"><h2>📩 FYI / Updates <span class="count">no action needed</span></h2>'
     +fyi.map(function(x){ var _mh=_mcMailHref(x); var open=_mh?' <a href="'+esc(_mh)+'" target="_blank" rel="noopener" style="color:#7aa2d6">📧</a>':'';
         return '<div class="row"><div style="min-width:0"><div class="lead">📩 '+esc(x.title||'')+open+'</div><div class="meta">'+esc(x.note||'')+(x.who?(' · '+esc(x.who)):'')+(x.project?(' · '+esc(x.project)):'')+'</div></div></div>'; }).join('')+'</div>'):'';
+  // 💬 Teams messages — the latest message from someone else in each active chat (so you don't have to
+  // tab over to Teams to see if anyone's said anything). Link only shown when it's a real, working deep
+  // link (1:1/group chats) — meeting chats don't have a safe one, so they just show the text, no dead link.
+  var tmsgs=A.teamsMsgs||[];
+  var tmh='<div class="panel" id="mwsec-cmdtm"><h2>💬 Teams messages <span class="count">'+tmsgs.length+'</span></h2>'
+    +(tmsgs.length?tmsgs.map(function(x){ var open=x.link?(' <a href="'+esc(x.link)+'" target="_blank" rel="noopener" style="color:#7aa2d6">💬 Open chat</a>'):'';
+        return '<div class="row"><div style="min-width:0"><div class="lead">'+esc(x.who||'')+(x.chat?(' <span class="badge grey">'+esc(x.chat)+'</span>'):'')+open+'</div><div class="meta">'+esc(_mcWhen(x.when||''))+'</div><div style="font-size:13px;margin-top:2px">'+esc(x.snippet||'')+'</div></div></div>'; }).join(''):'<div class="empty">No new Teams messages in the brief.</div>')
+    +'</div>';
   // 📋 Project brief
   var projs=A.projects||[];
   var ph='<div class="panel" id="mwsec-cmdp"><h2>📋 Project brief <span class="count">'+projs.length+'</span></h2>'
@@ -14737,11 +14747,12 @@ function _mwMcPanel(){
   var _snz=function(t){ return t.snoozeUntil && (!_tdy || t.snoozeUntil>_tdy); };
   var openN=tasks.filter(function(t){return !t.done && !_snz(t);}).length;
   var _mcTaskRow=function(t,i){ var mnum=String(t.t||'').match(/#(\d{2,6})/);
+      var fioB=(mnum&&typeof fioHref==='function')?('<a href="'+fioHref('issue',mnum[1])+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="'+B+';margin-right:6px;text-decoration:none;display:inline-block" title="Open the real issue in Fleetio">🔧 Open ↗</a>'):'';
       var asgB=(mnum&&!t.done)?'<button style="'+B+';margin-right:6px" onclick="event.stopPropagation();mcAssignIss(\''+mnum[1]+'\',event)" title="Assign to the board / General list (pick a crew)">👤 Assign</button>':'';
       var snzB=(!t.done)?'<button style="background:none;border:0;color:var(--muted);cursor:pointer;font-size:14px;margin-right:2px" onclick="event.stopPropagation();mwMcSnooze('+i+')" title="Snooze until tomorrow">💤</button>':'';
       var det=(mnum&&!t.done)?_mcFioDetail(mnum[1]):'';
       return '<div class="row" style="display:block'+(t.done?';opacity:.55':'')+'">'
-        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+(t.seededAt?' <span class="meta" style="font-size:10px">· '+new Date(t.seededAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric'})+'</span>':'')+'</div>'+asgB+snzB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
+        +'<div style="display:flex;align-items:center;gap:6px"><input type="checkbox" '+(t.done?'checked':'')+' onchange="mwMcToggle('+i+')" style="width:17px;height:17px;flex:0 0 auto"><div style="flex:1;min-width:0'+(t.done?';text-decoration:line-through':'')+'">'+esc(t.t)+(t.auto?' <span class="badge grey" style="font-size:9px">auto</span>':'')+(t.seededAt?' <span class="meta" style="font-size:10px">· '+new Date(t.seededAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric'})+'</span>':'')+'</div>'+fioB+asgB+snzB+'<button onclick="mwMcDel('+i+')" style="background:none;border:0;color:#f87171;cursor:pointer;font-size:14px">✕</button></div>'
         +det+'</div>'; };
   var openRows=tasks.map(function(t,i){ return (t.done||_snz(t))?'':_mcTaskRow(t,i); }).join('');
   var snzRows=tasks.map(function(t,i){ if(t.done||!_snz(t)) return ''; return '<div class="row" style="align-items:center;opacity:.7"><span style="flex:1;min-width:0">💤 '+esc(t.t)+' <span class="meta">until '+esc(t.snoozeUntil)+'</span></span><button onclick="mwMcWake('+i+')" style="'+B+'">☀ Wake</button></div>'; }).join('');
@@ -14760,7 +14771,7 @@ function _mwMcPanel(){
     +'<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button style="'+BP+'" onclick="mcAsk()">Send to Claude</button><span id="mcAskMsg" class="mc-muted" style="font-size:12px;color:var(--muted)"></span></div></div>';
   var fileH=_mcFileMailPanelHtml(B,BP);
   var mineH=_mcMinePanelHtml(B,BP);
-  var blocks={tellClaude:askH, questions:qh, myplate:mineH, waiting:wh, filemail:fileH, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, tasks:th, flows:_mcFlowsPanel()};
+  var blocks={tellClaude:askH, questions:qh, myplate:mineH, waiting:wh, filemail:fileH, appts:ah, inbound:ih, fyi:fh, teamsMsgs:tmh, projects:ph, watchdog:wdh, tasks:th, flows:_mcFlowsPanel()};
   return head+_mcNavTiles(A)+_mcLanes(blocks);
 }
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; a[i].doneAt=a[i].done?Date.now():0;
@@ -14931,13 +14942,13 @@ function _mcFioDetail(num){
     +'</div>'; }
 // ---- My Command: personal section order (drag-free reorder with ▲▼⤒), saved per device ----
 var MC_ORDER_KEY='mra_mycmd_order_v1';
-var MC_LANES_DEFAULT=['tellClaude','questions','myplate','waiting','filemail','appts','inbound','fyi','projects','watchdog','tasks','flows'];
+var MC_LANES_DEFAULT=['tellClaude','questions','myplate','waiting','filemail','appts','inbound','fyi','teamsMsgs','projects','watchdog','tasks','flows'];
 function _mcOrder(){ var d=MC_LANES_DEFAULT.slice(); var s=null; try{ s=JSON.parse(localStorage.getItem(MC_ORDER_KEY)||'null'); }catch(e){}
   if(!Array.isArray(s)) return d;
   var out=s.filter(function(k){return d.indexOf(k)>=0;}); d.forEach(function(k){ if(out.indexOf(k)<0) out.push(k); }); return out; }
 function _mcSaveOrder(o){ try{ localStorage.setItem(MC_ORDER_KEY,JSON.stringify(o)); }catch(e){} }
 function mwResetOrder(){ try{ localStorage.removeItem(MC_ORDER_KEY); }catch(e){} renderMyWork(); }
-function _mcLaneVisible(k){ var A=_MC_AGENT||{}; if(k==='questions') return (A.questions||[]).length>0; if(k==='fyi') return (A.fyi||[]).length>0; if(k==='filemail') return (typeof _mcProjectMail==='function') && _mcProjectMail().length>0; if(k==='myplate') return (typeof _mcMine==='function') && _mcMine().length>0; return true; }
+function _mcLaneVisible(k){ var A=_MC_AGENT||{}; if(k==='questions') return (A.questions||[]).length>0; if(k==='fyi') return (A.fyi||[]).length>0; if(k==='filemail') return (typeof _mcProjectMail==='function') && _mcProjectMail().length>0; if(k==='myplate') return (typeof _mcMine==='function') && _mcMine().length>0; if(k==='teamsMsgs') return (A.teamsMsgs||[]).length>0; return true; }
 function mwMove(key,dir){ var o=_mcOrder(); var i=o.indexOf(key); if(i<0) return;
   if(dir==='top'){ o.splice(i,1); o.unshift(key); _mcSaveOrder(o); renderMyWork(); return; }
   var step=dir<0?-1:1; var j=i+step;
@@ -19030,7 +19041,15 @@ function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ var t=_mcIssTas
 // "this message might have been moved or deleted" on BOTH mail and calendar items from it (calendar
 // items especially: the guess pointed a mail-reading viewmodel at a calendar-type id, which can never
 // work). Better to hide the button than hand out a link that dead-ends — so no verbatim webLink = no button.
-function _mcMailHref(x){ return (x&&x.link)?String(x.link):''; }
+// Rich also has a SEPARATE @tandemeng.com Microsoft account, and his browser can already have that
+// session active — an outlook.office365.com link with no tenant hint can then open against the WRONG
+// mailbox (Tandem's, not gomra's), same "moved or deleted" symptom on a perfectly valid gomra link.
+// login_hint is the standard Microsoft-identity query param that tells sign-in which account to use —
+// stamp the signed-in gomra.com address on so the link opens in the right mailbox.
+function _msLoginHint(){ try{ if(typeof ssoEnforcing==='function' && ssoEnforcing() && SSO.user && SSO.email && SSO.email()) return SSO.email(); }catch(e){} return ''; }
+function _mcMailHref(x){ var l=(x&&x.link)?String(x.link):''; if(!l) return '';
+  var hint=_msLoginHint(); if(!hint) return l;
+  return l+(l.indexOf('?')>=0?'&':'?')+'login_hint='+encodeURIComponent(hint); }
 // ✋ Dismiss ("not for me" / already handled) — hide a Waiting-on-you item. Keyed by the stable message id so it
 // stays hidden across the 4×/day re-scans; per-device localStorage; recoverable via the "N hidden · show" toggle.
 var _MC_DISMISS_KEY='mra_mc_dismiss_v1'; var _MC_SHOW_DISMISSED=false;
