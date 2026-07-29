@@ -43,6 +43,7 @@
   table.t td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
   table.t td.r,table.t th.r{text-align:right}
   table.t tr:hover td{background:var(--card2)}
+  tr.daysub td{background:var(--card2);border-bottom:2px solid var(--line)}
   .rowdel{color:var(--err);cursor:pointer;font-weight:800;border:0;background:none;font-size:15px}
   .rowedit{color:var(--muted);cursor:pointer;border:0;background:none;font-size:14px}
   .filtrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
@@ -118,10 +119,10 @@
     </div>
   </div>
 
-  <!-- YOUR ENTRIES (open to everyone — shows the selected person's own hours for the day) -->
+  <!-- YOUR WEEK (open to everyone — shows the selected person's own hours for the whole week, grouped by day) -->
   <div class="card" id="myDayCard">
-    <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span id="myDayTitle">What you\u2019ve logged</span><span class="grand">Total <b id="myDayTot">0.0</b> hrs</span></h2>
-    <div style="overflow:auto"><table class="t"><thead><tr><th>Job charged</th><th class="r">Hrs</th><th>Task / notes</th></tr></thead><tbody id="myDayRows"></tbody></table></div>
+    <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span id="myDayTitle">Your week</span><span class="grand">Total <b id="myDayTot">0.0</b> hrs</span></h2>
+    <div style="overflow:auto"><table class="t"><thead><tr><th>Day</th><th>Job charged</th><th class="r">Hrs</th><th>Task / notes</th></tr></thead><tbody id="myDayRows"></tbody></table></div>
   </div>
 
   <!-- MANAGE (hidden until pin) -->
@@ -191,11 +192,11 @@
     <ol class="helpsteps">
       <li><b>Tap your name</b> at the top (Employee).</li>
       <li><b>Pick the job</b> — start typing the <b>job number</b> or <b>name</b>, then tap it in the list.</li>
-      <li><b>Enter your hours</b> — type them, or tap a quick number: <b>½ &nbsp; 1 &nbsp; 2 &nbsp; 4 &nbsp; 8</b>.</li>
+      <li><b>Enter your hours</b> — type them, or tap a quick number: <b>½ &nbsp; 1 &nbsp; 2 &nbsp; 4 &nbsp; 8 &nbsp; 10</b>.</li>
       <li><b>Tap “＋ Add time entry.”</b> Done — it saves right away.</li>
       <li><b>Worked more than one job?</b> Just repeat for the next one.</li>
     </ol>
-    <p class="helpnote">👀 Check the <b>“What you’ve logged”</b> box under the form — it shows everything you added today and your <b>total hours</b>. Example: 2 hrs on one job + 1 hr on another = <b>3 hrs</b>.</p>
+    <p class="helpnote">👀 Check the <b>“Your week”</b> box under the form — it shows everything you’ve added <b>for the whole week</b>, grouped by day with a day total and a week total. Add time for Tuesday and Wednesday shows up right alongside Monday's, so by Friday you can see your whole week in one place.</p>
     <button class="tbtn primary" id="helpGot">Got it — let’s go</button>
   </div>
 </div>
@@ -274,7 +275,7 @@ function jobListItems(){
   return out;
 }
 function fillJobs(){ var dl=$('jobList'); dl.innerHTML=jobListItems().map(function(o){ return '<option value="'+esc(o.val)+'">'; }).join(''); }
-function fillHchips(){ var box=$('hchips'); box.innerHTML=[0.5,1,2,4,8].map(function(h){return '<button type="button" class="hchip" data-h="'+h+'">'+h+'</button>';}).join(''); }
+function fillHchips(){ var box=$('hchips'); box.innerHTML=[0.5,1,2,4,8,10].map(function(h){return '<button type="button" class="hchip" data-h="'+h+'">'+h+'</button>';}).join(''); }
 
 /* ---------- submit ---------- */
 function submit(){
@@ -356,18 +357,34 @@ function mapShared(arr){ if(!Array.isArray(arr)) return [];
 function loadShared(cb){ function done(a){ SHARED=mapShared(a); if(cb)cb(true); } function fail(){ SHARED=null; if(cb)cb(false); }
   fetch('../time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ fetch('time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(fail); }); }
 
-/* ---------- employee "my day" summary (open, this device, selected person + date) ---------- */
+/* ---------- employee "my week" summary (open, this device, selected person's whole week, grouped by day) ---------- */
+/* Rich's ask: as someone logs time day by day, they should see everything they've charged for the
+   WEEK (not just today), so it builds up as they go. Scoped to whichever name is picked above \u2014 this
+   kiosk has no per-person login, so the selected Employee name IS the identity for this box. */
 function renderMyDay(){
   var who=$('fWho').value.trim(), date=$('fDate').value||todayISO();
-  var mine=ENTS.filter(function(e){ return e.who===who && e.dateISO===date; }).sort(function(a,b){ return String(a.ts).localeCompare(String(b.ts)); });
+  var wkStartD=startOfWeek(new Date(date+'T00:00:00')); var wkStart=ymd(wkStartD);
+  var wkEndD=new Date(wkStartD); wkEndD.setDate(wkEndD.getDate()+6); var wkEnd=ymd(wkEndD);
+  var mine=ENTS.filter(function(e){ return e.who===who && e.dateISO>=wkStart && e.dateISO<=wkEnd; })
+    .sort(function(a,b){ return String(a.dateISO).localeCompare(String(b.dateISO))||String(a.ts).localeCompare(String(b.ts)); });
   var tot=mine.reduce(function(x,e){ return x+(e.hours||0); },0);
-  var tt=$('myDayTitle'); if(tt) tt.textContent = who ? (who+' \u2014 '+isoToMDY(date)) : 'What you\u2019ve logged';
+  var tt=$('myDayTitle'); if(tt) tt.textContent = who ? (who+' \u2014 week of '+isoToMDY(wkStart)) : 'Your week';
   var mt=$('myDayTot'); if(mt) mt.textContent = tot.toFixed(2).replace(/\.00$/,'.0');
   var tb=$('myDayRows'); if(!tb) return;
-  if(!who){ tb.innerHTML='<tr><td colspan="3" class="muted" style="padding:12px">Pick your name above to see what you\u2019ve logged today.</td></tr>'; return; }
-  tb.innerHTML = mine.length ? mine.map(function(e){ var tn=[e.task,e.notes].filter(Boolean).join(' \u2014 ');
-      return '<tr><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td></tr>'; }).join('')
-    : '<tr><td colspan="3" class="muted" style="padding:12px">Nothing logged yet for '+esc(who)+' on '+esc(isoToMDY(date))+'.</td></tr>';
+  if(!who){ tb.innerHTML='<tr><td colspan="4" class="muted" style="padding:12px">Pick your name above to see your hours for the week.</td></tr>'; return; }
+  if(!mine.length){ tb.innerHTML='<tr><td colspan="4" class="muted" style="padding:12px">Nothing logged yet this week for '+esc(who)+'.</td></tr>'; return; }
+  var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var byDay={}, order=[];
+  mine.forEach(function(e){ if(!byDay[e.dateISO]){ byDay[e.dateISO]=[]; order.push(e.dateISO); } byDay[e.dateISO].push(e); });
+  var html='';
+  order.forEach(function(d){
+    var rows=byDay[d]; var dTot=rows.reduce(function(x,e){ return x+(e.hours||0); },0);
+    var dow=DOW[new Date(d+'T00:00:00').getDay()];
+    rows.forEach(function(e,i){ var tn=[e.task,e.notes].filter(Boolean).join(' \u2014 ');
+      html+='<tr><td>'+(i===0?('<b>'+esc(dow)+' '+esc(isoToMDY(d))+'</b>'):'')+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td></tr>'; });
+    html+='<tr class="daysub"><td></td><td class="r muted" style="font-style:italic">Day total</td><td class="r"><b>'+dTot.toFixed(2).replace(/\.00$/,'.0')+'</b></td><td></td></tr>';
+  });
+  tb.innerHTML=html;
 }
 
 /* ---------- tracking / rollups ---------- */
@@ -441,10 +458,10 @@ function buildFinanceReport(){
     var pt=fPayType(e), c=fCode(e), h=e.hours||0; grand+=h;
     byPay[pt]=(byPay[pt]||0)+h;
     if(pt==='Work'){ if(!byCode[c]) byCode[c]={name:fCodeName(e),h:0}; byCode[c].h+=h; }
-    var who=e.who||'—'; if(!byEmp[who]) byEmp[who]={id:EMPIDS[who]||'',codes:{},leaves:{},tot:0};
+    var who=e.who||'—'; if(!byEmp[who]) byEmp[who]={id:EMPIDS[who]||'',byDay:{},tot:0};
     byEmp[who].tot+=h;
-    if(pt==='Work'){ if(!byEmp[who].codes[c]) byEmp[who].codes[c]={name:fCodeName(e),h:0}; byEmp[who].codes[c].h+=h; }
-    else { byEmp[who].leaves[pt]=(byEmp[who].leaves[pt]||0)+h; }
+    var lbl = pt==='Work' ? (c+' · '+fCodeName(e)) : pt;
+    var d=e.dateISO||''; if(!byEmp[who].byDay[d]) byEmp[who].byDay[d]=[]; byEmp[who].byDay[d].push({lbl:lbl,h:h});
   });
   function f(n){ return (Math.round((n||0)*100)/100).toFixed(2); }
   // Totals by pay type
@@ -452,12 +469,18 @@ function buildFinanceReport(){
   // Job code totals
   var codeKeys=Object.keys(byCode).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
   var codeRows=codeKeys.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(byCode[c].name||'')+'</td><td class="r">'+f(byCode[c].h)+'</td></tr>'; }).join('');
-  // Per employee
+  // Per employee, BY DAY — Rich's ask: "show, like, John Tindle by day what was charged by day."
+  var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var empKeys=Object.keys(byEmp).sort(function(a,b){ return String(a).localeCompare(String(b)); });
   var empSecs=empKeys.map(function(w){ var E=byEmp[w];
-    var lines=Object.keys(E.codes).sort().map(function(c){ return '<tr><td>Work</td><td>'+esc(c)+'</td><td>'+esc(E.codes[c].name||'')+'</td><td class="r">'+f(E.codes[c].h)+'</td></tr>'; }).join('')
-      + Object.keys(E.leaves).sort().map(function(pt){ return '<tr><td>'+esc(pt)+'</td><td></td><td></td><td class="r">'+f(E.leaves[pt])+'</td></tr>'; }).join('');
-    return '<h3>ID: '+esc(E.id||'—')+' &nbsp; '+esc(w)+'</h3><table class="t"><thead><tr><th>Pay type</th><th>Job code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'+lines+'<tr class="sub"><td colspan="3">Employee total</td><td class="r">'+f(E.tot)+'</td></tr></tbody></table>'; }).join('');
+    var days=Object.keys(E.byDay).sort();
+    var body=days.map(function(d){
+      var items=E.byDay[d]; var dTot=items.reduce(function(x,i){ return x+i.h; },0);
+      var dLbl = d ? (DOWF[new Date(d+'T00:00:00').getDay()]+' '+isoToMDY(d)) : '(no date)';
+      var itemRows=items.map(function(i){ return '<tr><td>'+esc(i.lbl)+'</td><td class="r">'+f(i.h)+'</td></tr>'; }).join('');
+      return '<tr class="dayhdr"><td><b>'+esc(dLbl)+'</b></td><td class="r"><b>'+f(dTot)+'</b></td></tr>'+itemRows;
+    }).join('');
+    return '<h3>ID: '+esc(E.id||'—')+' &nbsp; '+esc(w)+'</h3><table class="t"><thead><tr><th>Day / charged to</th><th class="r">Hours</th></tr></thead><tbody>'+body+'<tr class="sub"><td>Employee total</td><td class="r">'+f(E.tot)+'</td></tr></tbody></table>'; }).join('');
   var d=new Date(), dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
   var html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Weekly Time Summary '+period+'</title><style>'
     +'body{font-family:Segoe UI,Arial,sans-serif;color:#1b2635;margin:0}'
@@ -469,6 +492,7 @@ function buildFinanceReport(){
     +'table.t th{background:#101827;color:#fff;text-align:left;padding:5px 8px;font-size:10px;text-transform:uppercase}'
     +'table.t td{padding:5px 8px;border-bottom:1px solid #e6e8eb}td.r,th.r{text-align:right}'
     +'tr.sub td{font-weight:800;background:#faf1ea}.grand{display:inline-block;background:#faf1ea;border:1px solid #f0d3bf;border-radius:9px;padding:8px 16px;font-weight:800;margin-top:8px}'
+    +'tr.dayhdr td{background:#eef2f7;padding-top:8px}'
     +'@media print{.bar{display:none}} tr{break-inside:avoid}'
     +'</style></head><body><div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button></div><div class="pad">'
     +'<h1>Mobility Resource Associates Inc — Weekly Time Summary</h1>'
