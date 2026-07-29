@@ -201,6 +201,27 @@
   </div>
 </div>
 
+<!-- EDIT TIME ENTRY (manager only) -->
+<div class="helpov noprint" id="editModal">
+  <div class="helpbox" style="max-width:460px">
+    <button class="helpx" id="editClose" aria-label="Close">✕</button>
+    <h2 style="font-size:19px">✎ Edit time entry</h2>
+    <div class="frm" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
+      <div class="fld"><label for="eWho">Employee</label><select id="eWho"></select></div>
+      <div class="fld"><label for="eDate">Date worked</label><input type="date" id="eDate"></div>
+      <div class="fld full"><label for="eJob">Job charged</label><input id="eJob" list="jobList" autocomplete="off"></div>
+      <div class="fld"><label for="eHours">Hours</label><input type="number" id="eHours" min="0" max="24" step="0.25" inputmode="decimal"></div>
+      <div class="fld"><label for="eTask">Task / phase</label><input id="eTask"></div>
+      <div class="fld full"><label for="eNotes">Notes</label><textarea id="eNotes"></textarea></div>
+    </div>
+    <div class="submitrow">
+      <button class="tbtn primary" id="editSaveBtn">Save changes</button>
+      <button class="tbtn" id="editCancelBtn">Cancel</button>
+      <span id="editMsg" class="ok-msg hide">✓ Saved</span>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ---------- data.js loader (works at /time/ and at root) ---------- */
 (function(){
@@ -418,10 +439,45 @@ function renderTracking(){
   var sn=$('shareNote'); if(sn) sn.textContent = ro ? '☁ Showing everyone’s hours (shared list).' : (isMgr() ? 'Showing this device only — shared read-back not live yet (build the “MRA Time to JSON” flow).' : '');
   $('entRows').innerHTML=rows.length?rows.map(function(e){
     var tn=[e.task,e.notes].filter(Boolean).join(' — ');
-    return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint">'+(ro?'':'<button class="rowdel" data-del="'+e.id+'" title="Delete">×</button>')+'</td></tr>';
+    return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint"><button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">✎</button> '+(ro?'':'<button class="rowdel" data-del="'+e.id+'" title="Delete">×</button>')+'</td></tr>';
   }).join(''):'<tr><td colspan="6" class="muted" style="padding:14px">No time entries yet.</td></tr>';
 }
 function delEntry(id){ if(!confirm('Delete this entry?')) return; ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS); renderTracking(); }
+/* ---------- manager edit: fix a wrong job/hours/date on ANY entry (this device's own, or someone
+   else's shared entry once shared read-back is live) ---------- */
+function findEntryRef(id){
+  var i=ENTS.findIndex(function(e){ return e.id===id; }); if(i>=0) return {arr:'local', idx:i, e:ENTS[i]};
+  if(SHARED){ var j=SHARED.findIndex(function(e){ return e.id===id; }); if(j>=0) return {arr:'shared', idx:j, e:SHARED[j]}; }
+  return null;
+}
+function openEditEntry(id){
+  var ref=findEntryRef(id); if(!ref){ alert('Could not find that entry.'); return; }
+  var e=ref.e;
+  $('editModal').dataset.id=id;
+  var sel=$('eWho'); var ppl=NAMES.concat(e.who&&NAMES.indexOf(e.who)<0?[e.who]:[]); sel.innerHTML='<option value="">— pick —</option>'+ppl.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); sel.value=e.who||'';
+  $('eDate').value=e.dateISO||todayISO();
+  $('eJob').value=e.job||'';
+  $('eHours').value=e.hours!=null?e.hours:'';
+  $('eTask').value=e.task||'';
+  $('eNotes').value=e.notes||'';
+  $('editMsg').classList.add('hide');
+  $('editModal').classList.add('on');
+}
+function closeEditModal(){ $('editModal').classList.remove('on'); }
+function saveEditEntry(){
+  var id=$('editModal').dataset.id; var ref=findEntryRef(id); if(!ref) return;
+  var who=$('eWho').value.trim(), date=$('eDate').value, job=$('eJob').value.trim(), hours=num($('eHours').value), task=$('eTask').value.trim(), notes=$('eNotes').value.trim();
+  if(!who){ alert('Pick an employee.'); return; }
+  if(!job){ alert('Pick a job to charge.'); return; }
+  if(!(hours>0)){ alert('Enter hours (more than 0).'); return; }
+  var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
+  var updated=Object.assign({}, ref.e, { who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes });
+  if(ref.arr==='local'){ ENTS[ref.idx]=updated; lset(LS.ents,ENTS); }
+  else { SHARED[ref.idx]=updated; }   // optimistic — see note below on making this permanent
+  if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'editTime',empId:(EMPIDS[updated.who]||''),code:fCode(updated),payType:fPayType(updated)}, updated))}); }catch(_){} }
+  $('editMsg').classList.remove('hide'); renderTracking();
+  setTimeout(closeEditModal, 700);
+}
 function exportCSV(){
   var rows=filtered(); var head=['Date','Employee','Job','JobNum','Hours','Task','Notes'];
   var lines=[head.join(',')].concat(rows.map(function(e){ return [e.dateISO,e.who,e.job,e.jobNum,e.hours,e.task,e.notes].map(function(v){ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(','); }));
@@ -572,7 +628,9 @@ function boot(){
   $('fWho').onchange=function(){ lset(LS.lastWho,$('fWho').value); renderMyDay(); }; $('fDate').addEventListener('change',renderMyDay);
   ['fHours','fTask'].forEach(function(id){ $(id).addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }); });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
-  $('entRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d) delEntry(d.getAttribute('data-del')); });
+  $('entRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d){ delEntry(d.getAttribute('data-del')); return; } var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
+  $('editSaveBtn').onclick=saveEditEntry; $('editCancelBtn').onclick=closeEditModal; $('editClose').onclick=closeEditModal;
+  $('editModal').addEventListener('click',function(e){ if(e.target===$('editModal')) closeEditModal(); });
   // manage list edit/delete delegation
   $('mgrCard').addEventListener('click',function(e){
     var t=e.target; var i;
