@@ -3645,7 +3645,7 @@ const GENERAL_HELP = `
     <p><b>✨ Claude reply assistant (Rich only):</b> in any reply composer — the ✉ Reply on a Waiting item, or the new <span class="k">✍️ Reply</span> button on a <b>📥 File-mail</b> card — tap <span class="k">✨ Draft it for me</span> and Claude writes a first reply from the email, or type how to change the draft (“shorter,” “add the lead time,” “say we ship Friday”) and hit <span class="k">✏️ Tweak the draft</span>. The new wording drops straight into the box in a few seconds; edit it and <b>Send</b>. (Needs the one-time Claude reply flow connected — until then it uses the slower back-on-refresh channel.)</p>
     <p><b>Layout picker (Rich only):</b> a small <span class="k">⊞ Widgets · 📑 Tabs · ☰ Classic</span> switcher sits next to 🖨 Print. All three show the exact same data and buttons — nothing is removed either way, and your device remembers which you picked:</p>
     <ul>
-      <li><b>⊞ Widgets</b> (the default) — every section (My Command's lanes AND the board sections below) as its own tile in a responsive grid, so nothing is hidden behind a scroll position or a tab. My Command / Needs-your-follow-up / Tell Claude span the full width since they're bigger; everything else — Questions, On your plate, File mail, Appointments, Inbound, FYI, Project brief, <b>Fleetio watchdog</b>, My Projects, Milestones, Completed, Everything else, Flows &amp; Agents, Customize — is one tile each. A truly-empty section still collapses away, same as elsewhere on the page.</li>
+      <li><b>⊞ Widgets</b> (the default) — every section (My Command's lanes AND the board sections below), including My Command / Needs-your-follow-up / Tell Claude, as its own SAME-WIDTH tile in a responsive grid — no KPI strip up top (each tile already shows its own count) and nothing hidden behind a scroll position or a tab. A tile whose content changed since you last looked gets a <b>green glow + NEW badge</b>, same rule the old chip row used. A truly-empty section still collapses away, same as elsewhere on the page.</li>
       <li><b>📑 Tabs</b> — regroups the page into 4 tabs (📌 Today · 🧠 Brief · 📊 Projects · ✅ Done) instead of one long scroll.</li>
       <li><b>☰ Classic</b> — the original one-page stack.</li>
     </ul>
@@ -3879,6 +3879,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.72", date:"2026-07-29", title:"⊞ Widget Grid cleanup — no more KPI strip, uniform tiles, NEW badges", items:[
+    "Rich's follow-up: the top KPI numbers were redundant clutter in Grid mode (every tile already shows its own count), and My Command / Tell Claude / Needs-your-follow-up were oversized full-width banners instead of tiles — inconsistent and \"ugly\" next to the small tiles below. Fixed: the KPI strip is hidden in <b>⊞ Widgets</b> mode (still shows in Tabs/Classic), and every tile — including those three — is now the same uniform grid width, just naturally taller when it has more inside. Also brought back the <b>green \"NEW\" glow</b> the old chip row used to show: a tile whose content changed since you last looked (same signature-tracking the chips used) gets a green ring + NEW badge, so nothing new gets missed just because it's not in a jump-to-it chip row anymore." ] },
   { rev:"36.71", date:"2026-07-29", title:"⊞ My Work — Widget Grid layout (Rich only, full coverage)", items:[
     "Rich picked the widget-grid direction after trying all 3, then flagged it was missing sections (Fleetio watchdog, etc). The ⊞/📑/☰ layout switcher next to 🖨 Print now has a real <b>⊞ Grid</b> mode — EVERY section on the page gets its own tile (My Command's lanes: Waiting/Teams/Tasks/Questions/On-your-plate/File-mail/Appointments/Inbound/FYI/Project-brief/<b>Fleetio watchdog</b>/Flows &amp; Agents, plus the board sections: sign-off/overdue/due/marked-ready/My-Projects/Milestones/Completed/Everything-else/Customize) instead of a subset. Same live data + same buttons as Classic (Verify, Reply, Assign, Place, etc. all work identically) — this is a layout change only, nothing re-implemented. Empty sections still collapse away rather than showing a placeholder tile, matching how the rest of the page already behaves." ] },
   { rev:"36.70", date:"2026-07-29", title:"⊞ My Work — tabbed layout PREVIEW (Rich only)", items:[
@@ -14821,15 +14823,20 @@ function _mwMcPanel(){
   return r.head+_mcNavTiles(r.A)+_mcLanes(r.blocks);
 }
 // Widget-grid layout: the SAME head + lane HTML as the classic view, laid out as a responsive grid
-// of tiles instead of one long reorderable stack. No nav-chip row (redundant — everything's already
-// visible at once). "My Command" header + "Needs your follow-up" + "Tell Claude" span full width
-// since they're naturally bigger; every other lane is one tile. Empty lanes collapse away exactly
-// like they do in the classic layout — nothing forces a placeholder for a truly-empty section.
+// of UNIFORM-WIDTH tiles instead of one long reorderable stack or a few oversized full-width banners
+// — every tile (including My Command / Needs-your-follow-up / Tell Claude) is just a grid cell like
+// the rest; some are naturally taller, none are forced wide. Empty lanes collapse away exactly like
+// they do in the classic layout. Tiles whose content is new since you last looked get the same green
+// "NEW" glow the old chip row used, via the shared _mcLaneDefs() signatures.
 function _mwMcPanelGrid(){
   var r=_mcBuild(); if(!r) return '';
   if(!r.A) return '<div class="mw-grid">'+r.head+'<div class="panel" id="mwsec-cmd2"><div class="empty">Loading your brief…</div></div></div>';
   var order=['tellClaude','followup','questions','myplate','filemail','appts','inbound','fyi','projects','watchdog','flows'];
-  var lanes=order.map(function(k){ return r.blocks[k]||''; }).join('');
+  var byKey={}; _mcLaneDefs(r.A).forEach(function(d){ byKey[d.k]=d; });
+  var isNew=function(){ for(var i=0;i<arguments.length;i++){ var d=byKey[arguments[i]]; if(d&&d.isNew) return true; } return false; };
+  var newMap={followup:isNew('waiting','teamsMsgs','tasks'), questions:isNew('questions'), myplate:isNew('myplate'), filemail:isNew('filemail'), appts:isNew('appts'), inbound:isNew('inbound'), fyi:isNew('fyi'), projects:isNew('projects'), watchdog:isNew('watchdog')};
+  var lanes=order.map(function(k){ var html=r.blocks[k]; if(!html) return '';
+    return newMap[k] ? ('<div class="mw-tile-new">'+html+'</div>') : html; }).join('');
   return '<div class="mw-grid">'+r.head+lanes+'</div>';
 }
 function mwMcToggle(i){ var a=_mcTasks(); if(a[i]){ a[i].done=!a[i].done; a[i].doneAt=a[i].done?Date.now():0;
@@ -14892,7 +14899,10 @@ function _mcChipItems(k){ var A=(typeof _MC_AGENT!=='undefined'&&_MC_AGENT)?_MC_
   else if(k==='questions'){ (A.questions||[]).forEach(function(q){ out.push({t:q.q||'', s:clip(q.ctx,110)}); }); }
   else if(k==='fyi'){ (A.fyi||[]).forEach(function(x){ out.push({t:x.title||'', s:clip(x.note,110)}); }); }
   return out; }
-function _mcNavTiles(A){
+// Per-lane "what's new since you last looked" signatures — shared by the chip row (_mcNavTiles,
+// Classic/Tabbed) and the widget tiles (_mwMcPanelGrid) so both agree on what counts as new.
+// Side effect (window._MW_SIGS + first-ever seen save) runs once per render, whichever caller hits it first.
+function _mcLaneDefs(A){
   var g=(typeof _mcGaps==='function')?_mcGaps():{overdue:[],notask:[],gone:[],total:0};
   var tasks=(typeof _mcTasks==='function')?_mcTasks():[]; var _tdy=(window.MRA_DATA||{}).todayISO||'';
   var openTasks=tasks.filter(function(t){ return !t.done && !(t.snoozeUntil&&(!_tdy||t.snoozeUntil>_tdy)); });
@@ -14912,8 +14922,15 @@ function _mcNavTiles(A){
   ];
   defs=defs.filter(function(d){ if((d.k==='questions'||d.k==='fyi')&&d.n===0) return false; return true; });
   var seen=_mwSeen(), firstEver=Object.keys(seen).length===0; window._MW_SIGS={};
-  var tilesHtml=defs.map(function(d){ window._MW_SIGS[d.k]=d.s;
-    var isNew = firstEver ? false : (seen[d.k]!==undefined ? seen[d.k]!==d.s : d.n>0);
+  defs.forEach(function(d){ window._MW_SIGS[d.k]=d.s;
+    d.isNew = firstEver ? false : (seen[d.k]!==undefined ? seen[d.k]!==d.s : d.n>0); });
+  if(firstEver){ var b={}; defs.forEach(function(d){ b[d.k]=d.s; }); _mwSeenSave(b); }
+  return defs;
+}
+function _mcNavTiles(A){
+  var defs=_mcLaneDefs(A);
+  var tilesHtml=defs.map(function(d){
+    var isNew=d.isNew;
     var isOpen = (MW_CHIP_OPEN===d.k);
     var glow=isOpen?';box-shadow:0 0 0 2px var(--brand) inset;border-color:var(--brand)':(isNew?';box-shadow:0 0 0 2px #22c55e inset;border-color:#22c55e':'');
     var _tap = d.jump ? ('mwGoSec(\''+d.k+'\',\''+d.anchor+'\')') : ('mwChipToggle(\''+d.k+'\')');
@@ -14923,7 +14940,6 @@ function _mcNavTiles(A){
       +'<div style="font-size:21px;font-weight:800;line-height:1;margin-top:3px;color:'+(isNew&&!isOpen?'#22c55e':'var(--txt)')+'">'+d.n+'</div>'
       +(isNew&&!isOpen?'<div style="font-size:8.5px;font-weight:800;color:#22c55e;letter-spacing:.6px;margin-top:2px">NEW</div>':'')
       +'</button>'; }).join('');
-  if(firstEver){ var b={}; defs.forEach(function(d){ b[d.k]=d.s; }); _mwSeenSave(b); }
   // Tap-to-peek detail box (shows the items behind the tapped chip, without scrolling)
   var openDef=defs.filter(function(d){return d.k===MW_CHIP_OPEN;})[0]; var detail='';
   if(openDef){ var items=_mcChipItems(openDef.k);
@@ -14985,7 +15001,8 @@ function _mwFreshCss(){ if(document.getElementById('mwFreshCss')) return; var s=
   +'#myworkView .mw-gridlab{font-size:11.5px;font-weight:800;letter-spacing:.4px;color:var(--muted);text-transform:uppercase;margin:22px 2px 12px;padding-top:16px;border-top:1px solid var(--line)}'
   +'#myworkView .mw-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start}'
   +'#myworkView .mw-grid .panel{margin-bottom:0}'
-  +'#myworkView .mw-grid #mwsec-cmd,#myworkView .mw-grid #mwsec-followup,#myworkView .mw-grid #mwsec-cmdask{grid-column:1/-1}';
+  +'#myworkView .mw-grid .mw-tile-new{position:relative;border-radius:16px;box-shadow:0 0 0 2px #22c55e}'
+  +'#myworkView .mw-grid .mw-tile-new::after{content:"NEW";position:absolute;top:11px;right:16px;font-size:9px;font-weight:800;color:#22c55e;letter-spacing:.6px;background:rgba(34,197,94,.14);padding:2px 8px;border-radius:999px;pointer-events:none}';
   document.head.appendChild(s); }
 // 💬 Tell Claude: send a free-text instruction to Claude (routes via the mail flow, tagged; Claude reads it on the next refresh and acts).
 function mcAsk(){ var el=document.getElementById('mcAskBox'); if(!el) return; var v=(el.value||'').trim(); if(!v){ alert('Type what you want Claude to do.'); return; }
@@ -15168,7 +15185,7 @@ function renderMyWork(){
   const S=_mwSections(m);
   const mode=isAdmin?mw2Mode():'classic';
   const layoutSw=isAdmin?('<div class="mwlsw" role="group" aria-label="Layout">'+MW2_MODES.map(k=>'<button class="mwlbtn'+(mode===k?' active':'')+'" onclick="mw2SetMode(\''+k+'\')" title="'+esc(MW2_LABS[k])+'">'+MW2_LABS[k]+'</button>').join('')+'</div>'):'';
-  const header='<div class="panel"><h2>🙋 My Work — '+esc(who)+' <span class="count">'+m.total+' open</span><button onclick="mwPrint()" title="Print this page or save it as a PDF" style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:12px;font-weight:700;cursor:pointer">🖨 Print</button>'+layoutSw+picker+'</h2>'+S.tiles+'</div>';
+  const header='<div class="panel"><h2>🙋 My Work — '+esc(who)+' <span class="count">'+m.total+' open</span><button onclick="mwPrint()" title="Print this page or save it as a PDF" style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:12px;font-weight:700;cursor:pointer">🖨 Print</button>'+layoutSw+picker+'</h2>'+(mode==='widgets'?'':S.tiles)+'</div>';
   box.innerHTML = header + (
     mode==='widgets' ? _mwAssembleWidgets(m,S) :
     mode==='tabbed' ? _mwAssembleTabbed(m,S) :
