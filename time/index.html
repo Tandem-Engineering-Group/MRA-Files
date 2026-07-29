@@ -212,7 +212,7 @@
 })();
 
 /* ---------- storage ---------- */
-var LS={ names:'mra_time_names', jobs:'mra_time_chargejobs', ents:'mra_time_entries', theme:'mra_time_theme', pin:'mra_time_pinok' };
+var LS={ names:'mra_time_names', jobs:'mra_time_chargejobs', ents:'mra_time_entries', theme:'mra_time_theme', pin:'mra_time_pinok', lastWho:'mra_time_lastwho' };
 function lget(k,def){ try{ var v=localStorage.getItem(k); return v==null?def:JSON.parse(v); }catch(e){ return def; } }
 function lset(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 /* roster = the crew on Luc's Job Cost punch report (hourly). Manage (1974) to add/edit. */
@@ -265,7 +265,11 @@ function allJobOptions(){
 }
 
 /* ---------- render form dropdowns ---------- */
-function fillWho(){ var sel=$('fWho'); var cur=sel.value; sel.innerHTML='<option value="">— pick your name —</option>'+NAMES.map(function(n){return '<option>'+esc(n)+'</option>';}).join(''); if(cur) sel.value=cur; }
+/* Remember whoever was last picked ON THIS DEVICE — no login, so "this phone remembers you" is the
+   identity model: John picks his name once on his own phone, and it's still his name next time he
+   opens the kiosk there, so his "Your week" box just shows up without re-picking every time. */
+function fillWho(){ var sel=$('fWho'); var cur=sel.value; sel.innerHTML='<option value="">— pick your name —</option>'+NAMES.map(function(n){return '<option>'+esc(n)+'</option>';}).join('');
+  var want=cur||lget(LS.lastWho,''); if(want&&NAMES.indexOf(want)>=0) sel.value=want; }
 function jobListItems(){
   var out=[], seen={}, codes={};
   // every distinct client job (dedup by full code·name, NOT by code — so all jobs sharing a J# still each show)
@@ -541,7 +545,7 @@ function boot(){
   SSO.init(); applyMgr(); renderMyDay();
   $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
   ['fRange','fPerson','fJobF'].forEach(function(id){ $(id).onchange=renderTracking; });
-  $('fWho').onchange=renderMyDay; $('fDate').addEventListener('change',renderMyDay);
+  $('fWho').onchange=function(){ lset(LS.lastWho,$('fWho').value); renderMyDay(); }; $('fDate').addEventListener('change',renderMyDay);
   ['fHours','fTask'].forEach(function(id){ $(id).addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }); });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
   $('entRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d) delEntry(d.getAttribute('data-del')); });
