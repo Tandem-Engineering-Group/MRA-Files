@@ -473,18 +473,32 @@ function buildFinanceReport(){
   // Job code totals
   var codeKeys=Object.keys(byCode).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
   var codeRows=codeKeys.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(byCode[c].name||'')+'</td><td class="r">'+f(byCode[c].h)+'</td></tr>'; }).join('');
-  // Per employee, BY DAY — Rich's ask: "show, like, John Tindle by day what was charged by day."
+  // Per employee, BY DAY — as a CALENDAR grid (Rich's call: more compact than a list, and lines up
+  // the same weekday across employees so gaps/patterns are easy to spot at a glance).
   var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var empKeys=Object.keys(byEmp).sort(function(a,b){ return String(a).localeCompare(String(b)); });
   var empSecs=empKeys.map(function(w){ var E=byEmp[w];
-    var days=Object.keys(E.byDay).sort();
-    var body=days.map(function(d){
-      var items=E.byDay[d]; var dTot=items.reduce(function(x,i){ return x+i.h; },0);
-      var dLbl = d ? (DOWF[new Date(d+'T00:00:00').getDay()]+' '+isoToMDY(d)) : '(no date)';
-      var itemRows=items.map(function(i){ return '<tr><td>'+esc(i.lbl)+'</td><td class="r">'+f(i.h)+'</td></tr>'; }).join('');
-      return '<tr class="dayhdr"><td><b>'+esc(dLbl)+'</b></td><td class="r"><b>'+f(dTot)+'</b></td></tr>'+itemRows;
+    var noDate=E.byDay['']||null;
+    // bucket this employee's dated entries into calendar weeks (Monday-start, same convention as the rest of the app)
+    var weeks={}, weekOrder=[];
+    Object.keys(E.byDay).filter(Boolean).sort().forEach(function(d){
+      var wk=ymd(startOfWeek(new Date(d+'T00:00:00')));
+      if(!weeks[wk]){ weeks[wk]=1; weekOrder.push(wk); }
+    });
+    var weekBlocks=weekOrder.map(function(wk){
+      var wkStartD=new Date(wk+'T00:00:00'); var wkTot=0;
+      var cells=[]; for(var i=0;i<7;i++){
+        var cd=ymd(new Date(wkStartD.getTime()+i*86400000));
+        var items=E.byDay[cd]||[]; var dTot=items.reduce(function(x,it){return x+it.h;},0); wkTot+=dTot;
+        var lines=items.map(function(it){ return '<div class="wc-line">'+esc(it.lbl)+' <b>'+f(it.h)+'</b></div>'; }).join('');
+        cells.push('<div class="wkcell'+(items.length?'':' empty')+'"><div class="wc-day">'+DOWF[new Date(cd+'T00:00:00').getDay()]+' '+esc(isoToMDY(cd))+'</div>'
+          +(items.length?('<div class="wc-tot">'+f(dTot)+'</div>'+lines):'<div class="wc-dash">—</div>')+'</div>');
+      }
+      cells.push('<div class="wkcell tot"><div class="wc-day">Week total</div><div class="wc-tot">'+f(wkTot)+'</div></div>');
+      return '<div class="wklabel">Week of '+esc(isoToMDY(wk))+'</div><div class="wkgrid">'+cells.join('')+'</div>';
     }).join('');
-    return '<h3>ID: '+esc(E.id||'—')+' &nbsp; '+esc(w)+'</h3><table class="t"><thead><tr><th>Day / charged to</th><th class="r">Hours</th></tr></thead><tbody>'+body+'<tr class="sub"><td>Employee total</td><td class="r">'+f(E.tot)+'</td></tr></tbody></table>'; }).join('');
+    var noDateHtml = noDate ? ('<div class="wklabel">No date</div><table class="t"><tbody>'+noDate.map(function(i){ return '<tr><td>'+esc(i.lbl)+'</td><td class="r">'+f(i.h)+'</td></tr>'; }).join('')+'</tbody></table>') : '';
+    return '<h3>ID: '+esc(E.id||'—')+' &nbsp; '+esc(w)+' — total '+f(E.tot)+' hrs</h3>'+weekBlocks+noDateHtml; }).join('');
   var d=new Date(), dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
   var html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Weekly Time Summary '+period+'</title><style>'
     +'body{font-family:Segoe UI,Arial,sans-serif;color:#1b2635;margin:0}'
@@ -496,8 +510,18 @@ function buildFinanceReport(){
     +'table.t th{background:#101827;color:#fff;text-align:left;padding:5px 8px;font-size:10px;text-transform:uppercase}'
     +'table.t td{padding:5px 8px;border-bottom:1px solid #e6e8eb}td.r,th.r{text-align:right}'
     +'tr.sub td{font-weight:800;background:#faf1ea}.grand{display:inline-block;background:#faf1ea;border:1px solid #f0d3bf;border-radius:9px;padding:8px 16px;font-weight:800;margin-top:8px}'
-    +'tr.dayhdr td{background:#eef2f7;padding-top:8px}'
-    +'@media print{.bar{display:none}} tr{break-inside:avoid}'
+    +'.wklabel{font-size:10.5px;color:#66758a;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin:8px 0 3px}'
+    +'.wkgrid{display:grid;grid-template-columns:repeat(7,1fr) 0.85fr;gap:4px;margin-bottom:8px}'
+    +'.wkcell{border:1px solid #e6e8eb;border-radius:7px;padding:6px 7px;min-height:50px}'
+    +'.wkcell.empty{background:#fafbfc}'
+    +'.wkcell.tot{background:#faf1ea;border-color:#f0d3bf}'
+    +'.wc-day{font-size:9px;color:#8894a3;text-transform:uppercase;letter-spacing:.2px;font-weight:700;margin-bottom:3px}'
+    +'.wkcell.tot .wc-day{color:#c9530f}'
+    +'.wc-tot{font-size:14px;font-weight:800;color:#1b2635}'
+    +'.wkcell.tot .wc-tot{color:#c9530f}'
+    +'.wc-line{font-size:9.5px;color:#455066;line-height:1.35;margin-top:1px}'
+    +'.wc-dash{color:#c3cad4;font-size:12px}'
+    +'@media print{.bar{display:none}} tr,.wkgrid{break-inside:avoid}'
     +'</style></head><body><div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button></div><div class="pad">'
     +'<h1>Mobility Resource Associates Inc — Weekly Time Summary</h1>'
     +'<div class="sub2">Pay period '+esc(period)+' ('+esc(rangeLbl)+') · Dept 210 Engineering · Generated '+dd+' · Grand total '+f(grand)+' hrs</div>'
