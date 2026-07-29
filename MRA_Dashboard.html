@@ -3872,6 +3872,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.65", date:"2026-07-29", title:"🐛 Fixed the real bug behind \"message might have been moved or deleted\" + 🔧 Fleetio issue link", items:[
+    "Rich caught this one for real: the 📧 Open email / 📅 appointment links in My Work were landing on Outlook's \"moved or deleted\" error page — every time, on both mail AND calendar. Root cause: those items never had a real Outlook link stored, so the button was guessing a link from the raw message id — and calendar events especially were being pointed at a MAIL-reading link, which can never work for a calendar item. <b>Fixed:</b> stopped guessing — the button now only appears when there's a real, verified working link (no more dead-end clicks); the current items have been re-matched against the real mailbox/calendar with working links restored. Also added a <b>🔧 Open in Fleetio ↗</b> link right on the Fleetio issue card in the watchdog panel — opens the real issue on Fleetio's site." ] },
   { rev:"36.64", date:"2026-07-29", title:"🔎 My Work deep-dive verification — one small cleanup, everything else checked out", items:[
     "Went through every My Work section end to end at Rich's request (view + edit, does state stick, can you mark complete / not-for-me): section collapse, ✓ Not for me, the personal task list (add/check/snooze/delete), ▲▼ reorder, tap-to-peek tiles, PM verify/send-back, ✓ close a task, ⚙ Follow a project, ✍ Answer, ✉ Reply, 🖨 Print all held up correctly — none of them lose their state on the 30-second refresh. <b>One real find:</b> the little grey Fleetio description line under a 🔧 task still had a leftover \"tap to expand\" click on it from before the text was made to always show in full — clicking it hadn't done anything for a while (nothing left to expand), so that dead click was removed. If something specific still isn't behaving for you, tell me exactly which button/section and what you tapped so it can be pinned down." ] },
   { rev:"36.63", date:"2026-07-28", title:"🐛 Fixed the new board-tasks digest — wrong job matched + real duplicates", items:[
@@ -19021,19 +19023,14 @@ function mcToast(msg){ var t=document.getElementById('mcToast');
   if(!t){ t=document.createElement('div'); t.id='mcToast'; t.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2000;background:#16a34a;color:#fff;font-weight:700;padding:11px 18px;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.4);font-size:14px;max-width:90vw;text-align:center;opacity:0;transition:opacity .18s'; document.body.appendChild(t); }
   t.textContent=msg; t.style.opacity='1'; clearTimeout(t._h); t._h=setTimeout(function(){ t.style.opacity='0'; },2600); }
 function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ var t=_mcIssTask(num); var lab=t?'👤 Re-assign crew':'👤 Add to board + assign';
-    _mcModal('<h3>🔧 Fleetio issue #'+esc(num)+'</h3><div style="max-height:60vh;overflow:auto">'+fioIssueDetailHtml(num)+'</div><div class="foot"><button class="mc-btn primary" onclick="mcAssignIss(\''+esc(num)+'\',event)">'+lab+'</button><button class="mc-btn" onclick="_mcModalClose()">Close</button><span id="mcIssMsg" class="mc-muted"></span></div>'); } else { alert('Issue #'+num); } }
-// Build a working "open this email" link. Use the message's verbatim Graph webLink (correct ItemID),
-// forced to open in Outlook-on-the-web by stripping exvsurl. The Graph `id` is URL-safe base64 and is
-// NOT usable in an OWA open-link, so if there's no webLink we return '' (hide the button) rather than a broken one.
-function _mcMailHref(x){ var l=(x&&x.link)?String(x.link):''; if(l) return l;   // use Outlook's webLink VERBATIM — stripping &exvsurl=1 was breaking the OWA deep link (it wouldn't open the message)
-  // Fallback: build an Outlook-web deep link straight from the message id (every scanned item carries one) so
-  // "📧 Open email" always works and opens the FULL thread even when the brief didn't include a prebuilt link.
-  // Fallback (item has no prebuilt webLink — e.g. Waiting/Appt items): build the SAME OWA "?ItemID=" link
-  // Graph itself uses. Graph ids come url-safe-base64 (-,_); the OWA ItemID needs standard base64 (+,/), so convert.
-  // (The old /mail/deeplink/read/<id> format could NOT open a REST id in the new Outlook → "message moved or deleted".)
-  var id=(x&&x.id)?String(x.id):''; if(!id) return '';
-  var std=id.replace(/_/g,'+').replace(/-/g,'/');   // VERIFIED against Graph's own webLink: id's _ ↔ + and - ↔ / (swapped base64 variant)
-  return 'https://outlook.office365.com/owa/?ItemID='+encodeURIComponent(std)+'&exvsurl=1&viewmodel=ReadMessageItem'; }
+    var fioLink=(typeof fioHref==='function')?('<a class="mc-btn" href="'+fioHref('issue',num)+'" target="_blank" rel="noopener" title="Open the real issue in Fleetio">🔧 Open in Fleetio ↗</a>'):'';
+    _mcModal('<h3>🔧 Fleetio issue #'+esc(num)+'</h3><div style="max-height:60vh;overflow:auto">'+fioIssueDetailHtml(num)+'</div><div class="foot">'+fioLink+'<button class="mc-btn primary" onclick="mcAssignIss(\''+esc(num)+'\',event)">'+lab+'</button><button class="mc-btn" onclick="_mcModalClose()">Close</button><span id="mcIssMsg" class="mc-muted"></span></div>'); } else { alert('Issue #'+num); } }
+// Build a working "open this email/appointment" link. Use the item's verbatim Graph webLink ONLY —
+// a guessed ItemID built by charset-swapping the Graph `id` was tried here before and Rich hit
+// "this message might have been moved or deleted" on BOTH mail and calendar items from it (calendar
+// items especially: the guess pointed a mail-reading viewmodel at a calendar-type id, which can never
+// work). Better to hide the button than hand out a link that dead-ends — so no verbatim webLink = no button.
+function _mcMailHref(x){ return (x&&x.link)?String(x.link):''; }
 // ✋ Dismiss ("not for me" / already handled) — hide a Waiting-on-you item. Keyed by the stable message id so it
 // stays hidden across the 4×/day re-scans; per-device localStorage; recoverable via the "N hidden · show" toggle.
 var _MC_DISMISS_KEY='mra_mc_dismiss_v1'; var _MC_SHOW_DISMISSED=false;
