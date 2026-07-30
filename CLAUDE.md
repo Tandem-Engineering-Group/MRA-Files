@@ -1,5 +1,24 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-07-30 — Project-task attachments could get silently wiped by Gantt drag actions
+
+Rich reported PDFs disappearing from project tasks (an electrical package on Medtronic – Buildout J1553,
+one on the Airstream/On Cloud job) with no idea why — "I can't have shit disappearing." Root cause found
+by auditing every code path in `MRA_Dashboard.html` that writes a project task (`action:'editProjectTask'`,
+12 call sites): project-task attachments live as a hidden `[files:]` tag riding inside the task's Notes/
+comments field (`_withFiles`/`_taskFiles`, same pattern as the `[by:]`/`[due0:]`/`[pt:]` tags). 11 of the 12
+call sites correctly resend the task's full `comments` on every save specifically so an unrelated edit can't
+blank it — but **two didn't**: `pdApplyOrderById`/`pdResetOrder` (dragging a task to reorder it in the Gantt,
+or the "reset order" button) and `gLinkApply` (dragging to link a predecessor) sent a payload with no
+`comments` field at all. Anyone reordering a task or drawing a dependency arrow on a project's Gantt — a
+completely normal PM action, nothing to do with attachments — could silently wipe that task's Notes field
+and, with it, the `[files:]` tag. **Fixed** (rev 36.75): both paths now resend `comments:t.cm||''` like every
+other write. Verified headless: attaching a file, then simulating both a drag-reorder and a predecessor-link
+write, now correctly preserves the `[files:]` tag through both. ⚠️ **Not proven over real use yet** — same
+caveat as other write-path fixes here — and **attachments already lost before this fix are NOT recoverable**
+(the tag pointing to them is gone from that task's Notes row) — Rich needs to re-attach the electrical PDF on
+Medtronic J1553 and whatever was on the Airstream/On Cloud job.
+
 Guidance for Claude when working in this repository.
 
 ## ⚠️ RECURRING "DATA PIPELINE STALLED" ISSUE — READ BEFORE TOUCHING POWER AUTOMATE (do not re-suggest fixes already applied)

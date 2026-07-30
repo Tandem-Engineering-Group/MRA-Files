@@ -3879,6 +3879,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.75", date:"2026-07-30", title:"🐛 FIXED — project-task attachments could get silently wiped by Gantt drag actions", items:[
+    "Rich reported PDFs he'd attached to project tasks (an electrical package on Medtronic, one on the Airstream job) disappearing on their own. Root cause found: project-task attachments live as a hidden tag riding inside the task's Notes/comments field, and two Gantt actions — <b>dragging a task to reorder it</b> and <b>dragging to link a predecessor</b> — were sending a save that didn't include the comments field at all, unlike every other edit action on this board (which all deliberately resend the full comments so a save never blanks it). That gap could wipe the attachment tag (and any other hidden tags riding along) any time someone reordered a task or drew a dependency arrow, with zero connection to the attachment itself. Both paths now resend the task's real comments on every save, matching the rest of the board. Any attachment already lost before this fix isn't recoverable from here — it'll need to be re-attached." ] },
   { rev:"36.74", date:"2026-07-30", title:"✨ Quote Generator — 5 more real job-cost sheets added to the Estimate helper", items:[
     "Rich asked to check his Z-drive Client Tours folder for more quote sheets (only recent ones); a systematic search of the 6 client folders there turned up nothing else matching the FM Global format, but surfaced 5 real job-cost sheets in a simpler format elsewhere (Steve C's internal quotes): <b>Beazley (J1525)</b>, <b>SWC-MMOT Illinois entry-door-step removal</b>, <b>Hershey's roll-up screen mount</b>, <b>Barton Malow nose storage shelves (J1506)</b>, and an <b>Army Training trailer interior rebuild</b> — each reconciled exactly against its own Vendor/Material-markup/Labor totals and added to <b>QUOTE_REF</b> (now 26 reference jobs). Two of the five (SWC-MMOT, Barton Malow) are dated a few weeks past a strict 2-year cutoff — included anyway since they're only marginally over and match the pricing pattern, but flagged plainly in their notes so they're easy to exclude later if wanted." ] },
   { rev:"36.73", date:"2026-07-30", title:"✨ Quote Generator — added the FM Global budget + wired in real Catalogue material costs", items:[
@@ -17707,7 +17709,7 @@ function pdApplyOrderById(project, id, ord){
   const p=oProj(project); if(!p) return;
   const t=projTaskByAnyId(p,id); if(!t) return;
   t.ord=(ord==null?null:ord);
-  if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, ord:(ord==null?'':ord) });
+  if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, ord:(ord==null?'':ord), comments:t.cm||'' });
   if(typeof oRecomputeProject==='function') oRecomputeProject(p);
   renderGanttFS(); if(typeof renderAll==='function') renderAll();
 }
@@ -17724,7 +17726,7 @@ function pdResetOrder(){
   const had=(p.tasks||[]).filter(t=>t.ord!=null && t.ord!=='');
   if(!had.length){ alert('This project is already in date order — nothing to reset.'); return; }
   if(!confirm('Reset "'+GFS_PROJECT+'" back to date order? This clears the manual task order for everyone.')) return;
-  had.forEach(t=>{ t.ord=null; if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project:GFS_PROJECT, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, ord:'' }); });
+  had.forEach(t=>{ t.ord=null; if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project:GFS_PROJECT, pin:CLOSE_PIN, user:CURRENT_USER, id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, ord:'', comments:t.cm||'' }); });
   if(typeof oRecomputeProject==='function') oRecomputeProject(p);
   renderGanttFS(); if(typeof renderAll==='function') renderAll();
 }
@@ -17785,7 +17787,7 @@ function gLinkApply(ctx, srcId, tgtId){
   let cur=src, hops=0; while(cur && hops++<100){ if(projTaskHandle(cur)===tgtId){ alert('That link would make a loop — skipped.'); return; }
     const pid=cur.pred; cur=(pid!=null&&pid!=='')?ctx.byId[String(pid)]:null; }   // cycle guard
   tgt.pred=srcId;
-  if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project:ctx.project, pin:CLOSE_PIN, user:CURRENT_USER, id:tgt.id, _id:(tgt._id!=null?tgt._id:undefined), taskOld:tgt.t, pred:srcId });
+  if(typeof shopWrite==='function') shopWrite({ action:'editProjectTask', project:ctx.project, pin:CLOSE_PIN, user:CURRENT_USER, id:tgt.id, _id:(tgt._id!=null?tgt._id:undefined), taskOld:tgt.t, pred:srcId, comments:tgt.cm||'' });
   if(typeof oRecomputeProject==='function') oRecomputeProject(p);
   renderGanttFS(); if(typeof renderAll==='function') renderAll();
 }
