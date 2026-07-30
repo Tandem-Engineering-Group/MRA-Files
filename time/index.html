@@ -387,15 +387,18 @@ function mapShared(arr){ if(!Array.isArray(arr)) return [];
 function loadShared(cb){ function done(a){ SHARED=mapShared(a); if(cb)cb(true); } function fail(){ SHARED=null; if(cb)cb(false); }
   fetch('../time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(function(){ fetch('time.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done).catch(fail); }); }
 
-/* ---------- employee "my week" summary (open, this device, selected person's whole week, grouped by day) ---------- */
+/* ---------- employee "my week" summary (selected person's whole week, grouped by day) ---------- */
 /* Rich's ask: as someone logs time day by day, they should see everything they've charged for the
    WEEK (not just today), so it builds up as they go. Scoped to whichever name is picked above \u2014 this
-   kiosk has no per-person login, so the selected Employee name IS the identity for this box. */
+   kiosk has no per-person login, so the selected Employee name IS the identity for this box.
+   Uses activeEntries() (shared/synced data when signed in as a manager, else this device's own local
+   entries) instead of raw ENTS \u2014 otherwise a manager correcting real data directly in SharePoint would
+   see this box keep showing stale, already-deleted entries from its own local cache indefinitely. */
 function renderMyDay(){
   var who=$('fWho').value.trim(), date=$('fDate').value||todayISO();
   var wkStartD=startOfWeek(new Date(date+'T00:00:00')); var wkStart=ymd(wkStartD);
   var wkEndD=new Date(wkStartD); wkEndD.setDate(wkEndD.getDate()+6); var wkEnd=ymd(wkEndD);
-  var mine=ENTS.filter(function(e){ return e.who===who && e.dateISO>=wkStart && e.dateISO<=wkEnd; })
+  var mine=activeEntries().filter(function(e){ return e.who===who && e.dateISO>=wkStart && e.dateISO<=wkEnd; })
     .sort(function(a,b){ return String(a.dateISO).localeCompare(String(b.dateISO))||String(a.ts).localeCompare(String(b.ts)); });
   var tot=mine.reduce(function(x,e){ return x+(e.hours||0); },0);
   var tt=$('myDayTitle'); if(tt) tt.textContent = who ? (who+' \u2014 week of '+isoToMDY(wkStart)) : 'Your week';
