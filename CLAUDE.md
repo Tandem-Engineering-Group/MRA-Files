@@ -1,5 +1,43 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-07-30 — Time Tracking: real edit/delete, job-picker double-prefix bug, 0-hr Called In tile
+
+Follow-up to the "duplicated payroll rows" incident below — this is where that got actually fixed, plus two
+more bugs Rich caught live the same day.
+
+- **Real `editTime` branch built + VERIFIED.** "MRA Time Write" now has a genuine edit path: Condition
+  (`action=='editTime'`) → Get items (SharePoint, filter `EntryID eq '<id>'`) → Update item (`PatchItem`,
+  `Id` = `first(body('Get_items'))?['ID']`, straight quotes in the filter, body parsed via
+  `json(triggerBody())?['field']` same as every other no-cors flow here). Tested end-to-end with a safe
+  throwaway entry (`claudetest1785444436`, "ZZ Test QA Ignore") before touching anything real: `addTime` →
+  confirmed landed → `editTime` → confirmed the SAME row updated (Hours 1→2, no duplicate). `time/index.html`
+  `saveEditEntry()` now sends the real POST again (previously local-device-only per the incident below).
+  **Real correction made same day**: Brian Glenn's and Kayla Roe's 7/30/26 Airstream entries (both showing
+  4 hrs) corrected for real to 7 and 5 hrs respectively via this mechanism — confirmed same row updated, no
+  duplicate created.
+- **Delete function added** (Rich: "give me a delete function here so i dont have to go to the list").
+  `delEntry()` in `time/index.html` now POSTs `{action:'deleteTime', id}` to the same flow and the 🗑/×
+  button is wired up on both the manager Tracking view and "Your week". ⚠️ **The `deleteTime` branch in
+  "MRA Time Write" still needs to be built** (Get items by EntryID → Delete item, same shape as editTime) —
+  until that exists, clicking delete removes the row from the current view/device but the row is NOT
+  actually removed from SharePoint and will reappear on the next shared refresh. Build + test the same way
+  editTime was (safe throwaway entry first) before relying on it for a real row.
+- **Job-picker double-prefix bug fixed** (Rich caught it live: "look how J1110 is written. looks wrong" —
+  screenshot showed "1110 · 92 · 92 · Siemens DBX J1110-92"). Root cause: `jobListItems()` regex-stripped
+  the job-number prefix back off a label that `boardJobs()` had just built, to recover the bare project name
+  — but the regex (`\d{3,6}` then one separator char) can't span a **hyphenated job number** like `1110-92`;
+  it only eats `J1110-`, leaving a stray `92 ·` fragment that then gets prepended again. Any board job whose
+  `jobNum` contains a hyphen (sub-unit numbering, e.g. trailer 92 within job family 1110) hit this. **Fixed**:
+  `boardJobs()` now returns the raw `project` name directly (`name:j.project`) so `jobListItems()` doesn't
+  need to regex-strip anything back off. Verified via a Node sandbox reproducing the exact case — old code
+  produced `"1110-92 · 92 · 92 · Siemens DBX J1110-92"`, new code produces the correct
+  `"1110-92 · 92 · Siemens DBX J1110-92"` (job code · unit number · description, no duplication).
+- **"Called In" 0-hour stat tile removed** (Rich: "remove this called in up top pls" — Finance Report header
+  showed a `CALLED IN 0.00` tile). `payChips` in `buildFinanceReport()` rendered one tile per PayType present
+  in the range with no floor — Called In is a 0-hour flag by design (see the earlier "0-hours time entry"
+  feature), so it always showed a useless 0.00 tile. Fixed: tiles only render for pay types with hours > 0
+  (Leave/Sick/etc. with real hours still show correctly).
+
 ## ✅ FIXED 2026-07-30 — SHOP-task attachments silently dropped by Move/Copy and drag-to-another-trailer
 
 Rich clarified his attachment complaint was about the **shop floor screen specifically** (shop tasks), not
