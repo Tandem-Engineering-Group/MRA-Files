@@ -29,6 +29,28 @@ Rich is done being told to re-apply the same fix — check this section before s
 - Older note below ("Pipeline incident... resolved 2026-07-17") turned out to NOT be fully resolved —
   it's the same recurring issue, kept for history but superseded by this section.
 
+## ⚠️ BUG INCIDENT 2026-07-29 — Time Tracking edit feature duplicated real payroll rows (FIXED, cleanup still owed)
+
+The ✎ edit-entry feature added to `time/index.html` today POSTed `action:'editTime'` to the SAME
+`TIME_WRITE_URL` that only ever handled `action:'addTime'` (create a row in the **MRA Time Entries**
+SharePoint list). That flow almost certainly has no branching on `action` at all — it was only ever
+built to create — so every edit of a previously-synced entry silently created ANOTHER row instead of
+correcting the original, inflating real hours. Confirmed live: Brent Burns showed **50 hrs** in the
+manager/finance view (shared list) vs the real **30 hrs** in his own device's "Your week" view, caused
+by a duplicated "Fab Gen mount for Doug" / General / 10 hrs entry for 7/27/26.
+- ✅ **Fixed same day**: `saveEditEntry()` no longer POSTs anything to `TIME_WRITE_URL` — edits are
+  local-device-only until a real update branch exists in that flow. Do not re-add that POST without
+  first building (with Rich, in Power Automate) a genuine `editTime` branch that does a SharePoint
+  **Update item** by `EntryID`, not another Create item.
+- ⚠️ **NOT done yet — real data cleanup still owed**: any entry edited via ✎ during today's testing
+  (2026-07-29) likely has a duplicate row sitting in the live **MRA Time Entries** SharePoint list right
+  now. Known duplicate: Brent Burns, 7/27/26, "Fab Gen mount for Doug", General, 10 hrs (two copies).
+  There may be others from other test edits made today — check the list directly (SharePoint → MRA
+  Site → MRA Time Entries, or via the flow's "Get items") for same Employee+Date+Job+Hours+Notes rows
+  and delete the extra copy. I don't have write access to SharePoint to do this myself.
+- If a real "editTime" flow branch gets built later, match by the `EntryID` field (the client-generated
+  id sent in the edit POST body) — that's the stable key, not SharePoint's own row `ID`.
+
 ## How Rich likes instructions (standing preference — follow every time)
 
 - **Write the instructions IN THE CHAT, numbered step-by-step.** Do NOT put the steps
