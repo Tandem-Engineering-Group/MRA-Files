@@ -526,22 +526,24 @@ function buildFinanceReport(){
   if(!rows.length){ alert('No time entries in this range to report.'); return; }
   var dates=rows.map(function(e){return e.dateISO;}).sort();
   var period=isoToMDY(dates[0])+' - '+isoToMDY(dates[dates.length-1]);
-  var byPay={}, byCode={}, byEmp={}, byWeekCode={}, grand=0;
+  var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var byPay={}, byCode={}, byWeekCode={}, grand=0;
+  var weeks={}, weekOrder=[], weekend={};   // wk -> {emps:{who:{id,byDay,tot}}, empOrder:[]} ; weekend[wk] = {5:bool sat,6:bool sun}
+  var noDateByEmp={}, noDateOrder=[];
   rows.forEach(function(e){
-    var pt=fPayType(e), c=fCode(e), h=e.hours||0; grand+=h;
+    var pt=fPayType(e), c=fCode(e), h=e.hours||0, who=e.who||'—'; grand+=h;
     byPay[pt]=(byPay[pt]||0)+h;
-    if(pt==='Work'){
-      if(!byCode[c]) byCode[c]={name:fCodeName(e),h:0}; byCode[c].h+=h;
-      if(e.dateISO){ var wkc=ymd(startOfWeek(new Date(e.dateISO+'T00:00:00')));
-        if(!byWeekCode[wkc]) byWeekCode[wkc]={};
-        if(!byWeekCode[wkc][c]) byWeekCode[wkc][c]={name:fCodeName(e),h:0};
-        byWeekCode[wkc][c].h+=h; }
-    }
-    var who=e.who||'—'; if(!byEmp[who]) byEmp[who]={id:EMPIDS[who]||'',byDay:{},tot:0};
-    byEmp[who].tot+=h;
+    if(pt==='Work'){ if(!byCode[c]) byCode[c]={name:fCodeName(e),h:0}; byCode[c].h+=h; }
     var lbl = pt==='Work' ? (c+' · '+fCodeName(e)) : pt;
     var tn=[e.task,e.notes].filter(Boolean).join(' — ');
-    var d=e.dateISO||''; if(!byEmp[who].byDay[d]) byEmp[who].byDay[d]=[]; byEmp[who].byDay[d].push({lbl:lbl,h:h,tn:tn});
+    if(!e.dateISO){ if(!noDateByEmp[who]){ noDateByEmp[who]=[]; noDateOrder.push(who); } noDateByEmp[who].push({lbl:lbl,h:h,tn:tn}); return; }
+    var dd=new Date(e.dateISO+'T00:00:00'), wk=ymd(startOfWeek(dd)), off=(dd.getDay()+6)%7;   // Mon=0 … Sun=6
+    if(pt==='Work'){ if(!byWeekCode[wk]) byWeekCode[wk]={}; if(!byWeekCode[wk][c]) byWeekCode[wk][c]={name:fCodeName(e),h:0}; byWeekCode[wk][c].h+=h; }
+    if(off===5||off===6){ if(!weekend[wk]) weekend[wk]={}; weekend[wk][off]=true; }
+    if(!weeks[wk]){ weeks[wk]={emps:{},empOrder:[]}; weekOrder.push(wk); }
+    if(!weeks[wk].emps[who]){ weeks[wk].emps[who]={id:EMPIDS[who]||'',byDay:{},tot:0}; weeks[wk].empOrder.push(who); }
+    var E=weeks[wk].emps[who]; E.tot+=h;
+    if(!E.byDay[e.dateISO]) E.byDay[e.dateISO]=[]; E.byDay[e.dateISO].push({lbl:lbl,h:h,tn:tn});
   });
   function f(n){ return (Math.round((n||0)*100)/100).toFixed(2); }
   // Totals by pay type — folded into one compact stat line instead of its own bordered table.
@@ -549,7 +551,7 @@ function buildFinanceReport(){
   // "Work" and maybe "Leave" — pure vertical space with almost no information in it.
   var payStat=Object.keys(byPay).sort().map(function(k){ return esc(k)+' <b>'+f(byPay[k])+'</b>'; }).join(' &nbsp;·&nbsp; ');
   // Job code totals — split into two side-by-side columns once the list gets long enough that a
-  // single column would run tall for no reason (landscape gives plenty of spare width to use).
+  // single column would run tall for no reason (plenty of spare width to use in portrait too).
   var codeKeys=Object.keys(byCode).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
   function codeTable(keys){ return '<table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'
     +keys.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(byCode[c].name||'')+'</td><td class="r">'+f(byCode[c].h)+'</td></tr>'; }).join('')+'</tbody></table>'; }
@@ -561,7 +563,7 @@ function buildFinanceReport(){
   // without adding it up by hand across every employee's row. Only worth a separate section when the
   // range covers 2+ weeks — with just one week in range this would be identical to Job Code Totals above.
   var wkCodeKeys=Object.keys(byWeekCode).sort();
-  var singleWeek=wkCodeKeys.length<=1;   // also lets each employee block below drop its own "Week of…" repeat
+  var singleWeek=wkCodeKeys.length<=1;   // also drops the "Week of…" caption below since there's only one
   var byWeekHtml = wkCodeKeys.length>1 ? wkCodeKeys.map(function(wk){
     var codes=byWeekCode[wk];
     var ck=Object.keys(codes).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
@@ -569,43 +571,43 @@ function buildFinanceReport(){
     var rowsHtml=ck.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(codes[c].name||'')+'</td><td class="r">'+f(codes[c].h)+'</td></tr>'; }).join('');
     return '<h3>Week of '+esc(isoToMDY(wk))+'</h3><table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'+rowsHtml+'<tr class="sub"><td colspan="2">Week total</td><td class="r">'+f(wkTot)+'</td></tr></tbody></table>';
   }).join('') : '';
-  // Per employee, BY DAY — as a CALENDAR grid (Rich's call: more compact than a list, and lines up
-  // the same weekday across employees so gaps/patterns are easy to spot at a glance).
-  var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  var empKeys=Object.keys(byEmp).sort(function(a,b){ return String(a).localeCompare(String(b)); });
-  var empSecs=empKeys.map(function(w){ var E=byEmp[w];
-    var noDate=E.byDay['']||null;
-    // bucket this employee's dated entries into calendar weeks (Monday-start, same convention as the rest of the app)
-    var weeks={}, weekOrder=[];
-    Object.keys(E.byDay).filter(Boolean).sort().forEach(function(d){
-      var wk=ymd(startOfWeek(new Date(d+'T00:00:00')));
-      if(!weeks[wk]){ weeks[wk]=1; weekOrder.push(wk); }
-    });
-    var weekBlocks=weekOrder.map(function(wk){
-      var wkStartD=new Date(wk+'T00:00:00'); var wkTot=0;
-      var wkByJob={}, wkJobOrder=[];   // this ONE employee's hours by job, THIS week only — Rich's ask
-      var cells=[]; for(var i=0;i<7;i++){
-        var cd=ymd(new Date(wkStartD.getTime()+i*86400000));
-        var items=E.byDay[cd]||[]; var dTot=items.reduce(function(x,it){return x+it.h;},0); wkTot+=dTot;
-        items.forEach(function(it){ if(!(it.lbl in wkByJob)){ wkByJob[it.lbl]=0; wkJobOrder.push(it.lbl); } wkByJob[it.lbl]+=it.h; });
-        var lines=items.map(function(it){ return '<div class="wc-line">'+esc(it.lbl)+' <b>'+f(it.h)+'</b>'+(it.tn?('<div class="wc-note">'+esc(it.tn)+'</div>'):'')+'</div>'; }).join('');
-        cells.push('<div class="wkcell'+(items.length?'':' empty')+'"><div class="wc-day">'+DOWF[new Date(cd+'T00:00:00').getDay()]+' '+esc(isoToMDY(cd))+'</div>'
-          +(items.length?('<div class="wc-tot">'+f(dTot)+'</div>'+lines):'<div class="wc-dash">—</div>')+'</div>');
-      }
-      wkJobOrder.sort(function(a,b){ return wkByJob[b]-wkByJob[a]; });   // biggest chunk of the week first
-      var jobLines=wkJobOrder.map(function(k){ return '<div class="wk-job-line">'+esc(k)+' <b>'+f(wkByJob[k])+'</b></div>'; }).join('');
-      cells.push('<div class="wkcell tot"><div class="wc-day">Week total</div><div class="wc-tot">'+f(wkTot)+'</div>'+jobLines+'</div>');
-      var lbl = singleWeek ? '' : '<div class="wklabel">Week of '+esc(isoToMDY(wk))+' — '+f(wkTot)+' hrs total</div>';
-      return lbl+'<div class="wkgrid">'+cells.join('')+'</div>';
+  // Weekly hours — ONE real table per week (employees as rows, days as columns), not a stack of
+  // per-employee mini-calendars each repeating its own day headers. Sat/Sun columns only appear on
+  // a week where SOMEONE actually logged hours that day (Rich: "we don't typically use Sat or Sun —
+  // just don't show them at all unless hours are there") — every other week stays Mon–Fri.
+  weekOrder.sort();
+  var weekTables=weekOrder.map(function(wk){
+    var wkStartD=new Date(wk+'T00:00:00'), wa=weekend[wk]||{};
+    var dayIdx=[0,1,2,3,4]; if(wa[5]) dayIdx.push(5); if(wa[6]) dayIdx.push(6);
+    var dayDates=dayIdx.map(function(i){ return ymd(new Date(wkStartD.getTime()+i*86400000)); });
+    var head='<tr><th class="empcol">Employee</th>'+dayIdx.map(function(i,k){ return '<th>'+DOWF[(i+1)%7]+' '+esc(isoToMDY(dayDates[k]))+'</th>'; }).join('')+'<th class="r">Week total</th></tr>';
+    var W=weeks[wk], empKeys=W.empOrder.slice().sort(function(a,b){ return String(a).localeCompare(String(b)); });
+    var bodyRows=empKeys.map(function(who){ var E=W.emps[who];
+      var byJob={}, jobOrder=[];
+      var dayCells=dayDates.map(function(cd){
+        var items=E.byDay[cd]||[];
+        items.forEach(function(it){ if(!(it.lbl in byJob)){ byJob[it.lbl]=0; jobOrder.push(it.lbl); } byJob[it.lbl]+=it.h; });
+        if(!items.length) return '<td class="dcell empty">—</td>';
+        var dTot=items.reduce(function(x,it){return x+it.h;},0);
+        var lines=items.map(function(it){ return '<div class="jline">'+esc(it.lbl)+' <b>'+f(it.h)+'</b>'+(it.tn?('<div class="jnote">'+esc(it.tn)+'</div>'):'')+'</div>'; }).join('');
+        return '<td class="dcell"><div class="dtot">'+f(dTot)+'</div>'+lines+'</td>';
+      }).join('');
+      jobOrder.sort(function(a,b){ return byJob[b]-byJob[a]; });
+      var jobLines=jobOrder.map(function(k){ return '<div class="jline tot">'+esc(k)+' <b>'+f(byJob[k])+'</b></div>'; }).join('');
+      return '<tr><td class="empcol"><b>'+esc(who)+'</b><br><span class="muted">ID '+esc(E.id||'—')+'</span></td>'+dayCells+'<td class="dcell tot"><div class="dtot">'+f(E.tot)+'</div>'+jobLines+'</td></tr>';
     }).join('');
-    var noDateHtml = noDate ? ('<div class="wklabel">No date</div><table class="t"><tbody>'+noDate.map(function(i){ return '<tr><td>'+esc(i.lbl)+'</td><td class="r">'+f(i.h)+'</td></tr>'; }).join('')+'</tbody></table>') : '';
-    return '<h3>ID: '+esc(E.id||'—')+' &nbsp; '+esc(w)+' — total '+f(E.tot)+' hrs</h3>'+weekBlocks+noDateHtml; }).join('');
+    var cap = singleWeek ? '' : '<h3>Week of '+esc(isoToMDY(wk))+'</h3>';
+    return cap+'<table class="wk"><thead>'+head+'</thead><tbody>'+bodyRows+'</tbody></table>';
+  }).join('');
+  var noDateHtml = noDateOrder.length ? ('<h3>No date on entry</h3><table class="t"><thead><tr><th>Employee</th><th>Charge</th><th class="r">Hours</th></tr></thead><tbody>'
+    +noDateOrder.map(function(who){ return noDateByEmp[who].map(function(i){ return '<tr><td>'+esc(who)+'</td><td>'+esc(i.lbl)+'</td><td class="r">'+f(i.h)+'</td></tr>'; }).join(''); }).join('')
+    +'</tbody></table>') : '';
   var d=new Date(), dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
   var body='<h1>Mobility Resource Associates Inc — Weekly Time Summary</h1>'
     +'<div class="sub2">Pay period '+esc(period)+' ('+esc(rangeLbl)+') · Dept 210 Engineering · Generated '+dd+' · Grand total <b>'+f(grand)+'</b> hrs'+(payStat?' &nbsp;·&nbsp; '+payStat:'')+'</div>'
     +'<h2>Job code totals</h2>'+codeHtml
     +(byWeekHtml?('<h2>Totals by job — per week (everyone combined)</h2>'+byWeekHtml):'')
-    +'<h2>By employee</h2>'+empSecs;
+    +'<h2>Weekly hours by employee</h2>'+weekTables+noDateHtml;
   /* Fit-to-1-page (Rich's ask): same zoom-based auto-scale already proven on the dashboard's other
      print views (Production Status report-out, etc.) — measure the real content size at zoom 1, then
      shrink the whole #sheet down with CSS zoom (which reflows, unlike transform) so it lands on one
@@ -626,21 +628,20 @@ function buildFinanceReport(){
     +'table.t th{background:#101827;color:#fff;text-align:left;padding:3px 7px;font-size:9px;text-transform:uppercase}'
     +'table.t td{padding:3px 7px;border-bottom:1px solid #e6e8eb}td.r,th.r{text-align:right}'
     +'tr.sub td{font-weight:800;background:#faf1ea}'
-    +'.wklabel{font-size:10px;color:#66758a;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin:4px 0 2px}'
-    +'.wk-job-line{font-size:9px;color:#8a4a1f;line-height:1.3;margin-top:1px;font-weight:600}'
-    +'.wk-job-line b{color:#c9530f}'
-    +'.wkgrid{display:grid;grid-template-columns:repeat(7,1fr) 1.5fr;gap:3px;margin-bottom:5px}'
-    +'.wkcell{border:1px solid #e6e8eb;border-radius:6px;padding:4px 6px;min-height:38px}'
-    +'.wkcell.empty{background:#fafbfc}'
-    +'.wkcell.tot{background:#faf1ea;border-color:#f0d3bf}'
-    +'.wc-day{font-size:8.5px;color:#8894a3;text-transform:uppercase;letter-spacing:.2px;font-weight:700;margin-bottom:2px}'
-    +'.wkcell.tot .wc-day{color:#c9530f}'
-    +'.wc-tot{font-size:14px;font-weight:800;color:#1b2635}'
-    +'.wkcell.tot .wc-tot{color:#c9530f}'
-    +'.wc-line{font-size:9.5px;color:#455066;line-height:1.35;margin-top:1px}'
-    +'.wc-note{font-size:9px;color:#8894a3;font-style:italic;line-height:1.3;margin:1px 0 2px}'
-    +'.wc-dash{color:#c3cad4;font-size:12px}'
-    +'tr,.wkgrid,h3{break-inside:avoid}'
+    +'table.wk{width:100%;border-collapse:collapse;font-size:10.5px;margin-bottom:8px;table-layout:fixed}'
+    +'table.wk th{background:#101827;color:#fff;text-align:left;padding:4px 6px;font-size:8.5px;text-transform:uppercase;letter-spacing:.2px;font-weight:700}'
+    +'table.wk th.r,table.wk td.r{text-align:right}'
+    +'table.wk th:last-child{width:15%}table.wk th.empcol{width:14%}'
+    +'table.wk td{padding:4px 6px;border-bottom:1px solid #e6e8eb;vertical-align:top}'
+    +'table.wk tbody tr:nth-child(even){background:#fafbfc}'
+    +'table.wk .empcol .muted{display:block;color:#8894a3;font-size:9px;font-weight:400}'
+    +'table.wk .dcell{text-align:center}.dcell.empty{color:#c3cad4}'
+    +'table.wk .dcell.tot{background:#faf1ea;text-align:left}'
+    +'.dtot{font-weight:800;color:#1b2635}.dcell.tot .dtot{color:#c9530f}'
+    +'.jline{font-size:8.5px;color:#455066;line-height:1.3;text-align:left}'
+    +'.jline.tot{color:#8a4a1f;font-weight:600}.jline.tot b{color:#c9530f}'
+    +'.jnote{font-size:8px;color:#8894a3;font-style:italic;line-height:1.2;margin:0 0 1px}'
+    +'tr,h3{break-inside:avoid}'
     +'@media print{.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none}}'
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
