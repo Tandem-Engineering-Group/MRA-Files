@@ -105,7 +105,8 @@
       <div class="fld full"><label for="fJob">Job to charge <span class="muted">(type a code or name)</span></label>
         <input id="fJob" list="jobList" placeholder="Start typing a job code or name…" autocomplete="off">
         <datalist id="jobList"></datalist>
-        <div class="muted" style="font-size:11.5px;margin-top:2px">Can't find the job? Type anything — or pick <b>Shop / General</b> and describe it in Notes below.</div></div>
+        <div class="muted" style="font-size:11.5px;margin-top:2px">Can't find the job? Type anything — or pick <b>Shop / General</b> and describe it in Notes below.
+          &nbsp;·&nbsp; <button type="button" class="hchip" id="calledInBtn" style="padding:2px 10px;font-size:11.5px" title="Someone didn't come in — logs 0 hours, no job needed">🤒 Called in / no hours</button></div></div>
       <div class="fld"><label for="fHours">Hours</label>
         <input type="number" id="fHours" min="0" max="24" step="0.25" inputmode="decimal" placeholder="0.0">
         <div class="hoursrow" id="hchips"></div></div>
@@ -246,7 +247,7 @@ var EMPIDS=lget('mra_time_empids', JSON.parse(JSON.stringify(ROSTER_IDS)));
 /* finance job-code names (code = J# without the J) */
 var JCNAMES={'1014':'MRA Internal','1420':'Oakland Schools','1428':'Mott','1479':'WFCU','1543':'Washtenaw Community College','1553':'Medtronic','1557':'Ferguson Roadshow (Bizbox)'};
 /* pay types that are NOT job work */
-var LEAVEMAP={'all purpose leave':'All Purpose Leave','apl':'All Purpose Leave','pto':'All Purpose Leave','vacation':'All Purpose Leave','holiday':'Holiday','jury duty':'Jury Duty','jury':'Jury Duty','lunch':'Lunch','sick':'Sick','bereavement':'Bereavement'};
+var LEAVEMAP={'all purpose leave':'All Purpose Leave','apl':'All Purpose Leave','pto':'All Purpose Leave','vacation':'All Purpose Leave','holiday':'Holiday','jury duty':'Jury Duty','jury':'Jury Duty','lunch':'Lunch','sick':'Sick','bereavement':'Bereavement','called in':'Called In','no show':'Called In','absent':'Called In'};
 function fPayType(e){ var k=String(e.job||'').toLowerCase().replace(/\s*\(.*/,'').replace(/^\d+\s*-\s*/,'').trim(); return LEAVEMAP[k]||'Work'; }
 function fCode(e){ if(fPayType(e)!=='Work') return ''; var jn=String(e.jobNum||'').replace(/^j/i,'').trim(); return jn||'Unknown'; }
 function fCodeName(e){ var c=fCode(e); if(!c) return ''; if(JCNAMES[c]) return JCNAMES[c]; var lbl=String(e.job||'').replace(/^\s*j?\d{3,6}\s*[·\-]\s*/i,'').trim(); return lbl||('Job '+c); }
@@ -313,7 +314,9 @@ function submit(){
   var job=$('fJob').value.trim();
   if(!who){ alert('Pick your name.'); $('fWho').focus(); return; }
   if(!job){ alert('Pick a job to charge to.'); $('fJob').focus(); return; }
-  if(!(hours>0)){ alert('Enter hours (more than 0).'); $('fHours').focus(); return; }
+  // Real work needs real hours — but Called In / Sick / other non-work entries are a record that
+  // someone was OUT, not hours worked, so 0 is valid there (Rich: "Brent called in... need an option for that").
+  if(!(hours>0) && fPayType({job:job})==='Work'){ alert('Enter hours (more than 0).'); $('fHours').focus(); return; }
   // derive jobNum from label if present
   var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
   var e={ id:uid(), who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes, ts:new Date().toISOString() };
@@ -478,7 +481,7 @@ function saveEditEntry(){
   var who=$('eWho').value.trim(), date=$('eDate').value, job=$('eJob').value.trim(), hours=num($('eHours').value), task=$('eTask').value.trim(), notes=$('eNotes').value.trim();
   if(!who){ alert('Pick an employee.'); return; }
   if(!job){ alert('Pick a job to charge.'); return; }
-  if(!(hours>0)){ alert('Enter hours (more than 0).'); return; }
+  if(!(hours>0) && fPayType({job:job})==='Work'){ alert('Enter hours (more than 0).'); return; }
   var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
   var updated=Object.assign({}, ref.e, { who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes });
   if(ref.arr==='local'){ ENTS[ref.idx]=updated; lset(LS.ents,ENTS); }
@@ -719,6 +722,7 @@ function boot(){
   $('fWho').onchange=function(){ lset(LS.lastWho,$('fWho').value); renderMyDay(); }; $('fDate').addEventListener('change',renderMyDay);
   ['fHours','fTask'].forEach(function(id){ $(id).addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }); });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
+  $('calledInBtn').addEventListener('click',function(){ $('fJob').value='Called In'; $('fHours').value='0'; document.querySelectorAll('.hchip.on').forEach(function(c){c.classList.remove('on');}); $('fNotes').focus(); });
   $('entRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d){ delEntry(d.getAttribute('data-del')); return; } var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
   $('myDayRows').addEventListener('click',function(e){ var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
   $('editSaveBtn').onclick=saveEditEntry; $('editCancelBtn').onclick=closeEditModal; $('editClose').onclick=closeEditModal;
