@@ -519,11 +519,17 @@ function buildFinanceReport(){
   if(!rows.length){ alert('No time entries in this range to report.'); return; }
   var dates=rows.map(function(e){return e.dateISO;}).sort();
   var period=isoToMDY(dates[0])+' - '+isoToMDY(dates[dates.length-1]);
-  var byPay={}, byCode={}, byEmp={}, grand=0;
+  var byPay={}, byCode={}, byEmp={}, byWeekCode={}, grand=0;
   rows.forEach(function(e){
     var pt=fPayType(e), c=fCode(e), h=e.hours||0; grand+=h;
     byPay[pt]=(byPay[pt]||0)+h;
-    if(pt==='Work'){ if(!byCode[c]) byCode[c]={name:fCodeName(e),h:0}; byCode[c].h+=h; }
+    if(pt==='Work'){
+      if(!byCode[c]) byCode[c]={name:fCodeName(e),h:0}; byCode[c].h+=h;
+      if(e.dateISO){ var wkc=ymd(startOfWeek(new Date(e.dateISO+'T00:00:00')));
+        if(!byWeekCode[wkc]) byWeekCode[wkc]={};
+        if(!byWeekCode[wkc][c]) byWeekCode[wkc][c]={name:fCodeName(e),h:0};
+        byWeekCode[wkc][c].h+=h; }
+    }
     var who=e.who||'—'; if(!byEmp[who]) byEmp[who]={id:EMPIDS[who]||'',byDay:{},tot:0};
     byEmp[who].tot+=h;
     var lbl = pt==='Work' ? (c+' · '+fCodeName(e)) : pt;
@@ -536,6 +542,16 @@ function buildFinanceReport(){
   // Job code totals
   var codeKeys=Object.keys(byCode).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
   var codeRows=codeKeys.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(byCode[c].name||'')+'</td><td class="r">'+f(byCode[c].h)+'</td></tr>'; }).join('');
+  // Job totals PER WEEK, everyone combined — finance's ask: see what each job got charged that week
+  // without adding it up by hand across every employee's row.
+  var wkCodeKeys=Object.keys(byWeekCode).sort();
+  var byWeekHtml = wkCodeKeys.length ? wkCodeKeys.map(function(wk){
+    var codes=byWeekCode[wk];
+    var ck=Object.keys(codes).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
+    var wkTot=ck.reduce(function(x,c){ return x+codes[c].h; },0);
+    var rowsHtml=ck.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(codes[c].name||'')+'</td><td class="r">'+f(codes[c].h)+'</td></tr>'; }).join('');
+    return '<h3>Week of '+esc(isoToMDY(wk))+'</h3><table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'+rowsHtml+'<tr class="sub"><td colspan="2">Week total</td><td class="r">'+f(wkTot)+'</td></tr></tbody></table>';
+  }).join('') : '';
   // Per employee, BY DAY — as a CALENDAR grid (Rich's call: more compact than a list, and lines up
   // the same weekday across employees so gaps/patterns are easy to spot at a glance).
   var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -592,6 +608,7 @@ function buildFinanceReport(){
     +'<h2>Totals by pay type</h2><table class="t"><thead><tr><th>Pay type</th><th class="r">Hours</th></tr></thead><tbody>'+payRows+'</tbody></table>'
     +'<h2>Job code totals</h2><table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'+codeRows+'</tbody></table>'
     +'<div class="grand">Grand total '+f(grand)+' hrs</div>'
+    +(byWeekHtml?('<h2>Totals by job — per week (everyone combined)</h2>'+byWeekHtml):'')
     +'<h2>By employee</h2>'+empSecs
     +'</div></body></html>';
   var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups, then tap Finance report again.'); return; } w.document.open(); w.document.write(html); w.document.close();
