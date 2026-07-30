@@ -1,6 +1,25 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-07-30 — SHOP-task attachments silently dropped by Move/Copy and drag-to-another-trailer
+
+Rich clarified his attachment complaint was about the **shop floor screen specifically** (shop tasks), not
+the project Gantt (see the entry right below — that was a real bug too, found first, but not the one he
+meant). Shop-task attachments live in their own **Files column** (not a comments tag like project tasks),
+written by a dedicated `setTaskFiles` action whenever a task is first created or edited with files attached.
+Found the actual bug: the **⇄ Move / ⧉ Copy buttons** in the shop task editor (`etMoveCopy`) and plain
+**drag-a-task-card-onto-another-trailer** (`ftDropJob`) both move/copy a task by calling `addTask` to
+recreate it on the destination job — but `addTask` has no files field, and neither function carried the
+source task's `files` forward or fired a follow-up `setTaskFiles` for the new row. The new task was simply
+born with zero attachments every time. **Fixed** (rev 36.76): both paths now grab the source task's `files`
+and re-attach them to the new row via `setTaskFiles`, same as when a brand-new task gets files attached.
+Verified headless for both the Move/Copy buttons and drag-and-drop — the new row now correctly carries the
+attachment through. ⚠️ **Not proven over real use yet** (same caveat as always) — and **attachments already
+lost by moving/copying a task before this fix are NOT recoverable** — Rich needs to re-attach the electrical
+PDF and the Airstream/On Cloud file to wherever those two tasks live now.
+
 ## ✅ FIXED 2026-07-30 — Project-task attachments could get silently wiped by Gantt drag actions
+(Found while chasing the report above — turned out to be a real but DIFFERENT bug, on project tasks not
+shop tasks. Kept fixed and documented since it's a genuine gap, but it is NOT what Rich's PDFs went missing from.)
 
 Rich reported PDFs disappearing from project tasks (an electrical package on Medtronic – Buildout J1553,
 one on the Airstream/On Cloud job) with no idea why — "I can't have shit disappearing." Root cause found

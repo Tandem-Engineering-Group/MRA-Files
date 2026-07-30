@@ -3879,6 +3879,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.76", date:"2026-07-30", title:"🐛 FIXED — moving/copying a SHOP task to another trailer dropped its attachments", items:[
+    "Same complaint as the project-task fix, but Rich meant the shop floor specifically: he'd attached an electrical PDF and an Airstream file to shop tasks, then they vanished. Root cause: shop-task attachments live in their own Files column (not a comments tag like project tasks), written by a dedicated <b>setTaskFiles</b> action whenever a task is first created or edited with files. But the <b>⇄ Move / ⧉ Copy</b> buttons (shop task editor) and plain <b>drag-a-task-onto-another-trailer</b> both recreate the task on the destination job by calling <b>addTask</b> — which has no files field — and neither one carried the task's files forward or fired a follow-up setTaskFiles for the new row. The new task was simply born with no attachments. Both paths now grab the task's existing files and re-attach them to the new row the same way a brand-new task with files does. Verified headless for both the Move/Copy buttons and drag-and-drop. Same caveat as always: attachments already lost by moving/copying a task before this fix are gone — re-attach the electrical PDF and the Airstream file to wherever those tasks live now." ] },
   { rev:"36.75", date:"2026-07-30", title:"🐛 FIXED — project-task attachments could get silently wiped by Gantt drag actions", items:[
     "Rich reported PDFs he'd attached to project tasks (an electrical package on Medtronic, one on the Airstream job) disappearing on their own. Root cause found: project-task attachments live as a hidden tag riding inside the task's Notes/comments field, and two Gantt actions — <b>dragging a task to reorder it</b> and <b>dragging to link a predecessor</b> — were sending a save that didn't include the comments field at all, unlike every other edit action on this board (which all deliberately resend the full comments so a save never blanks it). That gap could wipe the attachment tag (and any other hidden tags riding along) any time someone reordered a task or drew a dependency arrow, with zero connection to the attachment itself. Both paths now resend the task's real comments on every save, matching the rest of the board. Any attachment already lost before this fix isn't recoverable from here — it'll need to be re-attached." ] },
   { rev:"36.74", date:"2026-07-30", title:"✨ Quote Generator — 5 more real job-cost sheets added to the Estimate helper", items:[
@@ -6816,10 +6818,13 @@ function ftDropJob(ev, row){ if(!_ftDrag) return; ev.preventDefault(); ev.stopPr
   if(!ensureAuth('move a task to '+(dj.project||'another trailer'))) return;
   if(!confirm('Move this task to '+(dj.project||'')+(dj.bay?(' ('+dj.bay+')'):'')+'?\n\n"'+String(d.raw).slice(0,90)+'"')) return;
   const sj=oJob(d.proj), t=sj&&(sj.tasks||[]).find(x=>x.t===d.raw);
-  const who=(t&&t.who)||'', ml=(t&&t.ml)||'', cm=(t&&t.cm)||'';
+  const who=(t&&t.who)||'', ml=(t&&t.ml)||'', cm=(t&&t.cm)||'', files=(t&&t.files)||[];
   shopWrite({ action:'addTask', project:dj.project, jobNum:dj.jobNum||'', bay:dj.bay||'', task:d.raw, assigned:who, milestone:ml, comments:cm, pin:CLOSE_PIN, user:CURRENT_USER }).then(()=>{
-    const tobj={ t:d.raw, who:who, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:ml, cm:cm };
+    const tobj={ t:d.raw, who:who, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:ml, cm:cm, files:files.length?files.slice():undefined };
     if(!dj.tasks) dj.tasks=[]; dj.tasks.push(tobj); oRecompute(dj); pendAdd({kind:'jobTask', project:dj.project, obj:tobj});
+    // The new row is born with no attachments (addTask has no files field) -- re-attach whatever
+    // the original task had, same fire-and-forget pattern already used when a NEW task gets files.
+    if(files.length) shopWrite({action:'setTaskFiles', project:dj.project, task:d.raw, files:files, pin:CLOSE_PIN, user:CURRENT_USER});
     return shopWrite({ action:'deleteTask', project:d.proj, task:d.raw, pin:CLOSE_PIN, user:CURRENT_USER });
   }).then(()=>{ if(sj&&sj.tasks){ sj.tasks=sj.tasks.filter(x=>x.t!==d.raw); oRecompute(sj); } pendDrop('jobTask', d.proj, d.raw); oApply(); });
 }
@@ -7023,14 +7028,17 @@ function etMoveCopy(isMove){
   if(!destProj){ alert("Pick a destination trailer."); return; }
   if(!ensurePin((isMove?"move":"copy")+" a task")) return;
   const dj=oJob(destProj); if(!dj){ alert("Couldn't find that trailer — try reloading."); return; }
-  const who=(t&&t.who)||"", ml=(t&&t.ml)||"", cm=(t&&t.cm)||"";
+  const who=(t&&t.who)||"", ml=(t&&t.ml)||"", cm=(t&&t.cm)||"", files=(t&&t.files)||[];
   const mm=document.getElementById('etMoveMsg'); mm.style.color='var(--muted)'; mm.textContent=(isMove?"Moving":"Copying")+"…";
   // Copy = add to the destination trailer; Move = add there + delete from source. Existing sync actions only.
   const add={ action:"addTask", project:dj.project, jobNum:dj.jobNum||"", bay:dj.bay||"", task:taskTxt, assigned:who, milestone:ml, comments:cm, pin:CLOSE_PIN, user:CURRENT_USER };
   shopWrite(add).then(()=>{
-    const tobj={ t:taskTxt, who:who, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:ml, cm:cm };
+    const tobj={ t:taskTxt, who:who, op:localISO(Date.now()), cl:null, st:'Open', done:false, ml:ml, cm:cm, files:files.length?files.slice():undefined };
     if(dj){ if(!dj.tasks) dj.tasks=[]; dj.tasks.push(tobj); oRecompute(dj); }
     pendAdd({kind:'jobTask', project:dj.project, obj:tobj});
+    // The new row is born with no attachments (addTask has no files field) -- re-attach whatever
+    // the original task had, same fire-and-forget pattern already used when a NEW task gets files.
+    if(files.length) shopWrite({action:'setTaskFiles', project:dj.project, task:taskTxt, files:files, pin:CLOSE_PIN, user:CURRENT_USER});
     if(isMove){
       return shopWrite({ action:"deleteTask", project:src, task:taskTxt, pin:CLOSE_PIN, user:CURRENT_USER }).then(()=>{
         if(sj&&sj.tasks){ sj.tasks=sj.tasks.filter(x=>x.t!==taskTxt); oRecompute(sj); }
