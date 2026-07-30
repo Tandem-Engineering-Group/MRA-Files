@@ -20,21 +20,22 @@ Rich is done being told to re-apply the same fix — check this section before s
     raise this above 1 for this flow** unless the reason is written here first. If capping it at 1 ever
     causes visible lag (Maximum waiting runs climbing), the fix is slowing the Recurrence interval, not
     raising parallelism back up.
-- ⚠️ **ROOT CAUSE OF THE CONTINUED STALLING FOUND 2026-07-29 evening: a TYPO, not a design problem.**
+- ✅ **TYPO ROOT CAUSE FOUND + FIXED 2026-07-29 evening (Rich confirmed "Done") — do NOT re-litigate this.**
   The banner recurred again same day (~9:01 PM) and Rich dug into the actual failed run (flow shown as
   **"Copy of - MRA Lists to JSON v2"** in his Power Automate) — the **`Create file`** step's **Action
-  Timeout** was typed as **`P2TM`** instead of **`PT2M`** (T and 2 swapped). That's not a valid ISO-8601
-  duration, so `Create_file` fails INSTANTLY (0.1s, `InvalidTemplate... 'P2TM' is not a valid TimeSpan
-  value`) on every single run, not just occasionally — meaning since the 7/29 "done" fix went in, this
-  step was actually broken 100% of the time, not intermittently. Gave Rich exact steps to retype it as
-  `PT2M` and to check the `Create blob (V2)` step for the same swap (it got the identical PT2M value
-  the same session, plausible the same typo happened twice). **Not yet confirmed fixed — waiting on
-  Rich to retype it and confirm a clean run.** Also flagged: the flow name "Copy of - MRA Lists to JSON
-  v2" suggests a possible duplicate flow floating around — worth Rich confirming only ONE has the
-  Recurrence trigger enabled, but that's separate from and doesn't block the typo fix.
-  - Once Rich confirms `PT2M` is saved and a run succeeds clean, if the banner STILL recurs after that,
-    the next suspects are `Get Shop Tasks` / `Get Users` (other connector actions in this same flow, not
-    yet timeout-protected) — check those next, don't just redo the settings above again.
+  Timeout** had been typed as **`P2TM`** instead of **`PT2M`** (T and 2 swapped). That's not a valid
+  ISO-8601 duration, so `Create_file` was failing INSTANTLY (0.1s, `InvalidTemplate... 'P2TM' is not a
+  valid TimeSpan value`) on every single run, not just occasionally — meaning since the 7/29 "done" fix
+  went in, this step was actually broken 100% of the time, not intermittently. Rich retyped it to
+  `PT2M` and confirmed done. **Still not proven over a real multi-day stretch** (same caveat as always
+  with this flow) — if the banner recurs again, don't assume it's this same typo; check fresh.
+  - ⚠️ **Still open, not yet checked:** whether the `Create blob (V2)` step has the same P2TM/PT2M swap
+    (it got the identical value the same original session — plausible the same typo happened twice, but
+    unconfirmed either way). Check it next time you're in this flow with Rich.
+  - ⚠️ **Still open, not yet checked:** the flow name "Copy of - MRA Lists to JSON v2" suggests a possible
+    duplicate flow floating around — confirm only ONE has the Recurrence trigger enabled.
+  - If the banner recurs again after all the above, the next suspects are `Get Shop Tasks` / `Get Users`
+    (other connector actions in this same flow, not yet timeout-protected) — check those next.
 - **Immediate workaround (Rich already knows, the banner says it too):** cancel the stuck run(s) →
   Run manually. Don't re-explain this to him either — he's done it many times.
 - Older note below ("Pipeline incident... resolved 2026-07-17") turned out to NOT be fully resolved —
