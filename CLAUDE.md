@@ -13,19 +13,20 @@ Rich is done being told to re-apply the same fix — check this section before s
      interval, Count `4`, Interval `PT10S`**.
   2. **`Create file`** step (a separate SharePoint write, earlier in the same flow) → same treatment:
      Action Timeout `PT2M`, Retry Policy Exponential interval, Count `4`, Interval `PT10S`.
-  3. Trigger (**Recurrence**) → Settings → **Concurrency Control: Limit = On, Degree of Parallelism = `1`**
-     (was found set to `50` on 2026-07-29 — Rich says a past session told him to raise it 1→50 "2 days
-     ago"; I have **no record of that** in this file and can't confirm it happened as he describes, but
-     it doesn't matter — 1 is correct regardless: at 50, a hung run doesn't block anything, so new runs
-     just launch right on top of it, which is exactly the repeated pile-up. **Do not raise this above 1
-     for this flow** unless the reason is written here first. If capping it at 1 ever causes visible
-     lag (Maximum waiting runs climbing), the fix is slowing the Recurrence interval, not raising
-     parallelism back up.
-- ⚠️ **Even with all three of the above, confirm it stops recurring before declaring this done** — as of
-  2026-07-29 the fix had JUST been completed, not yet proven over a real multi-day stretch. If the "DATA
-  PIPELINE STALLED" banner still comes back after this, the next suspect is `Get Shop Tasks` / `Get Users`
-  (also connector actions in this same flow, not yet timeout-protected) — check those next, don't just
-  redo the three above.
+- ⚠️ **NOT yet confirmed done — verify before assuming, don't just re-recommend blind:** Trigger
+  (**Recurrence**) → Settings → **Concurrency Control: Degree of Parallelism should be `1`** — found set
+  to `50` on 2026-07-29 (screenshot), told Rich to change it to `1` and Save, but have **not** seen
+  confirmation he actually did. Ask him to confirm or screenshot before assuming it's set.
+  - Rich says a past session told him to raise it 1→50 "2 days ago"; I have **no record of that** in this
+    file and can't confirm it happened as he describes. Doesn't change the fix either way — 1 is correct
+    regardless, since at 50 a hung run doesn't block anything and new runs just launch right on top of it.
+    **Do not raise this above 1 for this flow** unless the reason is written here first. If capping it at
+    1 ever causes visible lag (Maximum waiting runs climbing), the fix is slowing the Recurrence interval,
+    not raising parallelism back up.
+- ⚠️ **Even once all three of the above are confirmed, don't declare this fixed until it's held for a real
+  multi-day stretch without the banner reappearing.** If it still recurs after all three are truly in
+  place, the next suspects are `Get Shop Tasks` / `Get Users` (other connector actions in this same flow,
+  not yet timeout-protected) — check those next, don't just redo the ones above.
 - **Immediate workaround (Rich already knows, the banner says it too):** cancel the stuck run(s) →
   Run manually. Don't re-explain this to him either — he's done it many times.
 - Older note below ("Pipeline incident... resolved 2026-07-17") turned out to NOT be fully resolved —
