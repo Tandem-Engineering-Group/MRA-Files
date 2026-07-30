@@ -544,15 +544,24 @@ function buildFinanceReport(){
     var d=e.dateISO||''; if(!byEmp[who].byDay[d]) byEmp[who].byDay[d]=[]; byEmp[who].byDay[d].push({lbl:lbl,h:h,tn:tn});
   });
   function f(n){ return (Math.round((n||0)*100)/100).toFixed(2); }
-  // Totals by pay type
-  var payRows=Object.keys(byPay).sort().map(function(k){ return '<tr><td>'+esc(k)+'</td><td class="r">'+f(byPay[k])+'</td></tr>'; }).join('');
-  // Job code totals
+  // Totals by pay type — folded into one compact stat line instead of its own bordered table.
+  // That table used to cost a whole section (header bar + row) to show what's usually just
+  // "Work" and maybe "Leave" — pure vertical space with almost no information in it.
+  var payStat=Object.keys(byPay).sort().map(function(k){ return esc(k)+' <b>'+f(byPay[k])+'</b>'; }).join(' &nbsp;·&nbsp; ');
+  // Job code totals — split into two side-by-side columns once the list gets long enough that a
+  // single column would run tall for no reason (landscape gives plenty of spare width to use).
   var codeKeys=Object.keys(byCode).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
-  var codeRows=codeKeys.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(byCode[c].name||'')+'</td><td class="r">'+f(byCode[c].h)+'</td></tr>'; }).join('');
+  function codeTable(keys){ return '<table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'
+    +keys.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(byCode[c].name||'')+'</td><td class="r">'+f(byCode[c].h)+'</td></tr>'; }).join('')+'</tbody></table>'; }
+  var codeHalf=Math.ceil(codeKeys.length/2);
+  var codeHtml = codeKeys.length>6
+    ? '<div class="codecols">'+codeTable(codeKeys.slice(0,codeHalf))+codeTable(codeKeys.slice(codeHalf))+'</div>'
+    : codeTable(codeKeys);
   // Job totals PER WEEK, everyone combined — finance's ask: see what each job got charged that week
   // without adding it up by hand across every employee's row. Only worth a separate section when the
   // range covers 2+ weeks — with just one week in range this would be identical to Job Code Totals above.
   var wkCodeKeys=Object.keys(byWeekCode).sort();
+  var singleWeek=wkCodeKeys.length<=1;   // also lets each employee block below drop its own "Week of…" repeat
   var byWeekHtml = wkCodeKeys.length>1 ? wkCodeKeys.map(function(wk){
     var codes=byWeekCode[wk];
     var ck=Object.keys(codes).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
@@ -586,16 +595,15 @@ function buildFinanceReport(){
       wkJobOrder.sort(function(a,b){ return wkByJob[b]-wkByJob[a]; });   // biggest chunk of the week first
       var jobLines=wkJobOrder.map(function(k){ return '<div class="wk-job-line">'+esc(k)+' <b>'+f(wkByJob[k])+'</b></div>'; }).join('');
       cells.push('<div class="wkcell tot"><div class="wc-day">Week total</div><div class="wc-tot">'+f(wkTot)+'</div>'+jobLines+'</div>');
-      return '<div class="wklabel">Week of '+esc(isoToMDY(wk))+' — '+f(wkTot)+' hrs total</div><div class="wkgrid">'+cells.join('')+'</div>';
+      var lbl = singleWeek ? '' : '<div class="wklabel">Week of '+esc(isoToMDY(wk))+' — '+f(wkTot)+' hrs total</div>';
+      return lbl+'<div class="wkgrid">'+cells.join('')+'</div>';
     }).join('');
     var noDateHtml = noDate ? ('<div class="wklabel">No date</div><table class="t"><tbody>'+noDate.map(function(i){ return '<tr><td>'+esc(i.lbl)+'</td><td class="r">'+f(i.h)+'</td></tr>'; }).join('')+'</tbody></table>') : '';
     return '<h3>ID: '+esc(E.id||'—')+' &nbsp; '+esc(w)+' — total '+f(E.tot)+' hrs</h3>'+weekBlocks+noDateHtml; }).join('');
   var d=new Date(), dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
   var body='<h1>Mobility Resource Associates Inc — Weekly Time Summary</h1>'
-    +'<div class="sub2">Pay period '+esc(period)+' ('+esc(rangeLbl)+') · Dept 210 Engineering · Generated '+dd+' · Grand total '+f(grand)+' hrs</div>'
-    +'<h2>Totals by pay type</h2><table class="t"><thead><tr><th>Pay type</th><th class="r">Hours</th></tr></thead><tbody>'+payRows+'</tbody></table>'
-    +'<h2>Job code totals</h2><table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'+codeRows+'</tbody></table>'
-    +'<div class="grand">Grand total '+f(grand)+' hrs</div>'
+    +'<div class="sub2">Pay period '+esc(period)+' ('+esc(rangeLbl)+') · Dept 210 Engineering · Generated '+dd+' · Grand total <b>'+f(grand)+'</b> hrs'+(payStat?' &nbsp;·&nbsp; '+payStat:'')+'</div>'
+    +'<h2>Job code totals</h2>'+codeHtml
     +(byWeekHtml?('<h2>Totals by job — per week (everyone combined)</h2>'+byWeekHtml):'')
     +'<h2>By employee</h2>'+empSecs;
   /* Fit-to-1-page (Rich's ask): same zoom-based auto-scale already proven on the dashboard's other
@@ -610,21 +618,22 @@ function buildFinanceReport(){
     +'.bar select{font-size:12px;padding:3px 6px;border-radius:5px;border:1px solid #4a5568}'
     +'#sheetwrap{position:relative;overflow:hidden;padding:14px}'
     +'#sheet{transform-origin:top left;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto}'
-    +'.pad{padding:18px 26px}h1{color:#F36C21;margin:0;font-size:21px}.sub2{color:#66758a;font-size:12.5px;margin:3px 0 16px}'
-    +'h2{font-size:14px;margin:20px 0 5px;border-bottom:2px solid #F36C21;padding-bottom:3px;text-transform:uppercase;letter-spacing:.4px}'
-    +'h3{font-size:13px;margin:16px 0 4px;background:#f1f4f8;padding:6px 9px;border-radius:6px}'
-    +'table.t{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px}'
-    +'table.t th{background:#101827;color:#fff;text-align:left;padding:5px 8px;font-size:10px;text-transform:uppercase}'
-    +'table.t td{padding:5px 8px;border-bottom:1px solid #e6e8eb}td.r,th.r{text-align:right}'
-    +'tr.sub td{font-weight:800;background:#faf1ea}.grand{display:inline-block;background:#faf1ea;border:1px solid #f0d3bf;border-radius:9px;padding:8px 16px;font-weight:800;margin-top:8px}'
-    +'.wklabel{font-size:10.5px;color:#66758a;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin:8px 0 3px}'
-    +'.wk-job-line{font-size:9.5px;color:#8a4a1f;line-height:1.35;margin-top:2px;font-weight:600}'
+    +'.pad{padding:12px 20px}h1{color:#F36C21;margin:0;font-size:19px}.sub2{color:#66758a;font-size:11.5px;margin:2px 0 8px}.sub2 b{color:#1b2635}'
+    +'h2{font-size:13px;margin:10px 0 3px;border-bottom:2px solid #F36C21;padding-bottom:2px;text-transform:uppercase;letter-spacing:.4px}'
+    +'h3{font-size:12.5px;margin:8px 0 2px;background:#f1f4f8;padding:3px 7px;border-radius:5px}'
+    +'.codecols{display:flex;gap:14px}.codecols table{flex:1}'
+    +'table.t{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:4px}'
+    +'table.t th{background:#101827;color:#fff;text-align:left;padding:3px 7px;font-size:9px;text-transform:uppercase}'
+    +'table.t td{padding:3px 7px;border-bottom:1px solid #e6e8eb}td.r,th.r{text-align:right}'
+    +'tr.sub td{font-weight:800;background:#faf1ea}'
+    +'.wklabel{font-size:10px;color:#66758a;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin:4px 0 2px}'
+    +'.wk-job-line{font-size:9px;color:#8a4a1f;line-height:1.3;margin-top:1px;font-weight:600}'
     +'.wk-job-line b{color:#c9530f}'
-    +'.wkgrid{display:grid;grid-template-columns:repeat(7,1fr) 1.5fr;gap:4px;margin-bottom:8px}'
-    +'.wkcell{border:1px solid #e6e8eb;border-radius:7px;padding:6px 7px;min-height:50px}'
+    +'.wkgrid{display:grid;grid-template-columns:repeat(7,1fr) 1.5fr;gap:3px;margin-bottom:5px}'
+    +'.wkcell{border:1px solid #e6e8eb;border-radius:6px;padding:4px 6px;min-height:38px}'
     +'.wkcell.empty{background:#fafbfc}'
     +'.wkcell.tot{background:#faf1ea;border-color:#f0d3bf}'
-    +'.wc-day{font-size:9px;color:#8894a3;text-transform:uppercase;letter-spacing:.2px;font-weight:700;margin-bottom:3px}'
+    +'.wc-day{font-size:8.5px;color:#8894a3;text-transform:uppercase;letter-spacing:.2px;font-weight:700;margin-bottom:2px}'
     +'.wkcell.tot .wc-day{color:#c9530f}'
     +'.wc-tot{font-size:14px;font-weight:800;color:#1b2635}'
     +'.wkcell.tot .wc-tot{color:#c9530f}'
@@ -635,7 +644,7 @@ function buildFinanceReport(){
     +'@media print{.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none}}'
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
-    +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option></select></label>'
+    +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option></select></label>'
     +'<label><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
     +'</div>'
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
