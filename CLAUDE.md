@@ -2,6 +2,29 @@
 
 Guidance for Claude when working in this repository.
 
+## ⚠️ RECURRING "DATA PIPELINE STALLED" ISSUE — READ BEFORE TOUCHING POWER AUTOMATE (do not re-suggest fixes already applied)
+
+The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the Lists in Nm" = the
+**"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
+Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
+
+- ✅ **ALREADY DONE (screenshot-verified live 2026-07-29) — do NOT ask Rich to redo:** the **`Create blob
+  (V2)`** step already has **Settings → Action Timeout = `PT2M`**, **Retry Policy = Exponential interval,
+  Count `4`, Interval `PT10S`**.
+- ⚠️ **Still recurring even with that fix in place** — the timeout on Create blob alone is NOT sufficient
+  by itself. Next diagnostic steps, not yet confirmed:
+  1. Check whether the flow's **other connector steps** also have a timeout/retry — they currently may
+     NOT: `Get Shop Tasks` → `Select 2` → `Get Users` → `Select 3` → `Compose` → **`Create file`** (a
+     SEPARATE SharePoint file-write step, not the same action as Create blob) → `Create blob (V2)` →
+     `HTTP`. Any of these can hang the same way Create blob did. Ask Rich for a screenshot of `Create
+     file`'s Settings tab before assuming — don't just tell him to add it blind.
+  2. Confirm the trigger's (Recurrence) **Concurrency Control** is capped at Degree of Parallelism `1` —
+     recommended 2026-07-29, not yet confirmed done.
+- **Immediate workaround (Rich already knows, the banner says it too):** cancel the stuck run(s) →
+  Run manually. Don't re-explain this to him either — he's done it many times.
+- Older note below ("Pipeline incident... resolved 2026-07-17") turned out to NOT be fully resolved —
+  it's the same recurring issue, kept for history but superseded by this section.
+
 ## How Rich likes instructions (standing preference — follow every time)
 
 - **Write the instructions IN THE CHAT, numbered step-by-step.** Do NOT put the steps
@@ -190,9 +213,10 @@ Rich's explicit goal: retire the workbook entirely. Track progress here; don't l
   (MRA Lists to JSON / MRA Lists Write 2 / MRA Email / MRA Daily My Work Emails) → gomra site + gomra
   connections — do this WITH Rich, GUI, one at a time, Tandem stays live as rollback; (3) Tim still owes
   admin consent for the "M365 MCP Client for Claude" app so I can read gomra sites directly.
-- **Pipeline incident (resolved, 2026-07-17 ~16:00Z):** "MRA Lists to JSON" hung on Create blob (V2) —
-  two runs stuck 3+ hrs, listsAsOf frozen 45 min. Fix = cancel stuck runs + Recurrence 2→3 min + manual
-  run. Diagnostic tell: `listsAsOf` stale while `generatedAt` ticks = that flow hung on the blob step.
+- **Pipeline incident (2026-07-17 ~16:00Z, NOT actually resolved — recurred repeatedly since, see the
+  ⚠️ RECURRING section at the very top of this file for current status):** "MRA Lists to JSON" hung on
+  Create blob (V2) — two runs stuck 3+ hrs, listsAsOf frozen 45 min. Diagnostic tell: `listsAsOf` stale
+  while `generatedAt` ticks = that flow hung on the blob step.
 
 ## 📧 WEEKLY EXECUTIVE REPORT (Tony) — built 2026-07-18, revs 29.1→29.9 (state)
 
