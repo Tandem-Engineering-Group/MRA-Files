@@ -479,8 +479,12 @@ function saveEditEntry(){
   var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
   var updated=Object.assign({}, ref.e, { who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes });
   if(ref.arr==='local'){ ENTS[ref.idx]=updated; lset(LS.ents,ENTS); }
-  else { SHARED[ref.idx]=updated; }   // optimistic — see note below on making this permanent
-  if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'editTime',empId:(EMPIDS[updated.who]||''),code:fCode(updated),payType:fPayType(updated)}, updated))}); }catch(_){} }
+  else { SHARED[ref.idx]=updated; }   // local-device view only, on purpose — see note above submit()
+  /* DO NOT POST an "editTime" action to TIME_WRITE_URL. That flow was only ever built to CREATE a row
+     (addTime) - it almost certainly has no logic branching on `action` at all, so an edit POST there
+     likely just creates ANOTHER row instead of updating the original, silently duplicating hours in the
+     real SharePoint list (this is exactly what happened - confirmed 2026-07-29 from a real duplicate).
+     Edits are local-device-only until a real "editTime" branch exists in that flow - see CLAUDE.md. */
   $('editMsg').classList.remove('hide'); renderTracking(); renderMyDay();
   setTimeout(closeEditModal, 700);
 }
