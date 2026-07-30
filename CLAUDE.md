@@ -8,25 +8,22 @@ The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
 Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
 
-- ✅ **ALREADY DONE (screenshot-verified live 2026-07-29) — do NOT ask Rich to redo:**
+- ✅ **ALL THREE PARTS DONE (Rich confirmed 2026-07-29) — do NOT ask Rich to redo any of these:**
   1. **`Create blob (V2)`** step → Settings → **Action Timeout = `PT2M`**, **Retry Policy = Exponential
      interval, Count `4`, Interval `PT10S`**.
   2. **`Create file`** step (a separate SharePoint write, earlier in the same flow) → same treatment:
      Action Timeout `PT2M`, Retry Policy Exponential interval, Count `4`, Interval `PT10S`.
-- ⚠️ **NOT yet confirmed done — verify before assuming, don't just re-recommend blind:** Trigger
-  (**Recurrence**) → Settings → **Concurrency Control: Degree of Parallelism should be `1`** — found set
-  to `50` on 2026-07-29 (screenshot), told Rich to change it to `1` and Save, but have **not** seen
-  confirmation he actually did. Ask him to confirm or screenshot before assuming it's set.
+  3. Trigger (**Recurrence**) → Settings → **Concurrency Control: Degree of Parallelism = `1`** — was
+     found set to `50`, Rich changed it to `1` and saved, confirmed done 2026-07-29.
   - Rich says a past session told him to raise it 1→50 "2 days ago"; I have **no record of that** in this
-    file and can't confirm it happened as he describes. Doesn't change the fix either way — 1 is correct
-    regardless, since at 50 a hung run doesn't block anything and new runs just launch right on top of it.
-    **Do not raise this above 1 for this flow** unless the reason is written here first. If capping it at
-    1 ever causes visible lag (Maximum waiting runs climbing), the fix is slowing the Recurrence interval,
-    not raising parallelism back up.
-- ⚠️ **Even once all three of the above are confirmed, don't declare this fixed until it's held for a real
-  multi-day stretch without the banner reappearing.** If it still recurs after all three are truly in
-  place, the next suspects are `Get Shop Tasks` / `Get Users` (other connector actions in this same flow,
-  not yet timeout-protected) — check those next, don't just redo the ones above.
+    file and couldn't confirm it happened as he describes — doesn't change the fix either way. **Do not
+    raise this above 1 for this flow** unless the reason is written here first. If capping it at 1 ever
+    causes visible lag (Maximum waiting runs climbing), the fix is slowing the Recurrence interval, not
+    raising parallelism back up.
+- ⚠️ **Not proven yet — all three parts just went in on 2026-07-29, hasn't been observed over a real
+  multi-day stretch.** Don't declare this fully fixed until it's held. If the "DATA PIPELINE STALLED"
+  banner still recurs after this, the next suspects are `Get Shop Tasks` / `Get Users` (other connector
+  actions in this same flow, not yet timeout-protected) — check those next, don't just redo the three above.
 - **Immediate workaround (Rich already knows, the banner says it too):** cancel the stuck run(s) →
   Run manually. Don't re-explain this to him either — he's done it many times.
 - Older note below ("Pipeline incident... resolved 2026-07-17") turned out to NOT be fully resolved —
