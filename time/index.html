@@ -123,7 +123,7 @@
   <!-- YOUR WEEK (open to everyone — shows the selected person's own hours for the whole week, grouped by day) -->
   <div class="card" id="myDayCard">
     <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span id="myDayTitle">Your week</span><span class="grand">Total <b id="myDayTot">0.0</b> hrs</span></h2>
-    <div style="overflow:auto"><table class="t"><thead><tr><th>Day</th><th>Job charged</th><th class="r">Hrs</th><th>Task / notes</th></tr></thead><tbody id="myDayRows"></tbody></table></div>
+    <div style="overflow:auto"><table class="t"><thead><tr><th>Day</th><th>Job charged</th><th class="r">Hrs</th><th>Task / notes</th><th class="noprint"></th></tr></thead><tbody id="myDayRows"></tbody></table></div>
   </div>
 
   <!-- MANAGE (hidden until pin) -->
@@ -397,8 +397,9 @@ function renderMyDay(){
   var tt=$('myDayTitle'); if(tt) tt.textContent = who ? (who+' \u2014 week of '+isoToMDY(wkStart)) : 'Your week';
   var mt=$('myDayTot'); if(mt) mt.textContent = tot.toFixed(2).replace(/\.00$/,'.0');
   var tb=$('myDayRows'); if(!tb) return;
-  if(!who){ tb.innerHTML='<tr><td colspan="4" class="muted" style="padding:12px">Pick your name above to see your hours for the week.</td></tr>'; return; }
-  if(!mine.length){ tb.innerHTML='<tr><td colspan="4" class="muted" style="padding:12px">Nothing logged yet this week for '+esc(who)+'.</td></tr>'; return; }
+  if(!who){ tb.innerHTML='<tr><td colspan="5" class="muted" style="padding:12px">Pick your name above to see your hours for the week.</td></tr>'; return; }
+  if(!mine.length){ tb.innerHTML='<tr><td colspan="5" class="muted" style="padding:12px">Nothing logged yet this week for '+esc(who)+'.</td></tr>'; return; }
+  var canEditHere=isMgr();   // self-service employees see this read-only; a signed-in manager can fix it right here too
   var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var byDay={}, order=[];
   mine.forEach(function(e){ if(!byDay[e.dateISO]){ byDay[e.dateISO]=[]; order.push(e.dateISO); } byDay[e.dateISO].push(e); });
@@ -407,8 +408,8 @@ function renderMyDay(){
     var rows=byDay[d]; var dTot=rows.reduce(function(x,e){ return x+(e.hours||0); },0);
     var dow=DOW[new Date(d+'T00:00:00').getDay()];
     rows.forEach(function(e,i){ var tn=[e.task,e.notes].filter(Boolean).join(' \u2014 ');
-      html+='<tr><td>'+(i===0?('<b>'+esc(dow)+' '+esc(isoToMDY(d))+'</b>'):'')+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td></tr>'; });
-    html+='<tr class="daysub"><td></td><td class="r muted" style="font-style:italic">Day total</td><td class="r"><b>'+dTot.toFixed(2).replace(/\.00$/,'.0')+'</b></td><td></td></tr>';
+      html+='<tr><td>'+(i===0?('<b>'+esc(dow)+' '+esc(isoToMDY(d))+'</b>'):'')+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint">'+(canEditHere?('<button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">\u270e</button>'):'')+'</td></tr>'; });
+    html+='<tr class="daysub"><td></td><td class="r muted" style="font-style:italic">Day total</td><td class="r"><b>'+dTot.toFixed(2).replace(/\.00$/,'.0')+'</b></td><td></td><td></td></tr>';
   });
   tb.innerHTML=html;
 }
@@ -476,7 +477,7 @@ function saveEditEntry(){
   if(ref.arr==='local'){ ENTS[ref.idx]=updated; lset(LS.ents,ENTS); }
   else { SHARED[ref.idx]=updated; }   // optimistic — see note below on making this permanent
   if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'editTime',empId:(EMPIDS[updated.who]||''),code:fCode(updated),payType:fPayType(updated)}, updated))}); }catch(_){} }
-  $('editMsg').classList.remove('hide'); renderTracking();
+  $('editMsg').classList.remove('hide'); renderTracking(); renderMyDay();
   setTimeout(closeEditModal, 700);
 }
 function exportCSV(){
@@ -632,6 +633,7 @@ function boot(){
   ['fHours','fTask'].forEach(function(id){ $(id).addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }); });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
   $('entRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d){ delEntry(d.getAttribute('data-del')); return; } var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
+  $('myDayRows').addEventListener('click',function(e){ var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
   $('editSaveBtn').onclick=saveEditEntry; $('editCancelBtn').onclick=closeEditModal; $('editClose').onclick=closeEditModal;
   $('editModal').addEventListener('click',function(e){ if(e.target===$('editModal')) closeEditModal(); });
   // manage list edit/delete delegation
