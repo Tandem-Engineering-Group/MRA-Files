@@ -279,7 +279,7 @@ function boardJobs(){
     var label=(jn?(/^j/i.test(jn)?jn:'J'+jn)+' · ':'')+j.project;
     var key=label.toLowerCase(); if(seen[key]) return; seen[key]=1;
     var active=!/shipped/i.test(j.status||'');
-    out.push({label:label, jobNum:jn, active:active});
+    out.push({label:label, name:j.project, jobNum:jn, active:active});
   });
   // active first, then by label
   out.sort(function(a,b){ return (b.active-a.active)||a.label.localeCompare(b.label); });
@@ -300,7 +300,7 @@ function fillWho(){ var sel=$('fWho'); var cur=sel.value; sel.innerHTML='<option
 function jobListItems(){
   var out=[], seen={}, codes={};
   // every distinct client job (dedup by full code·name, NOT by code — so all jobs sharing a J# still each show)
-  boardJobs().forEach(function(j){ var code=String(j.jobNum||'').replace(/^j/i,'').trim(); var nm=j.label.replace(/^\s*j?\d{3,6}\s*[·\-\u2014]\s*/i,'').trim()||j.label; var val=code?(code+' · '+nm):nm; var k='v'+val.toLowerCase(); if(seen[k])return; seen[k]=1; if(code)codes[code]=1; out.push({val:val,code:code,name:nm,active:j.active}); });
+  boardJobs().forEach(function(j){ var code=String(j.jobNum||'').replace(/^j/i,'').trim(); var nm=j.name||j.label; var val=code?(code+' · '+nm):nm; var k='v'+val.toLowerCase(); if(seen[k])return; seen[k]=1; if(code)codes[code]=1; out.push({val:val,code:code,name:nm,active:j.active}); });
   Object.keys(JCNAMES).forEach(function(code){ if(codes[code])return; codes[code]=1; out.push({val:code+' · '+JCNAMES[code],code:code,name:JCNAMES[code],active:true}); });
   CJOBS.forEach(function(c){ var k='x'+c.toLowerCase(); if(seen[k])return; seen[k]=1; out.push({val:c,code:'',name:c,custom:true}); });
   return out;
@@ -418,7 +418,7 @@ function renderMyDay(){
     var rows=byDay[d]; var dTot=rows.reduce(function(x,e){ return x+(e.hours||0); },0);
     var dow=DOW[new Date(d+'T00:00:00').getDay()];
     rows.forEach(function(e,i){ var tn=[e.task,e.notes].filter(Boolean).join(' \u2014 ');
-      html+='<tr><td>'+(i===0?('<b>'+esc(dow)+' '+esc(isoToMDY(d))+'</b>'):'')+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint">'+(canEditHere?('<button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">\u270e</button>'):'')+'</td></tr>'; });
+      html+='<tr><td>'+(i===0?('<b>'+esc(dow)+' '+esc(isoToMDY(d))+'</b>'):'')+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint">'+(canEditHere?('<button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">\u270e</button> <button class="rowdel" data-del="'+e.id+'" title="Delete">\u00d7</button>'):'')+'</td></tr>'; });
     html+='<tr class="daysub"><td></td><td class="r muted" style="font-style:italic">Day total</td><td class="r"><b>'+dTot.toFixed(2).replace(/\.00$/,'.0')+'</b></td><td></td><td></td></tr>';
   });
   tb.innerHTML=html;
@@ -451,10 +451,20 @@ function renderTracking(){
   var sn=$('shareNote'); if(sn) sn.textContent = ro ? '☁ Showing everyone’s hours (shared list).' : (isMgr() ? 'Showing this device only — shared read-back not live yet (build the “MRA Time to JSON” flow).' : '');
   $('entRows').innerHTML=rows.length?rows.map(function(e){
     var tn=[e.task,e.notes].filter(Boolean).join(' — ');
-    return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint"><button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">✎</button> '+(ro?'':'<button class="rowdel" data-del="'+e.id+'" title="Delete">×</button>')+'</td></tr>';
+    return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint"><button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">✎</button> <button class="rowdel" data-del="'+e.id+'" title="Delete">×</button></td></tr>';
   }).join(''):'<tr><td colspan="6" class="muted" style="padding:14px">No time entries yet.</td></tr>';
 }
-function delEntry(id){ if(!confirm('Delete this entry?')) return; ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS); renderTracking(); }
+// ✅ 2026-07-30: deletes now hit "MRA Time Write" for real (a deleteTime branch mirroring editTime —
+// Get items by EntryID -> Delete item), same as the edit fix, so a manager can remove a bad row here
+// instead of going into the SharePoint list directly.
+function delEntry(id){
+  if(!confirm('Delete this time entry? This removes it from SharePoint for good.')) return;
+  var ref=findEntryRef(id); if(!ref) return;
+  if(ref.arr==='local'){ ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS); }
+  else { SHARED=SHARED.filter(function(e){return e.id!==id;}); }
+  if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({ action:'deleteTime', id:id })}); }catch(_){} }
+  renderTracking(); renderMyDay();
+}
 /* ---------- manager edit: fix a wrong job/hours/date on ANY entry (this device's own, or someone
    else's shared entry once shared read-back is live) ---------- */
 function findEntryRef(id){
@@ -605,7 +615,7 @@ function buildFinanceReport(){
   // Quote Generator, work orders): logo badge + title/subtitle on the left, key numbers as a
   // label-under-value stat strip on the right, instead of one crammed sentence of middot-joined facts.
   var logoUrl=(location.origin||'')+'/logo.png';
-  var payChips=Object.keys(byPay).sort().map(function(k){ return '<div><b>'+f(byPay[k])+'</b><span>'+esc(k)+'</span></div>'; }).join('');
+  var payChips=Object.keys(byPay).filter(function(k){ return byPay[k]>0; }).sort().map(function(k){ return '<div><b>'+f(byPay[k])+'</b><span>'+esc(k)+'</span></div>'; }).join('');
   var body='<header class="rhead"><img src="'+logoUrl+'" class="rlogo" onerror="this.style.display=\'none\'">'
     +'<div class="rtitle"><h1>Weekly Time Summary</h1><div class="rsub">Mobility Resource Associates Inc · Dept 210 Engineering · Pay period '+esc(period)+' ('+esc(rangeLbl)+') · Generated '+dd+'</div></div>'
     +'<div class="rstats"><div><b>'+f(grand)+'</b><span>Grand total hrs</span></div>'+payChips+'</div>'
@@ -723,7 +733,7 @@ function boot(){
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
   $('calledInBtn').addEventListener('click',function(){ $('fJob').value='Called In'; $('fHours').value='0'; document.querySelectorAll('.hchip.on').forEach(function(c){c.classList.remove('on');}); $('fNotes').focus(); });
   $('entRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d){ delEntry(d.getAttribute('data-del')); return; } var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
-  $('myDayRows').addEventListener('click',function(e){ var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
+  $('myDayRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d){ delEntry(d.getAttribute('data-del')); return; } var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
   $('editSaveBtn').onclick=saveEditEntry; $('editCancelBtn').onclick=closeEditModal; $('editClose').onclick=closeEditModal;
   $('editModal').addEventListener('click',function(e){ if(e.target===$('editModal')) closeEditModal(); });
   // manage list edit/delete delegation
