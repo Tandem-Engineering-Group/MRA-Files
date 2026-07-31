@@ -1292,6 +1292,42 @@ Dashboard-side safety net (rev 36.37): the device keeps a **self-renewing 30-day
 that's a net, not the fix. The fix is step 1–4 above every refresh. (Filed items track in `mra_mc_filed_v1` + the
 "MRA Email Filer" flow, `MAIL_FILE_URL`; they correctly drop off after filing.)
 
+## ⚠️ FOUND + PARTIALLY FIXED 2026-07-30 — 💬 Teams messages panel had NEVER carried real data (Rich: "I have
+never gotten 1 message but have had many over the past few days")
+
+**Root cause: same class of bug as the `projectMail` one above, but worse — `teamsMsgs` was never populated with
+real data even once.** The My Work panel (`💬 Teams messages`, built earlier as its own task) reads `agent.json`
+`teamsMsgs[]` and renders correctly (verified headless — count badge, snippets, ✓ Not for me / ↩ Restore, 💬 Open
+chat links all work). But the live `agent.json` had `teamsMsgs:null` — turned out the ONLY prior write to that
+field was `agent_with_teams.json` in the scratchpad, which is a **fake test fixture** (`"19:chat1/msg1"`, canned
+sample text) built to verify the UI renders, never real scanned Teams data. Whatever process republishes
+`agent.json` has simply never included a Teams-scan step.
+- **Confirmed the data source itself works fine**: M365 MCP `get_me` shows the connection IS signed in as
+  `rmiller@gomra.com` (not blocked/Tandem-only, contrary to an earlier assumption elsewhere in this file — that
+  may have been fixed since, or scoped differently; don't assume Tandem-only without checking `get_me` first).
+  `teams_list_chats` and `chat_message_search` both return real, current chats/messages (dozens of active 1:1s,
+  group chats, meeting chats, messages from today).
+- **Fixed for today**: manually built 8 real `teamsMsgs` entries (rule: for each active chat, if the LATEST
+  message isn't from Rich, surface it — matches the panel's own code comment) from a live scan (`chat_message_search`
+  with a broad query + `afterDateTime`, grouped by `chatId`, kept the newest per chat, filtered to sender ≠ Rich
+  Miller), merged into the live `agent.json` (preserving every other field), and published via the same **Agent
+  Publish flow** (`agent_publish_url.txt` in scratchpad) used for `projectMail`. Verified headless against the
+  real published data: panel shows all 8, count badge correct, dismiss/restore + chat links work.
+- **⚠️ NOT actually recurring yet — this was a one-time manual fix, not a running scan.** Whatever job republishes
+  `agent.json` on its normal cadence will overwrite this with `teamsMsgs:null` again the next time it runs, UNLESS
+  that job's own instructions are updated to include a Teams-scan step. **Rule for any future session/scan that
+  republishes `agent.json` (same shape as the `projectMail` rule above): fetch the current live `agent.json` first,
+  then refresh `teamsMsgs` — for each of the user's active Teams chats (`teams_list_chats`), find the latest
+  message; if its sender isn't Rich, include `{id:chatId+'#'+messageId, who, chat, snippet, when, link, history?}`
+  (id must be stable across refreshes so dismissed items via `mcDismissWaitKey` stay dismissed — don't regenerate
+  a new id for the same message on every scan). If you can't scan Teams, carry the existing `teamsMsgs` forward —
+  never publish `null` over real data.**
+- **Not yet investigated**: what mechanism actually republishes `agent.json` on a recurring basis (a Claude Code
+  scheduled Trigger, a separate flow, etc.) — this session's own `CronList` showed nothing scheduled, so the 4x/day
+  auto-refresh referenced elsewhere in this file may be running from a different session/mechanism entirely, or may
+  have lapsed. Whoever/whatever runs the next refresh needs to follow the rule above, or Rich will see this same
+  "0 messages" bug return.
+
 ## 📧 Daily task-email routing (Rich confirmed 2026-07-16) — wire when building the per-person email step
 Rich CC'd on ALL. ⚠ TWO Jeffs: "Jeff" board column = Jeff Sellers (jsellers@gomra.com); Wrap Team's Jeff = W2 Graphic (jeff@w2graphic.com) — keep separate.
 - **Sal** → shopsupport@gomra.com
