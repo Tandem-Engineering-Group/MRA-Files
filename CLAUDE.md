@@ -1329,8 +1329,9 @@ sample text) built to verify the UI renders, never real scanned Teams data. What
   (Claude Code on the web project/environment settings) and paste back what it currently runs**, so its
   instructions can be updated to include the `teamsMsgs` (and now `pricingFinds`, see below) refresh rules.
 - **Bridge in place 2026-07-30**: started a same-session `CronCreate` job (every 3h) that re-scans Teams and
-  republishes `teamsMsgs` following the rule above, PLUS the pricing-scan rule below. ⚠️ Session-only — dies when
-  this Claude session ends, hard-capped at 7 days regardless. Not a substitute for fixing the real Trigger.
+  republishes `teamsMsgs` following the rule above, PLUS the pricing-scan and pricing-approval rules below.
+  ⚠️ Session-only — dies when this Claude session ends, hard-capped at 7 days regardless. Not a substitute for
+  fixing the real Trigger.
 
 ## ✅ BUILT 2026-07-30 — 📦 "Pricing to review" box on My Work (finds real material/labor quotes, Rich approves/skips)
 
@@ -1345,12 +1346,18 @@ no to add it." Built as a new My Work panel, same shape/mechanics as the Teams m
 - **✓ Add it** (`pfApprove()`) emails the approval decision to rmiller@gomra.com via the same `MC_MAILSEND` channel
   `mcAsk()`/Tell Claude uses, then dismisses the card — **same decide-now-act-later pattern as Tell Claude**:
   Rich's yes is the decision, a FUTURE Claude session reads the approval email and does the actual write.
-- **⚠️ NOT YET BUILT: the "act on approval" half.** No session has yet written code that reads a "[Pricing
-  approved]" email and actually edits `MATERIALS_REF`/`QUOTE_REF` (or the Product Catalogue's embedded JSON in
-  `catalogue/index.html`) to add the approved line, commits, and redeploys. **Whoever does this next**: check
-  rmiller@gomra.com inbox for "[Pricing approved] ..." emails Rich hasn't had actioned yet, add the real number to
-  the appropriate data (`MATERIALS_REF` for material costs, `QUOTE_REF` for full quote lines — see the Quote
-  Generator section elsewhere in this file for the exact shape), bump CHANGELOG, deploy, verify live.
+- **✅ "Act on approval" half BUILT 2026-07-30 (rev 36.79), Rich: "build the 2nd part of the pricing review pls".**
+  Both material AND labor approvals land in `MATERIALS_REF` (not `QUOTE_REF` — a single approved line doesn't have
+  the shape of a full job quote, so `MATERIALS_REF`'s simple `{family,category,byUnit:[{unit,lowCost,highCost,
+  vendors,orders,latest}]}` is the right target for both; labor items just get a `"Labor/…"` category prefix).
+  Proved end-to-end on the real seed: the $6,550 chrome-wrap upcharge is now a real `MATERIALS_REF` family
+  ("Chrome/Mirror Wrap Finish Upcharge", category "Graphics Media/Vinyl", unit "vehicle") and the card was cleared
+  from the live `pricingFinds`. **The recurring bridge cron (Part C)** now does this automatically going forward:
+  search rmiller@gomra.com for "[Pricing approved] …" emails → for each, check if that item is STILL in the live
+  `pricingFinds` (if it's already gone, already actioned, skip) → if still there, insert the `MATERIALS_REF`
+  family, syntax-check, bump CHANGELOG, commit/push/deploy, then remove it from `pricingFinds` and republish.
+  Batches multiple pending approvals into one deploy rather than one per item. **Still session-only** (dies with
+  this Claude session) — once the durable Trigger's prompt is found/updated (see above), fold Part C into it too.
 - **Scan rule for whoever refreshes `agent.json` next (same shape as `projectMail`/`teamsMsgs` above):** search
   rmiller@gomra.com email (`outlook_email_search`, query like "quote"/"pricing", last ~2 weeks) and Teams
   (`chat_message_search`) for real material or labor pricing/quotes NOT already reflected in `MATERIALS_REF`/
