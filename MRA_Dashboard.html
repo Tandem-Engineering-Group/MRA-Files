@@ -3873,6 +3873,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.78", date:"2026-07-30", title:"📦 New \"Pricing to review\" box on My Work (Rich only)", items:[
+    "Rich asked for a box where Claude looks for material &amp; labor quotes/pricing in email and Teams and offers to add them to the Product Catalogue and Quote Generator, with a yes/no decision each time. New <b>📦 Pricing to review</b> panel on My Work: each card shows the item, price found, where it came from, and the story — <b>✓ Add it</b> approves it (I fold the real number into the catalogue/Quote Generator on the next refresh) or <b>✗ Skip</b> dismisses it, same stays-until-you-decide pattern as Teams messages. Seeded live with a real find: a $6,550 full-chrome-wrap material upcharge from the On x MRA Airstream quote thread (7/28)." ] },
   { rev:"36.77", date:"2026-07-30", title:"🖨 Menu cleanup — Prints & reports collapsed into one button", items:[
     "Rich: the ☰ menu's Prints &amp; Reports section had grown to 11 separate lines (Print, Work Orders, Daily Letter, Floor recap, PM report, Executive report, Deficiency list, 4 Fleetio digests). Collapsed to a single <b>🖨 Prints &amp; Reports…</b> button — click it and the same picker that already handled Whole board / crew task sheets / Work Orders now also lists every report as a one-click jump. Nothing was removed, just gathered into one place." ] },
   { rev:"36.76", date:"2026-07-30", title:"🐛 FIXED — moving/copying a SHOP task to another trailer dropped its attachments", items:[
@@ -14826,6 +14828,25 @@ function _mcBuild(){
   var followupH='<div class="panel" id="mwsec-followup"><h2>🔔 Needs your follow-up</h2>'
     +'<div style="font-size:12px;color:var(--muted);margin:-4px 0 10px">Mail, Teams, and your task list — one place, so nothing gets missed checking three spots. Each item stays until YOU close it.</div>'
     +wh+tmh+th+'</div>';
+  // 📦 Pricing to review — real material/labor quotes I spot in your email &amp; Teams that aren't in the
+  // Catalogue or Quote Generator yet. You approve or skip each one (the story explains where it came from);
+  // ✓ Add it just marks it approved here — I fold the actual number into MATERIALS_REF/QUOTE_REF (or the
+  // catalogue) on the next refresh, same "you decide, I act later" pattern as Tell Claude.
+  var pfinds=A.pricingFinds||[];
+  var _pfdm=_mcDismissed(); var _pfVisN=0, _pfHidN=0;
+  var pfRows=pfinds.map(function(x){ var k='price:'+String(x.id||((x.item||'')+'|'+(x.when||'')));
+      var isDm=(_pfdm.indexOf(k)>=0);
+      if(isDm){ _pfHidN++; if(!_MC_SHOW_DISMISSED) return ''; } else { _pfVisN++; }
+      var open=x.link?(' <a href="'+esc(x.link)+'" target="_blank" rel="noopener" style="color:#7aa2d6">🔗 Source</a>'):'';
+      var dz=isDm?('<button class="mc-btn" onclick="mcRestoreWaitKey(\''+escJsAttr(k)+'\')" title="Bring this back">↩ Restore</button>')
+                 :('<button style="'+BP+'" onclick="pfApprove(\''+escJsAttr(k)+'\',\''+escJsAttr(x.item||'')+'\',\''+escJsAttr(x.price||'')+'\')" title="Add this to the catalogue / quote generator">✓ Add it</button> '
+                  +'<button class="mc-btn" onclick="mcDismissWaitKey(\''+escJsAttr(k)+'\')" title="Skip — not worth adding">✗ Skip</button>');
+      return '<div class="row" style="display:block'+(isDm?';opacity:.55':'')+'"><div style="min-width:0"><div class="lead">'+(x.kind==='labor'?'🧰':'📦')+' '+esc(x.item||'')+' <span class="badge grey">'+esc(x.price||'')+(x.unit?(' / '+esc(x.unit)):'')+'</span>'+open+'</div><div class="meta">'+esc(x.source||'')+'</div><div style="font-size:13px;margin:4px 0">'+esc(x.story||'')+'</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'+dz+'</div></div></div>'; }).join('');
+  var pfFoot=_pfHidN?('<div style="margin-top:8px;font-size:12px;color:var(--muted)"><a onclick="mcToggleShowDismissed()" style="cursor:pointer;text-decoration:underline">'+(_MC_SHOW_DISMISSED?('▲ hide '+_pfHidN+' skipped'):('▾ '+_pfHidN+' skipped · show')) +'</a></div>'):'';
+  var pfH='<div class="panel" id="mwsec-cmdpf"><h2>📦 Pricing to review <span class="count">'+_pfVisN+'</span></h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin:-2px 0 8px">Real material/labor quotes I found in your email &amp; Teams that aren’t in the catalogue or Quote Generator yet. ✓ Add it and I’ll fold it in on the next refresh; ✗ Skip if it’s not worth keeping.</div>'
+    +((_pfVisN||(_MC_SHOW_DISMISSED&&_pfHidN))?pfRows:'<div class="empty">Nothing new to review right now.</div>')+pfFoot
+    +'</div>';
   // 💬 Tell Claude — free-text command box; routes to Claude, acted on the next refresh
   var askH='<div class="panel" id="mwsec-cmdask"><h2>💬 Tell Claude <span class="count">I act on the next refresh</span></h2>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Type a request in plain English — a dashboard change, a design/CAD idea to think through, anything. E.g. “find a time for Al, Luc &amp; Megan Wednesday for Medtronic and set a Teams meeting,” “draft a reply to Taylor,” “add a task to…,” “help me think through the cabinet layout for the new pedestal trailer.” I read these and do them on the next refresh (or right away if you ping me).</div>'
@@ -14833,7 +14854,7 @@ function _mcBuild(){
     +'<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button style="'+BP+'" onclick="mcAsk()">Send to Claude</button><span id="mcAskMsg" class="mc-muted" style="font-size:12px;color:var(--muted)"></span></div></div>';
   var fileH=_mcFileMailPanelHtml(B,BP);
   var mineH=_mcMinePanelHtml(B,BP);
-  var blocks={tellClaude:askH, questions:qh, myplate:mineH, followup:followupH, filemail:fileH, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, flows:_mcFlowsPanel()};
+  var blocks={tellClaude:askH, questions:qh, myplate:mineH, followup:followupH, pricing:pfH, filemail:fileH, appts:ah, inbound:ih, fyi:fh, projects:ph, watchdog:wdh, flows:_mcFlowsPanel()};
   return {head:head, A:A, blocks:blocks};
 }
 function _mwMcPanel(){
@@ -14850,10 +14871,10 @@ function _mwMcPanel(){
 function _mwMcPanelGrid(){
   var r=_mcBuild(); if(!r) return '';
   if(!r.A) return '<div class="mw-grid">'+r.head+'<div class="panel" id="mwsec-cmd2"><div class="empty">Loading your brief…</div></div></div>';
-  var order=['tellClaude','followup','questions','myplate','filemail','appts','inbound','fyi','projects','watchdog','flows'];
+  var order=['tellClaude','followup','pricing','questions','myplate','filemail','appts','inbound','fyi','projects','watchdog','flows'];
   var byKey={}; _mcLaneDefs(r.A).forEach(function(d){ byKey[d.k]=d; });
   var isNew=function(){ for(var i=0;i<arguments.length;i++){ var d=byKey[arguments[i]]; if(d&&d.isNew) return true; } return false; };
-  var newMap={followup:isNew('waiting','teamsMsgs','tasks'), questions:isNew('questions'), myplate:isNew('myplate'), filemail:isNew('filemail'), appts:isNew('appts'), inbound:isNew('inbound'), fyi:isNew('fyi'), projects:isNew('projects'), watchdog:isNew('watchdog')};
+  var newMap={followup:isNew('waiting','teamsMsgs','tasks'), pricing:isNew('pricing'), questions:isNew('questions'), myplate:isNew('myplate'), filemail:isNew('filemail'), appts:isNew('appts'), inbound:isNew('inbound'), fyi:isNew('fyi'), projects:isNew('projects'), watchdog:isNew('watchdog')};
   var lanes=order.map(function(k){ var html=r.blocks[k]; if(!html) return '';
     return newMap[k] ? ('<div class="mw-tile-new">'+html+'</div>') : html; }).join('');
   return '<div class="mw-grid">'+r.head+lanes+'</div>';
@@ -14909,6 +14930,7 @@ function _mcChipItems(k){ var A=(typeof _MC_AGENT!=='undefined'&&_MC_AGENT)?_MC_
   if(k==='myplate'){ (typeof _mcMine==='function'?_mcMine():[]).forEach(function(it){ out.push({t:'#'+it.num+' '+(it.summary||''), s:(it.jobNum?('['+it.jobNum+'] '):'')+clip(it.asset,55)}); }); }
   else if(k==='waiting'){ (A.waiting||[]).forEach(function(w){ out.push({t:(w.who||'')+(w.subject?(' — '+w.subject):''), s:clip(w.need,110)}); }); }
   else if(k==='teamsMsgs'){ (A.teamsMsgs||[]).forEach(function(x){ out.push({t:(x.who||'')+(x.chat?(' — '+x.chat):''), s:clip(x.snippet,110)}); }); }
+  else if(k==='pricing'){ (A.pricingFinds||[]).forEach(function(x){ out.push({t:(x.item||'')+' — '+(x.price||''), s:clip(x.story,110)}); }); }
   else if(k==='filemail'){ (typeof _mcProjectMail==='function'?_mcProjectMail():[]).forEach(function(x){ out.push({t:x.project+' · '+(x.subject||''), s:clip(x.snippet||x.from,110)}); }); }
   else if(k==='appts'){ (A.appts||[]).forEach(function(x){ out.push({t:(x.when||'')+(x.what?(' — '+x.what):''), s:(x.who||'')+(x.where?(' · '+x.where):'')}); }); }
   else if(k==='inbound'){ (A.inbound||[]).forEach(function(x){ out.push({t:(x.item||'')+(x.vendor?(' — '+x.vendor):''), s:(x.project||'')+(x.when?(' · '+x.when):'')+(x.gap?(' · ⚠ '+x.gap):'')}); }); }
@@ -14930,6 +14952,7 @@ function _mcLaneDefs(A){
    {k:'myplate',ic:'⚠',lab:'My plate',anchor:'mwsec-cmdmine',n:(typeof _mcMine==='function'?_mcMine().length:0),s:sig((typeof _mcMine==='function'?_mcMine():[]),function(x){return String(x.num||'');})},
    {k:'waiting',ic:'🔴',lab:'Waiting',anchor:'mwsec-cmdw',n:(A.waiting||[]).length,s:sig(A.waiting,function(x){return (x.who||'')+(x.subject||'');})},
    {k:'teamsMsgs',ic:'💬',lab:'Teams',anchor:'mwsec-cmdtm',n:(A.teamsMsgs||[]).length,s:sig(A.teamsMsgs,function(x){return (x.id||(x.who||'')+(x.when||''));})},
+   {k:'pricing',ic:'📦',lab:'Pricing',anchor:'mwsec-cmdpf',n:(A.pricingFinds||[]).length,s:sig(A.pricingFinds,function(x){return (x.id||x.item||'');})},
    {k:'filemail',ic:'📥',lab:'File mail',anchor:'mwsec-cmdfile',jump:true,n:(typeof _mcProjectMail==='function'?_mcProjectMail().length:0),s:sig((typeof _mcProjectMail==='function'?_mcProjectMail():[]),function(x){return (x.id||x.subject||'');})},
    {k:'questions',ic:'❓',lab:'Questions',anchor:'mwsec-cmdq',n:(A.questions||[]).length,s:sig(A.questions,function(x){return (x.q||'');})},
    {k:'appts',ic:'📅',lab:'Appts',anchor:'mwsec-cmda',n:(A.appts||[]).length,s:sig(A.appts,function(x){return (x.what||'')+(x.when||'');})},
@@ -15029,6 +15052,13 @@ function mcAsk(){ var el=document.getElementById('mcAskBox'); if(!el) return; va
   var html='<b>MyCommand ask</b>'+(when?(' — '+esc(when)):'')+'<br>'+esc(v).replace(/\n/g,'<br>');
   try{ if(typeof MC_MAILSEND!=='undefined') fetch(MC_MAILSEND,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({to:'rmiller@gomra.com',subject:'[MyCommand ask] '+v.slice(0,70),html:html})}); }catch(e){}
   el.value=''; var m=document.getElementById('mcAskMsg'); if(m) m.textContent='✓ Sent to Claude — I’ll handle it on the next refresh (or ping me to do it now).'; }
+// 📦 Pricing to review: approve a found material/labor quote for the catalogue/Quote Generator.
+// Emails the decision (same channel as Tell Claude) so Claude picks it up and makes the actual
+// edit on the next refresh, then hides the card here the same way a Teams message gets dismissed.
+function pfApprove(id, item, price){
+  try{ if(typeof MC_MAILSEND!=='undefined') fetch(MC_MAILSEND,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({to:'rmiller@gomra.com',subject:'[Pricing approved] '+item,html:'<b>Approved for the catalogue / Quote Generator:</b><br>'+esc(item)+' — '+esc(price)+'<br>Approved '+new Date().toLocaleString()})}); }catch(e){}
+  mcDismissWaitKey(id);
+}
 // Full Fleetio issue detail shown inline (summary, asset, description, photos) — pulled from the board's own Fleetio data.
 function _mcFioDetail(num){
   var it=(typeof fioIssue==='function')?fioIssue(num):null;
@@ -15053,7 +15083,7 @@ function _mcFioDetail(num){
     +'</div>'; }
 // ---- My Command: personal section order (drag-free reorder with ▲▼⤒), saved per device ----
 var MC_ORDER_KEY='mra_mycmd_order_v1';
-var MC_LANES_DEFAULT=['tellClaude','followup','questions','myplate','filemail','appts','inbound','fyi','projects','watchdog','flows'];
+var MC_LANES_DEFAULT=['tellClaude','followup','pricing','questions','myplate','filemail','appts','inbound','fyi','projects','watchdog','flows'];
 function _mcOrder(){ var d=MC_LANES_DEFAULT.slice(); var s=null; try{ s=JSON.parse(localStorage.getItem(MC_ORDER_KEY)||'null'); }catch(e){}
   if(!Array.isArray(s)) return d;
   var out=s.filter(function(k){return d.indexOf(k)>=0;}); d.forEach(function(k){ if(out.indexOf(k)<0) out.push(k); }); return out; }
