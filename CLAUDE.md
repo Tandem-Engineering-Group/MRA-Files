@@ -1332,6 +1332,23 @@ sample text) built to verify the UI renders, never real scanned Teams data. What
   republishes `teamsMsgs` following the rule above, PLUS the pricing-scan and pricing-approval rules below.
   ⚠️ Session-only — dies when this Claude session ends, hard-capped at 7 days regardless. Not a substitute for
   fixing the real Trigger.
+- **✅ FOUND + FIXED 2026-07-30.** It's a Claude Code **Routine** (not a "Trigger" — different name, same idea),
+  called **"MRA My Command refresh"**, repo `Tandem-Engineering-Group/MRA-Files`, Microsoft 365 connector, schedule
+  **6:05 AM / 10:05 AM / 2:05 PM / 6:05 PM, Monday–Friday** (found via Claude Code web UI → sidebar → Routines).
+  Rich screenshotted its Instructions box — confirmed root cause: it builds `agent.json` **from scratch every
+  run** with only 8 keys (`generatedAt/generatedText/questions/waiting/appts/inbound/projects/tasks`) and POSTs
+  that as the WHOLE object — `teamsMsgs`/`pricingFinds` were never in its key list, so every run (weekdays,
+  4×/day) silently wiped them back to nothing. **This is the actual mechanism behind the "my mail disappeared"/
+  "0 Teams messages" bugs** — not a separate unknown process. Gave Rich full replacement Instructions text (in
+  chat, per his standing preference) that: (0) fetches the current live `agent.json` first and carries
+  `teamsMsgs`/`pricingFinds` forward instead of building fresh, (2) adds `teamsMsgs`/`pricingFinds` to the managed
+  key list with the same field shapes documented above, and folds in the **pricing-approval action** (scan for
+  "[Pricing approved]" emails → edit `MATERIALS_REF` in this repo → commit/deploy → clear from `pricingFinds`) so
+  Part C doesn't need the session-only bridge cron either. **Once Rich pastes this in and saves, the bridge
+  cron above becomes redundant** — safe to leave it running as a fallback until the routine's first real run
+  after the edit is confirmed working, then it can be dropped. ⚠️ Not yet confirmed running with the new
+  instructions as of this writing — next session should check `agent.json`'s `teamsMsgs`/`pricingFinds` stay
+  populated across a real scheduled run (not just this session's manual publishes).
 
 ## ✅ BUILT 2026-07-30 — 📦 "Pricing to review" box on My Work (finds real material/labor quotes, Rich approves/skips)
 
