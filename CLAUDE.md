@@ -1344,11 +1344,22 @@ sample text) built to verify the UI renders, never real scanned Teams data. What
   `teamsMsgs`/`pricingFinds` forward instead of building fresh, (2) adds `teamsMsgs`/`pricingFinds` to the managed
   key list with the same field shapes documented above, and folds in the **pricing-approval action** (scan for
   "[Pricing approved]" emails → edit `MATERIALS_REF` in this repo → commit/deploy → clear from `pricingFinds`) so
-  Part C doesn't need the session-only bridge cron either. **Once Rich pastes this in and saves, the bridge
-  cron above becomes redundant** — safe to leave it running as a fallback until the routine's first real run
-  after the edit is confirmed working, then it can be dropped. ⚠️ Not yet confirmed running with the new
-  instructions as of this writing — next session should check `agent.json`'s `teamsMsgs`/`pricingFinds` stay
-  populated across a real scheduled run (not just this session's manual publishes).
+  Part C doesn't need the session-only bridge cron either.
+- **✅ CONFIRMED WORKING 2026-07-30 evening.** Rich saved the new instructions and hit the manual **Run** button
+  in the Claude Code UI to test. Verified live: `generatedAt` advanced to a genuinely fresh timestamp (was stuck
+  for hours before), `teamsMsgs` came back with 6 real entries from its OWN independent scan (different count
+  than this session's manual seed — proof it actually re-ran the scan, not just carried old data forward),
+  `pricingFinds` correctly present as `[]` (nothing new to flag, matches this session's own from-scratch email
+  sweep earlier the same day), and every original field (waiting/appts/inbound/projects/questions) still came
+  through intact. **The routine is the real, durable fix now — the session-only bridge cron has been stopped**
+  (nothing left in `CronList`). Next real scheduled run is the normal weekday cadence (6:05/10:05/14:05/18:05).
+  ⚠️ Rich also asked for a manual "run it now" button directly on the dashboard's My Work page — investigated
+  whether Claude Code Routines expose a copyable webhook/API URL (like the Power Automate flows this dashboard
+  already calls); the Runs list has API/Webhook FILTER tabs but neither showed an actual URL to copy as of this
+  session — still open, asked Rich to check the pencil/edit view for a dedicated Triggers/Integrations section.
+  If no simple webhook URL exists, this may need a real Claude Code API key + authenticated request (bigger
+  lift than the usual "paste a flow URL" pattern) — don't build a fake/broken button; confirm the real mechanism
+  first.
 
 ## ✅ BUILT 2026-07-30 — 📦 "Pricing to review" box on My Work (finds real material/labor quotes, Rich approves/skips)
 
