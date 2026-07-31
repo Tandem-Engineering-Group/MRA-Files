@@ -1322,11 +1322,48 @@ sample text) built to verify the UI renders, never real scanned Teams data. What
   (id must be stable across refreshes so dismissed items via `mcDismissWaitKey` stay dismissed — don't regenerate
   a new id for the same message on every scan). If you can't scan Teams, carry the existing `teamsMsgs` forward —
   never publish `null` over real data.**
-- **Not yet investigated**: what mechanism actually republishes `agent.json` on a recurring basis (a Claude Code
-  scheduled Trigger, a separate flow, etc.) — this session's own `CronList` showed nothing scheduled, so the 4x/day
-  auto-refresh referenced elsewhere in this file may be running from a different session/mechanism entirely, or may
-  have lapsed. Whoever/whatever runs the next refresh needs to follow the rule above, or Rich will see this same
-  "0 messages" bug return.
+- **Confirmed 2026-07-30 (Rich): the 4x/day refresh IS a real Claude Code scheduled Trigger** — Rich: "We set up
+  the 4x a day in Claude. Some setting you had me do." So it's a platform Trigger (not a Power Automate flow),
+  separate from any one session — but I have no tool in-session to list/inspect/edit Triggers directly, so I still
+  don't know its exact stored prompt/instructions. **Next session: ask Rich to open wherever that Trigger lives
+  (Claude Code on the web project/environment settings) and paste back what it currently runs**, so its
+  instructions can be updated to include the `teamsMsgs` (and now `pricingFinds`, see below) refresh rules.
+- **Bridge in place 2026-07-30**: started a same-session `CronCreate` job (every 3h) that re-scans Teams and
+  republishes `teamsMsgs` following the rule above, PLUS the pricing-scan rule below. ⚠️ Session-only — dies when
+  this Claude session ends, hard-capped at 7 days regardless. Not a substitute for fixing the real Trigger.
+
+## ✅ BUILT 2026-07-30 — 📦 "Pricing to review" box on My Work (finds real material/labor quotes, Rich approves/skips)
+
+Rich: "add a box to my work where you look for material quotes and pricing and then add them to my part catalogue
+and quote generators. As well as look for labor quotes... I get a box and you give me the story and I say yes or
+no to add it." Built as a new My Work panel, same shape/mechanics as the Teams messages panel:
+- **UI (live, rev 36.78)**: `agent.json` gets a new `pricingFinds[]` field — `{id, kind:'material'|'labor', item,
+  price, unit, source, story, link}`. Panel renders each as a card (item/price/source/story + 🔗 Source link) with
+  **✓ Add it** / **✗ Skip** buttons, reusing the exact same `_mcDismissed()`/`mcDismissWaitKey`/`mcRestoreWaitKey`
+  dismiss-list mechanism as Teams messages (key prefix `price:` so it doesn't collide). Wired into every layout
+  (widget-grid `order`/`newMap`, `_mcLaneDefs`, `_mcChipItems`, `MC_LANES_DEFAULT`) same as every other lane.
+- **✓ Add it** (`pfApprove()`) emails the approval decision to rmiller@gomra.com via the same `MC_MAILSEND` channel
+  `mcAsk()`/Tell Claude uses, then dismisses the card — **same decide-now-act-later pattern as Tell Claude**:
+  Rich's yes is the decision, a FUTURE Claude session reads the approval email and does the actual write.
+- **⚠️ NOT YET BUILT: the "act on approval" half.** No session has yet written code that reads a "[Pricing
+  approved]" email and actually edits `MATERIALS_REF`/`QUOTE_REF` (or the Product Catalogue's embedded JSON in
+  `catalogue/index.html`) to add the approved line, commits, and redeploys. **Whoever does this next**: check
+  rmiller@gomra.com inbox for "[Pricing approved] ..." emails Rich hasn't had actioned yet, add the real number to
+  the appropriate data (`MATERIALS_REF` for material costs, `QUOTE_REF` for full quote lines — see the Quote
+  Generator section elsewhere in this file for the exact shape), bump CHANGELOG, deploy, verify live.
+- **Scan rule for whoever refreshes `agent.json` next (same shape as `projectMail`/`teamsMsgs` above):** search
+  rmiller@gomra.com email (`outlook_email_search`, query like "quote"/"pricing", last ~2 weeks) and Teams
+  (`chat_message_search`) for real material or labor pricing/quotes NOT already reflected in `MATERIALS_REF`/
+  `QUOTE_REF` — a vendor quoting a dollar figure for a specific material/service is a good candidate; vague "we're
+  working on pricing" mentions are not. Build `{id (stable — e.g. a hash of the source message id, so re-scans
+  don't create duplicate cards for the same finding), kind, item, price, unit, source, story, link}` per find,
+  merge into `pricingFinds` (append new ones, don't duplicate existing ids, drop ones Rich already approved/skipped
+  if you can tell — check the dismissed-list convention), publish. If you can't scan, carry existing
+  `pricingFinds` forward — never publish `null`/`[]` over real unactioned finds.
+- **First real seed (2026-07-30)**: a $6,550 full-chrome-wrap material upcharge (vs standard vinyl) from the real
+  On x MRA Airstream buildout quote thread (On Running, via Luciana Giglio, 7/28/26 email) — genuine, unactioned,
+  not yet in the Catalogue or Quote Generator. Verified headless (renders, count badge, Approve/Skip both wired,
+  zero page errors) before publishing.
 
 ## 📧 Daily task-email routing (Rich confirmed 2026-07-16) — wire when building the per-person email step
 Rich CC'd on ALL. ⚠ TWO Jeffs: "Jeff" board column = Jeff Sellers (jsellers@gomra.com); Wrap Team's Jeff = W2 Graphic (jeff@w2graphic.com) — keep separate.
