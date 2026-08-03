@@ -3874,6 +3874,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.81", date:"2026-07-31", title:"🔢 VIN card line: POD-style asset tags show their real number", items:[
+    "Rich: the Cisco POD's Fleetio \"VIN\" field is actually a POD asset tag (\"POD #21-086/EA915/3.3\"), not a VIN — rev 36.80 correctly didn't show it as a VIN, but he wanted the 21-086 shown instead of nothing. Now any unit whose Fleetio VIN field matches a POD-style asset tag shows <b>POD #21-086</b> on its card (honestly labeled, not mislabeled as a VIN); real VINs still show <b>VIN •••XXXXX</b> as before." ] },
   { rev:"36.80", date:"2026-07-31", title:"🔢 VIN last-5 on every bay / parking-lot card (finance's ask)", items:[
     "Rich's finance team asked for the last 5 digits of a trailer's VIN on the board, any time a job shows in a bay or the Parking Lot. Added a small muted <b>VIN •••XXXXX</b> line under the job name on every card (both the compact Floor tab and Floor Detail), matched to the job's Fleetio unit the same way GPS location already is (leading fleet # in the name, else job # + name-word matching). Skips jobs with no Fleetio match, 🧩 sub-jobs (they follow the main job), and any unit whose Fleetio \"VIN\" field isn't actually a VIN (found one POD asset with a custom tag typed in there instead — filtered out rather than shown wrong)." ] },
   { rev:"36.79", date:"2026-07-30", title:"📦 Pricing to review — the \"add it for real\" half is built", items:[
@@ -10243,12 +10245,12 @@ function renderFloor(D){
     const _kp=(typeof jobKind==='function'&&jobKind(j)==='project');
     const _pd=(j.tasks||[]).filter(t=>t.done).length, _po=(j.tasks||[]).filter(t=>!t.done).length, _pct=(_pd+_po)?Math.round(_pd/(_pd+_po)*100):0;
     const _acc={active:'#22c55e',scheduled:'#3b82f6',onhold:'#f59e0b',overdue:'#ef4444',done:'#64748b',open:'#3b82f6'}[c.state]||'var(--brand)';
-    const _vin=(typeof _jobVinTail==='function')?_jobVinTail(j):'';
-    const _mini=`<div class="jt-mini" onclick="jobEdit(event,${j.row})" style="border-left-color:${_acc}" title="Click to edit ${escA(j.project)} (needs code)"><div class="jm-top">${_sub?`<span class="jm-pos">${esc(_sub)}</span>`:'<span class="jm-pos"></span>'}<span class="jm-tag ${_kp?'jm-proj':'jm-maint'}">${_kp?'Project':'Maint'}</span></div><div class="jm-job">${esc(j.project)}${j.jobNum?` <span class="jm-jn">${esc(j.jobNum)}</span>`:''}</div>${_cdt?`<div class="jm-dt">📅 ${_cdt}</div>`:''}<div class="jm-pct"><span>${j.pm?esc(j.pm):'—'}</span><span>${(j.openCount||0)} open</span></div>${_vin?`<div class="jm-vin">VIN •••${esc(_vin)}</div>`:''}<div class="jm-bar"><span style="width:${_pct}%"></span></div></div>`;
+    const _vin=(typeof _jobVinTail==='function')?_jobVinTail(j):null;
+    const _mini=`<div class="jt-mini" onclick="jobEdit(event,${j.row})" style="border-left-color:${_acc}" title="Click to edit ${escA(j.project)} (needs code)"><div class="jm-top">${_sub?`<span class="jm-pos">${esc(_sub)}</span>`:'<span class="jm-pos"></span>'}<span class="jm-tag ${_kp?'jm-proj':'jm-maint'}">${_kp?'Project':'Maint'}</span></div><div class="jm-job">${esc(j.project)}${j.jobNum?` <span class="jm-jn">${esc(j.jobNum)}</span>`:''}</div>${_cdt?`<div class="jm-dt">📅 ${_cdt}</div>`:''}<div class="jm-pct"><span>${j.pm?esc(j.pm):'—'}</span><span>${(j.openCount||0)} open</span></div>${_vin?`<div class="jm-vin">${esc(_vin.label)}${esc(_vin.val)}</div>`:''}<div class="jm-bar"><span style="width:${_pct}%"></span></div></div>`;
     return `<div class="job${jc}" id="floorjob-${j.row}" ondragover="jobTileDragOver(event)" ondrop="jobTileDrop(event,${typeof j.row==='number'?j.row:`'${escJsAttr(String(j.row))}'`})">${_mini}<div class="jt-full"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}${j.jobNum?` <span class="jnum-t">${esc(j.jobNum)}</span>`:''}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag onto a BAY to move this trailer there — or onto ANOTHER TRAILER'S card to slot it above (re-orders the list; needs code)">⠿</span>`:''}</div>`+
       `${(()=>{const _fr=jobIsSub(j)?null:_fioRange(_fioRetForJob(j.jobNum));
         if(WALL) return `<div class="pills">${_fr?`<span class="pill" title="Fleetio Back to MRA → Leaving MRA">🗓 ${esc(_fr)}</span>`:''}${pills}</div>`;   // 📺 compact: no client/PM line, MRA folds into the pill row
-        return `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div>${_fr?`<div class="jfio" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(_fr)}</div>`:''}${_vin?`<div class="jvin" title="Last 5 of this unit's VIN, matched via Fleetio">VIN •••${esc(_vin)}</div>`:''}<div class="pills">${pills}</div>`;})()}${tl}</div></div>`;};
+        return `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div>${_fr?`<div class="jfio" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(_fr)}</div>`:''}${_vin?`<div class="jvin" title="Matched via Fleetio">${esc(_vin.label)}${esc(_vin.val)}</div>`:''}<div class="pills">${pills}</div>`;})()}${tl}</div></div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
   const bayCard=(bay,rawList,opts={})=>{
@@ -10771,12 +10773,16 @@ function _jobFleetRec(name, jobNum){
 // shown as a small line on every bay/parking-lot card). 🧩 sub-jobs skip it, same rule as GPS/Fleetio:
 // those follow the MAIN job only.
 function _jobVinTail(j){
-  if(!j || jobIsSub(j)) return '';
+  if(!j || jobIsSub(j)) return null;
   const f=_jobFleetRec(j.project, j.jobNum); const vin=f&&String(f.vin||'').trim();
-  // Fleetio's VIN field is free-text — some equipment (e.g. PODs) has an asset tag typed in there
-  // instead of a real VIN ("POD #21-086/EA915/3.3"). Only show values that actually look like a VIN.
-  if(!vin || vin.length<8 || !/^[A-Za-z0-9]+$/.test(vin)) return '';
-  return vin.slice(-5);
+  if(!vin) return null;
+  // Fleetio's VIN field is free-text — equipment with no real VIN (PODs) gets an asset tag typed in
+  // there instead, e.g. "POD #21-086/EA915/3.3". Surface that asset number honestly rather than
+  // hiding it or mislabeling it as a VIN (Rich: "make the vin the 21-086" for the Cisco POD).
+  const podM=vin.match(/POD\s*#?\s*([0-9]{1,4}-[0-9]{1,4})/i);
+  if(podM) return {label:'POD #', val:podM[1]};
+  if(vin.length<8 || !/^[A-Za-z0-9]+$/.test(vin)) return null;
+  return {label:'VIN •••', val:vin.slice(-5)};
 }
 // A GPS fix older than 14 days is STALE — show it as history ("last seen"), never as a live
 // location claim, and never let it trigger an at-MRA/at-yard call or a mismatch warning.
