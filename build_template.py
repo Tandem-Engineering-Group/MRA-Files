@@ -27,6 +27,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.drawing.image import Image as XLImage
+from PIL import Image as PILImage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ORANGE = "E24E26"
@@ -85,9 +86,11 @@ bottom = Border(bottom=Side(style="thin", color="C9CDD3"))
 # ---- Slim letterhead (logo + title only) -----------------------------------
 logo_path = os.path.join(HERE, "logo.png")
 if os.path.exists(logo_path):
+    with PILImage.open(logo_path) as _src:
+        _nat_w, _nat_h = _src.size
     img = XLImage(logo_path)
     img.width = 74
-    img.height = 74
+    img.height = round(74 * _nat_h / _nat_w)  # keep the logo's real aspect ratio
     ws.add_image(img, "A1")
 
 for r, h in {1: 22, 2: 20, 3: 6}.items():
