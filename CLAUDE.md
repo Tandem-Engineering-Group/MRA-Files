@@ -181,6 +181,21 @@ Rich is done being told to re-apply the same fix — check this section before s
   no pagination threshold, or gets throttled by SharePoint with no retry to recover. Check each `Get *`
   step's Settings tab the same way the write steps were just checked, and add the same `PT2M`/Exponential/
   4/`PT10S` treatment if any is missing it.
+  - **Checked + FIXED same session:** all four Get steps (`Get Jobs`/`Get Project Tasks`/`Get Shop Tasks`/
+    `Get Users`) were IDENTICALLY under-protected — no explicit Action Timeout (blank), Pagination On/
+    Threshold `5000`, Retry Policy `Default` (not the explicit Exponential/4/`PT10S` the write steps have).
+    Not one-bad-step, a systemic gap across all four reads. Rich added **Action Timeout `PT5M`** (longer
+    than the write steps' `PT2M` since a paginated multi-thousand-row read can legitimately take longer)
+    **+ Retry Policy Exponential interval/Count 4/Interval `PT10S`** to all four, saved. ⚠️ Not yet proven
+    over a real stretch — if the banner recurs again, this round of fixes didn't hold either.
+  - **Also confirmed: Filter Query is blank on `Get Jobs`** (pulls the ENTIRE list every 5-min run,
+    including years of historical/closed rows, no date/status filter). This means the flow gets slower
+    over time purely from list growth with zero code changes — plausible explanation for why stalls have
+    gotten MORE frequent rather than staying constant. **Not yet checked:** the actual item counts of the
+    4 lists vs the pagination Threshold of `5000` — if any list has grown past ~5000 rows, that threshold
+    can act as a silent cap (older/newer rows quietly stop coming through the export, not just "runs
+    slow"). Asked Rich to check each list's item count (SharePoint list settings) — pending his reply.
+    If any is near/over 5000, raise that Threshold (e.g. to `20000`) on that step.
 - ✅ **ALL THREE PARTS DONE (Rich confirmed 2026-07-29) — do NOT ask Rich to redo any of these:**
   1. **`Create blob (V2)`** step → Settings → **Action Timeout = `PT2M`**, **Retry Policy = Exponential
      interval, Count `4`, Interval `PT10S`**.
