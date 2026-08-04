@@ -188,14 +188,20 @@ Rich is done being told to re-apply the same fix — check this section before s
     than the write steps' `PT2M` since a paginated multi-thousand-row read can legitimately take longer)
     **+ Retry Policy Exponential interval/Count 4/Interval `PT10S`** to all four, saved. ⚠️ Not yet proven
     over a real stretch — if the banner recurs again, this round of fixes didn't hold either.
-  - **Also confirmed: Filter Query is blank on `Get Jobs`** (pulls the ENTIRE list every 5-min run,
-    including years of historical/closed rows, no date/status filter). This means the flow gets slower
-    over time purely from list growth with zero code changes — plausible explanation for why stalls have
-    gotten MORE frequent rather than staying constant. **Not yet checked:** the actual item counts of the
-    4 lists vs the pagination Threshold of `5000` — if any list has grown past ~5000 rows, that threshold
-    can act as a silent cap (older/newer rows quietly stop coming through the export, not just "runs
-    slow"). Asked Rich to check each list's item count (SharePoint list settings) — pending his reply.
-    If any is near/over 5000, raise that Threshold (e.g. to `20000`) on that step.
+  - **Filter Query is blank on `Get Jobs`** (pulls the ENTIRE list every 5-min run, no date/status
+    filter) — real gap, left as-is (the flow's job is to export everything, filtering would need matching
+    changes downstream), just noting it exists.
+  - **Checked real list item counts (Site Contents, 2026-08-04): all four are small — Jobs 107, Project
+    Tasks 734, Shop Tasks 492, Users 12.** Nowhere near the pagination Threshold of `5000` — the
+    silent-truncation risk is RULED OUT, and this also makes the "growing list slows the flow down"
+    theory less likely (734 rows is trivial for SharePoint to page through, shouldn't cause multi-minute
+    hangs by itself). **Net status after this whole session: every externally-checkable cause has now
+    been checked and hardened (no typo, no duplicate-flow collision, all Get steps now have explicit
+    timeout+retry, list sizes ruled out) but NONE was confirmed as an actual smoking gun for why it
+    hangs.** ⚠️ **NEXT TIME it stalls: before cancelling, open the stuck run in run history FIRST and
+    screenshot/note which specific step still shows as running/not-completed.** That's the one diagnostic
+    that hasn't been tried — it would show exactly where time is going in real time, instead of auditing
+    settings after the evidence (the hung run) is already gone. Cancel + rerun as normal after capturing it.
 - ✅ **ALL THREE PARTS DONE (Rich confirmed 2026-07-29) — do NOT ask Rich to redo any of these:**
   1. **`Create blob (V2)`** step → Settings → **Action Timeout = `PT2M`**, **Retry Policy = Exponential
      interval, Count `4`, Interval `PT10S`**.
