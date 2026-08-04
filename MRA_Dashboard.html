@@ -2672,16 +2672,16 @@
   <div class="modal-overlay" id="ptbModal" onclick="ptbClose(event)">
     <div class="modal" style="max-width:520px">
       <button class="modal-close" onclick="ptbClose()" title="Close">×</button>
-      <h3>⚒ Break into shop tasks</h3>
+      <h3 id="ptbTitle">⚒ Break into shop tasks</h3>
       <div class="msub" id="ptbSub"></div>
       <div class="addform">
         <div><label>Put the tasks on</label><select id="ptbJob"></select></div>
-        <div><label>Shop tasks — ONE PER LINE (each line becomes its own closable task)</label><textarea id="ptbTasks" rows="6" placeholder="Build base frame&#10;Cut + fit wall panels&#10;Paint &amp; seal"></textarea></div>
+        <div><label>Tasks — ONE PER LINE (each line becomes its own closable task)</label><textarea id="ptbTasks" rows="6" placeholder="Build base frame&#10;Cut + fit wall panels&#10;Paint &amp; seal"></textarea></div>
         <div class="addrow2">
           <div><label>Assign to</label><input id="ptbWho" list="asgNames" placeholder="Sal, Electricians, …" autocomplete="off"></div>
           <div><label>Due</label><input id="ptbDue" type="date"></div>
         </div>
-        <div class="msub">The tasks land on that trailer's card + the crew's column, tagged to this schedule line. The schedule line flips to <b>In Progress</b> — and when the <b>last</b> shop task is closed, the board offers to flag it <b>🟡 ready for the PM to verify</b> (same sign-off loop as the design board; the PM closes it from the Projects tab).</div>
+        <div class="msub" id="ptbInfo">The tasks land on that trailer's card + the crew's column, tagged to this schedule line. The schedule line flips to <b>In Progress</b> — and when the <b>last</b> shop task is closed, the board offers to flag it <b>🟡 ready for the PM to verify</b> (same sign-off loop as the design board; the PM closes it from the Projects tab).</div>
         <div id="ptbMsg" style="font-size:12px;margin-top:6px"></div>
         <div class="addbtns"><button class="btn-ghost" onclick="ptbClose()">Cancel</button><button class="btn-primary" id="ptbGo" onclick="ptbSubmit()">➕ Create tasks</button></div>
       </div>
@@ -2744,6 +2744,7 @@
           <button class="btn-ghost" onclick="submitDeleteJob()" id="ejDelete" style="margin-right:auto;border-color:rgba(239,68,68,.5);color:#fca5a5">🗑 Delete job</button>
           <button class="btn-ghost" onclick="bringBackHere()" id="ejBringBack" style="display:none;border-color:rgba(34,197,94,.5);color:#86efac" title="Reactivate this shipped trailer for a new maintenance visit (Active · Parking Lot · today), logging the prior ship date">🔄 Bring back</button>
           <button class="btn-ghost" onclick="addTaskForJob()" title="Add an assignable Shop Task to this job — it shows on the board" style="border-color:rgba(59,130,246,.5);color:#93c5fd">➕ Add task</button>
+          <button class="btn-ghost" onclick="ptbOpenNew(window._ejProj)" title="Create several tasks at once — each line becomes its own closable task on this job" style="border-color:rgba(59,130,246,.5);color:#93c5fd">📋 Add multiple</button>
           <button class="btn-ghost" onclick="closeEdit()">Cancel</button>
           <button class="btn-ghost" onclick="openJobPunch(window._ejRow)" title="One document with EVERY crew's open tasks on THIS job (electricians, wrap, Doug, video, unassigned), grouped by crew, with photos - digital copy first, print from there. Hand it to the crew.">🧾 Punch list</button>
           <button class="btn-primary" id="ejSubmit" onclick="submitEditJob()">Save changes</button>
@@ -2797,6 +2798,9 @@
           <button class="btn-ghost" onclick="etMoveCopy(false)" title="Copy this task onto the chosen trailer (keeps the original here)">⧉ Copy</button>
           <button class="btn-ghost" onclick="etMoveCopy(true)" title="Move this task to the chosen trailer (removes it from here)">⇄ Move</button>
           <span id="etMoveMsg" style="font-size:12px; color:var(--muted)"></span>
+        </div>
+        <div style="border-top:1px solid var(--line); margin-top:6px; padding-top:8px">
+          <button class="btn-ghost" onclick="ptbOpenShop(window._etProj, window._etOld)" title="Break this task into several smaller closable tasks — this one stays open and closes itself automatically once every new one is closed">⚒ Split into multiple</button>
         </div>
         <div id="etMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
@@ -3874,6 +3878,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.86", date:"2026-08-04", title:"🛠 Split one task into several — now works on ANY shop task, plus a standalone bulk-add", items:[
+    "Rich: \"add the ability to create multiple tasks from one task ... if tied to a project we would need to make sure all synced.\" The existing <b>⚒ Break into shop tasks</b> (which only worked on a project's own 📋 schedule line) is now generalized to two more entry points: (1) open any existing shop task (✎ Edit task) and hit the new <b>⚒ Split into multiple</b> button — the original task <b>stays open</b>, and closes itself automatically once every one of the new tasks is closed; (2) a standalone <b>📋 Add multiple</b> button next to ➕ Add task (in ✎ Edit job) creates a fresh batch with no parent at all. If the task you're splitting was itself tagged back to a project schedule line, that link rides along automatically — once the split closes itself, the project-level 🟡 ready-for-PM-verify sign-off still fires, so nothing falls out of sync. Verified headless: split-and-reclose, the project-chain sign-off, and the standalone bulk-add all confirmed working before shipping." ] },
   { rev:"36.85", date:"2026-08-04", title:"🎨 Logo fix, round 2 — Work Orders, Punch Lists, Hard-Date Schedules & the Quote Generator", items:[
     "Rich sent screenshots proving a Work Order print and a Quote Generator print STILL showed the old/no logo even after 36.83's cache fix — turned out those two (plus Punch Lists and the 3 Hard-Date Schedule print layouts) never read logo.png at all. They pull from a separate embedded copy (<code>MRA_LOGO</code>, a base64 constant baked into the page) that 36.82 never touched. The Quote Generator's letterhead had NO logo image at all — it was pure styled text (\"MRA\" in orange). Fixed: MRA_LOGO now carries the current logo, and the Quote Generator prints a real logo image like every other report. Verified headless against live board data (28 real Work Orders + a real Quote print, screenshotted) before shipping — not just a byte check this time." ] },
   { rev:"36.84", date:"2026-08-03", title:"📦 4 approved pricing finds landed in the Catalogue / Quote Generator", items:[
@@ -6458,7 +6464,7 @@ function closeTaskByName(proj, task, el){
   shopWrite({project:proj, task:task, closedDate:cd, pin:_pin, user:_user});   // queued (serialized) send
   rememberClosed(proj, task);
   const j=oJob(proj); if(j&&j.tasks){ const t=j.tasks.filter(x=>!x.done&&x.t===task).sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')))[0];
-    if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); spawnRepeat(j,t); ptOfferReady(t.cm); } oRecompute(j); }
+    if(t){ t.done=true; t.st='Done'; t.cl=localISO(Date.now()); spawnRepeat(j,t); ptOfferReady(t.cm); stOfferClose(t.cm); } oRecompute(j); }
   oApply();   // instant: task drops out of open list now, not in 15 min
   fioOfferResolve(task);   // 🔧 #NNN fleet-linked task? offer to resolve the Fleetio issue too
 }
@@ -14547,7 +14553,7 @@ function mwSetFollow(name, arr){ try{ localStorage.setItem(_mwFollowKey(name), J
 function mwToggleFollow(proj){ const who=myWorkWho(); if(!who||!proj) return; const cur=mwGetFollow(who); const i=cur.indexOf(proj); if(i>=0) cur.splice(i,1); else cur.push(proj); mwSetFollow(who,cur); try{ renderMyWork(); }catch(e){} }
 function mwPickFollow(sel){ const v=sel&&sel.value; if(v) mwToggleFollow(v); if(sel) sel.value=''; }
 // Clean a task's comments for display: drop the machine tags ([repeat:…], [pt:…], [sales]…, [subjob], [mtg]).
-function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|sales|mtg|subjob|sub|by|due0|files|pfiles)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
+function _mwCleanCm(cm){ let s=String(cm||''); s=s.replace(/\[(?:repeat|pt|st|sales|mtg|subjob|sub|by|due0|files|pfiles)[^\]]*\]/gi,'').replace(/\[sales\]\s*\{[\s\S]*$/i,'').trim(); return s; }
 function myWorkFor(name){
   const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
   const mn=String(name||'').replace(/\s*\([^)]*\)\s*$/,'').trim()||String(name||'');   // strip a trailing label like "(Beyer)" so "Electricians (Beyer)" matches the board's "Electricians" tasks
@@ -18469,16 +18475,23 @@ function _projTasksForJob(j){
   if(window._PJBYROW===undefined) _pjRebuild();      // first paint before renderAll's pass
   return (window._PJBYROW||{})[String(j.row)]||[];
 }
-// ---- ⚒ Break a project-schedule task into real shop tasks (rev 25.0) ----
+// ---- ⚒ Break a project-schedule task (or a plain shop task) into several closable tasks (rev 25.0, generalized rev 36.86) ----
 // Generic schedule lines ("Fabrication and Installation in Shop") become several concrete,
 // closable SHOP tasks on a trailer; the schedule line is the parent. Closing the last child
 // offers the design-board sign-off: 🟡 Pending Verification -> PM verifies on the Projects tab.
+// Rev 36.86 (Rich: "add the ability to create multiple tasks from one task ... if tied to a
+// project we would need to make sure all synced") generalizes the SAME modal/submit to two more
+// modes via _PTB.kind: 'shop' (split an EXISTING plain shop task -- it stays open and auto-closes
+// once every spawned child closes, chaining into ptOfferReady if IT was itself project-tagged) and
+// null (a standalone bulk-add with no parent at all, no tag).
 let _PTB=null;
+function _ptbSetText(title, info){ const ti=document.getElementById('ptbTitle'), inf=document.getElementById('ptbInfo'); if(ti) ti.textContent=title; if(inf) inf.innerHTML=info; }
 function ptbOpen(proj, handle){
   if(!ensureAuth('break a project task into shop tasks', ()=>ptbOpen(proj,handle))) return;
   const p=oProj(proj), t=p&&projTaskByAnyId(p,handle);
   if(!t){ alert("Couldn't find that schedule task — try reloading."); return; }
-  _PTB={proj:proj, handle:handle};
+  _PTB={kind:'proj', proj:proj, handle:handle};
+  _ptbSetText('⚒ Break into shop tasks', 'The tasks land on that trailer’s card + the crew’s column, tagged to this schedule line. The schedule line flips to <b>In Progress</b> — and when the <b>last</b> shop task is closed, the board offers to flag it <b>🟡 ready for the PM to verify</b> (same sign-off loop as the design board; the PM closes it from the Projects tab).');
   document.getElementById('ptbSub').innerHTML='<b>'+esc(t.t||'')+'</b> — '+esc(proj)+((t.startISO||t.finISO)?(' · ▶ '+fmtMD(t.startISO||t.finISO)+((t.finISO&&t.finISO!==t.startISO)?(' → '+fmtMD(t.finISO)):'')):'');
   const D=window.MRA_DATA||{}; const live=(D.jobs||[]).filter(j=>j.category!=='leave'&&(j.status||'').toLowerCase()!=='shipped'&&j.project!==GENERAL_PROJ);
   const _mj=_projMainJob(proj); const best=_mj?String(_mj.row):'';
@@ -18493,8 +18506,46 @@ function ptbOpen(proj, handle){
   document.getElementById('ptbModal').classList.add('show');
   document.getElementById('ptbTasks').focus();
 }
+// Split an EXISTING plain shop task into several — reachable from the ✎ Edit task modal's ⚒ button.
+function ptbOpenShop(proj, raw){
+  if(!ensureAuth('split a task into multiple', ()=>ptbOpenShop(proj,raw))) return;
+  const j=oJob(proj), t=j&&(j.tasks||[]).find(x=>!x.done&&x.t===raw);
+  if(!t){ alert("Couldn't find that task — try reloading."); return; }
+  _PTB={kind:'shop', proj:proj, raw:raw};
+  _ptbSetText('⚒ Split into multiple tasks', 'The new tasks land on the trailer’s card + the crew’s column, tagged back to this task. <b>This task stays open</b> — once every one of the new tasks is closed, it closes itself automatically.');
+  document.getElementById('ptbSub').innerHTML='<b>'+esc(t.t||'')+'</b> — '+esc(proj);
+  const D=window.MRA_DATA||{}; const live=(D.jobs||[]).filter(x=>x.category!=='leave'&&(x.status||'').toLowerCase()!=='shipped'&&x.project!==GENERAL_PROJ);
+  document.getElementById('ptbJob').innerHTML=live.map(x=>`<option value="${escA(String(x.row))}"${x.project===proj?' selected':''}>${esc(x.project)}${x.jobNum?(' · '+esc(x.jobNum)):''}${x.bay?(' — '+esc(x.bay)):''}</option>`).join('')+`<option value="__general__">🛠 General (no trailer)</option>`;
+  document.getElementById('ptbTasks').value='';
+  document.getElementById('ptbWho').value=t.who||'';
+  document.getElementById('ptbDue').value=t.due?String(t.due).slice(0,10):'';
+  document.getElementById('ptbMsg').textContent='';
+  const b=document.getElementById('ptbGo'); b.disabled=false; b.textContent='➕ Create tasks';
+  try{ if(typeof fillAsgNames==='function') fillAsgNames(); }catch(e){}
+  closeEditTask();
+  document.getElementById('ptbModal').classList.add('show');
+  document.getElementById('ptbTasks').focus();
+}
+// Standalone bulk-add — no parent task, just several new tasks at once. Reachable from ✎ Edit job's 📋 Add multiple.
+function ptbOpenNew(prefillProj){
+  if(!ensureAuth('add several tasks at once', ()=>ptbOpenNew(prefillProj))) return;
+  _PTB={kind:null, proj:prefillProj||''};
+  _ptbSetText('➕ Add multiple tasks', 'Each line becomes its own closable task on the job you pick.');
+  document.getElementById('ptbSub').innerHTML='';
+  const D=window.MRA_DATA||{}; const live=(D.jobs||[]).filter(x=>x.category!=='leave'&&(x.status||'').toLowerCase()!=='shipped'&&x.project!==GENERAL_PROJ);
+  document.getElementById('ptbJob').innerHTML=live.map(x=>`<option value="${escA(String(x.row))}"${x.project===prefillProj?' selected':''}>${esc(x.project)}${x.jobNum?(' · '+esc(x.jobNum)):''}${x.bay?(' — '+esc(x.bay)):''}</option>`).join('')+`<option value="__general__"${prefillProj?'':' selected'}>🛠 General (no trailer)</option>`;
+  document.getElementById('ptbTasks').value='';
+  document.getElementById('ptbWho').value='';
+  document.getElementById('ptbDue').value='';
+  document.getElementById('ptbMsg').textContent='';
+  const b=document.getElementById('ptbGo'); b.disabled=false; b.textContent='➕ Create tasks';
+  try{ if(typeof fillAsgNames==='function') fillAsgNames(); }catch(e){}
+  document.getElementById('ptbModal').classList.add('show');
+  document.getElementById('ptbTasks').focus();
+}
 function ptbClose(e){ if(!e || e.target.id==='ptbModal' || (e.target.classList&&e.target.classList.contains('modal-close'))) document.getElementById('ptbModal').classList.remove('show'); }
 function _ptTag(proj, handle){ return '[pt:'+String(proj).replace(/[\[\]|]/g,' ').trim()+'|'+String(handle)+']'; }
+function _stTag(proj, raw){ return '[st:'+String(proj).replace(/[\[\]|]/g,' ').trim()+'|'+String(raw).replace(/[\[\]|]/g,' ').trim()+']'; }
 function ptbSubmit(){
   if(!_PTB) return;
   const lines=document.getElementById('ptbTasks').value.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -18505,23 +18556,32 @@ function ptbSubmit(){
   const proj=jsel?jsel.project:GENERAL_PROJ, jobNum=jsel?(jsel.jobNum||''):'', bay=jsel?(jsel.bay||''):'General';
   const who=document.getElementById('ptbWho').value.trim();
   const due=document.getElementById('ptbDue').value||'';
-  const tag=_ptTag(_PTB.proj,_PTB.handle);
+  const tag = _PTB.kind==='proj' ? _ptTag(_PTB.proj,_PTB.handle)
+            : _PTB.kind==='shop' ? _stTag(_PTB.proj,_PTB.raw)
+            : '';
   const btn=document.getElementById('ptbGo'); btn.disabled=true; btn.textContent='Adding…';
   let i=0;
   const fire=()=>{
     if(i>=lines.length){
-      try{ const p=oProj(_PTB.proj), t=p&&projTaskByAnyId(p,_PTB.handle);
-        if(t && !projIsDone(t) && !projIsPendingVerify(t) && !/in progress/i.test(t.st||'')){
-          shopWrite({ action:'editProjectTask', project:_PTB.proj, pin:CLOSE_PIN, user:CURRENT_USER,
-            id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
-            assigned:t.who||'', status:'In Progress', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
-            milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
-            budget:(t.bud!=null?t.bud:''), comments:t.cm||'' });
-          t.st='In Progress'; oRecomputeProject(p); }
-      }catch(e){}
+      if(_PTB.kind==='proj'){
+        try{ const p=oProj(_PTB.proj), t=p&&projTaskByAnyId(p,_PTB.handle);
+          if(t && !projIsDone(t) && !projIsPendingVerify(t) && !/in progress/i.test(t.st||'')){
+            shopWrite({ action:'editProjectTask', project:_PTB.proj, pin:CLOSE_PIN, user:CURRENT_USER,
+              id:t.id, _id:(t._id!=null?t._id:undefined), taskOld:t.t, task:t.t, phase:t.phase||'', type:t.type||'',
+              assigned:t.who||'', status:'In Progress', start:t.startISO||'', finish:t.finISO||'', pred:t.pred||'',
+              milestone:t.ml||'', parentId:t.parent||'', estDays:(t.eD!=null?t.eD:''), estHours:(t.eH!=null?t.eH:''),
+              budget:(t.bud!=null?t.bud:''), comments:t.cm||'' });
+            t.st='In Progress'; oRecomputeProject(p); }
+        }catch(e){}
+      }
       document.getElementById('ptbModal').classList.remove('show');
       oApply();
-      alert('✓ Created '+lines.length+' shop task'+(lines.length>1?'s':'')+' on '+proj+'.\n\nThe schedule line is now In Progress. When the LAST of these is closed, the board offers to flag it 🟡 ready for the PM to verify.');
+      const doneMsg = _PTB.kind==='proj'
+        ? ('✓ Created '+lines.length+' shop task'+(lines.length>1?'s':'')+' on '+proj+'.\n\nThe schedule line is now In Progress. When the LAST of these is closed, the board offers to flag it 🟡 ready for the PM to verify.')
+        : _PTB.kind==='shop'
+        ? ('✓ Created '+lines.length+' task'+(lines.length>1?'s':'')+' on '+proj+'.\n\nThe original task stays open — it closes itself automatically once every one of these is closed.')
+        : ('✓ Created '+lines.length+' task'+(lines.length>1?'s':'')+' on '+proj+'.');
+      alert(doneMsg);
       return; }
     const task=lines[i++];
     shopWrite({ action:'addTask', project:proj, jobNum:jobNum, bay:bay, task:task, assigned:who,
@@ -18533,6 +18593,28 @@ function ptbSubmit(){
     setTimeout(fire, 420);
   };
   fire();
+}
+// Closing the LAST open shop task tagged [st:job|taskText] -> auto-close the shop-task parent too
+// (mirrors ptOfferReady below, one level down). Chains upward: if the parent itself carried a
+// [pt:] tag (it was a spawned project-line child), closing it here re-fires ptOfferReady on IT.
+function stOfferClose(cm){
+  try{ const m=String(cm||'').match(/\[st:([^|\]]+)\|([^\]]+)\]/); if(!m) return;
+    const proj=m[1].trim(), raw=m[2].trim(); const D=window.MRA_DATA||{};
+    const tag='[st:'+proj+'|'+raw+']';
+    const left=(D.jobs||[]).reduce((n,j)=>n+((j.tasks||[]).filter(t=>!t.done&&String(t.cm||'').indexOf(tag)>=0).length),0);
+    if(left>0) return;
+    setTimeout(()=>{ try{
+      const j=oJob(proj); const pt=j&&(j.tasks||[]).find(t=>!t.done && t.t===raw);
+      if(!pt) return;
+      const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
+      shopWrite({project:proj, task:raw, closedDate:cd, pin:CLOSE_PIN, user:CURRENT_USER});
+      rememberClosed(proj, raw);
+      pt.done=true; pt.st='Done'; pt.cl=localISO(Date.now());
+      spawnRepeat(j,pt); ptOfferReady(pt.cm);
+      oRecompute(j); oApply();
+      fioOfferResolve(raw);
+    }catch(e){} }, 250);
+  }catch(e){}
 }
 // Closing the LAST open shop task tagged to a schedule line -> offer the design-board sign-off.
 function ptOfferReady(cm){
