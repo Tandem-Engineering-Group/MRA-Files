@@ -458,11 +458,15 @@ function renderTracking(){
     return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint"><button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">✎</button> <button class="rowdel" data-del="'+e.id+'" title="Delete">×</button></td></tr>';
   }).join(''):'<tr><td colspan="6" class="muted" style="padding:14px">No time entries yet.</td></tr>';
 }
-// ✅ 2026-07-30: deletes now hit "MRA Time Write" for real (a deleteTime branch mirroring editTime —
-// Get items by EntryID -> Delete item), same as the edit fix, so a manager can remove a bad row here
-// instead of going into the SharePoint list directly.
+// ⚠️ 2026-08-04: this comment previously (wrongly) claimed the deleteTime branch was live in "MRA Time
+// Write" -- verified for real this session (safe throwaway entry: added, confirmed synced, POSTed
+// deleteTime, waited over an hour past the next time.json rebuild) that it is NOT. The POST is accepted
+// (202) but the SharePoint row's Created/Modified never change -- nothing on the flow side handles the
+// deleteTime action yet. Until that branch is actually built (Condition action=='deleteTime' -> Get
+// items filter EntryID eq '<id>' -> Delete item, same shape as editTime), clicking delete only removes
+// the row from this device/view; it WILL reappear on the next shared refresh.
 function delEntry(id){
-  if(!confirm('Delete this time entry? This removes it from SharePoint for good.')) return;
+  if(!confirm('Delete this time entry? Heads up: the SharePoint-side delete isn’t wired up yet, so this only hides it on your device for now -- it will come back on the next shared refresh until that’s fixed.')) return;
   var ref=findEntryRef(id); if(!ref) return;
   if(ref.arr==='local'){ ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS); }
   else { SHARED=SHARED.filter(function(e){return e.id!==id;}); }
