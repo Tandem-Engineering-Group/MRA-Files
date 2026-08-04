@@ -39,24 +39,15 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
 <body>
 <header>
   <h1>🚚 MRA InfoWheels — 3D Builder</h1>
-  <span class="rev">Rev 2 · placeholder VAN configurator + a real CAD scan (☰ 3D reference) — fully-segmented Inventor exports still to come</span>
+  <span class="rev">Rev 3 · Brandon's real CAD scan (17MB, decimated) — fully-segmented Inventor exports drop in later</span>
 </header>
 <main>
   <div id="view3d"><div id="hint">drag = orbit · wheel/pinch = zoom · right-drag = pan</div></div>
   <aside>
     <h2>View</h2>
     <div class="row">
-      <button data-view="ext">🚚 Exterior</button>
-      <button data-view="int">🛋 Interior</button>
       <button id="spinBtn">↻ Auto-spin</button>
     </div>
-    <h2>3D reference</h2>
-    <div class="row">
-      <button id="scanBtn">🔍 Real 3D scan (beta)</button>
-    </div>
-    <div class="note" id="scanNote" style="display:none;margin-top:8px">Brandon's actual CAD scan, decimated for the
-      web (17MB, down from a 461MB raw export). It's one fused mesh with no separate parts, so accent/floor/wall/
-      cabinet controls below only affect the stylized preview — wrap color still tints the whole scan.</div>
     <h2>Wrap color</h2>
     <div class="row">
       <button class="sw" data-wrap="#e04826" style="background:#e04826" title="MRA Orange"></button>
@@ -67,45 +58,17 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
       <button class="sw" data-wrap="#7c3aed" style="background:#7c3aed" title="Purple"></button>
       <input type="color" id="wrapCustom" value="#e04826" title="Custom color — client brand match">
     </div>
-    <div id="procOnly">
-    <h2>Accent / trim</h2>
-    <div class="row">
-      <button class="sw" data-accent="#23272e" style="background:#23272e" title="Graphite"></button>
-      <button class="sw" data-accent="#f4f5f6" style="background:#f4f5f6" title="White"></button>
-      <button class="sw" data-accent="#c9ced4" style="background:#c9ced4" title="Aluminum"></button>
-      <button class="sw" data-accent="#e04826" style="background:#e04826" title="Orange"></button>
-    </div>
-    <h2>Floor finish</h2>
-    <div class="row">
-      <button data-floor="oak">Light oak</button>
-      <button data-floor="vinyl">Grey vinyl</button>
-      <button data-floor="rubber">Black rubber</button>
-    </div>
-    <h2>Wall finish</h2>
-    <div class="row">
-      <button class="sw" data-wall="#f2f3f5" style="background:#f2f3f5" title="White"></button>
-      <button class="sw" data-wall="#d7dbe0" style="background:#d7dbe0" title="Light grey"></button>
-      <button class="sw" data-wall="#5b6470" style="background:#5b6470" title="Slate"></button>
-      <button class="sw" data-wall="#8a6b4d" style="background:#8a6b4d" title="Walnut"></button>
-    </div>
-    <h2>Cabinets — curb side (4 slots)</h2>
-    <div class="slotgrid" id="slotsL"></div>
-    <h2>Cabinets — street side (4 slots)</h2>
-    <div class="slotgrid" id="slotsR"></div>
-    </div>
     <h2>Share</h2>
     <div class="act">
       <button id="shotBtn">📸 Screenshot</button>
       <button id="linkBtn">🔗 Copy config link</button>
       <button id="resetBtn">↺ Reset</button>
     </div>
-    <div class="note"><b>Rev 2</b>: the van is a to-proportion placeholder (ProMaster-class high-roof, like the IW fleet) so the configurator
-    (colors · floors · cabinet slots · share links) can be exercised now. Tap <b>🔍 Real 3D scan</b> above to switch
-    to Brandon's actual CAD scan — it's one fused mesh (no separate shell/cabinets/floor yet), so it's a look-and-spin
-    reference rather than a customizable one. When properly <b>segmented IW 2.0 Inventor exports</b> (shell, high/low
-    cabinets, benches, wall panels as separate named parts) come from the design team, they drop straight into these
-    same slots — the controls don't change. Tap <b>Interior</b> to open the box; slot buttons cycle empty → low →
-    high → bench.</div>
+    <div class="note"><b>Rev 3</b>: this is Brandon's actual CAD scan (decimated for the web — 150k triangles, 17MB,
+    down from a 461MB raw export), not a placeholder. It's one fused mesh with no separate shell/cabinet/floor parts
+    yet, so it's a look-and-spin reference — wrap color tints the whole scan. Per-part customization (floors, wall
+    finishes, cabinet layouts) comes back once the design team exports <b>segmented IW 2.0 Inventor parts</b> instead
+    of one fused mesh.</div>
   </aside>
 </main>
 <script>/**
@@ -1595,8 +1558,8 @@ function ensureScanLoaded(cb){
   if(scanLoaded){ cb&&cb(); return; }
   if(scanLoading) return;
   scanLoading=true;
-  const btn=document.getElementById('scanBtn'), origTxt=btn.textContent;
-  btn.textContent='⏳ Loading scan…'; btn.disabled=true;
+  const hint=document.getElementById('hint'), origHint=hint.textContent;
+  hint.textContent='⏳ Loading the real 3D scan… (17MB, one-time)';
   fetch('/builder/infowheels.obj').then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); }).then(text=>{
     const vp=[], vn=[], positions=[], normals=[];
     const lines=text.split('\n');
@@ -1627,13 +1590,11 @@ function ensureScanLoaded(cb){
     const mat=new THREE.MeshStandardMaterial({color:state.wrap, roughness:.45, metalness:.1});
     scanMesh=new THREE.Mesh(geo,mat); scanMesh.castShadow=true; scanMesh.receiveShadow=true;
     scanG.add(scanMesh);
-    scanLoaded=true; scanLoading=false; btn.disabled=false; btn.textContent=origTxt;
+    scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
-    scanLoading=false; btn.disabled=false; btn.textContent=origTxt;
+    scanLoading=false; hint.textContent='⚠ Could not load the 3D scan — check your connection and reload.';
     console.error('scan load failed',err);
-    alert('Could not load the 3D scan — check your connection and try again.');
-    state.scan=false; applyScan();
   });
 }
 function frameScan(){
@@ -1648,37 +1609,13 @@ function frameScan(){
   camera.position.set(c.x+md*.9, c.y+md*.5, c.z+md*.9); controls.target.copy(c);
   camera.near=md/1000; camera.far=md*10; camera.updateProjectionMatrix();
 }
-function applyScan(){
-  const btn=document.getElementById('scanBtn');
-  btn.classList.toggle('on',state.scan); btn.classList.toggle('scan',state.scan);
-  document.getElementById('scanNote').style.display=state.scan?'block':'none';
-  document.getElementById('procOnly').classList.toggle('off',state.scan);
-  const intBtn=document.querySelector('[data-view="int"]'); if(intBtn) intBtn.disabled=state.scan;
-  extG.visible=!state.scan; intG.visible=!state.scan;
-  if(state.scan){ ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); }); }
-  else { scanG.visible=false; applyView(); }
-}
 function applyAccent(){ M.accent.color.set(state.accent); document.querySelectorAll('[data-accent]').forEach(b=>b.classList.toggle('on',b.dataset.accent===state.accent)); }
 function applyFloor(){ const f=FLOORS[state.floor]||FLOORS.oak; M.floor.map=f.map; M.floor.roughness=f.rough; M.floor.needsUpdate=true;
   document.querySelectorAll('[data-floor]').forEach(b=>b.classList.toggle('on',b.dataset.floor===state.floor)); }
 function applyWall(){ M.wall.color.set(state.wall); document.querySelectorAll('[data-wall]').forEach(b=>b.classList.toggle('on',b.dataset.wall===state.wall)); }
 
-document.getElementById('scanBtn').onclick=()=>{ state.scan=!state.scan; applyScan(); saveHash(); };
-document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{ if(state.scan) return; state.view=b.dataset.view; applyView(); saveHash(); });
 document.querySelectorAll('[data-wrap]').forEach(b=>b.onclick=()=>{ state.wrap=b.dataset.wrap; applyWrap(); saveHash(); });
 document.getElementById('wrapCustom').oninput=e=>{ state.wrap=e.target.value; applyWrap(); saveHash(); };
-document.querySelectorAll('[data-accent]').forEach(b=>b.onclick=()=>{ state.accent=b.dataset.accent; applyAccent(); saveHash(); });
-document.querySelectorAll('[data-floor]').forEach(b=>b.onclick=()=>{ state.floor=b.dataset.floor; applyFloor(); saveHash(); });
-document.querySelectorAll('[data-wall]').forEach(b=>b.onclick=()=>{ state.wall=b.dataset.wall; applyWall(); saveHash(); });
-const KINDS=['empty','low','high','bench'], KLABEL={empty:'—',low:'Low cab',high:'High cab',bench:'Bench'};
-function slotBtns(){ ['L','R'].forEach(side=>{
-  const holder=document.getElementById('slots'+side); holder.innerHTML='';
-  state.slots[side].forEach((kind,i)=>{ const b=document.createElement('button');
-    b.className='slotbtn k-'+kind; b.textContent=(i+1)+' · '+KLABEL[kind];
-    b.title='Slot '+(i+1)+' ('+(side==='L'?'curb':'street')+' side) — tap to cycle: empty → low cabinet → high cabinet → bench';
-    b.onclick=()=>{ state.slots[side][i]=KINDS[(KINDS.indexOf(kind)+1)%KINDS.length]; rebuildSlots(); slotBtns(); saveHash(); };
-    holder.appendChild(b); }); }); }
-slotBtns();
 document.getElementById('shotBtn').onclick=()=>{ renderer.render(scene,camera);
   const a=document.createElement('a'); a.download='infowheels-config.png'; a.href=renderer.domElement.toDataURL('image/png'); a.click(); };
 document.getElementById('linkBtn').onclick=()=>{ saveHash();
@@ -1686,7 +1623,12 @@ document.getElementById('linkBtn').onclick=()=>{ saveHash();
     b.textContent='✓ Copied'; setTimeout(()=>b.textContent='🔗 Copy config link',1400); }); };
 document.getElementById('resetBtn').onclick=()=>{ location.hash=''; location.reload(); };
 
-applyView(); applyWrap(); applyAccent(); applyFloor(); applyWall(); applyScan();
+// The real 3D scan is the only view now (Rich: "make the scan default, no other choice needed") —
+// the procedural placeholder van (extG/intG) stays built but hidden; wrap color still applies to
+// the scan mesh once it loads.
+applyWrap();
+extG.visible=false; intG.visible=false;
+ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); });
 
 function size(){ const el=document.getElementById('view3d');
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect=el.clientWidth/el.clientHeight; camera.updateProjectionMatrix(); }
