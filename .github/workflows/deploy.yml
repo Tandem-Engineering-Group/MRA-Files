@@ -168,6 +168,14 @@ jobs:
         if: ${{ inputs.mode == 'objsas' }}
         run: |
             az storage container create --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --name pipeline --only-show-errors >/dev/null
+            # Allow the live site origin to PUT/GET directly against blob storage, so the
+            # browser-based upload3d.html page can stream large files straight into the
+            # 'pipeline' container without a server in between.
+            az storage cors add --services b \
+              --methods GET HEAD PUT \
+              --origins 'https://mrashopdash.z13.web.core.windows.net' \
+              --allowed-headers '*' --exposed-headers '*' --max-age 3600 \
+              --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --only-show-errors >/dev/null
             EXPIRY=$(date -u -d "+3 days" '+%Y-%m-%dT%H:%MZ')
             SAS=$(az storage container generate-sas \
               --account-name mrashopdash \
@@ -384,6 +392,20 @@ jobs:
               --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
             az storage blob upload --account-name mrashopdash --container-name '$web' \
               --name 'time.html' --file time/index.html --content-type 'text/html' \
+              --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      # 3D-model staging uploader — a one-off internal tool (self-contained page, chunked PUT
+      # straight to Azure Blob) for moving files too large for chat/email into the private
+      # 'pipeline' container. The page itself carries no secret; the destination + token are
+      # passed via the URL fragment (#...) so they never touch the repo or server logs.
+      - name: Upload upload3d.html
+        if: ${{ hashFiles('upload3d.html') != '' }}
+        run: |
+            az storage blob upload --account-name mrashopdash --container-name '$web' \
+              --name 'upload3d.html' --file upload3d.html --content-type 'text/html' \
               --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
         env:
           AZURE_STORAGE_ACCOUNT: mrashopdash

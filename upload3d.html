@@ -1,0 +1,183 @@
+<title>MRA File Staging Upload</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:#0f1420;color:#e8ecf4;font:15px/1.5 -apple-system,Segoe UI,Arial,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:560px;background:#171d2c;border:1px solid #2a3348;border-radius:14px;padding:28px}
+  h1{font-size:19px;margin:0 0 6px;color:#fff}
+  .sub{color:#93a0b8;font-size:13px;margin:0 0 20px}
+  .drop{border:2px dashed #3a4660;border-radius:12px;padding:36px 16px;text-align:center;color:#93a0b8;cursor:pointer;transition:.15s}
+  .drop.over{border-color:#e04826;background:#1c2436;color:#fff}
+  .drop input{display:none}
+  .file{margin-top:16px;padding:12px 14px;background:#1c2436;border-radius:10px;font-size:13.5px;display:none}
+  .file b{color:#fff}
+  .go{margin-top:16px;width:100%;padding:12px;border:0;border-radius:10px;background:#e04826;color:#fff;font-weight:700;font-size:14.5px;cursor:pointer;display:none}
+  .go:disabled{opacity:.5;cursor:default}
+  .bar{margin-top:16px;height:10px;border-radius:6px;background:#1c2436;overflow:hidden;display:none}
+  .bar>i{display:block;height:100%;width:0%;background:#e04826;transition:width .2s}
+  .status{margin-top:12px;font-size:13.5px;color:#93a0b8;white-space:pre-wrap}
+  .status.err{color:#f87171}
+  .status.ok{color:#4ade80}
+  .err-box{margin-top:16px;padding:14px;background:#2a1616;border:1px solid #5c2626;border-radius:10px;color:#fca5a5;font-size:13.5px;display:none}
+</style>
+
+<div class="card">
+  <h1>📦 MRA File Staging Upload</h1>
+  <p class="sub" id="subtitle">One-time link — drop the file below to upload it directly.</p>
+
+  <div id="missing" class="err-box">This link is missing its upload destination. Get a fresh link before trying again.</div>
+
+  <div id="dropzone" class="drop">
+    <div id="dropText">Drag a file here, or click to choose one</div>
+    <input type="file" id="fileInput">
+  </div>
+
+  <div class="file" id="fileInfo"></div>
+  <button class="go" id="goBtn">Upload now</button>
+  <div class="bar" id="bar"><i id="barFill"></i></div>
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+(function(){
+  var CHUNK = 32 * 1024 * 1024; // 32MB per block — safely within Azure block-blob limits
+
+  function parseHash(){
+    var h = location.hash.replace(/^#/, '');
+    var out = {};
+    h.split('&').forEach(function(kv){
+      if(!kv) return;
+      var i = kv.indexOf('=');
+      if(i < 0) return;
+      out[decodeURIComponent(kv.slice(0,i))] = decodeURIComponent(kv.slice(i+1));
+    });
+    return out;
+  }
+
+  var params = parseHash();
+  var containerUrl = params.c || ''; // full container SAS URL: https://acct.blob.core.windows.net/container?sv=...
+  var defaultBlobName = params.b || '';
+
+  var dropzone = document.getElementById('dropzone');
+  var fileInput = document.getElementById('fileInput');
+  var fileInfo = document.getElementById('fileInfo');
+  var goBtn = document.getElementById('goBtn');
+  var bar = document.getElementById('bar');
+  var barFill = document.getElementById('barFill');
+  var statusEl = document.getElementById('status');
+  var missing = document.getElementById('missing');
+
+  if(!containerUrl){
+    missing.style.display = 'block';
+    dropzone.style.display = 'none';
+    return;
+  }
+
+  var chosenFile = null;
+
+  function humanSize(n){
+    if(n > 1024*1024*1024) return (n/1024/1024/1024).toFixed(2)+' GB';
+    if(n > 1024*1024) return (n/1024/1024).toFixed(1)+' MB';
+    return Math.ceil(n/1024)+' KB';
+  }
+
+  function pickFile(f){
+    if(!f) return;
+    chosenFile = f;
+    fileInfo.style.display = 'block';
+    fileInfo.innerHTML = 'File: <b>'+f.name+'</b><br>Size: <b>'+humanSize(f.size)+'</b>';
+    goBtn.style.display = 'block';
+    goBtn.disabled = false;
+    statusEl.textContent = '';
+    statusEl.className = 'status';
+  }
+
+  dropzone.addEventListener('click', function(){ fileInput.click(); });
+  fileInput.addEventListener('change', function(e){ pickFile(e.target.files[0]); });
+  ['dragenter','dragover'].forEach(function(ev){
+    dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.add('over'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.remove('over'); });
+  });
+  dropzone.addEventListener('drop', function(e){
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    pickFile(f);
+  });
+
+  function blockIdFor(i){
+    var s = 'block-' + String(i).padStart(10, '0');
+    return btoa(s);
+  }
+
+  function urlWith(blobName, extraQS){
+    var qIdx = containerUrl.indexOf('?');
+    var base = qIdx >= 0 ? containerUrl.slice(0, qIdx) : containerUrl;
+    var qs = qIdx >= 0 ? containerUrl.slice(qIdx+1) : '';
+    return base + '/' + blobName.split('/').map(encodeURIComponent).join('/') + '?' + qs + '&' + extraQS;
+  }
+
+  function putWithRetry(url, body, headers, attempts){
+    attempts = attempts || 3;
+    var lastErr;
+    function attempt(n){
+      return fetch(url, { method: 'PUT', headers: headers, body: body }).then(function(r){
+        if(!r.ok) return r.text().then(function(t){ throw new Error('HTTP '+r.status+': '+t.slice(0,300)); });
+        return r;
+      }).catch(function(e){
+        lastErr = e;
+        if(n >= attempts) throw lastErr;
+        return new Promise(function(res){ setTimeout(res, 1000*n); }).then(function(){ return attempt(n+1); });
+      });
+    }
+    return attempt(1);
+  }
+
+  async function upload(){
+    goBtn.disabled = true;
+    bar.style.display = 'block';
+    statusEl.className = 'status';
+    var blobName = defaultBlobName || chosenFile.name;
+    var total = chosenFile.size;
+    var chunks = Math.max(1, Math.ceil(total / CHUNK));
+    var blockIds = [];
+
+    try {
+      for (var i = 0; i < chunks; i++) {
+        var start = i * CHUNK;
+        var end = Math.min(start + CHUNK, total);
+        var slice = chosenFile.slice(start, end);
+        var blockId = blockIdFor(i);
+        blockIds.push(blockId);
+        statusEl.textContent = 'Uploading part ' + (i+1) + ' of ' + chunks + '  (' + humanSize(end) + ' / ' + humanSize(total) + ')';
+        await putWithRetry(
+          urlWith(blobName, 'comp=block&blockid=' + encodeURIComponent(blockId)),
+          slice,
+          { 'Content-Type': 'application/octet-stream' }
+        );
+        barFill.style.width = Math.round((end/total)*95) + '%';
+      }
+
+      statusEl.textContent = 'Finalizing...';
+      var xml = '<?xml version="1.0" encoding="utf-8"?><BlockList>' +
+        blockIds.map(function(id){ return '<Latest>'+id+'</Latest>'; }).join('') +
+        '</BlockList>';
+      await putWithRetry(
+        urlWith(blobName, 'comp=blocklist'),
+        xml,
+        { 'Content-Type': 'application/xml' }
+      );
+
+      barFill.style.width = '100%';
+      statusEl.className = 'status ok';
+      statusEl.textContent = '✅ Upload complete — ' + humanSize(total) + ' sent as "' + blobName + '". You can close this tab.';
+    } catch (err) {
+      statusEl.className = 'status err';
+      statusEl.textContent = '❌ Upload failed: ' + err.message + '\n\nYou can try again — click "Upload now" once more.';
+      goBtn.disabled = false;
+    }
+  }
+
+  goBtn.addEventListener('click', upload);
+})();
+</script>
