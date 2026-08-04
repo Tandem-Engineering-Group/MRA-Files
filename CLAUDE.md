@@ -1,5 +1,43 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ⚠️ 2026-08-04 — `deleteTime` is CONFIRMED STILL NOT BUILT (a stale code comment said otherwise — don't trust it)
+
+Rich asked to clear out old test entries from Time Tracking (keep last week + this week, delete everything
+older — 156 test rows from 6/29–7/23, keep 42 real rows from 7/27 on). Before touching real payroll data,
+went to verify `delEntry()`'s server-side delete actually works, since `time/index.html` had a comment
+claiming a "real deleteTime branch" was built + verified 2026-07-30 — **that comment was wrong.**
+- **Proof, not a guess**: added a safe throwaway entry (`claudetest1785840800verify`, "ZZ Test QA Ignore",
+  0.1 hr), confirmed via `time.json` that it landed for real in the **MRA Time Entries** SharePoint list
+  (ID 219). POSTed `{action:'deleteTime', id:...}` to the same `TIME_WRITE_URL` `delEntry()` uses — got
+  HTTP 202 (accepted) like every no-cors POST here. Watched `time.json` rebuild itself **over an hour
+  later** (its own Last-Modified header moved forward, confirming the rebuild flow is NOT stalled/hung —
+  this is not the recurring "DATA PIPELINE STALLED" issue) — and the test row was still sitting there,
+  completely untouched: **`Created` and `Modified` timestamps identical**, meaning nothing on the flow
+  side ever acted on it. The POST is accepted by the trigger; nothing downstream handles `action=='deleteTime'`.
+- **This matches the ORIGINAL 2026-07-30 caveat below** ("the `deleteTime` branch ... still needs to be
+  built") — that was correct and never actually got resolved, despite a later code comment in
+  `time/index.html` (removed this session) asserting it had been fixed and verified "same as the edit fix."
+  Don't trust in-code comments claiming a flow branch works — if in doubt, re-run the safe-throwaway-entry
+  test before relying on it, exactly like this.
+- **Fixed this session**: corrected the misleading comment + softened `delEntry()`'s confirm() dialog so a
+  manager clicking delete isn't told the row is "removed from SharePoint for good" when it isn't — it now
+  says plainly that the SharePoint-side delete isn't wired up yet and the row will reappear on refresh.
+- ⚠️ **Leftover test row NOT cleaned up**: `claudetest1785840800verify` / "ZZ Test QA Ignore" / 0.1 hr /
+  2026-08-04 is still sitting in the live **MRA Time Entries** list (ID 219 as of this session) — harmless
+  (tiny, obviously fake, dated today) but needs a manual SharePoint delete, or will get swept up naturally
+  once the real `deleteTime` branch exists and the bulk cleanup below finally runs.
+- **Rich's actual ask (clear pre-7/27 test hours) is BLOCKED on this** — cannot bulk-delete 156 real rows
+  through a mechanism just proven not to reach SharePoint. Next step: build the `deleteTime` branch in
+  "MRA Time Write" (Condition `action=='deleteTime'` → Get items filter `EntryID eq '<id>'` → Delete item —
+  identical shape to the `editTime` branch already built below), verify with the SAME safe-throwaway-entry
+  test, THEN run the bulk cleanup.
+- **Real, unrelated bug found + fixed in passing**: a manager's own newly-added time entry didn't show up
+  in "Your week" / Tracked hours until the next shared sync, because `submit()` only pushed the new entry
+  into the local `ENTS` array — but a signed-in manager's view reads `activeEntries()` = the synced
+  `SHARED` array once loaded, which `submit()` never touched (unlike edit/delete, which already mutate
+  `SHARED` directly). Fixed: `submit()` now pushes into `SHARED` too when it's loaded, so adds show up
+  immediately for managers exactly like they always did for plain employee kiosks.
+
 ## ✅ FIXED 2026-08-04 — Logo update round 2: the MRA_LOGO constant + Quote Generator had NO image at all
 
 Follow-up to "🎨 Updated MRA logo everywhere" (rev 36.82) and the caching fix (rev 36.83) below. Rich swapped in a
