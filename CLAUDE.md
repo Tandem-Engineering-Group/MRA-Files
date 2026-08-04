@@ -1,5 +1,46 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-08-04 — Logo update round 2: the MRA_LOGO constant + Quote Generator had NO image at all
+
+Follow-up to "🎨 Updated MRA logo everywhere" (rev 36.82) and the caching fix (rev 36.83) below. Rich swapped in a
+new logo (adds the "mobile.experiential" wordmark, transparent background) and asked for it "everywhere — all
+reports, quotes, prints, etc." Round 1 swapped `logo.png` + `catalogue/logo.png`. Round 2 (36.83) fixed a real bug —
+the `logo.png` deploy step had no cache-control header, so browsers held the old cached copy forever — but even
+after that was confirmed fixed via curl (correct header, correct fresh bytes), **Rich sent screenshots proving a
+real Work Order print and a real Quote Generator print still showed the wrong/no logo.** Lesson: byte-level/header
+checks are not the same as tracing every render path — don't repeat that gap.
+- **Root cause found**: there is a SEPARATE, standalone embedded copy of the logo — `const MRA_LOGO =
+  "data:image/png;base64,…"` (search that exact string to find it) — completely independent of the `logo.png`
+  file. It's the ONLY logo source for: `buildWorkOrders` (Maintenance Work Order print), the Job Punch List print,
+  and all 3 "Hard-Date Schedule" customer-PDF print layouts. Swapping `logo.png` does nothing for any of these —
+  `MRA_LOGO`'s payload has to be edited directly (find the closing `"` after the marker, replace the whole base64
+  string with the new file's base64).
+- **The Quote Generator letterhead had NO image at all** — it was 100% CSS-styled text (`<span class="mra">MRA</span>`
+  + the rest of the company name in a big bold font, no `<img>` anywhere). "Update the logo" could never make that
+  surface change because there was nothing to update — it had to be converted to actually render an `<img
+  src="'+MRA_LOGO+'">` first. Fixed (`_qCustomerHtml`, the `head` var) + added `.lh-logo{height:44px;width:auto}` CSS.
+- **Fixed 2026-08-04** (rev 36.85): `MRA_LOGO`'s base64 swapped to the current logo; Quote Generator now renders a
+  real image. **Verified by actually rendering the pages**, not just checking bytes: local headless run against a
+  copy of the LIVE `data.js` — `openQuote()`+`quoteCustomer()` and `printWorkOrders(PRINT_CREWS,{})` (28 real work
+  orders) — screenshotted, confirmed `naturalWidth/naturalHeight` matched the new file (318×360) and the image
+  `complete` (no broken-image icon) on both. Zero page errors. Then deployed live and re-confirmed via curl.
+- ⚠️ **Note for later, not yet acted on**: the new logo's "mobile.experiential" wordmark sits below the orange
+  square in the file, but every surface that shows the logo (dashboard header, all report letterheads, Work Orders,
+  Quote Generator) displays it at a small compact-badge height (34–48px, unchanged from before — that's how big the
+  OLD square-only logo always was there). At that height the wordmark shrinks to a few px and is essentially
+  illegible (confirmed by zooming into a screenshot — it's there, just unreadable). This was never flagged by Rich
+  as a problem; flagging it here in case he wants specific spots enlarged so the wordmark actually reads — don't
+  silently resize things across the app without asking, it touches a lot of layouts at once.
+- **`preview.html` gap found while chasing this**: it's a genuinely stale, unsynced snapshot — **it has no Quote
+  Generator at all** (0 occurrences of `quoteCustomer`/`openQuote`/`_qCustomerHtml`), ~3000 lines behind
+  `MRA_Dashboard.html`. Its `MRA_LOGO` copy was still swapped to the current logo for consistency (rev bump not
+  applicable — preview.html doesn't carry the CHANGELOG rev), but there was no letterhead-image gap to fix there
+  since the feature itself doesn't exist in that file. Don't assume preview.html mirrors MRA_Dashboard.html for any
+  feature added since whenever it was last synced — check before relying on it to represent what's live.
+- **If the logo changes again**: check `logo.png`, `catalogue/logo.png`, catalogue's OWN embedded base64 (separate
+  from the file, inside `catalogue/index.html`), AND `MRA_LOGO` in `MRA_Dashboard.html` — four independent places,
+  not one. Grep for `data:image/png;base64` in each file to find embedded copies before declaring "done."
+
 ## ✅ FIXED 2026-07-30 — Time Tracking: real edit/delete, job-picker double-prefix bug, 0-hr Called In tile
 
 Follow-up to the "duplicated payroll rows" incident below — this is where that got actually fixed, plus two
