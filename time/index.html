@@ -466,10 +466,15 @@ function renderTracking(){
 // items filter EntryID eq '<id>' -> Delete item, same shape as editTime), clicking delete only removes
 // the row from this device/view; it WILL reappear on the next shared refresh.
 function delEntry(id){
-  if(!confirm('Delete this time entry? Heads up: the SharePoint-side delete isn’t wired up yet, so this only hides it on your device for now -- it will come back on the next shared refresh until that’s fixed.')) return;
+  if(!confirm('Delete this time entry? The SharePoint-side delete is wired up now, so this removes it for real.')) return;
   var ref=findEntryRef(id); if(!ref) return;
-  if(ref.arr==='local'){ ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS); }
-  else { SHARED=SHARED.filter(function(e){return e.id!==id;}); }
+  // Fixed 2026-08-04: an entry can exist in BOTH ENTS (local cache) and SHARED (the synced list) with
+  // the same id -- submit() pushes into both now, and a real server sync can too. Only clearing
+  // whichever array findEntryRef happened to check first left a stale duplicate in the other, so
+  // whichever view reads that one (e.g. "Your week" reads SHARED once signed in as a manager) still
+  // showed the deleted row. Clear it from BOTH, always.
+  ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS);
+  if(SHARED) SHARED=SHARED.filter(function(e){return e.id!==id;});
   if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({ action:'deleteTime', id:id })}); }catch(_){} }
   renderTracking(); renderMyDay();
 }
@@ -502,8 +507,10 @@ function saveEditEntry(){
   if(!(hours>0) && fPayType({job:job})==='Work'){ alert('Enter hours (more than 0).'); return; }
   var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
   var updated=Object.assign({}, ref.e, { who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes });
-  if(ref.arr==='local'){ ENTS[ref.idx]=updated; lset(LS.ents,ENTS); }
-  else { SHARED[ref.idx]=updated; }
+  // Fixed 2026-08-04: same dual-array issue as delEntry -- update BOTH copies whenever the id exists
+  // in either, so the edit shows up no matter which array the current view happens to read from.
+  var li=ENTS.findIndex(function(e){return e.id===id;}); if(li>=0){ ENTS[li]=Object.assign({}, ENTS[li], updated); lset(LS.ents,ENTS); }
+  if(SHARED){ var si=SHARED.findIndex(function(e){return e.id===id;}); if(si>=0) SHARED[si]=Object.assign({}, SHARED[si], updated); }
   // ✅ 2026-07-30: "MRA Time Write" now has a real editTime branch (Condition -> Get items by EntryID ->
   // Update item), built + verified with Rich. Sends the correction for real -- matched to the ORIGINAL
   // entry's id (= the EntryID column), never a new one, so it updates that row instead of creating another.
