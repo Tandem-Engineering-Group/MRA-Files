@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = AzCopy token; cleanup = delete temp preview.html blob; listscand = build data.js FROM the Lists (validation only, no publish); listspreview = publish a side-by-side Lists-built board at /preview-lists.html (does NOT touch the live board); listspreview-cleanup = remove that preview'
+        description: 'preview = preview.html only; live = index.html + MRA_Dashboard.html; data = data.js only; sas = AzCopy token; cleanup = delete temp preview.html blob; listscand = build data.js FROM the Lists (validation only, no publish); listspreview = publish a side-by-side Lists-built board at /preview-lists.html (does NOT touch the live board); listspreview-cleanup = remove that preview; objsas = short-lived write token for the private "pipeline" blob container, for staging large files (e.g. 3D model exports) too big to upload through chat'
         type: choice
         options:
           - preview
@@ -25,6 +25,7 @@ on:
           - listspreview-cleanup
           - ganttpreview
           - ganttpreview-cleanup
+          - objsas
         default: preview
 
 jobs:
@@ -157,6 +158,37 @@ jobs:
         with:
           name: azure-target
           path: out/azure-target.txt
+          retention-days: 1
+
+      # objsas: a short-lived read+write token scoped to the private "pipeline" container (NOT the
+      # public $web site), for staging one-off large files — e.g. a 3D model export too big to move
+      # through chat upload. Same idea as the 'sas' mode above, but private container + short expiry
+      # since it grants write access (vs $web's long-lived AzCopy token for the routine deploy path).
+      - name: Generate pipeline-container staging token
+        if: ${{ inputs.mode == 'objsas' }}
+        run: |
+            az storage container create --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --name pipeline --only-show-errors >/dev/null
+            EXPIRY=$(date -u -d "+3 days" '+%Y-%m-%dT%H:%MZ')
+            SAS=$(az storage container generate-sas \
+              --account-name mrashopdash \
+              --account-key "$AZURE_STORAGE_KEY" \
+              --name pipeline \
+              --permissions racwl \
+              --expiry "$EXPIRY" \
+              -o tsv)
+            echo "::add-mask::$SAS"
+            mkdir -p out
+            printf 'https://mrashopdash.blob.core.windows.net/pipeline?%s' "$SAS" > out/pipeline-sas.txt
+            echo "Generated pipeline-sas.txt (token valid until $EXPIRY, container 'pipeline'). Value is masked in logs."
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      - name: Upload pipeline token artifact
+        if: ${{ inputs.mode == 'objsas' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-sas
+          path: out/pipeline-sas.txt
           retention-days: 1
 
       # Always safe: preview.html is a standalone file, separate from the live board.
