@@ -1,5 +1,59 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ SHIPPED 2026-08-04 — Weekly Time Summary rebuilt to Claude Design + real InfoWheels 3D scan wired in (Builder rev 2)
+
+Two separate pieces of work from the same session, both live.
+
+- **Time Tracking finance report → Claude Design "Airy" direction.** Rich sent a full design handoff
+  (spec doc + two HTML directions, Dense/Airy) from a Claude Design session; picked Airy. Rebuilt
+  `buildFinanceReport()` in `time/index.html` to match the design tokens/layout exactly (name-rail
+  employee cards, job-code bars, tabular figures, Called-In exception tinting+badge) while keeping the
+  SAME data-reconciliation logic (job totals, week totals, per-job breakdowns, grand total all still
+  tie out — only the presentation changed). **First pass had a real bug**: kept the OLD alphabetical
+  sort on the job-code-totals section instead of the design's explicit "sorted desc by total" rule —
+  Rich caught it ("didn't follow claude design, font etc") by comparing screenshots; per-row styling was
+  actually pixel-identical to the reference (verified computed colors: exception cell `#FBF1EE` bg /
+  `#C1401F` text, byte-for-byte spec match), the sort order was the real divergence. Fixed + redeployed.
+  Verified headless against real seeded data + synthetic Called-In and multi-week test cases before each ship.
+- **InfoWheels 3D Builder rev 2 — a real CAD scan finally landed.** Brandon exported the actual model
+  (asked for a smaller export after the first 2.6GB attempt was unusable; his "half size" pass was
+  still 461MB — floor for what Rhino's ReduceMesh could do without visibly losing detail). Got it off
+  his machine via a purpose-built transfer path (see below), then **decimated it myself**: `open3d`
+  quadric-edge-collapse in a Python venv, 2.78M → 150,000 triangles, **461MB → 17MB**. Wired it into
+  `builder/index.html` as a **"🔍 Real 3D scan (beta)"** toggle alongside the existing Rev 1 procedural
+  placeholder van (kept, not replaced — see why below). Committed as `builder/infowheels.obj`
+  (17MB in-repo, `no-cache, must-revalidate` on its deploy step — deliberately NOT a long/immutable
+  cache given the exact "new logo not showing" caching bug documented elsewhere in this file).
+  - **Why a toggle, not a replacement**: the raw export has NO group/object separation (`grep "^g \|^o "`
+    → zero matches) and only ONE material (`usemtl Default` × 1716, all pointing at the same material) —
+    it's one fused mesh, not separate shell/cabinet/floor parts. So it can't support the existing
+    per-part customization (accent color, floor/wall finish, cabinet slots) without Brandon/Mark
+    re-exporting with real named groups — a different, future ask. Rev 2 disables (greys out,
+    `pointer-events:none`) those controls while the scan is active, keeps wrap-color live-tinting the
+    whole mesh (`applyWrap()` updates `scanMesh.material.color` too), and disables the Interior toggle
+    (no separate interior geometry to show). The procedural van is UNCHANGED and still the default.
+  - **Real bug hit + fixed during headless verification**: the scan loaded but the viewport was blank —
+    root cause was the raw OBJ being in **millimeters** while the scene (built for the procedural van)
+    uses **meters** with a fixed fog range (18–40 units) tuned for that scale. The unscaled scan's
+    ~9000-unit bounding box put the camera thousands of units past the fog falloff → fully swallowed
+    into the background color, not actually invisible/broken, just fogged out. Fixed with a single
+    `geo.scale(.001,.001,.001)` on load. Caught this BEFORE shipping via headless Playwright + screenshot
+    verification (WebGL via `--use-gl=swiftshader`) — a blank canvas with zero console errors doesn't
+    mean it works, always screenshot 3D output, don't trust "no errors" alone.
+  - Loaded lazily on first toggle (not on page boot) since it's a genuine 17MB download, absolute-path
+    fetch (`/builder/infowheels.obj`) since this same HTML is ALSO published at root `/builder.html` —
+    a relative fetch would resolve wrong from that copy.
+  - **Large-file transfer mechanism (reusable for next time Brandon has a big export):** chat/email
+    upload has a hard ceiling well under 100MB (confirmed twice — a 2.6GB and then a 472MB `.obj` both
+    silently failed, only their tiny `.mtl` sidecar came through). Built `upload3d.html` (self-contained
+    drag-and-drop page, chunked Put Block + Put Block List straight to Azure Blob REST, no server) +
+    a new `objsas` mode in `deploy.yml` that mints a short-lived (3-day) write-scoped SAS for the
+    existing private `pipeline` container + sets CORS so a browser can talk to blob storage directly.
+    Verified the block-upload mechanics myself with a real test blob (small file, PUT block ×2 + PUT
+    blocklist, GET back to confirm byte-exact reassembly) before ever handing the link to Brandon.
+    ⚠️ Test blob cleanup attempt failed (403 — SAS token is `racwl`, no delete permission by design);
+    harmless leftover, needs a manual delete or will fall out of any future container cleanup.
+
 ## ⚠️ 2026-08-04 — `deleteTime` is CONFIRMED STILL NOT BUILT (a stale code comment said otherwise — don't trust it)
 
 Rich asked to clear out old test entries from Time Tracking (keep last week + this week, delete everything
