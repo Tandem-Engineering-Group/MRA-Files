@@ -323,7 +323,11 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
       # MRA InfoWheels 3D Builder — standalone configurator hosted in /builder/ (self-contained
-      # single file: three.js embedded; Rev 1 placeholder van until the Inventor exports land).
+      # single file: three.js embedded; Rev 2 adds a real decimated CAD scan (infowheels.obj,
+      # 17MB — down from Brandon's 461MB raw export via quadric decimation) as a "Real 3D scan"
+      # toggle alongside the original placeholder van. Fetched via an ABSOLUTE path from the page's
+      # JS (not relative) since this same HTML is also published at root /builder.html — a relative
+      # fetch would resolve to the wrong path from that copy.
       - name: Upload InfoWheels 3D Builder (/builder/)
         if: ${{ hashFiles('builder/index.html') != '' }}
         run: |
@@ -332,6 +336,16 @@ jobs:
               --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
             az storage blob upload --account-name mrashopdash --container-name '$web' \
               --name 'builder.html' --file builder/index.html --content-type 'text/html' \
+              --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      - name: Upload InfoWheels real 3D scan asset (/builder/infowheels.obj)
+        if: ${{ hashFiles('builder/infowheels.obj') != '' }}
+        run: |
+            az storage blob upload --account-name mrashopdash --container-name '$web' \
+              --name 'builder/infowheels.obj' --file builder/infowheels.obj --content-type 'text/plain' \
               --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
         env:
           AZURE_STORAGE_ACCOUNT: mrashopdash
