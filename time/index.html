@@ -321,6 +321,10 @@ function submit(){
   var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
   var e={ id:uid(), who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes, ts:new Date().toISOString() };
   ENTS.push(e); lset(LS.ents, ENTS);
+  // A manager view reads activeEntries() = SHARED (not ENTS) once signed in, so without this push a
+  // manager adding their own entry wouldn't see it in "Your week" / Tracked hours until the next shared
+  // refresh (Rich: "i thought hours entered were saved... i should be able to see them at bottom. not working").
+  if(SHARED) SHARED.push(Object.assign({}, e, { empId:(EMPIDS[e.who]||''), payType:fPayType(e), shared:true }));
   if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'addTime',empId:(EMPIDS[e.who]||''),code:fCode(e),payType:fPayType(e)}, e))}); }catch(_){} }
   // reset for the next punch (keep who + date)
   $('fJob').value=''; $('fHours').value=''; $('fTask').value=''; $('fNotes').value=''; document.querySelectorAll('.hchip.on').forEach(function(c){c.classList.remove('on');});
