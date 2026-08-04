@@ -547,142 +547,180 @@ function seedRealWeek(){
 function clearAll(){ if(!confirm('Delete ALL entries on this device?')) return; ENTS=[]; lset(LS.ents,ENTS); lset('mra_time_seeded',1); renderTracking(); }
 
 /* ---------- weekly finance report (payroll format) ---------- */
+/* Airy design (Rich, 2026-08-04): rebuilt from a Claude Design handoff. Same data-reconciliation
+   rules as before (job-code hours per employee, week totals, per-job breakdowns, and the grand
+   total must always reconcile) — only the visual template changed. Design tokens/scale below
+   match the handoff exactly; multi-week ranges and no-date entries (real edge cases this app
+   already handles) are folded into the same visual language rather than dropped. */
 function buildFinanceReport(){
   var rows=filtered();
   var rangeLbl={tw:'This week',lw:'Last week',m:'This month',all:'All time'}[$('fRange').value]||'';
   if(!rows.length){ alert('No time entries in this range to report.'); return; }
   var dates=rows.map(function(e){return e.dateISO;}).sort();
-  var period=isoToMDY(dates[0])+' - '+isoToMDY(dates[dates.length-1]);
+  var period=isoToMDY(dates[0])+' – '+isoToMDY(dates[dates.length-1]);
   var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  var byPay={}, byCode={}, byWeekCode={}, grand=0;
-  var weeks={}, weekOrder=[], weekend={};   // wk -> {emps:{who:{id,byDay,tot}}, empOrder:[]} ; weekend[wk] = {5:bool sat,6:bool sun}
+  var byCode={}, byCodeEmp={}, byWeekCode={}, grand=0, calledInN=0;
+  var weeks={}, weekOrder=[], weekend={};   // wk -> {emps:{who:{id,byDay,tot,calledIn}}, empOrder:[]} ; weekend[wk] = {5:bool sat,6:bool sun}
   var noDateByEmp={}, noDateOrder=[];
+  var allEmpSet={};
   rows.forEach(function(e){
     var pt=fPayType(e), c=fCode(e), h=e.hours||0, who=e.who||'—'; grand+=h;
-    byPay[pt]=(byPay[pt]||0)+h;
-    if(pt==='Work'){ if(!byCode[c]) byCode[c]={name:fCodeName(e),h:0}; byCode[c].h+=h; }
-    var lbl = pt==='Work' ? (c+' · '+fCodeName(e)) : pt;
+    allEmpSet[who]=1;
+    if(pt==='Called In') calledInN++;
+    if(pt==='Work'){ if(!byCode[c]) byCode[c]={name:fCodeName(e),h:0}; byCode[c].h+=h;
+      if(!byCodeEmp[c]) byCodeEmp[c]={}; byCodeEmp[c][who]=(byCodeEmp[c][who]||0)+h; }
+    var codeLbl = pt==='Work' ? c : pt;
     var tn=[e.task,e.notes].filter(Boolean).join(' — ');
-    if(!e.dateISO){ if(!noDateByEmp[who]){ noDateByEmp[who]=[]; noDateOrder.push(who); } noDateByEmp[who].push({lbl:lbl,h:h,tn:tn}); return; }
+    if(!e.dateISO){ if(!noDateByEmp[who]){ noDateByEmp[who]=[]; noDateOrder.push(who); } noDateByEmp[who].push({lbl:(pt==='Work'?(c+' · '+fCodeName(e)):pt),h:h,tn:tn}); return; }
     var dd=new Date(e.dateISO+'T00:00:00'), wk=ymd(startOfWeek(dd)), off=(dd.getDay()+6)%7;   // Mon=0 … Sun=6
     if(pt==='Work'){ if(!byWeekCode[wk]) byWeekCode[wk]={}; if(!byWeekCode[wk][c]) byWeekCode[wk][c]={name:fCodeName(e),h:0}; byWeekCode[wk][c].h+=h; }
     if(off===5||off===6){ if(!weekend[wk]) weekend[wk]={}; weekend[wk][off]=true; }
     if(!weeks[wk]){ weeks[wk]={emps:{},empOrder:[]}; weekOrder.push(wk); }
-    if(!weeks[wk].emps[who]){ weeks[wk].emps[who]={id:EMPIDS[who]||'',byDay:{},tot:0}; weeks[wk].empOrder.push(who); }
-    var E=weeks[wk].emps[who]; E.tot+=h;
-    if(!E.byDay[e.dateISO]) E.byDay[e.dateISO]=[]; E.byDay[e.dateISO].push({lbl:lbl,h:h,tn:tn});
+    if(!weeks[wk].emps[who]){ weeks[wk].emps[who]={id:EMPIDS[who]||'',byDay:{},tot:0,calledIn:false}; weeks[wk].empOrder.push(who); }
+    var E=weeks[wk].emps[who]; E.tot+=h; if(pt==='Called In') E.calledIn=true;
+    if(!E.byDay[e.dateISO]) E.byDay[e.dateISO]=[]; E.byDay[e.dateISO].push({code:codeLbl,h:h,tn:tn,exc:pt==='Called In'});
   });
   function f(n){ return (Math.round((n||0)*100)/100).toFixed(2); }
-  // Job code totals — split into two side-by-side columns once the list gets long enough that a
-  // single column would run tall for no reason (plenty of spare width to use in portrait too).
+  var INK='#16110F', INKS='#6B6360', MUT='#8A827D', DIS='#C9C3BF', HAIR='#F0EDEA', BORD='#E3DFDC', SURF='#FAF8F7', BRAND='#C1401F', TINT='#FBF1EE';
+  var FF="'Helvetica Neue',Helvetica,Arial,sans-serif";
+  // ---- Job code totals by employee (bar = share of the range's largest job) ----
   var codeKeys=Object.keys(byCode).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
-  function codeTable(keys){ return '<table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'
-    +keys.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(byCode[c].name||'')+'</td><td class="r">'+f(byCode[c].h)+'</td></tr>'; }).join('')+'</tbody></table>'; }
-  var codeHalf=Math.ceil(codeKeys.length/2);
-  var codeHtml = codeKeys.length>6
-    ? '<div class="codecols">'+codeTable(codeKeys.slice(0,codeHalf))+codeTable(codeKeys.slice(codeHalf))+'</div>'
-    : codeTable(codeKeys);
-  // Job totals PER WEEK, everyone combined — finance's ask: see what each job got charged that week
-  // without adding it up by hand across every employee's row. Only worth a separate section when the
-  // range covers 2+ weeks — with just one week in range this would be identical to Job Code Totals above.
+  var maxJobTot=codeKeys.reduce(function(m,c){ return Math.max(m,byCode[c].h); },0)||1;
+  var codeHtml=codeKeys.map(function(c,i){
+    var tot=byCode[c].h, w=Math.max(2,Math.round(tot/maxJobTot*1000)/10);
+    var emps=Object.keys(byCodeEmp[c]||{}).sort(function(a,b){return byCodeEmp[c][b]-byCodeEmp[c][a];}).map(function(w2){return w2+' '+f(byCodeEmp[c][w2]);}).join(' · ');
+    return '<div style="display:grid;grid-template-columns:48px 1fr 150px 66px;align-items:center;gap:14px;padding:4px 0;border-bottom:1px solid '+(i===codeKeys.length-1?INK:HAIR)+';break-inside:avoid">'
+      +'<span style="font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums">'+esc(c)+'</span>'
+      +'<span style="font-size:10.5px">'+esc(byCode[c].name||'')+'<span style="display:block;font-size:8.5px;color:'+INKS+';margin-top:2px;font-variant-numeric:tabular-nums">'+esc(emps)+'</span></span>'
+      +'<span style="display:block;height:7px;background:'+HAIR+'"><span style="display:block;height:7px;width:'+w+'%;background:'+BRAND+'"></span></span>'
+      +'<span style="font-size:12px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums">'+f(tot)+'</span></div>';
+  }).join('');
+  // Job totals PER WEEK, everyone combined — finance's ask: see what each job got charged that
+  // week without adding it up by hand. Only shown when the range covers 2+ weeks.
   var wkCodeKeys=Object.keys(byWeekCode).sort();
-  var singleWeek=wkCodeKeys.length<=1;   // also drops the "Week of…" caption below since there's only one
   var byWeekHtml = wkCodeKeys.length>1 ? wkCodeKeys.map(function(wk){
     var codes=byWeekCode[wk];
     var ck=Object.keys(codes).sort(function(a,b){ return (a==='Unknown')-(b==='Unknown')||a.localeCompare(b); });
-    var wkTot=ck.reduce(function(x,c){ return x+codes[c].h; },0);
-    var rowsHtml=ck.map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+esc(codes[c].name||'')+'</td><td class="r">'+f(codes[c].h)+'</td></tr>'; }).join('');
-    return '<h3>Week of '+esc(isoToMDY(wk))+'</h3><table class="t"><thead><tr><th>Code</th><th>Job</th><th class="r">Hours</th></tr></thead><tbody>'+rowsHtml+'<tr class="sub"><td colspan="2">Week total</td><td class="r">'+f(wkTot)+'</td></tr></tbody></table>';
+    var wMax=ck.reduce(function(m,c){return Math.max(m,codes[c].h);},0)||1, wkTot=ck.reduce(function(x,c){ return x+codes[c].h; },0);
+    var rowsHtml=ck.map(function(c,i){ var w=Math.max(2,Math.round(codes[c].h/wMax*1000)/10);
+      return '<div style="display:grid;grid-template-columns:48px 1fr 150px 66px;align-items:center;gap:14px;padding:4px 0;border-bottom:1px solid '+(i===ck.length-1?INK:HAIR)+';break-inside:avoid">'
+        +'<span style="font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums">'+esc(c)+'</span>'
+        +'<span style="font-size:10.5px">'+esc(codes[c].name||'')+'</span>'
+        +'<span style="display:block;height:7px;background:'+HAIR+'"><span style="display:block;height:7px;width:'+w+'%;background:'+BRAND+'"></span></span>'
+        +'<span style="font-size:12px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums">'+f(codes[c].h)+'</span></div>';
+    }).join('');
+    return '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin:12px 0 4px">Week of '+esc(isoToMDY(wk))+' <span style="font-weight:400;text-transform:none;letter-spacing:0">· '+f(wkTot)+' hrs</span></div>'+rowsHtml;
   }).join('') : '';
-  // Weekly hours — ONE real table per week (employees as rows, days as columns), not a stack of
-  // per-employee mini-calendars each repeating its own day headers. Sat/Sun columns only appear on
-  // a week where SOMEONE actually logged hours that day (Rich: "we don't typically use Sat or Sun —
-  // just don't show them at all unless hours are there") — every other week stays Mon–Fri.
+  // Hours by employee and day — one grid block per week. Sat/Sun columns only appear on a week
+  // where someone actually logged hours that day (Rich: "we don't typically use Sat or Sun — just
+  // don't show them at all unless hours are there") — every other week stays Mon–Fri.
   weekOrder.sort();
-  var weekTables=weekOrder.map(function(wk){
+  var singleWeek=weekOrder.length<=1;   // drops the "Week of…" caption when there's only one
+  var weekBlocks=weekOrder.map(function(wk){
     var wkStartD=new Date(wk+'T00:00:00'), wa=weekend[wk]||{};
     var dayIdx=[0,1,2,3,4]; if(wa[5]) dayIdx.push(5); if(wa[6]) dayIdx.push(6);
     var dayDates=dayIdx.map(function(i){ return ymd(new Date(wkStartD.getTime()+i*86400000)); });
-    var head='<tr><th class="empcol">Employee</th>'+dayIdx.map(function(i,k){ return '<th>'+DOWF[(i+1)%7]+' '+esc(isoToMDY(dayDates[k]))+'</th>'; }).join('')+'<th class="r">Week total</th></tr>';
-    var W=weeks[wk], empKeys=W.empOrder.slice().sort(function(a,b){ return String(a).localeCompare(String(b)); });
-    var bodyRows=empKeys.map(function(who){ var E=W.emps[who];
+    var cols='132px '+dayDates.map(function(){return '1fr';}).join(' ');
+    var W=weeks[wk];
+    var dayHas=dayDates.map(function(cd){ return W.empOrder.some(function(who){ return (W.emps[who].byDay[cd]||[]).length>0; }); });
+    var headCells=dayIdx.map(function(i,k){ var bold=dayHas[k];
+      return '<div style="font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:'+(bold?'700':'600')+(bold?'':(';color:'+MUT))+'">'+DOWF[(i+1)%7]+' '+esc(isoToMDY(dayDates[k]))+'</div>'; }).join('');
+    var head='<div style="display:grid;grid-template-columns:'+cols+';gap:8px;padding-bottom:5px;border-bottom:1px solid '+INK+'"><div></div>'+headCells+'</div>';
+    var empKeys=W.empOrder.slice().sort(function(a,b){ return String(a).localeCompare(String(b)); });
+    var dayTot=dayDates.map(function(){return 0;});
+    var empRows=empKeys.map(function(who){ var E=W.emps[who];
       var byJob={}, jobOrder=[];
-      var dayCells=dayDates.map(function(cd){
+      var cells=dayDates.map(function(cd,k){
         var items=E.byDay[cd]||[];
-        items.forEach(function(it){ if(!(it.lbl in byJob)){ byJob[it.lbl]=0; jobOrder.push(it.lbl); } byJob[it.lbl]+=it.h; });
-        if(!items.length) return '<td class="dcell empty">—</td>';
-        var dTot=items.reduce(function(x,it){return x+it.h;},0);
-        var lines=items.map(function(it){ return '<div class="jline">'+esc(it.lbl)+' <b>'+f(it.h)+'</b>'+(it.tn?('<div class="jnote">'+esc(it.tn)+'</div>'):'')+'</div>'; }).join('');
-        return '<td class="dcell"><div class="dtot">'+f(dTot)+'</div>'+lines+'</td>';
+        items.forEach(function(it){ dayTot[k]+=it.h; if(!it.exc){ if(!(it.code in byJob)){ byJob[it.code]=0; jobOrder.push(it.code); } byJob[it.code]+=it.h; } });
+        if(!items.length) return '<div style="border:1px dashed '+BORD+';padding:6px 8px;color:'+DIS+';font-size:12px;font-weight:700">—</div>';
+        var isExc=items.some(function(it){return it.exc;}), dTot=items.reduce(function(x,it){return x+it.h;},0);
+        var lines=items.map(function(it){
+          return '<div style="display:flex;justify-content:space-between;gap:4px;font-variant-numeric:tabular-nums'+(it.exc?(';color:'+BRAND):'')+'">'
+            +'<span'+(it.exc?(' style="font-weight:700"'):(' style="color:'+INKS+'"'))+'>'+esc(it.exc?'Called in':it.code)+'</span><span>'+f(it.h)+'</span></div>'
+            +(it.tn?('<div style="font-size:8.5px;color:'+INKS+';font-style:italic">'+esc(it.tn)+'</div>'):'');
+        }).join('');
+        return '<div style="background:'+(isExc?TINT:SURF)+';padding:6px 8px'+(isExc?(';box-shadow:inset 2px 0 0 '+BRAND):'')+'">'
+          +'<div style="font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;margin-bottom:4px'+(isExc?(';color:'+BRAND):'')+'">'+f(dTot)+'</div>'
+          +'<div style="display:flex;flex-direction:column;gap:2px">'+lines+'</div></div>';
       }).join('');
       jobOrder.sort(function(a,b){ return byJob[b]-byJob[a]; });
-      var jobLines=jobOrder.map(function(k){ return '<div class="jline tot">'+esc(k)+' <b>'+f(byJob[k])+'</b></div>'; }).join('');
-      return '<tr><td class="empcol"><b>'+esc(who)+'</b><br><span class="muted">ID '+esc(E.id||'—')+'</span></td>'+dayCells+'<td class="dcell tot"><div class="dtot">'+f(E.tot)+'</div>'+jobLines+'</td></tr>';
+      var railLines=jobOrder.map(function(k){ return '<div>'+esc(k)+' · '+f(byJob[k])+'</div>'; }).join('');
+      var badge=E.calledIn?(' <span style="font-size:7px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:'+BRAND+';padding:1px 4px">Called in</span>'):'';
+      return '<div style="display:grid;grid-template-columns:'+cols+';gap:8px;padding:8px 0;border-bottom:1px solid '+HAIR+';break-inside:avoid">'
+        +'<div style="padding-right:8px">'
+          +'<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:12.5px;font-weight:700;letter-spacing:-.015em">'+esc(who)+'</span>'+badge+'</div>'
+          +'<div style="font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin-top:1px">ID '+esc(E.id||'—')+'</div>'
+          +'<div style="font-size:17px;font-weight:700;letter-spacing:-.02em;margin-top:5px;font-variant-numeric:tabular-nums">'+f(E.tot)+'</div>'
+          +(railLines?('<div style="font-size:8.5px;color:'+INKS+';margin-top:2px;font-variant-numeric:tabular-nums">'+railLines+'</div>'):'')
+        +'</div>'+cells+'</div>';
     }).join('');
-    var cap = singleWeek ? '' : '<h3>Week of '+esc(isoToMDY(wk))+'</h3>';
-    return cap+'<table class="wk"><thead>'+head+'</thead><tbody>'+bodyRows+'</tbody></table>';
+    var footCells=dayTot.map(function(t){ return '<div style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums'+(t<=0?(';color:'+DIS):'')+'">'+f(t)+'</div>'; }).join('');
+    var wkGrand=dayTot.reduce(function(a,b){return a+b;},0);
+    var foot='<div style="display:grid;grid-template-columns:'+cols+';gap:8px;align-items:baseline;margin-top:10px;padding-top:8px;border-top:3px solid '+INK+'">'
+      +'<div style="font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+';font-weight:600">Day total<span style="display:block;font-size:18px;letter-spacing:-.02em;color:'+INK+';margin-top:3px;font-variant-numeric:tabular-nums">'+f(wkGrand)+'</span></div>'
+      +footCells+'</div>';
+    var cap = singleWeek ? '' : '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin:14px 0 4px">Week of '+esc(isoToMDY(wk))+'</div>';
+    return cap+head+empRows+foot;
   }).join('');
-  var noDateHtml = noDateOrder.length ? ('<h3>No date on entry</h3><table class="t"><thead><tr><th>Employee</th><th>Charge</th><th class="r">Hours</th></tr></thead><tbody>'
-    +noDateOrder.map(function(who){ return noDateByEmp[who].map(function(i){ return '<tr><td>'+esc(who)+'</td><td>'+esc(i.lbl)+'</td><td class="r">'+f(i.h)+'</td></tr>'; }).join(''); }).join('')
+  var noDateHtml = noDateOrder.length ? ('<h2 style="margin:14px 0 4px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">No date on entry</h2>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr style="border-bottom:1px solid '+INK+'">'
+    +'<th style="text-align:left;padding:0 8px 4px 0;font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:'+MUT+'">Employee</th>'
+    +'<th style="text-align:left;padding:0 8px 4px 0;font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:'+MUT+'">Charge</th>'
+    +'<th style="text-align:right;padding:0 0 4px 0;font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:'+MUT+'">Hours</th></tr></thead><tbody>'
+    +noDateOrder.map(function(who){ return noDateByEmp[who].map(function(it){ return '<tr style="border-bottom:1px solid '+HAIR+'"><td style="padding:4px 8px 4px 0">'+esc(who)+'</td><td style="padding:4px 8px 4px 0">'+esc(it.lbl)+'</td><td style="padding:4px 0;text-align:right;font-variant-numeric:tabular-nums">'+f(it.h)+'</td></tr>'; }).join(''); }).join('')
     +'</tbody></table>') : '';
   var d=new Date(), dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
-  // Letterhead + stat-strip header — same convention as MRA's other printed reports (Project Status,
-  // Quote Generator, work orders): logo badge + title/subtitle on the left, key numbers as a
-  // label-under-value stat strip on the right, instead of one crammed sentence of middot-joined facts.
   var logoUrl=(location.origin||'')+'/logo.png?v=20260803';
-  var payChips=Object.keys(byPay).filter(function(k){ return byPay[k]>0; }).sort().map(function(k){ return '<div><b>'+f(byPay[k])+'</b><span>'+esc(k)+'</span></div>'; }).join('');
-  var body='<header class="rhead"><img src="'+logoUrl+'" class="rlogo" onerror="this.style.display=\'none\'">'
-    +'<div class="rtitle"><h1>Weekly Time Summary</h1><div class="rsub">Mobility Resource Associates Inc · Dept 210 Engineering · Pay period '+esc(period)+' ('+esc(rangeLbl)+') · Generated '+dd+'</div></div>'
-    +'<div class="rstats"><div><b>'+f(grand)+'</b><span>Grand total hrs</span></div>'+payChips+'</div>'
-    +'</header>'
-    +'<h2>Job code totals</h2>'+codeHtml
-    +(byWeekHtml?('<h2>Totals by job — per week (everyone combined)</h2>'+byWeekHtml):'')
-    +'<h2>Weekly hours by employee</h2>'+weekTables+noDateHtml
-    +'<div class="rfoot"><img src="'+logoUrl+'" onerror="this.style.display=\'none\'"><span><b>MRA</b> · mobile.experiential — Weekly Time Summary, generated automatically</span></div>';
+  var empCount=Object.keys(allEmpSet).length, jobCount=codeKeys.length;
+  var excMeta=calledInN?('<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+BRAND+'">Exceptions</span><span style="color:'+BRAND+';font-weight:700">'+calledInN+' called in</span></div>'):'';
+  var body='<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;padding-bottom:8px;font-family:'+FF+'">'
+      +'<div style="display:flex;align-items:center;gap:10px"><img src="'+logoUrl+'" style="height:24px;width:auto;display:block" onerror="this.style.display=\'none\'"><span style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:'+MUT+'">Mobility Resource Associates Inc</span></div>'
+      +'<span style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:'+MUT+'">Weekly Time Summary · '+esc(period)+'</span>'
+    +'</div>'
+    +'<div style="font-family:'+FF+';color:'+INK+';-webkit-font-smoothing:antialiased">'
+      +'<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;padding-bottom:12px;border-bottom:3px solid '+INK+'">'
+        +'<div style="display:flex;flex-direction:column;gap:10px">'
+          +'<h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-.028em;line-height:1">Weekly Time Summary</h1>'
+          +'<div style="display:flex;gap:24px;font-size:9.5px;line-height:1.35;flex-wrap:wrap">'
+            +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Department</span><span>210 Engineering</span></div>'
+            +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Pay period</span><span style="font-weight:700">'+esc(period)+' ('+esc(rangeLbl)+')</span></div>'
+            +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Generated</span><span>'+dd+'</span></div>'
+            +excMeta
+          +'</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+          +'<div style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+';margin-bottom:3px">Grand total</div>'
+          +'<div style="font-size:34px;font-weight:700;letter-spacing:-.035em;line-height:.9;font-variant-numeric:tabular-nums">'+f(grand)+'</div>'
+          +'<div style="font-size:8.5px;color:'+MUT+';margin-top:4px">hours · '+empCount+' employee'+(empCount===1?'':'s')+' · '+jobCount+' job'+(jobCount===1?'':'s')+'</div>'
+        +'</div>'
+      +'</div>'
+      +'<h2 style="margin:18px 0 8px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Job code totals by employee</h2>'
+      +'<div style="border-top:1px solid '+INK+';margin-bottom:18px">'+(codeHtml||('<div style="font-size:11px;color:'+MUT+';padding:8px 0">No job-coded work in this range.</div>'))+'</div>'
+      +byWeekHtml
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">'
+        +'<h2 style="margin:0;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Hours by employee and day</h2>'
+        +'<span style="font-size:8.5px;color:'+MUT+'">Job code · hours</span>'
+      +'</div>'
+      +weekBlocks+noDateHtml
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid '+BORD+';font-family:'+FF+';font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+'">'
+      +'<span>MRA · mobile.experiential</span><span>Generated automatically '+dd+'</span></div>';
   /* Fit-to-1-page (Rich's ask): same zoom-based auto-scale already proven on the dashboard's other
-     print views (Production Status report-out, etc.) — measure the real content size at zoom 1, then
-     shrink the whole #sheet down with CSS zoom (which reflows, unlike transform) so it lands on one
-     printed page. Landscape by default since the 8-column week grid is wide. */
+     print views — measure the real content size at zoom 1, then shrink #sheet with CSS zoom (which
+     reflows, unlike transform) so it lands on one printed page. Portrait by default per the design
+     (US Letter, 0.4in margins) — the report is tuned to fit one page for a normal-size crew; it
+     flows to page 2 gracefully (break-inside:avoid on every job/employee row) if it doesn't. */
   var html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Weekly Time Summary '+period+'</title><style>'
-    +'body{font-family:Segoe UI,Arial,sans-serif;color:#1b2635;margin:0;background:#e7ebf0}'
+    +'*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#e7ebf0}'
     +'.bar{position:sticky;top:0;z-index:20;background:#101827;color:#fff;padding:9px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px}'
-    +'.bar button{background:#F36C21;color:#fff;border:0;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer;font-size:12.5px}'
+    +'.bar button{background:#e04826;color:#fff;border:0;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer;font-size:12.5px}'
     +'.bar label{color:#cdd6e2;display:flex;gap:6px;align-items:center;cursor:pointer}'
     +'.bar select{font-size:12px;padding:3px 6px;border-radius:5px;border:1px solid #4a5568}'
     +'#sheetwrap{position:relative;overflow:hidden;padding:14px}'
     +'#sheet{transform-origin:top left;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto}'
-    +'.pad{padding:14px 22px}'
-    +'.rhead{display:flex;align-items:center;gap:14px;border-bottom:3px solid #F36C21;padding-bottom:10px;margin-bottom:10px}'
-    +'.rlogo{height:44px;width:auto;border-radius:8px;flex:0 0 auto}'
-    +'.rtitle{flex:1;min-width:0}.rtitle h1{margin:0;font-size:19px;color:#1b2635}'
-    +'.rsub{font-size:10.5px;color:#66758a;margin-top:2px}'
-    +'.rstats{display:flex;gap:14px;text-align:center;flex:0 0 auto}'
-    +'.rstats div{display:flex;flex-direction:column}'
-    +'.rstats b{font-size:17px;line-height:1;color:#1b2635}'
-    +'.rstats span{font-size:7.5px;color:#8894a3;text-transform:uppercase;letter-spacing:.4px;margin-top:2px;white-space:nowrap}'
-    +'.rfoot{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:7px;border-top:1px solid #e6e8eb;font-size:8.5px;color:#9aa4b2}'
-    +'.rfoot img{height:16px;width:auto;border-radius:3px}'
-    +'h2{font-size:13px;margin:10px 0 3px;border-bottom:2px solid #F36C21;padding-bottom:2px;text-transform:uppercase;letter-spacing:.4px}'
-    +'h3{font-size:12.5px;margin:8px 0 2px;background:#f1f4f8;padding:3px 7px;border-radius:5px}'
-    +'.codecols{display:flex;gap:14px}.codecols table{flex:1}'
-    +'table.t{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:4px}'
-    +'table.wk{width:100%;border-collapse:collapse;font-size:10.5px;margin-bottom:8px;table-layout:fixed}'
-    +'table.t th,table.wk th{background:none;color:#6b7280;text-align:left;padding:0 6px 5px;font-size:8px;text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid #F36C21;font-weight:700}'
-    +'table.t td{padding:3px 7px;border-bottom:1px solid #e6e8eb}td.r,th.r{text-align:right}'
-    +'tr.sub td{font-weight:800;background:#faf1ea}'
-    +'table.wk th.r,table.wk td.r{text-align:right}'
-    +'table.wk th:last-child{width:15%}table.wk th.empcol{width:14%}'
-    +'table.wk td{padding:4px 6px;border-bottom:1px solid #e6e8eb;vertical-align:top}'
-    +'table.wk tbody tr:nth-child(even){background:#fafbfc}'
-    +'table.wk .empcol .muted{display:block;color:#8894a3;font-size:9px;font-weight:400}'
-    +'table.wk .dcell{text-align:center}.dcell.empty{color:#c3cad4}'
-    +'table.wk .dcell.tot{background:#faf1ea;text-align:left}'
-    +'.dtot{font-weight:800;color:#1b2635}.dcell.tot .dtot{color:#c9530f}'
-    +'.jline{font-size:8.5px;color:#455066;line-height:1.3;text-align:left}'
-    +'.jline.tot{color:#8a4a1f;font-weight:600}.jline.tot b{color:#c9530f}'
-    +'.jnote{font-size:8px;color:#8894a3;font-style:italic;line-height:1.2;margin:0 0 1px}'
-    +'tr,h3,.rhead{break-inside:avoid}'
-    +'@media print{.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none}}'
+    +'.pad{padding:0.4in}'
+    +'@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none}}'
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
     +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option></select></label>'
@@ -693,7 +731,7 @@ function buildFinanceReport(){
     +'function applyOpts(){'
     +'var ori=document.getElementById("ori").value,fit=document.getElementById("fit").checked;'
     +'var w=816,h=1056; if(ori==="landscape"){var t=w;w=h;h=t;}'
-    +'var m=0.35,mpx=m*96;'
+    +'var m=0.4,mpx=m*96;'
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
     +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
