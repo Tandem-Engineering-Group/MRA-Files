@@ -163,6 +163,24 @@ The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
 Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
 
+- **2026-08-04 (18th recurrence) — two prior "still open" questions FINALLY checked and BOTH ruled out,
+  true cause still unknown.** Found THREE copies of this flow existing: `MRA Lists to JSON` (original),
+  `Copy of - MRA Lists to JSON v2`, `Copy of - Copy of - MRA Lists to JSON v3`. Confirmed via screenshots
+  on the active one (v3): `Create blob (V2)` and `Create file` both already have the correct `PT2M` timeout
+  + Exponential/Count 4/Interval `PT10S` retry — **no P2TM typo on either, that question is answered,
+  both clean.** Recurrence Concurrency Control was already On/Degree 1. **Initially guessed the OTHER TWO
+  copies being simultaneously enabled was the culprit (multiple flow definitions colliding on the same
+  write, which per-flow Concurrency Control can't prevent) — Rich corrected this: v2 and the original were
+  ALREADY disabled before this stall happened, not something newly turned off. So that's NOT the cause
+  either.** Net result: every setting on v3 checks out correct, no duplicate-flow collision, yet it still
+  stalled — **the actual root cause remains unfound.** Next suspects (per the original note below, still
+  untried): the `Get Jobs` / `Get Project Tasks` / `Get Shop Tasks` / `Get Users` SharePoint "Get items"
+  steps earlier in v3's flow (visible in the canvas: Recurrence → Get Jobs → Select → Get Project Tasks →
+  Select 1 → Get Shop Tasks → Select 2 → Get Users → …) have never had Action Timeout/Retry Policy added,
+  unlike the two blob/file write steps. A `Get items` action can hang if it's set to return all items with
+  no pagination threshold, or gets throttled by SharePoint with no retry to recover. Check each `Get *`
+  step's Settings tab the same way the write steps were just checked, and add the same `PT2M`/Exponential/
+  4/`PT10S` treatment if any is missing it.
 - ✅ **ALL THREE PARTS DONE (Rich confirmed 2026-07-29) — do NOT ask Rich to redo any of these:**
   1. **`Create blob (V2)`** step → Settings → **Action Timeout = `PT2M`**, **Retry Policy = Exponential
      interval, Count `4`, Interval `PT10S`**.
