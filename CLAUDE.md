@@ -1,5 +1,39 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ SHIPPED 2026-08-05 (rev 36.91) — Quote Generator: priced scope sections + autosave
+
+Rich sent a real customer quote (American Welding Society / "AWS Revamp") as a screenshot and asked for a
+price next to each scope subsection (Interior Flooring Replacement, Graphic Updates, Welding Equipment Area
+Reconfiguration, AV and Display Upgrades, General Maintenance and Repairs) — "make it professional and make
+it selectable to turn on and off this feature." Mid-turn he also asked, separately, for the Quote Generator
+to autosave so he doesn't have to hit Save.
+
+- **New per-quote toggle**: `QUOTE.scopePriced` (off by default — nothing changes for existing/legacy quotes).
+  Off = the same single free-text "Work description" paragraph as always. On = the Work-description box
+  becomes a repeatable **section editor** (title + description + its own $ price per section, same ＋Add/✕
+  pattern as the existing Labor/Materials line-item editors). `QUOTE.scopeSections=[{title,body,price}]`.
+- **Money math**: each section's price is a real contribution to the quote total (`_qCompute()`'s
+  `sectionsTotal`, folded into `subtotal` before tax) — NOT just cosmetic. Toggle off = zero contribution,
+  identical to before. The internal breakdown (`_qDetailHtml`) gets a matching "Scope of Work (priced
+  sections)" bucket + subtotal line, same convention as Labor/Materials/Supplies.
+- **Customer-facing print** (`_qCustomerHtml`): each section renders as its own row — bold title + price on
+  the same line, description below in muted text, thin divider between sections, and (when there's more than
+  one) a bold "Scope of Work Subtotal" row — then the same all-inclusive Total box as always underneath.
+  New CSS: `.q-secrow/.q-sectop/.q-secprice/.q-secbody/.q-secsub`.
+- **Autosave**: quotes now save themselves ~1.5s after the last keystroke (`_qScheduleAutosave`/
+  `_qAutoSaveNow`), upserting the SAME saved record by a persistent `QUOTE.id` instead of creating a new row
+  every time (the old `qSaveQuote()` always inserted a fresh id — harmless when only triggered by a manual
+  click, but would have flooded the shared `quotes.json` store with near-duplicate rows once wired to fire
+  automatically on every edit). `qNewQuote()`/`qLoadQuote()`/`closeQuote()` all flush any pending autosave
+  FIRST so a just-typed edit within the last 1.5s is never lost when switching quotes. The 💾 button still
+  works — it's now just a "force it right now" shortcut, not required.
+- Verified headless (Playwright, live-URL POST blocked via route-abort so the test never touched the real
+  shared `quotes.json`): toggle-on creates a default empty section, ＋Add section works, internal breakdown
+  shows the correct summed subtotal, autosave fires and upserts (not duplicates — confirmed same id across
+  two edits 1.5s apart), and the printed customer HTML shows both section titles/prices/subtotal correctly.
+  Also regression-checked the toggle-OFF path renders byte-identical to the pre-existing plain-paragraph
+  behavior (no `q-secrow`/subtotal leaking in). Screenshot of the rendered print eyeballed before shipping.
+
 ## ✅ SHIPPED 2026-08-04 — Weekly Time Summary rebuilt to Claude Design + real InfoWheels 3D scan wired in (Builder rev 2)
 
 Two separate pieces of work from the same session, both live.
