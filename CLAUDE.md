@@ -1,5 +1,31 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-08-05 (rev 36.92) — Quote Generator: phantom autosaves + broken header/body auto-split
+
+Two real bugs found within hours of shipping rev 36.91 (below), both from Rich actually using it live.
+
+- **"These 2 keep coming back. not sure. the untitled. bug?"** — Rich saw two saved-quote cards titled
+  "Untitled", $1,017.60, "today", in the shared quote store. Root cause confirmed by the exact math:
+  8 hrs × the $120 default rate + 6% tax = **$1,017.60 exactly** — the untouched DEFAULT filler labor line
+  every new quote starts with. `_qHasContent()`'s autosave guard was counting that line's `hours:8` as "real
+  content" (added there to match the old manual-Save guard's behavior) — but with autosave, that meant just
+  **opening** the Quote Generator (never typing anything) silently saved a blank quote 1.5s later, every
+  time. Fixed: a labor line only counts if it has a real description (`l.d`), not just leftover default hours.
+  **Cleaned up the 2 live phantom records** directly in the shared `quotes.json` (fetched it, removed the two
+  blank-cust/blank-proj/$1,017.60 rows by id, POSTed the cleaned array back through the same "MRA Quote
+  Write" flow the dashboard itself uses) — verified by re-fetching, 8 real quotes remain, 0 blank ones.
+  Verified the fix headless: opening the Quote Generator and waiting past the autosave debounce with zero
+  typing now saves nothing.
+- **Auto-split was pairing headers with the WRONG text.** When rev 36.91 shipped, turning on 🧩 priced
+  sections auto-split the existing plain-paragraph scope by blank lines — but a real scope paragraph has a
+  blank line **between a header and its own body text too** (not just between sections), so the naive split
+  put each header in its own section with an empty body, and its actual description became a separate,
+  bogus "section" of its own. Fixed with a two-pass split (`_qLooksLikeScopeHeader`): a block counts as a
+  header only if it's a single short line (≤70 chars) with no ending punctuation — then it's paired with the
+  block that immediately follows as its body. Verified against Rich's exact real AWS scope text (5 sections:
+  Interior Flooring Replacement / Graphic Updates / Welding Equipment Area Reconfiguration / AV and Display
+  Upgrades / General Maintenance and Repairs) — all 5 headers now pair with their correct body text.
+
 ## ✅ SHIPPED 2026-08-05 (rev 36.91) — Quote Generator: priced scope sections + autosave
 
 Rich sent a real customer quote (American Welding Society / "AWS Revamp") as a screenshot and asked for a
