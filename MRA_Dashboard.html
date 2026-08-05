@@ -3879,6 +3879,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.92", date:"2026-08-05", title:"🐛 Quote Generator — fixed phantom autosaves + auto-split now pairs headers with their own text", items:[
+    "<b>Fixed:</b> just opening the Quote Generator (without typing anything) was silently autosaving a blank \"Untitled\" quote — the untouched default 8hr filler labor line was being counted as \"real content.\" It no longer counts unless you actually name a scope line, add a customer/project, materials, or a priced section. The 2 phantom Untitled records this had already created in the shared quote store were removed.",
+    "<b>Fixed:</b> turning on <b>🧩 Price each scope section separately</b> on an existing plain-paragraph quote was splitting every blank line into its own section — separating a header (\"Interior Flooring Replacement\") from its own description instead of pairing them. It now recognizes short header-style lines and pairs each one with the text that follows it, matching how these are actually written." ] },
   { rev:"36.91", date:"2026-08-05", title:"🧩 Quote Generator: priced scope sections + autosave", items:[
     "New optional toggle on a quote's Work description: <b>🧩 Price each scope section separately</b>. Off (default) = the same single free-text scope paragraph as before, nothing changes. On = a repeatable section editor — title + description + its own $ price per section (e.g. Interior Flooring Replacement — $3,200, Graphic Updates — $2,400) — and the customer quote prints each section with its price, a Scope of Work Subtotal, and the same all-inclusive Total at the bottom (section prices count toward the real total, tax and all).",
     "<b>Autosave</b> — every quote now saves itself ~1.5s after you stop typing (upserts the SAME saved record, doesn't create duplicates), so the 💾 button is no longer required — it's kept as a 'save right now' shortcut. Switching to a different saved quote, starting a new one, or closing the panel flushes any pending edit first so nothing typed in the last second gets lost." ] },
@@ -11589,7 +11592,10 @@ function _qRecFromCurrent(t){ if(!QUOTE.id) QUOTE.id='q'+Date.now().toString(36)
 // Insert-or-update by id (never appends a second copy of the same in-progress quote).
 function _qUpsertRec(rec){ const a=_qSaved(); const idx=a.findIndex(x=>x.id===rec.id);
   if(idx>=0) a[idx]=rec; else { a.unshift(rec); if(a.length>60) a.length=60; } _qSaveList(a); return a; }
-function _qHasContent(){ return !!(QUOTE&&(QUOTE.cust||QUOTE.proj||(QUOTE.desc&&QUOTE.desc.trim())||_qMatLines().some(m=>m.d||m.c)||_qLines().some(l=>l.d||l.hours)||_qScopeSections().some(s=>s.title||s.price))); }
+// A brand-new quote always starts with one filler labor line (8 hr × the default rate) so the internal
+// breakdown isn't empty — that alone must NOT count as "real content", or just opening the Quote Generator
+// (never typing anything) autosaves a phantom "Untitled" record every time. Only a NAMED scope line counts.
+function _qHasContent(){ return !!(QUOTE&&(QUOTE.cust||QUOTE.proj||(QUOTE.desc&&QUOTE.desc.trim())||_qMatLines().some(m=>m.d||m.c)||_qLines().some(l=>l.d)||_qScopeSections().some(s=>s.title||s.price))); }
 let _qAutoTimer=null;
 // 💾 Autosave — 1.5s after the last edit, quietly upsert the in-progress quote so Rich never has to hit Save.
 // Only touches the saved-list widget + a small toast, never the whole form (a full renderQuote() mid-keystroke
@@ -11712,8 +11718,34 @@ function qDelMat(i){ _qRead(); QUOTE.matLines=_qMatLines(); QUOTE.matLines.splic
 // 🧩 Priced scope sections — an opt-in per-quote toggle: break "Work description" into titled sections, each
 // with its own $ price (e.g. "Interior Flooring Replacement — $1,200"). Off = the plain single-paragraph
 // description, exactly as before. On = a repeatable section editor + a priced breakdown on the customer quote.
-function qToggleScopeMode(){ _qRead(); const el=document.getElementById('qScopeMode'); QUOTE.scopePriced=el?el.checked:!QUOTE.scopePriced;
-  if(QUOTE.scopePriced && !_qScopeSections().length) QUOTE.scopeSections=[{title:'',body:'',price:0}]; renderQuote(); }
+// Split a plain scope paragraph into sections. Real quotes have a blank line BETWEEN a header and its own
+// detail lines too (header / blank / detail / blank-blank / next header), so naively treating every blank-line
+// block as one section splits the header away from its own body. Instead: split into blank-line-separated
+// blocks, then a block "looks like a header" if it's a single short line with no ending punctuation
+// (title-case labels like "Interior Flooring Replacement" vs a sentence like "Remove and replace ... areas.")
+// — pair each header with the block that immediately follows it as its body.
+function _qLooksLikeScopeHeader(b){ return !b.includes('\n') && b.length<=70 && !/[.!?:]$/.test(b); }
+function _qSplitScopeBlocks(text){
+  const raw=String(text||'').split(/\n\s*\n+/).map(b=>b.trim()).filter(Boolean);
+  const out=[]; let i=0;
+  while(i<raw.length){
+    if(_qLooksLikeScopeHeader(raw[i]) && i+1<raw.length && !_qLooksLikeScopeHeader(raw[i+1])){
+      out.push({title:raw[i], body:raw[i+1], price:0}); i+=2;
+    } else if(_qLooksLikeScopeHeader(raw[i])){
+      out.push({title:raw[i], body:'', price:0}); i+=1;
+    } else {
+      const lines=raw[i].split('\n'); out.push({title:(lines[0]||'').trim(), body:lines.slice(1).join('\n').trim(), price:0}); i+=1;
+    }
+  }
+  return out;
+}
+function qToggleScopeMode(){ _qRead(); const el=document.getElementById('qScopeMode'); const turningOn=el?el.checked:!QUOTE.scopePriced; QUOTE.scopePriced=turningOn;
+  if(turningOn && !_qScopeSections().length){ const blocks=_qSplitScopeBlocks(QUOTE.desc); QUOTE.scopeSections=blocks.length?blocks:[{title:'',body:'',price:0}];
+    // A never-touched default labor line (blank scope name, still sitting at its starting 8 hrs) would silently
+    // pad the total above what the sections actually add up to — zero it so the total = the section prices
+    // (plus anything real Rich still adds to Materials/Supplies/a named labor line).
+    const L=_qLines(); if(L.length===1 && !L[0].d) QUOTE.lines=[{d:'',hours:0,rate:L[0].rate}]; }
+  renderQuote(); }
 function qAddSection(){ _qRead(); QUOTE.scopeSections=_qScopeSections(); QUOTE.scopeSections.push({title:'',body:'',price:0}); renderQuote(); }
 function qDelSection(i){ _qRead(); QUOTE.scopeSections=_qScopeSections(); QUOTE.scopeSections.splice(i,1); renderQuote(); }
 function qTogglePaste(){ _qRead(); QUOTE._pasteOpen=!QUOTE._pasteOpen; renderQuote(); if(QUOTE._pasteOpen){ var t=document.getElementById('qMatPaste'); if(t) t.focus(); } }
