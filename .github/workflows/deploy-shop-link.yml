@@ -1,0 +1,67 @@
+name: Add Mobile Tour link to Shop board
+
+# Adds a single menu link on the LIVE shop dashboard that opens the MRA Mobile Tour
+# Schedule prototype. It fetches whatever is currently live, inserts the one link
+# (only if missing), and re-uploads just MRA_Dashboard.html — it does NOT touch the
+# shop board's data (data.js) or any other file, and it starts from the current live
+# copy so it can't revert newer shop content.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/mymobiletour-dashboard-a9lkcx]
+    paths: ['.github/workflows/deploy-shop-link.yml']
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch live shop board and insert the Mobile Tour link
+        run: |
+          curl -s "https://mrashopdash.z13.web.core.windows.net/MRA_Dashboard.html" -o shop.html
+          python3 - <<'PY'
+          f = 'shop.html'
+          s = open(f, encoding='utf-8').read()
+          url = 'https://mrashopdash.z13.web.core.windows.net/MRA_Mobile_Tour.html'
+          if url in s:
+              print('link already present - no change')
+          else:
+              link = ('\n        <a class="mi" href="%s" target="_blank" rel="noopener" '
+                      'onclick="closeDrops()" title="MRA Mobile Tour Schedule - prototype '
+                      'replacement for MyMobileTour">\U0001F195 Mobile Tour Schedule (Prototype)</a>' % url)
+              anchors = ['\U0001F4D6 Product Catalogue</a>', '\U0001F4DA Project Library</a>']
+              done = False
+              for a in anchors:
+                  i = s.find(a)
+                  if i != -1:
+                      j = i + len(a)
+                      s = s[:j] + link + s[j:]
+                      open(f, 'w', encoding='utf-8').write(s)
+                      print('inserted after anchor:', a)
+                      done = True
+                      break
+              if not done:
+                  raise SystemExit('ERROR: no menu anchor found - not modifying file')
+          PY
+
+      - name: Upload patched shop board to Azure ($web)
+        uses: azure/CLI@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'MRA_Dashboard.html' \
+              --file shop.html \
+              --content-type 'text/html' \
+              --overwrite --auth-mode key --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      - name: Verify link is live
+        run: |
+          N=$(curl -s "https://mrashopdash.z13.web.core.windows.net/MRA_Dashboard.html" | grep -c "MRA_Mobile_Tour.html")
+          echo "link occurrences on live shop board: $N"
+          if [ "$N" -lt 1 ]; then echo "WARNING: link not found"; exit 1; fi
