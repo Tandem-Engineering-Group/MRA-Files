@@ -1,5 +1,50 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ REDESIGNED 2026-08-05 (rev 36.93) — Quote Generator priced sections now derive from Labor/Materials, not a separate editor
+
+Rich pushed back HARD on the rev 36.91 design (screenshots + blunt feedback): "Your detailed quote under normal
+state breaks out labor and materials automatically. I don't want to fucking type anything in, but I want the
+ability to tweak it. So you should automatically do this just like you do on the detailed quote... You have all
+the data already. I don't understand why you're making me type it again." He was right — the 36.91 design made
+him re-type the whole scope into a SEPARATE title/description/price editor even though his real Labor line
+items + Material line items (which he'd already built, 15+17 of them on the real AWS quote) already carried
+every dollar amount. Full rework, not a patch:
+
+- **Removed entirely**: the standalone `QUOTE.scopeSections` array + its editor (`qAddSection`/`qDelSection`/
+  `qToggleScopeMode`), the `QUOTE.scopePriced` toggle checkbox, and the paragraph-auto-split machinery
+  (`_qSplitScopeBlocks`/`_qLooksLikeScopeHeader`) built for it in rev 36.91/36.92 — all dead weight once the
+  mechanism changed; none of it shipped to real users beyond Rich's own same-day testing.
+- **New mechanism**: every Labor line and every Material line gets one new optional field, **Category** (a
+  small text input with `<datalist>` autocomplete pulling from categories already used elsewhere in the same
+  quote — type it once, click-select it after that). `_qCatGroups()` groups `lines`+`mats` by trimmed category
+  name and sums each group's `amt`/`line` (post-markup) automatically. `_qCompute()`'s `sections` array is
+  fully DERIVED — `{title, price, body}` per category, `body` auto-built by joining that category's own line
+  descriptions (zero separate typing for the description either). **Critically: `subtotal` stays exactly
+  `laborTotal+matsLine+consLine`, unchanged from before this feature ever existed** — categories only REGROUP
+  money already counted, they never add a second charge on top (this was the actual root cause of the "$0.00
+  Scope item / total doesn't match" complaint in the prior design, where sections were a separate additive
+  bucket).
+- **No toggle, fully automatic**: if zero lines have a category, the customer quote renders exactly like the
+  original plain single-paragraph "Work description" always has (verified byte-identical, no `q-secrow` HTML
+  present at all). The moment ANY line has a category, the customer quote automatically switches to the
+  grouped, priced view — no checkbox to remember. Uncategorized lines/materials (if some lines ARE
+  categorized but others aren't) fall into an honest **"Other work"** section rather than silently vanishing
+  from the customer's total; nonzero Shop Supplies gets its own section the same way.
+- **Internal breakdown** (`_qDetailHtml`) gets a small "By category" reference block right at the top, clearly
+  labeled "(this is how the customer quote will group it — same money as the Labor/Materials rows below, just
+  regrouped)" so Rich can eyeball the split before printing without it reading as a second charge.
+- Verified headless against a representative reconstruction of Rich's real AWS quote (7 labor + 5 material
+  lines spanning Interior Flooring Replacement / Graphic Updates / AV and Display Upgrades / General
+  Maintenance and Repairs + 2 intentionally uncategorized lines): all 4 named sections + "Other work" grouped
+  and summed correctly, `sectionsTotal === subtotal` exactly (no double-counting), and the zero-category
+  fallback case renders identically to pre-feature behavior. Screenshot of both the customer print and the
+  actual editor form (category fields visible + working, datalist populated) eyeballed before shipping.
+- ⚠️ **Migration note for Rich's real in-progress AWS quote**: since categories are new information that can't
+  be inferred from his existing line-item text with certainty, his already-built 15 labor + 17 material lines
+  will show the plain-paragraph fallback (empty, since he never used the Work description box either) until he
+  goes through and tags the relevant lines with a Category — same ~5 categories from his original screenshot.
+  This is a one-time, per-line tag (autocomplete makes repeats fast), not a re-typing of the scope narrative.
+
 ## ✅ FIXED 2026-08-05 (rev 36.92) — Quote Generator: phantom autosaves + broken header/body auto-split
 
 Two real bugs found within hours of shipping rev 36.91 (below), both from Rich actually using it live.
