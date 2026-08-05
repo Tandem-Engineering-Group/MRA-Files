@@ -1,52 +1,34 @@
-name: Deploy Mobile Tour to Azure
+name: Retire v1 Mobile Tour prototype
 
-# Publishes ONLY the Mobile Tour board (MRA_Mobile_Tour.html + mmt_data.js) to the
-# same Azure static website ($web container) the shop board uses. It never touches
-# the shop board's files (MRA_Dashboard.html / data.js / index.html), so the shop
-# dashboard and its live data are completely unaffected.
+# One-time cleanup: v1 (MyMobileTour) has been superseded by v2 (Logistics).
+# This deletes the v1 files from the Azure $web container so only Logistics remains.
+# It never touches the shop board (MRA_Dashboard.html) or its data (data.js).
 
 on:
+  workflow_dispatch:
   push:
     branches: [claude/mymobiletour-dashboard-a9lkcx]
-    paths:
-      - 'MRA_Mobile_Tour.html'
-      - 'mmt_data.js'
-      - '.github/workflows/deploy-tour.yml'
-  workflow_dispatch:
+    paths: ['.github/workflows/deploy-tour.yml']
 
 jobs:
-  deploy:
+  retire:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Upload Mobile Tour files to Azure ($web)
+      - name: Delete v1 blobs from Azure ($web)
         uses: azure/CLI@v2
         with:
           azcliversion: latest
           inlineScript: |
-            az storage blob upload \
-              --account-name mrashopdash \
-              --container-name '$web' \
-              --name 'MRA_Mobile_Tour.html' \
-              --file MRA_Mobile_Tour.html \
-              --content-type 'text/html' \
-              --overwrite --auth-mode key --only-show-errors
-
-            az storage blob upload \
-              --account-name mrashopdash \
-              --container-name '$web' \
-              --name 'mmt_data.js' \
-              --file mmt_data.js \
-              --content-type 'application/javascript' \
-              --overwrite --auth-mode key --only-show-errors
+            az storage blob delete --account-name mrashopdash --container-name '$web' \
+              --name 'MRA_Mobile_Tour.html' --auth-mode key --only-show-errors || true
+            az storage blob delete --account-name mrashopdash --container-name '$web' \
+              --name 'mmt_data.js' --auth-mode key --only-show-errors || true
         env:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
-      - name: Verify live URL
+      - name: Verify v1 is gone
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://mrashopdash.z13.web.core.windows.net/MRA_Mobile_Tour.html")
-          echo "MRA_Mobile_Tour.html -> HTTP $STATUS"
-          if [ "$STATUS" != "200" ]; then echo "WARNING: not 200"; exit 1; fi
-          echo "Live: https://mrashopdash.z13.web.core.windows.net/MRA_Mobile_Tour.html"
+          A=$(curl -s -o /dev/null -w "%{http_code}" "https://mrashopdash.z13.web.core.windows.net/MRA_Mobile_Tour.html")
+          B=$(curl -s -o /dev/null -w "%{http_code}" "https://mrashopdash.z13.web.core.windows.net/mmt_data.js")
+          echo "MRA_Mobile_Tour.html -> $A ; mmt_data.js -> $B (expect 404)"
