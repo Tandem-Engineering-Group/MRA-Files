@@ -1,5 +1,18 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-08-05 (rev 36.94) — Customer quote sections were leaking internal line-item notes
+
+Same-day follow-up to rev 36.93 below. Rich, after I applied real categories to his live AWS quote: "just
+remember for the customer quote we just need the bold statement only not all the details." Real bug behind
+the ask — the grouped sections were printing each category's underlying line-item **descriptions** too (not
+just title+price), and some of those real line items carry internal-only annotations (`⚠ PLACEHOLDER — swap
+for Chad's actual quote + markup once confirmed`, `⚠ TBD — awaiting Monday surface inspection; likely Chad,
+possibly Sarah`) — meaning a document meant for the customer could leak internal notes verbatim. Fixed:
+`_qCustomerHtml`'s section rows now render ONLY the bold category title + its summed price — no description
+line at all. The full itemized detail (including those internal annotations, appropriately) stays exactly
+where it belongs: the Detailed/internal print. Removed the now-unused `.q-secbody` CSS. Verified against the
+real AWS quote render — clean 6-line "title — $price" list, same $57,754.36 total, no leaked internal text.
+
 ## ✅ REDESIGNED 2026-08-05 (rev 36.93) — Quote Generator priced sections now derive from Labor/Materials, not a separate editor
 
 Rich pushed back HARD on the rev 36.91 design (screenshots + blunt feedback): "Your detailed quote under normal
@@ -44,6 +57,16 @@ every dollar amount. Full rework, not a patch:
   will show the plain-paragraph fallback (empty, since he never used the Work description box either) until he
   goes through and tags the relevant lines with a Category — same ~5 categories from his original screenshot.
   This is a one-time, per-line tag (autocomplete makes repeats fast), not a re-typing of the scope narrative.
+- **Actually done, same session** (Rich: "so you can't do that for me"): fetched the LIVE `quotes.json`, found
+  his real AWS Revamp record (`qmsggczmx`), and hand-categorized all 15 labor + 15 material lines (only 15
+  material lines actually existed, not 17) by matching each description to his original 5 scope headers —
+  2 lines (`PM & Coordination`, `Mounting hardware/fasteners/misc`) didn't clearly fit any category and were
+  deliberately left untagged so they land honestly in the auto-generated "Other work" bucket rather than being
+  force-fit. Wrote it back through the same "MRA Quote Write" flow used elsewhere, verified by re-fetching, and
+  rendered the actual customer print to confirm: 6 sections, `$54,485.25` sections subtotal ties exactly to the
+  pre-existing Labor+Materials subtotal, same `$57,754.36` grand total as before (no double-counting).
+  ⚠️ Told Rich to reload his own browser tab before further edits — his open session's in-memory `QUOTE` predates
+  this server-side change and autosave would otherwise overwrite it with the uncategorized version.
 
 ## ✅ FIXED 2026-08-05 (rev 36.92) — Quote Generator: phantom autosaves + broken header/body auto-split
 
