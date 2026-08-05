@@ -1,10 +1,10 @@
-name: Add Mobile Tour link to Shop board
+name: Pin Logistics link on Shop board
 
-# Adds a single menu link on the LIVE shop dashboard that opens the MRA Mobile Tour
-# Schedule prototype. It fetches whatever is currently live, inserts the one link
-# (only if missing), and re-uploads just MRA_Dashboard.html — it does NOT touch the
-# shop board's data (data.js) or any other file, and it starts from the current live
-# copy so it can't revert newer shop content.
+# Adds ONE menu link on the LIVE shop dashboard that opens the current MRA Logistics
+# prototype (logistics.html — the v2 build with Run of Show). Removes the older
+# MyMobileTour (v1) link if present, so there's a single clear entry. It fetches the
+# current live shop board, edits only that link, and re-uploads MRA_Dashboard.html —
+# it never touches the shop board's data (data.js) or any other file.
 
 on:
   workflow_dispatch:
@@ -16,19 +16,27 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch live shop board and insert the Mobile Tour link
+      - name: Fetch live shop board and set the Logistics link
         run: |
           curl -s "https://mrashopdash.z13.web.core.windows.net/MRA_Dashboard.html" -o shop.html
           python3 - <<'PY'
+          import re
           f = 'shop.html'
           s = open(f, encoding='utf-8').read()
-          url = 'https://mrashopdash.z13.web.core.windows.net/MRA_Mobile_Tour.html'
-          if url in s:
-              print('link already present - no change')
+          # 1) remove any earlier v1 MyMobileTour link
+          s2 = re.sub(r'\s*<a class="mi"[^>]*MRA_Mobile_Tour\.html[^>]*>.*?</a>', '', s)
+          url = 'https://mrashopdash.z13.web.core.windows.net/logistics.html'
+          changed = (s2 != s)
+          s = s2
+          if ('href="%s"' % url) in s:
+              print('logistics link already present')
+              if changed:
+                  open(f, 'w', encoding='utf-8').write(s)
+                  print('removed old v1 link')
           else:
               link = ('\n        <a class="mi" href="%s" target="_blank" rel="noopener" '
-                      'onclick="closeDrops()" title="MRA Mobile Tour Schedule - prototype '
-                      'replacement for MyMobileTour">\U0001F195 Mobile Tour Schedule (Prototype)</a>' % url)
+                      'onclick="closeDrops()" title="MRA Logistics Dashboard - current tour/logistics '
+                      'prototype (with Run of Show)">\U0001F9ED MRA Logistics Dashboard (Prototype)</a>' % url)
               anchors = ['\U0001F4D6 Product Catalogue</a>', '\U0001F4DA Project Library</a>']
               done = False
               for a in anchors:
@@ -37,7 +45,7 @@ jobs:
                       j = i + len(a)
                       s = s[:j] + link + s[j:]
                       open(f, 'w', encoding='utf-8').write(s)
-                      print('inserted after anchor:', a)
+                      print('inserted logistics link after anchor:', a)
                       done = True
                       break
               if not done:
@@ -60,8 +68,10 @@ jobs:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
-      - name: Verify link is live
+      - name: Verify links
         run: |
-          N=$(curl -s "https://mrashopdash.z13.web.core.windows.net/MRA_Dashboard.html" | grep -c "MRA_Mobile_Tour.html")
-          echo "link occurrences on live shop board: $N"
-          if [ "$N" -lt 1 ]; then echo "WARNING: link not found"; exit 1; fi
+          H=$(curl -s "https://mrashopdash.z13.web.core.windows.net/MRA_Dashboard.html")
+          LOG=$(printf '%s' "$H" | grep -c "logistics.html")
+          OLD=$(printf '%s' "$H" | grep -c "MRA_Mobile_Tour.html")
+          echo "logistics links: $LOG | old v1 links: $OLD"
+          if [ "$LOG" -lt 1 ]; then echo "WARNING: logistics link missing"; exit 1; fi
