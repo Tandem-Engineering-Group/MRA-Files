@@ -1,5 +1,23 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ SETTLED 2026-08-05 (rev 36.96) — Quote Generator customer format, FINAL: one intro paragraph + plain priced list
+
+Three quick round-trips after 36.93 shipped, each based on Rich actually looking at the real AWS quote render:
+- 36.94: dropped ALL per-section text (title + price only) — Rich: "you can't just have the bowl [bold]
+  statements... we had like the scope of work before" — too far, it read like a bare price list.
+- 36.95: put the per-section description back (cleaned of internal notes) — Rich: "no this is not what I want...
+  generally we would have a one line on top of everything with a generic statement of work not underneath each
+  individual one" — wrong shape: description belongs ONCE at the top, not repeated under every section.
+- 36.96 (this one, confirmed with Rich BEFORE shipping — he said "yes that sounds correct"): the existing
+  **Work description** box (already in the form, previously hidden whenever any category was used) now always
+  prints as ONE general intro paragraph above the section list. Each section goes back to bold title + price
+  only. Removed the now-dead `_qCustClean`/`.q-secbody` from the 36.94/36.95 attempts.
+- **This is the real, final format** — don't re-litigate it without Rich raising it again. Layout: Scope of Work
+  header → one intro paragraph (from Work description, blank if he hasn't typed one) → bold-title/price row per
+  category → Scope of Work Subtotal (if >1 section) → the usual all-inclusive Total box.
+- Verified against the real AWS quote both with and without an intro paragraph filled in; confirmed the
+  section list still ties to the same $54,485.25 subtotal / $57,754.36 total throughout all 4 iterations.
+
 ## ✅ FIXED 2026-08-05 (rev 36.94) — Customer quote sections were leaking internal line-item notes
 
 Same-day follow-up to rev 36.93 below. Rich, after I applied real categories to his live AWS quote: "just
