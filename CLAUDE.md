@@ -1,5 +1,35 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-08-06 (rev 37.0) — Fleetio watchdog "Add to board + assign" button did nothing
+
+Rich, from a real Fleetio issue popup (#1280, Siemens DBX J1110-92 steps): "I'm hitting assign to board, but
+nothing's happening. I don't think it works." Reproduced headlessly against the live site/data rather than
+guessing — confirmed two real, distinct bugs stacked on top of each other:
+
+- **Root cause of "nothing happens":** every OTHER `👤 Assign` button on the page (`_mcIssRow`, `_mcMinePanelHtml`)
+  calls `event.stopPropagation()` before opening the crew-picker popover — except this ONE button, inside the
+  Fleetio-issue detail modal (`mcIss()`). Without it, the click bubbles up to a page-wide "click outside closes
+  the popover" listener on `document`, which fires for that SAME click (since the listener sees the event on its
+  way up, after `qaOpen()` already added the `.show` class moments earlier in the same tick) — closing the
+  popover the instant it opens. Net effect: tap the button, see nothing, because the popup opens and closes
+  faster than a repaint. **Fixed**: added the missing `event.stopPropagation();`, matching every other call site.
+- **Second, related bug found while tracing it**: `_mcIssJob()` (matches a Fleetio issue to its board job) had a
+  broken fallback — its asset-digit check compared the issue's OWN job-number digits against the issue's OWN
+  asset text (neither side referenced the candidate job `j` at all), so the condition was either always-true or
+  always-false for a given issue regardless of which job was being tested. In practice this meant: whenever the
+  real matching job wasn't found by exact job-number (e.g. because it's since shipped and got filtered out of the
+  "active" set — exactly issue #1280's case, Siemens DBX J1110-92 shipped), the broken fallback would grab the
+  FIRST job in the filtered list, unrelated or not, and silently attach the issue there instead of correctly
+  falling back to the 🛠 General list. **Fixed**: the fallback now correctly checks the asset text against each
+  CANDIDATE job's own digits (`nj(j.jobNum)`), matching the already-correct pattern used elsewhere
+  (`queueAllFleetio`, the Fleetio-tab job matcher at ~line 13434).
+- Verified headless against the real live issue #1280 both before and after: before the fix, `_mcIssJob('1280')`
+  returned the WRONG job ("Post ADLM Inventory Storage") and the popover never showed (`display:none` after a
+  real Playwright click); after the fix, `_mcIssJob('1280')` correctly returns `null` (its real job shipped) and
+  the popover opens correctly (`display:flex`, visible rect), falling back to 🛠 General as intended.
+- ⚠️ Not yet confirmed by Rich on his actual device — ask him to retry assigning a Fleetio issue from My Work and
+  confirm it now works before considering this fully closed.
+
 ## ✅ FIXED 2026-08-06 — My Work "Questions for you" had no source link (3 of 4 sections did)
 
 Rich, looking at a real question on his phone: "How do I see where this is coming from... didn't we ask that
