@@ -3879,6 +3879,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.0", date:"2026-08-06", title:"🔧 Fixed: Fleetio watchdog's \"Add to board + assign\" button did nothing", items:[
+    "Rich: clicking <b>👤 Add to board + assign</b> inside a Fleetio issue popup did nothing at all. Root cause: that one button (unlike every other Assign button on the page) was missing <code>event.stopPropagation()</code> — the click bubbled up to a page-wide \"click outside closes the crew-picker\" listener, which closed the picker in the same instant it opened, so it never visibly appeared.",
+    "Found + fixed a second, related bug while tracing this: the fallback logic that matches a Fleetio issue to a board job by asset-name digits was comparing the issue's own job number against itself instead of against each candidate job — so on a unit whose original job has since shipped (like issue #1280 / Siemens DBX J1110‑92), it could silently glue the issue onto a totally unrelated job instead of correctly falling back to the 🛠 General list. Fixed the comparison; verified headless against the real live issue #1280 — the picker now opens correctly and (since that unit's job shipped) correctly offers the General list instead of a wrong job." ] },
   { rev:"36.99", date:"2026-08-06", title:"💲 Quote Generator — VIDAS install labor (BioMerieux) added to the pricing catalogue", items:[
     "Rich approved this pricing find from the My Command brief (VIDAS install labor — $120/hour, per Luciana's internal billing rate on the BioMerieux job). Added as a new Labor/Installation entry in the Quote Generator's materials reference so it's available for future quotes without re-typing it." ] },
   { rev:"36.98", date:"2026-08-06", title:"❓ Questions for you gets the same 🔗 source link as Waiting/Appointments/Teams", items:[
@@ -19423,7 +19426,8 @@ function _mcIssRow(it,flag,cls){ var jn=it.jobNum?('['+esc(it.jobNum)+'] '):'';
 function _mcIssJob(num){ var D=window.MRA_DATA||{}; var it=(((D.fleetio&&D.fleetio.issues)||[]).find(function(x){return String(x.num)===String(num);})); if(!it) return null;
   var nj=function(s){return String(s||'').toUpperCase().replace(/[^0-9]/g,'');}; var k=nj(it.jobNum);
   var jobs=(D.jobs||[]).filter(function(j){return j&&j.project&&j.category!=='leave'&&!/shipped/i.test(j.status||'');}); var hit=null;
-  jobs.forEach(function(j){ if(hit) return; if(k&&nj(j.jobNum)===k){ hit=j; return; } var m=String(it.asset||'').toUpperCase().match(/\d{3,5}/g); if(k&&m&&m.indexOf(k)>=0) hit=j; });
+  var m=String(it.asset||'').toUpperCase().match(/\d{3,5}/g);
+  jobs.forEach(function(j){ if(hit) return; if(k&&nj(j.jobNum)===k){ hit=j; return; } var jk=nj(j.jobNum); if(jk&&m&&m.indexOf(jk)>=0) hit=j; });
   return hit; }
 // Is this issue already a Shop Task on the board? -> {job,task} else null
 function _mcIssTask(num){ var D=window.MRA_DATA||{}; var jobs=(D.jobs||[]);
@@ -19472,7 +19476,7 @@ function mcToast(msg){ var t=document.getElementById('mcToast');
   t.textContent=msg; t.style.opacity='1'; clearTimeout(t._h); t._h=setTimeout(function(){ t.style.opacity='0'; },2600); }
 function mcIss(num){ if(typeof fioIssueDetailHtml==='function'){ var t=_mcIssTask(num); var lab=t?'👤 Re-assign crew':'👤 Add to board + assign';
     var fioLink=(typeof fioHref==='function')?('<a class="mc-btn" href="'+fioHref('issue',num)+'" target="_blank" rel="noopener" title="Open the real issue in Fleetio">🔧 Open in Fleetio ↗</a>'):'';
-    _mcModal('<h3>🔧 Fleetio issue #'+esc(num)+'</h3><div style="max-height:60vh;overflow:auto">'+fioIssueDetailHtml(num)+'</div><div class="foot">'+fioLink+'<button class="mc-btn primary" onclick="mcAssignIss(\''+esc(num)+'\',event)">'+lab+'</button><button class="mc-btn" onclick="_mcModalClose()">Close</button><span id="mcIssMsg" class="mc-muted"></span></div>'); } else { alert('Issue #'+num); } }
+    _mcModal('<h3>🔧 Fleetio issue #'+esc(num)+'</h3><div style="max-height:60vh;overflow:auto">'+fioIssueDetailHtml(num)+'</div><div class="foot">'+fioLink+'<button class="mc-btn primary" onclick="event.stopPropagation();mcAssignIss(\''+esc(num)+'\',event)">'+lab+'</button><button class="mc-btn" onclick="_mcModalClose()">Close</button><span id="mcIssMsg" class="mc-muted"></span></div>'); } else { alert('Issue #'+num); } }
 // Build a working "open this email/appointment" link. Use the item's verbatim Graph webLink ONLY —
 // a guessed ItemID built by charset-swapping the Graph `id` was tried here before and Rich hit
 // "this message might have been moved or deleted" on BOTH mail and calendar items from it (calendar
