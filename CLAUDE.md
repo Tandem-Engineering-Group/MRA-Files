@@ -443,6 +443,31 @@ The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
 Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
 
+- **2026-08-06 (21st recurrence, same day as the 19th/20th) — a REAL, separate, GitHub-Actions-side
+  problem found and fixed (does NOT explain every recurrence, but is a genuine compounding factor).**
+  Rich pushed back hard on "it's just flaky Power Automate/Azure" and asked for an actual deep-dive
+  instead of the standard explanation. Pulled the real run history for the **"Cloud export (data.js)"**
+  GitHub Action (`export.yml` — separate from "MRA Lists to JSON" itself, but triggered by its trailing
+  `repository_dispatch` step): in the ~4 hours before this recurrence, **only 8 of the last 30 runs
+  actually succeeded** — 15 sat in GitHub's `windows-latest` runner queue for exactly 15 minutes and
+  got auto-cancelled, 7 failed outright. Root cause: "MRA Lists to JSON" fires a trigger for this
+  workflow roughly every **2 minutes** (the interval Rich changed it to on 2026-07-16), and `export.yml`
+  had `concurrency: cancel-in-progress: false` — meaning every trigger queued up and waited its turn
+  rather than dropping stale ones. Whenever GitHub's shared `windows-latest` pool has any above-normal
+  latency handing out a runner (common enough — this session hit the same "sits in queue" pattern on
+  unrelated `deploy.yml` runs the same day), a 2-minute cadence leaves zero slack: triggers pile up
+  faster than they drain, and the ones at the back miss GitHub's own 15-minute cutoff. **Fixed**: flipped
+  `cancel-in-progress` to `true` in `export.yml` on BOTH branches (the working branch AND the default
+  branch `claude/exciting-keller-wm7u2p` — repository_dispatch/schedule-triggered runs always execute
+  the workflow file version from the DEFAULT branch, so the fix only takes effect there). Verified safe
+  first: the only write to the live site is one atomic single-file `az storage blob upload --overwrite`
+  of `data.js` at the very end of `Export-Data.ps1`, so a cancelled run can never leave a half-written
+  file live — it just contributes nothing and the old `data.js` stays put until a run actually finishes.
+  **This does NOT fix the underlying Power Automate hang** (Create blob/Create file, below) — it fixes a
+  genuinely separate, real, measured problem on the GitHub Actions side that was compounding on top of
+  it. ⚠️ Not yet proven over a real stretch — watch whether `export.yml`'s success rate actually improves,
+  and whether the CURRENT recurrence (banner still up, `listsAsOf` frozen ~56+ min as of this writing)
+  still traces back to the same Power-Automate-side `Create blob`/`Create file` hang once Rich checks it.
 - **2026-08-06 (20th recurrence, same day as the 19th) — hang moved to a DIFFERENT step this time.**
   Stalled again ~2h after the 19th recurrence's manual rerun (banner at 1h47m). Rich screenshotted the
   stuck run again: this time every step through `Compose` completed fine (`Select` 0s → `Get Project
