@@ -443,6 +443,25 @@ The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
 Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
 
+- **2026-08-06 (20th recurrence, same day as the 19th) — hang moved to a DIFFERENT step this time.**
+  Stalled again ~2h after the 19th recurrence's manual rerun (banner at 1h47m). Rich screenshotted the
+  stuck run again: this time every step through `Compose` completed fine (`Select` 0s → `Get Project
+  Tasks` 47s → `Select 1` 0.2s → `Get Shop Tasks` 30s → `Select 2` 0.1s → `Get Users` 1s → `Select 3` 0s
+  → `Compose` 0.9s, ~80s total) but it hung on **`Create file`** — with `Create blob (V2)` never even
+  starting. **This is the important new fact: last time (19th) the hang was on `Create blob (V2)`; this
+  time it's on `Create file` instead.** Same symptom (spinning past its own already-correct `PT2M`
+  timeout + Exponential/Count 4/Interval `PT10S` retry, confirmed present on this step back on
+  2026-08-04), different action, different connector (SharePoint this time, not Azure Blob). **This
+  argues AGAINST the leading "stuck blob lease" theory being the sole cause** — a lease on the Azure
+  blob wouldn't explain a SharePoint `Create file` step hanging. More likely explanation: whatever's
+  wrong isn't specific to one action/connector, it's something that can stall ANY write step in this
+  flow — e.g. a similarly-stuck lock/checked-out state on whatever SharePoint file `Create file` writes
+  to, or a platform-level issue with how this environment's timeout/retry gets honored for long-running
+  connector calls in general. **Next time this happens, keep noting WHICH step is stuck each time** —
+  if it keeps rotating between different actions, that pattern itself is the clue (points to something
+  systemic, not a single fixable resource) — if it keeps landing on the SAME action, that narrows it
+  back down. Cancelled + reran as normal; the blob-lease ask to the partner (below) still stands, but
+  broaden it to also ask whether the SharePoint file `Create file` writes to could be locked/checked out.
 - **2026-08-06 (19th recurrence) — FIRST TIME actually caught mid-hang, live in run history. Real new
   evidence, not a re-guess.** Stalled again (banner at 42m). Per the standing ask below ("open the stuck
   run FIRST, before cancelling, and see which step is still running"), Rich did exactly that and
