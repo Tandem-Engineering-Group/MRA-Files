@@ -463,11 +463,28 @@ Rich is done being told to re-apply the same fix — check this section before s
   first: the only write to the live site is one atomic single-file `az storage blob upload --overwrite`
   of `data.js` at the very end of `Export-Data.ps1`, so a cancelled run can never leave a half-written
   file live — it just contributes nothing and the old `data.js` stays put until a run actually finishes.
-  **This does NOT fix the underlying Power Automate hang** (Create blob/Create file, below) — it fixes a
-  genuinely separate, real, measured problem on the GitHub Actions side that was compounding on top of
-  it. ⚠️ Not yet proven over a real stretch — watch whether `export.yml`'s success rate actually improves,
-  and whether the CURRENT recurrence (banner still up, `listsAsOf` frozen ~56+ min as of this writing)
-  still traces back to the same Power-Automate-side `Create blob`/`Create file` hang once Rich checks it.
+  **✅ CONFIRMED RESOLVED, same session, with hard timestamped proof — this recurrence was NOT a Power
+  Automate hang at all.** Rich pushed back hard on guessing (rightly — several wrong theories got floated
+  in a row: PAT expiration, event_type mismatch, multiple enabled flow copies) and demanded actual data.
+  Screenshots of the live flow ("Copy of - Copy of - MRA Lists to JSON v3") showed **every run succeeding
+  every 5 minutes for the full 75-minute duration of the stall**, including the final `HTTP` notify step:
+  correct URI (`.../MRA-Files/dispatches`), correct body (`event_type: run-export`), and a **204** response
+  every time, from a token not expiring until 2027. So the flow was 100% healthy the whole time — the
+  historical "hung on Create blob/Create file" pattern (below) does NOT apply to this recurrence. Built a
+  temporary catch-all diagnostic workflow (`on: repository_dispatch` with no `types:` filter, so it fires
+  on ANY dispatch regardless of event_type) to get a direct answer instead of another guess. Result: **the
+  very first dispatch cycle after the `cancel-in-progress:true` fix above landed on the default branch —
+  6:29:17 PM, to the second — succeeded end-to-end** (both the catch-all and `export.yml` itself fired and
+  completed), and the live board's `listsAsOf` updated 4 seconds later. Real mechanism: the earlier 5–9 PM
+  queue pileup (73% failure rate, documented above) jammed GitHub's concurrency-group queue for this job
+  badly enough that it stopped creating NEW runs entirely — even though every individual `repository_
+  dispatch` API call kept getting accepted (204) the whole time, so nothing looked wrong from the Power
+  Automate side. The `cancel-in-progress:true` fix cleared the jam; the next real dispatch went straight
+  through. Diagnostic workflow deleted once confirmed (see its own commit for the exact evidence chain).
+  **Lesson for next time a stall shows a 204/green everywhere and still doesn't publish**: don't assume the
+  Power Automate flow is hung just because the board is stale — check whether GitHub is actually spawning
+  runs for the dispatch (a temporary no-`types:` catch-all workflow is the fastest way to get a direct,
+  unambiguous answer instead of guessing).
 - **2026-08-06 (20th recurrence, same day as the 19th) — hang moved to a DIFFERENT step this time.**
   Stalled again ~2h after the 19th recurrence's manual rerun (banner at 1h47m). Rich screenshotted the
   stuck run again: this time every step through `Compose` completed fine (`Select` 0s → `Get Project
