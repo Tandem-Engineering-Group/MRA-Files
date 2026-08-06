@@ -46,7 +46,7 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
 <body>
 <header>
   <h1>🚚 MRA InfoWheels — 3D Builder</h1>
-  <span class="rev">Rev 3 · Brandon's real CAD scan (17MB, decimated) — fully-segmented Inventor exports drop in later</span>
+  <span class="rev">Rev 4 · Brandon's real CAD scan, now fully segmented (10 parts, decimated) — body-only wrap color</span>
 </header>
 <main>
   <div id="view3d"><div id="hint">drag = orbit · wheel/pinch = zoom · right-drag = pan</div></div>
@@ -72,11 +72,13 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
       <button id="linkBtn">🔗 Copy config link</button>
       <button id="resetBtn">↺ Reset</button>
     </div>
-    <div class="note"><b>Rev 3</b>: this is Brandon's actual CAD scan (decimated for the web — 150k triangles, 17MB,
-    down from a 461MB raw export), not a placeholder. It's one fused mesh with no separate shell/cabinet/floor parts
-    yet, so it's a look-and-spin reference — wrap color tints the whole scan. Per-part customization (floors, wall
-    finishes, cabinet layouts) comes back once the design team exports <b>segmented IW 2.0 Inventor parts</b> instead
-    of one fused mesh.</div>
+    <div class="note"><b>Rev 4</b>: Brandon's design team sent the first fully-segmented export — 10 separate parts
+    (body, doors, wheels, interior, floor, walls, lights, TV, step) instead of one fused mesh. That's what makes body-only
+    wrap color possible: only the exterior shell + passenger doors pick up the color you choose — wheels, glass fixtures,
+    interior, etc. keep their own finish. Per-part colors/finishes for those other parts (floor material, wall color,
+    cabinet layout) aren't wired up yet — this is a real look-and-spin reference with the correct parts finally split
+    apart, not the full configurator yet. Each part's own material data was blank in the export (generic Rhino default),
+    so every non-wrap color you see is a reasonable placeholder, not a measured color.</div>
   </aside>
 </main>
 <script>/**
@@ -1313,7 +1315,7 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
 
 } )();
 </script>
-<script>/* MRA InfoWheels 3D Builder — Rev 2 (placeholder VAN configurator + a real decimated CAD scan toggle; fully-segmented IW2.0 Inventor meshes drop in later) */
+<script>/* MRA InfoWheels 3D Builder — Rev 4 (real decimated CAD scan, now loaded as 10 segmented parts instead of one fused mesh; body-only wrap color) */
 (function(){
 'use strict';
 const FT=0.3048;
@@ -1555,7 +1557,8 @@ function applyView(){
   }
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===state.view));
 }
-function applyWrap(){ M.wrap.color.set(state.wrap); if(scanMesh) scanMesh.material.color.set(state.wrap);
+function applyWrap(){ M.wrap.color.set(state.wrap);
+  Object.keys(scanParts).forEach(k=>{ const p=SCAN_PARTS.find(x=>x.key===k); if(p&&p.tint) scanParts[k].material.color.set(state.wrap); });
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -1563,48 +1566,82 @@ function applyWrap(){ M.wrap.color.set(state.wrap); if(scanMesh) scanMesh.materi
   if(nameEl) nameEl.innerHTML=match?match.title:('Custom <span>'+state.wrap.toUpperCase()+'</span>');
   document.getElementById('wrapCustom').classList.toggle('on',!match); }
 
-// ---- Real 3D scan: fetch + parse the OBJ (v/vn/f only — no UVs, single material, per the raw
-// export) into a BufferGeometry. Absolute path — this same HTML is also served at root /builder.html,
-// where a relative fetch would resolve to the wrong URL. ----
-let scanMesh=null, scanLoading=false, scanLoaded=false;
+// ---- Real 3D scan: Brandon's design team sent the first fully-segmented Inventor export (10
+// separate parts instead of one fused mesh) — this is what unlocks body-only wrap color instead of
+// tinting the whole van. Each part is its own decimated OBJ (v/vn/f only, no UVs — same as before);
+// .mtl files were all an identical blank Rhino default (no real color data), so colors below are a
+// reasonable placeholder per part, not measured — only the wrap color (body + doors) is "real".
+// Absolute paths — this same HTML is also served at root /builder.html, where a relative fetch
+// would resolve to the wrong URL.
+const SCAN_PARTS=[
+  {key:'exterior',  file:'exterior.obj',          tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'doors',     file:'PASSENGER DOORS.obj',   tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'interior',  file:'interior.obj',          tint:false, color:0xf1ede6, rough:.75, metal:0},
+  {key:'segwalls',  file:'SEG WALLS.obj',         tint:false, color:0xf1ede6, rough:.7,  metal:0},
+  {key:'floor',     file:'FLOOR.obj',             tint:false, color:0x8a8f96, rough:.8,  metal:0},
+  {key:'wheels',    file:'WHEELS.obj',            tint:false, color:0x1c1e22, rough:.55, metal:.2},
+  {key:'step',      file:'STEP.obj',              tint:false, color:0x2b2e33, rough:.6,  metal:.3},
+  {key:'extlights', file:'EXTERIOR LIGHTS.obj',   tint:false, color:0x15171a, rough:.4,  metal:.4},
+  {key:'ceillights',file:'CEILING LIGHTS.obj',    tint:false, color:0xfff8ec, rough:.5,  metal:0},
+  {key:'tv',        file:'TV.obj',                tint:false, color:0x0a0a0c, rough:.3,  metal:.1},
+];
+let scanParts={}, scanLoading=false, scanLoaded=false;
+function parseObj(text){
+  const vp=[], vn=[], positions=[], normals=[];
+  const lines=text.split('\n');
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    if(line.charCodeAt(0)===118 && line.charCodeAt(1)===32){          // "v "
+      const p=line.slice(2).trim().split(/\s+/); vp.push(parseFloat(p[0]),parseFloat(p[1]),parseFloat(p[2]));
+    } else if(line.slice(0,3)==='vn '){
+      const p=line.slice(3).trim().split(/\s+/); vn.push(parseFloat(p[0]),parseFloat(p[1]),parseFloat(p[2]));
+    } else if(line.charCodeAt(0)===102 && line.charCodeAt(1)===32){   // "f "
+      const parts=line.slice(2).trim().split(/\s+/);
+      for(let k=1;k<parts.length-1;k++){                             // fan-triangulate, just in case
+        [parts[0],parts[k],parts[k+1]].forEach(tok=>{
+          const idx=tok.split('/').map(s=>s?parseInt(s,10):0);
+          const vi=(idx[0]-1)*3, ni=idx[2]?(idx[2]-1)*3:-1;
+          // This Rhino export is Z-up (confirmed: real wheel diameter shows up on the Z axis, not
+          // Y); this scene is Y-up like the rest of the scene, so remap (x,y,z) -> (x,z,-y) here --
+          // a -90 deg rotation about X that keeps the mesh right-handed (no mirroring/winding flip).
+          positions.push(vp[vi], vp[vi+2], -vp[vi+1]);
+          if(ni>=0) normals.push(vn[ni], vn[ni+2], -vn[ni+1]);
+        });
+      }
+    }
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  if(normals.length===positions.length) geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals,3));
+  else geo.computeVertexNormals();
+  // This new segmented Rhino export is in INCHES (confirmed against real-world sizes: the body
+  // shell's ~267-unit length matches a real ~22ft van, the wheel part's ~29-unit diameter matches a
+  // real wheel) -- unlike the earlier single-mesh scan, which was in millimeters. inches -> meters.
+  geo.scale(.0254,.0254,.0254);
+  return geo;
+}
 function ensureScanLoaded(cb){
   if(scanLoaded){ cb&&cb(); return; }
   if(scanLoading) return;
   scanLoading=true;
   const hint=document.getElementById('hint'), origHint=hint.textContent;
-  hint.textContent='⏳ Loading the real 3D scan… (17MB, one-time)';
-  fetch('/builder/infowheels.obj').then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); }).then(text=>{
-    const vp=[], vn=[], positions=[], normals=[];
-    const lines=text.split('\n');
-    for(let i=0;i<lines.length;i++){
-      const line=lines[i];
-      if(line.charCodeAt(0)===118 && line.charCodeAt(1)===32){          // "v "
-        const p=line.slice(2).trim().split(/\s+/); vp.push(parseFloat(p[0]),parseFloat(p[1]),parseFloat(p[2]));
-      } else if(line.slice(0,3)==='vn '){
-        const p=line.slice(3).trim().split(/\s+/); vn.push(parseFloat(p[0]),parseFloat(p[1]),parseFloat(p[2]));
-      } else if(line.charCodeAt(0)===102 && line.charCodeAt(1)===32){   // "f "
-        const parts=line.slice(2).trim().split(/\s+/);
-        for(let k=1;k<parts.length-1;k++){                             // fan-triangulate, just in case
-          [parts[0],parts[k],parts[k+1]].forEach(tok=>{
-            const idx=tok.split('/').map(s=>s?parseInt(s,10):0);
-            const vi=(idx[0]-1)*3, ni=idx[2]?(idx[2]-1)*3:-1;
-            positions.push(vp[vi],vp[vi+1],vp[vi+2]);
-            if(ni>=0) normals.push(vn[ni],vn[ni+1],vn[ni+2]);
-          });
-        }
-      }
-    }
-    const geo=new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-    if(normals.length===positions.length) geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals,3));
-    else geo.computeVertexNormals();
-    geo.scale(.001,.001,.001);   // raw CAD export is in millimeters; this scene's unit = 1 meter
-                                  // (matches the procedural van's ~6-9 unit scale + the fixed fog range)
-    // Glossy vehicle-wrap look (matches the reference photos' finish) — same recipe as the
-    // procedural van's own wrap material, for visual consistency between the two.
-    const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6, clearcoatRoughness:.25, envMapIntensity:.6});
-    scanMesh=new THREE.Mesh(geo,mat); scanMesh.castShadow=true; scanMesh.receiveShadow=true;
-    scanG.add(scanMesh);
+  let doneCount=0;
+  hint.textContent='⏳ Loading the real 3D scan… (0/'+SCAN_PARTS.length+', one-time)';
+  Promise.all(SCAN_PARTS.map(p=>
+    fetch('/builder/parts/'+encodeURIComponent(p.file)).then(r=>{ if(!r.ok) throw new Error(p.file+': HTTP '+r.status); return r.text(); }).then(text=>{
+      const geo=parseObj(text);
+      // Glossy vehicle-wrap look on tinted parts (body + doors); everything else gets a plain
+      // matte/semi-gloss placeholder finish per its role (matches the reference photos loosely).
+      // side:DoubleSide -- the decimated meshes have inconsistent triangle winding in places
+      // (an artifact of the quadric-decimation pass), which shows up as a "see-through checkerboard"
+      // under normal single-sided backface culling. Rendering both sides is the standard fix.
+      const mat=new THREE.MeshPhysicalMaterial({color:p.tint?state.wrap:p.color, roughness:p.rough, metalness:p.metal,
+        clearcoat:p.clearcoat||0, clearcoatRoughness:.25, envMapIntensity:.6, side:THREE.DoubleSide});
+      const mesh=new THREE.Mesh(geo,mat); mesh.castShadow=true; mesh.receiveShadow=true;
+      scanG.add(mesh); scanParts[p.key]=mesh;
+      doneCount++; hint.textContent='⏳ Loading the real 3D scan… ('+doneCount+'/'+SCAN_PARTS.length+', one-time)';
+    })
+  )).then(()=>{
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
@@ -1613,15 +1650,18 @@ function ensureScanLoaded(cb){
   });
 }
 function frameScan(){
-  if(!scanMesh) return;
-  if(!scanMesh.userData.framed){
-    const box=new THREE.Box3().setFromObject(scanMesh);
+  if(!Object.keys(scanParts).length) return;
+  if(!scanG.userData.framed){
+    const box=new THREE.Box3().setFromObject(scanG);
     const size=box.getSize(new THREE.Vector3()), center=box.getCenter(new THREE.Vector3());
-    scanMesh.userData.center=center; scanMesh.userData.maxDim=Math.max(size.x,size.y,size.z);
-    scanMesh.userData.framed=true;
+    scanG.userData.center=center; scanG.userData.maxDim=Math.max(size.x,size.y,size.z); scanG.userData.height=size.y;
+    scanG.userData.framed=true;
   }
-  const c=scanMesh.userData.center, md=scanMesh.userData.maxDim;
-  camera.position.set(c.x+md*.9, c.y+md*.5, c.z+md*.9); controls.target.copy(c);
+  const c=scanG.userData.center, md=scanG.userData.maxDim;
+  // A conventional 3/4 vehicle-photography angle: elevation scaled off the object's actual HEIGHT
+  // (not its overall max dimension, which is dominated by the van's length) -- using md for the
+  // vertical offset put the camera absurdly high, looking almost straight down.
+  camera.position.set(c.x+md*.75, c.y+(scanG.userData.height||md)*.55, c.z+md*.75); controls.target.copy(c);
   camera.near=md/1000; camera.far=md*10; camera.updateProjectionMatrix();
 }
 function applyAccent(){ M.accent.color.set(state.accent); document.querySelectorAll('[data-accent]').forEach(b=>b.classList.toggle('on',b.dataset.accent===state.accent)); }

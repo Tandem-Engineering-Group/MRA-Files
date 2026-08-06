@@ -323,11 +323,12 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
       # MRA InfoWheels 3D Builder — standalone configurator hosted in /builder/ (self-contained
-      # single file: three.js embedded; Rev 2 adds a real decimated CAD scan (infowheels.obj,
-      # 17MB — down from Brandon's 461MB raw export via quadric decimation) as a "Real 3D scan"
-      # toggle alongside the original placeholder van. Fetched via an ABSOLUTE path from the page's
-      # JS (not relative) since this same HTML is also published at root /builder.html — a relative
-      # fetch would resolve to the wrong path from that copy.
+      # single file: three.js embedded). Rev 4 replaced the old single fused-mesh scan
+      # (infowheels.obj) with Brandon's design team's first fully-segmented export: 10 separate
+      # decimated parts (body, doors, wheels, interior, floor, walls, lights, TV, step) in
+      # builder/parts/, letting the wrap color apply to just the body + doors instead of the
+      # whole van. Fetched via ABSOLUTE paths from the page's JS (not relative) since this same
+      # HTML is also published at root /builder.html — a relative fetch would resolve wrong there.
       - name: Upload InfoWheels 3D Builder (/builder/)
         if: ${{ hashFiles('builder/index.html') != '' }}
         run: |
@@ -341,12 +342,15 @@ jobs:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
-      - name: Upload InfoWheels real 3D scan asset (/builder/infowheels.obj)
-        if: ${{ hashFiles('builder/infowheels.obj') != '' }}
+      - name: Upload InfoWheels segmented 3D scan parts (/builder/parts/)
+        if: ${{ hashFiles('builder/parts/*.obj') != '' }}
         run: |
-            az storage blob upload --account-name mrashopdash --container-name '$web' \
-              --name 'builder/infowheels.obj' --file builder/infowheels.obj --content-type 'text/plain' \
-              --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+            for f in builder/parts/*.obj; do
+              name=$(basename "$f")
+              az storage blob upload --account-name mrashopdash --container-name '$web' \
+                --name "builder/parts/$name" --file "$f" --content-type 'text/plain' \
+                --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+            done
         env:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
