@@ -3,14 +3,21 @@
   :root{color-scheme:dark}
   *{box-sizing:border-box}
   body{margin:0;min-height:100vh;background:#0f1420;color:#e8ecf4;font:15px/1.5 -apple-system,Segoe UI,Arial,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px}
-  .card{width:100%;max-width:560px;background:#171d2c;border:1px solid #2a3348;border-radius:14px;padding:28px}
+  .card{width:100%;max-width:620px;background:#171d2c;border:1px solid #2a3348;border-radius:14px;padding:28px}
   h1{font-size:19px;margin:0 0 6px;color:#fff}
   .sub{color:#93a0b8;font-size:13px;margin:0 0 20px}
   .drop{border:2px dashed #3a4660;border-radius:12px;padding:36px 16px;text-align:center;color:#93a0b8;cursor:pointer;transition:.15s}
   .drop.over{border-color:#e04826;background:#1c2436;color:#fff}
   .drop input{display:none}
-  .file{margin-top:16px;padding:12px 14px;background:#1c2436;border-radius:10px;font-size:13.5px;display:none}
-  .file b{color:#fff}
+  .filelist{margin-top:16px;display:none}
+  .frow{padding:10px 14px;background:#1c2436;border-radius:10px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+  .frow b{color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .frow .sz{color:#93a0b8;flex-shrink:0}
+  .frow .st{flex-shrink:0;font-weight:700;font-size:12px;min-width:70px;text-align:right}
+  .frow .st.pending{color:#93a0b8}
+  .frow .st.up{color:#e04826}
+  .frow .st.ok{color:#4ade80}
+  .frow .st.err{color:#f87171}
   .go{margin-top:16px;width:100%;padding:12px;border:0;border-radius:10px;background:#e04826;color:#fff;font-weight:700;font-size:14.5px;cursor:pointer;display:none}
   .go:disabled{opacity:.5;cursor:default}
   .bar{margin-top:16px;height:10px;border-radius:6px;background:#1c2436;overflow:hidden;display:none}
@@ -23,17 +30,17 @@
 
 <div class="card">
   <h1>📦 MRA File Staging Upload</h1>
-  <p class="sub" id="subtitle">One-time link — drop the file below to upload it directly.</p>
+  <p class="sub" id="subtitle">Drag as many files as you want — a whole folder is fine — and every one gets uploaded, not just the first.</p>
 
   <div id="missing" class="err-box">This link is missing its upload destination. Get a fresh link before trying again.</div>
 
   <div id="dropzone" class="drop">
-    <div id="dropText">Drag a file here, or click to choose one</div>
-    <input type="file" id="fileInput">
+    <div id="dropText">Drag files here (or a whole folder selection), or click to choose</div>
+    <input type="file" id="fileInput" multiple>
   </div>
 
-  <div class="file" id="fileInfo"></div>
-  <button class="go" id="goBtn">Upload now</button>
+  <div class="filelist" id="filelist"></div>
+  <button class="go" id="goBtn">Upload all</button>
   <div class="bar" id="bar"><i id="barFill"></i></div>
   <div class="status" id="status"></div>
 </div>
@@ -56,11 +63,11 @@
 
   var params = parseHash();
   var containerUrl = params.c || ''; // full container SAS URL: https://acct.blob.core.windows.net/container?sv=...
-  var defaultBlobName = params.b || '';
+  var defaultBlobName = params.b || ''; // only meaningful when exactly one file is queued
 
   var dropzone = document.getElementById('dropzone');
   var fileInput = document.getElementById('fileInput');
-  var fileInfo = document.getElementById('fileInfo');
+  var filelistEl = document.getElementById('filelist');
   var goBtn = document.getElementById('goBtn');
   var bar = document.getElementById('bar');
   var barFill = document.getElementById('barFill');
@@ -73,27 +80,42 @@
     return;
   }
 
-  var chosenFile = null;
+  // queue = [{file, status:'pending'|'up'|'ok'|'err', el}]
+  var queue = [];
 
   function humanSize(n){
     if(n > 1024*1024*1024) return (n/1024/1024/1024).toFixed(2)+' GB';
     if(n > 1024*1024) return (n/1024/1024).toFixed(1)+' MB';
     return Math.ceil(n/1024)+' KB';
   }
+  var STLABEL={pending:'waiting',up:'uploading…',ok:'✓ done',err:'✗ failed'};
 
-  function pickFile(f){
-    if(!f) return;
-    chosenFile = f;
-    fileInfo.style.display = 'block';
-    fileInfo.innerHTML = 'File: <b>'+f.name+'</b><br>Size: <b>'+humanSize(f.size)+'</b>';
-    goBtn.style.display = 'block';
-    goBtn.disabled = false;
-    statusEl.textContent = '';
-    statusEl.className = 'status';
+  function renderQueue(){
+    filelistEl.innerHTML = '';
+    filelistEl.style.display = queue.length ? 'block' : 'none';
+    queue.forEach(function(item, i){
+      var row = document.createElement('div');
+      row.className = 'frow';
+      row.innerHTML = '<b>'+item.file.name+'</b><span class="sz">'+humanSize(item.file.size)+'</span><span class="st '+item.status+'">'+STLABEL[item.status]+'</span>';
+      filelistEl.appendChild(row);
+      item.el = row;
+    });
+    goBtn.style.display = queue.length ? 'block' : 'none';
+  }
+
+  function addFiles(fileListLike){
+    var added = 0;
+    for(var i=0;i<fileListLike.length;i++){
+      var f = fileListLike[i];
+      if(!f || f.size===0 && f.name==='') continue;   // folders sometimes surface as 0-byte/empty entries
+      queue.push({file:f, status:'pending'});
+      added++;
+    }
+    if(added){ statusEl.textContent=''; statusEl.className='status'; renderQueue(); }
   }
 
   dropzone.addEventListener('click', function(){ fileInput.click(); });
-  fileInput.addEventListener('change', function(e){ pickFile(e.target.files[0]); });
+  fileInput.addEventListener('change', function(e){ addFiles(e.target.files); fileInput.value=''; });
   ['dragenter','dragover'].forEach(function(ev){
     dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.add('over'); });
   });
@@ -101,8 +123,7 @@
     dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.remove('over'); });
   });
   dropzone.addEventListener('drop', function(e){
-    var f = e.dataTransfer.files && e.dataTransfer.files[0];
-    pickFile(f);
+    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){ addFiles(e.dataTransfer.files); }
   });
 
   function blockIdFor(i){
@@ -133,51 +154,72 @@
     return attempt(1);
   }
 
-  async function upload(){
+  async function uploadOne(item, blobName){
+    var file = item.file, total = file.size;
+    var chunks = Math.max(1, Math.ceil(total / CHUNK));
+    var blockIds = [];
+    for (var i = 0; i < chunks; i++) {
+      var start = i * CHUNK;
+      var end = Math.min(start + CHUNK, total);
+      var slice = file.slice(start, end);
+      var blockId = blockIdFor(i);
+      blockIds.push(blockId);
+      statusEl.textContent = 'Uploading "'+file.name+'" — part ' + (i+1) + ' of ' + chunks + '  (' + humanSize(end) + ' / ' + humanSize(total) + ')';
+      await putWithRetry(
+        urlWith(blobName, 'comp=block&blockid=' + encodeURIComponent(blockId)),
+        slice,
+        { 'Content-Type': 'application/octet-stream' }
+      );
+    }
+    var xml = '<?xml version="1.0" encoding="utf-8"?><BlockList>' +
+      blockIds.map(function(id){ return '<Latest>'+id+'</Latest>'; }).join('') +
+      '</BlockList>';
+    await putWithRetry(
+      urlWith(blobName, 'comp=blocklist'),
+      xml,
+      { 'Content-Type': 'application/xml' }
+    );
+  }
+
+  async function uploadAll(){
     goBtn.disabled = true;
     bar.style.display = 'block';
     statusEl.className = 'status';
-    var blobName = defaultBlobName || chosenFile.name;
-    var total = chosenFile.size;
-    var chunks = Math.max(1, Math.ceil(total / CHUNK));
-    var blockIds = [];
+    var grandTotal = queue.reduce(function(a,q){ return a+q.file.size; }, 0) || 1;
+    var doneBytes = 0;
+    var okCount = 0, errCount = 0;
 
-    try {
-      for (var i = 0; i < chunks; i++) {
-        var start = i * CHUNK;
-        var end = Math.min(start + CHUNK, total);
-        var slice = chosenFile.slice(start, end);
-        var blockId = blockIdFor(i);
-        blockIds.push(blockId);
-        statusEl.textContent = 'Uploading part ' + (i+1) + ' of ' + chunks + '  (' + humanSize(end) + ' / ' + humanSize(total) + ')';
-        await putWithRetry(
-          urlWith(blobName, 'comp=block&blockid=' + encodeURIComponent(blockId)),
-          slice,
-          { 'Content-Type': 'application/octet-stream' }
-        );
-        barFill.style.width = Math.round((end/total)*95) + '%';
+    for (var qi = 0; qi < queue.length; qi++){
+      var item = queue[qi];
+      item.status = 'up';
+      if(item.el) item.el.querySelector('.st').className='st up', item.el.querySelector('.st').textContent=STLABEL.up;
+      var blobName = (queue.length===1 && defaultBlobName) ? defaultBlobName : item.file.name;
+      try {
+        await uploadOne(item, blobName);
+        item.status = 'ok'; okCount++;
+      } catch (err) {
+        item.status = 'err'; errCount++;
+        console.error('upload failed for', item.file.name, err);
       }
-
-      statusEl.textContent = 'Finalizing...';
-      var xml = '<?xml version="1.0" encoding="utf-8"?><BlockList>' +
-        blockIds.map(function(id){ return '<Latest>'+id+'</Latest>'; }).join('') +
-        '</BlockList>';
-      await putWithRetry(
-        urlWith(blobName, 'comp=blocklist'),
-        xml,
-        { 'Content-Type': 'application/xml' }
-      );
-
-      barFill.style.width = '100%';
-      statusEl.className = 'status ok';
-      statusEl.textContent = '✅ Upload complete — ' + humanSize(total) + ' sent as "' + blobName + '". You can close this tab.';
-    } catch (err) {
-      statusEl.className = 'status err';
-      statusEl.textContent = '❌ Upload failed: ' + err.message + '\n\nYou can try again — click "Upload now" once more.';
-      goBtn.disabled = false;
+      if(item.el){ var stEl=item.el.querySelector('.st'); stEl.className='st '+item.status; stEl.textContent=STLABEL[item.status]; }
+      doneBytes += item.file.size;
+      barFill.style.width = Math.round((doneBytes/grandTotal)*100) + '%';
     }
+
+    if(errCount===0){
+      statusEl.className = 'status ok';
+      statusEl.textContent = '✅ All '+okCount+' file'+(okCount===1?'':'s')+' uploaded. You can close this tab.';
+    } else {
+      statusEl.className = 'status err';
+      statusEl.textContent = '⚠ '+okCount+' uploaded, '+errCount+' failed — scroll up to see which, then click "Upload all" again to retry just those.';
+      // Drop the successful ones so a retry only re-sends what actually failed.
+      queue = queue.filter(function(it){ return it.status==='err'; });
+      queue.forEach(function(it){ it.status='pending'; });
+      renderQueue();
+    }
+    goBtn.disabled = false;
   }
 
-  goBtn.addEventListener('click', upload);
+  goBtn.addEventListener('click', uploadAll);
 })();
 </script>
