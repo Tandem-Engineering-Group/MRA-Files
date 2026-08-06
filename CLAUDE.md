@@ -460,6 +460,13 @@ Rich is done being told to re-apply the same fix — check this section before s
   Storage access) check that specific blob for an active lease and break it if present — this hasn't been
   tried yet and is now the leading suspect, ahead of the `Get *` steps (already hardened + ruled out below).
   ⚠️ Not yet confirmed — waiting on the partner to actually check for a lease.
+  **Same-day update**: Rich tried checking this himself in the Azure Portal signed in as his @tandemeng.com
+  account (confirmed in the right tenant, "TGCS (tandemeng.com)") — every blade ("Storage center", "All
+  storage resources") threw a generic "Error fetching data: service error", and searching "mrashopdash" by
+  name in the top search returned nothing. **Confirmed: Rich has no working Azure access under this login**,
+  consistent with the existing Access note above (Azure is partner-owned) — this isn't a new problem to
+  troubleshoot, just confirmation he can't self-serve this check. The lease check has to go through the
+  **partner** — gave Rich the exact ask to forward (check the `pipeline` container's blob for a stuck lease).
 - **2026-08-04 (18th recurrence) — two prior "still open" questions FINALLY checked and BOTH ruled out,
   true cause still unknown.** Found THREE copies of this flow existing: `MRA Lists to JSON` (original),
   `Copy of - MRA Lists to JSON v2`, `Copy of - Copy of - MRA Lists to JSON v3`. Confirmed via screenshots
