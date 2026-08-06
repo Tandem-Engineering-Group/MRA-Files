@@ -444,8 +444,13 @@ function filtered(){
   return activeEntries().filter(function(e){ return inRange(e.dateISO,r) && (!p||e.who===p) && (!j||e.job===j); })
     .sort(function(a,b){ return String(b.dateISO).localeCompare(String(a.dateISO))||String(b.ts).localeCompare(String(a.ts)); });
 }
+function updateFinBtnLabel(){
+  var r=$('fRange').value, trend=(r==='m'||r==='all'), b=$('finBtn'); if(!b) return;
+  b.innerHTML=trend?'📈 Time trends':'📊 Finance report';
+  b.title=trend?'Charts + trends over time (hours by week/month/job/person) — no day-by-day grid':'Weekly finance summary (job codes + employee IDs) in your payroll format';
+}
 function renderTracking(){
-  fillPersonFilter(); fillJobFilter();
+  fillPersonFilter(); fillJobFilter(); updateFinBtnLabel();
   var rows=filtered(); var tot=0, byJob={}, byPer={};
   rows.forEach(function(e){ tot+=e.hours; byJob[e.job]=(byJob[e.job]||0)+e.hours; byPer[e.who]=(byPer[e.who]||0)+e.hours; });
   $('grandTot').textContent=tot.toFixed(2).replace(/\.00$/,'.0');
@@ -547,6 +552,116 @@ function seedRealWeek(){
 function clearAll(){ if(!confirm('Delete ALL entries on this device?')) return; ENTS=[]; lset(LS.ents,ENTS); lset('mra_time_seeded',1); renderTracking(); }
 
 /* ---------- weekly finance report (payroll format) ---------- */
+/* 📈 Time Trends report (Rich, 2026-08-05): "Monthly and/or all time" broke the weekly grid report —
+   stacking dozens of per-week day-by-day grids isn't readable and isn't what a month/all-time view is
+   for. This is a separate report for those two ranges: no day-by-day grid at all, just simple bar-chart
+   trends (hours by week, by month, by job, by person) so the big picture actually reads. Same shared
+   print shell (print button/orientation/fit-to-page) and visual language (INK/MUT/BRAND tokens, bar-row
+   style) as the weekly report, reused here rather than duplicated ad hoc. */
+function buildTimeTrendsReport(rows,rangeLbl){
+  var dates=rows.map(function(e){return e.dateISO;}).filter(Boolean).sort();
+  var period=dates.length?(isoToMDY(dates[0])+' – '+isoToMDY(dates[dates.length-1])):rangeLbl;
+  var grand=0, byJob={}, byPerson={}, byWeek={}, byMonth={}, allEmpSet={}, calledInN=0;
+  rows.forEach(function(e){
+    var pt=fPayType(e), h=e.hours||0, who=e.who||'—';
+    grand+=h; allEmpSet[who]=1;
+    if(pt==='Called In') calledInN++;
+    byPerson[who]=(byPerson[who]||0)+h;
+    if(pt==='Work'){ var c=fCode(e); if(!byJob[c]) byJob[c]={name:fCodeName(e),h:0}; byJob[c].h+=h; }
+    if(e.dateISO){
+      var dd=new Date(e.dateISO+'T00:00:00'), wk=ymd(startOfWeek(dd));
+      byWeek[wk]=(byWeek[wk]||0)+h;
+      byMonth[e.dateISO.slice(0,7)]=(byMonth[e.dateISO.slice(0,7)]||0)+h;
+    }
+  });
+  function f(n){ return (Math.round((n||0)*100)/100).toFixed(2).replace(/\.00$/,'.0'); }
+  var INK='#16110F', INKS='#6B6360', MUT='#8A827D', DIS='#C9C3BF', HAIR='#F0EDEA', BORD='#E3DFDC', SURF='#FAF8F7', BRAND='#C1401F', TINT='#FBF1EE';
+  var FF="'Helvetica Neue',Helvetica,Arial,sans-serif";
+  function barBlock(title,items){
+    if(!items.length) return '';
+    var max=items.reduce(function(m,it){return Math.max(m,it.h);},0)||1;
+    var rowsHtml=items.map(function(it,i){
+      var w=Math.max(2,Math.round(it.h/max*1000)/10);
+      return '<div style="display:grid;grid-template-columns:160px 1fr 66px;align-items:center;gap:14px;padding:4px 0;border-bottom:1px solid '+(i===items.length-1?INK:HAIR)+';break-inside:avoid">'
+        +'<span style="font-size:10.5px">'+esc(it.label)+'</span>'
+        +'<span style="display:block;height:7px;background:'+HAIR+'"><span style="display:block;height:7px;width:'+w+'%;background:'+BRAND+'"></span></span>'
+        +'<span style="font-size:12px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums">'+f(it.h)+'</span></div>';
+    }).join('');
+    return '<h2 style="margin:18px 0 8px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">'+esc(title)+'</h2>'
+      +'<div style="border-top:1px solid '+INK+';margin-bottom:6px">'+rowsHtml+'</div>';
+  }
+  var weekKeys=Object.keys(byWeek).sort();   // chronological — reads top-to-bottom as a real trend over time
+  var weekItems=weekKeys.map(function(wk){ return {label:'Week of '+isoToMDY(wk), h:byWeek[wk]}; });
+  var monthKeys=Object.keys(byMonth).sort();
+  var MOF=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var monthItems=monthKeys.map(function(mo){ var p=mo.split('-'); return {label:MOF[+p[1]-1]+' '+p[0], h:byMonth[mo]}; });
+  var jobKeys=Object.keys(byJob).sort(function(a,b){ return byJob[b].h-byJob[a].h||a.localeCompare(b); });
+  var jobItems=jobKeys.map(function(c){ return {label:(c?c+' · ':'')+(byJob[c].name||''), h:byJob[c].h}; });
+  var personKeys=Object.keys(byPerson).sort(function(a,b){ return byPerson[b]-byPerson[a]; });
+  var personItems=personKeys.map(function(who){ return {label:who, h:byPerson[who]}; });
+  var empCount=Object.keys(allEmpSet).length, jobCount=jobKeys.length;
+  var d=new Date(), dd=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+  var logoUrl=(location.origin||'')+'/logo.png?v=20260803';
+  var excMeta=calledInN?('<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+BRAND+'">Exceptions</span><span style="color:'+BRAND+';font-weight:700">'+calledInN+' called in</span></div>'):'';
+  var body='<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;padding-bottom:8px;font-family:'+FF+'">'
+      +'<div style="display:flex;align-items:center;gap:10px"><img src="'+logoUrl+'" style="height:24px;width:auto;display:block" onerror="this.style.display=\'none\'"><span style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:'+MUT+'">Mobility Resource Associates Inc</span></div>'
+      +'<span style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:'+MUT+'">Time Trends · '+esc(period)+'</span>'
+    +'</div>'
+    +'<div style="font-family:'+FF+';color:'+INK+';-webkit-font-smoothing:antialiased">'
+      +'<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;padding-bottom:12px;border-bottom:3px solid '+INK+'">'
+        +'<div style="display:flex;flex-direction:column;gap:10px">'
+          +'<h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-.028em;line-height:1">Time Trends</h1>'
+          +'<div style="display:flex;gap:24px;font-size:9.5px;line-height:1.35;flex-wrap:wrap">'
+            +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Range</span><span style="font-weight:700">'+esc(period)+' ('+esc(rangeLbl)+')</span></div>'
+            +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Generated</span><span>'+dd+'</span></div>'
+            +excMeta
+          +'</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+          +'<div style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+';margin-bottom:3px">Grand total</div>'
+          +'<div style="font-size:34px;font-weight:700;letter-spacing:-.035em;line-height:.9;font-variant-numeric:tabular-nums">'+f(grand)+'</div>'
+          +'<div style="font-size:8.5px;color:'+MUT+';margin-top:4px">hours · '+empCount+' employee'+(empCount===1?'':'s')+' · '+jobCount+' job'+(jobCount===1?'':'s')+' · '+weekKeys.length+' week'+(weekKeys.length===1?'':'s')+'</div>'
+        +'</div>'
+      +'</div>'
+      +barBlock('Hours by week',weekItems)
+      +(monthKeys.length>1?barBlock('Hours by month',monthItems):'')
+      +barBlock('Hours by job',jobItems)
+      +barBlock('Hours by person',personItems)
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid '+BORD+';font-family:'+FF+';font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+'">'
+      +'<span>MRA · mobile.experiential</span><span>Generated automatically '+dd+'</span></div>';
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Time Trends '+period+'</title><style>'
+    +'*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#e7ebf0}'
+    +'.bar{position:sticky;top:0;z-index:20;background:#101827;color:#fff;padding:9px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px}'
+    +'.bar button{background:#e04826;color:#fff;border:0;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer;font-size:12.5px}'
+    +'.bar label{color:#cdd6e2;display:flex;gap:6px;align-items:center;cursor:pointer}'
+    +'.bar select{font-size:12px;padding:3px 6px;border-radius:5px;border:1px solid #4a5568}'
+    +'#sheetwrap{position:relative;overflow:hidden;padding:14px}'
+    +'#sheet{transform-origin:top left;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto}'
+    +'.pad{padding:0.4in}'
+    +'@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none}}'
+    +'</style><style id="pg"></style></head><body>'
+    +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
+    +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option></select></label>'
+    +'<label><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
+    +'</div>'
+    +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
+    +'<scr'+'ipt>'
+    +'function applyOpts(){'
+    +'var ori=document.getElementById("ori").value,fit=document.getElementById("fit").checked;'
+    +'var w=816,h=1056; if(ori==="landscape"){var t=w;w=h;h=t;}'
+    +'var m=0.4,mpx=m*96;'
+    +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
+    +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
+    +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
+    +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.min(1,uW/cw,uH/ch);'
+    +'s.style.zoom=sc;}'
+    +'}'
+    +'window.onload=applyOpts;'
+    +'</scr'+'ipt>'
+    +'</body></html>';
+  var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups, then tap Finance report again.'); return; } w.document.open(); w.document.write(html); w.document.close();
+}
 /* Airy design (Rich, 2026-08-04): rebuilt from a Claude Design handoff. Same data-reconciliation
    rules as before (job-code hours per employee, week totals, per-job breakdowns, and the grand
    total must always reconcile) — only the visual template changed. Design tokens/scale below
@@ -554,8 +669,14 @@ function clearAll(){ if(!confirm('Delete ALL entries on this device?')) return; 
    already handles) are folded into the same visual language rather than dropped. */
 function buildFinanceReport(){
   var rows=filtered();
-  var rangeLbl={tw:'This week',lw:'Last week',m:'This month',all:'All time'}[$('fRange').value]||'';
+  var rng=$('fRange').value;
+  var rangeLbl={tw:'This week',lw:'Last week',m:'This month',all:'All time'}[rng]||'';
   if(!rows.length){ alert('No time entries in this range to report.'); return; }
+  // Monthly / All time: the day-by-day weekly grid below is built to read as ONE pay period — stacked
+  // across many weeks (or the whole history) it turns into a wall of near-identical grids with no
+  // big-picture read (Rich: "the formatting is screwed... we were looking for trends over time and
+  // charts"). Those two ranges get a completely different report instead — see buildTimeTrendsReport.
+  if(rng==='m'||rng==='all'){ buildTimeTrendsReport(rows,rangeLbl); return; }
   var dates=rows.map(function(e){return e.dateISO;}).sort();
   var period=isoToMDY(dates[0])+' – '+isoToMDY(dates[dates.length-1]);
   var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
