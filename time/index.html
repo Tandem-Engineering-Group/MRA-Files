@@ -447,8 +447,8 @@ function filtered(){
 }
 function updateFinBtnLabel(){
   var r=$('fRange').value, trend=(r==='m'||r==='all'), b=$('finBtn'); if(!b) return;
-  b.innerHTML=trend?'📈 Time trends':'📊 Finance report';
-  b.title=trend?'Charts + trends over time (hours by week/month/job/person) — no day-by-day grid':'Weekly finance summary (job codes + employee IDs) in your payroll format';
+  b.innerHTML=trend?'📈 Time trends':'📊 Hours report';
+  b.title=trend?'Charts + trends over time (hours by week/month/job/person) — no day-by-day grid':'Weekly hours summary (job codes + employee IDs) in your payroll format';
 }
 function renderTracking(){
   fillPersonFilter(); fillJobFilter(); updateFinBtnLabel();
@@ -907,7 +907,7 @@ function openCostReport(){
 
   var win=window.open('','_blank');
   if(!win){ alert('Allow pop-ups, then tap Cost report again.'); return; }
-  win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>MRA Cost Report</title></head>'
+  win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>MRA Labor Cost Summary</title></head>'
     +'<body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#666;text-align:center">Loading pay rates…</body></html>');
 
   fetch(ratesUrl, {method:'POST', headers:{'Content-Type':'application/json'}})
@@ -933,6 +933,21 @@ function buildCostReportInto(win, rows, rates){
   function f(n){ return (Math.round((n||0)*100)/100).toFixed(2); }
   function money(n){ return '$'+(Math.round((n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function dash(){ return '<span style="color:'+DIS+'">–</span>'; }
+  var COLSEP='2px solid '+DIS;   // visible divider between one job's column-group and the next
+
+  // Pull PM/status straight from the shared board data (same data.js the dashboard reads) so the
+  // report carries real job context, not just a bare code -- picks the non-shipped record if more
+  // than one board row shares this job number, else falls back to whatever's there.
+  function _jobMeta(code){
+    var jobs=(window.MRA_DATA||{}).jobs||[], best=null, bestActive=false;
+    for(var i=0;i<jobs.length;i++){
+      var j=jobs[i], jn=String(j.jobNum||'').replace(/^j/i,'').trim();
+      if(jn!==code) continue;
+      var active=!/shipped/i.test(j.status||'');
+      if(!best || (active && !bestActive)){ best=j; bestActive=active; }
+    }
+    return best;
+  }
 
   // ---- Employee x job/leave-type matrix, hours + $ together in every cell, OT broken out as its
   // own row per employee at 1.5x -- matches the structure the finance controller's own spreadsheet
@@ -1007,18 +1022,31 @@ function buildCostReportInto(win, rows, rates){
   empKeys.forEach(function(w){ var E=byEmp[w]; grandRegH+=E.totRegH; grandRegC+=E.totRegC; grandOTH+=E.totOTH; grandOTC+=E.totOTC; });
   var grandTotal=grandRegC+grandOTC;
 
+  // Job columns get their board number + PM/status right in the header (not just a bare name), and
+  // every column-group gets a visible right-hand divider -- Rich: the columns "merge together" as
+  // plain name-only headers with no separation made the report hard to scan.
   var colHeadHtml=colKeys.map(function(k){
-    return '<th colspan="2" style="padding:0 4px 2px;text-align:center;font-size:7px;letter-spacing:.06em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+BORD+';white-space:nowrap">'+esc(colMeta[k].label)+'</th>';
+    var cm=colMeta[k];
+    var sub='';
+    if(cm.isJob){
+      var meta=_jobMeta(k);
+      var bits=[];
+      if(meta && meta.pm && !/^n\/a$/i.test(meta.pm)) bits.push(esc(meta.pm));
+      if(meta && meta.status && /shipped|hold/i.test(meta.status)) bits.push('<span style="color:'+BRAND+'">'+esc(meta.status)+'</span>');
+      if(bits.length) sub='<span style="display:block;font-size:6.5px;font-weight:400;text-transform:none;letter-spacing:0;color:'+MUT+';margin-top:1px">'+bits.join(' · ')+'</span>';
+    }
+    return '<th colspan="2" style="padding:0 4px 2px;text-align:center;font-size:7px;letter-spacing:.06em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+BORD+';border-right:'+COLSEP+';white-space:nowrap">'
+      +(cm.isJob?('<b style="color:'+INK+'">'+esc(k)+' · '+esc(cm.label)+'</b>'):esc(cm.label))+sub+'</th>';
   }).join('')+'<th colspan="2" style="padding:0 4px 2px;text-align:center;font-size:7px;letter-spacing:.06em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+BORD+'">Total</th>';
-  var subHeadCell='<th style="padding:0 4px 4px;text-align:right;font-size:7px;color:'+MUT+'">Hrs</th><th style="padding:0 4px 4px;text-align:right;font-size:7px;color:'+MUT+'">$</th>';
-  var subHeadHtml=colKeys.map(function(){ return subHeadCell; }).join('')+subHeadCell;
+  var subHeadCell='<th style="padding:0 4px 4px;text-align:right;font-size:7px;color:'+MUT+'">Hrs</th><th style="padding:0 4px 4px;text-align:right;font-size:7px;color:'+MUT+';border-right:'+COLSEP+'">$</th>';
+  var subHeadHtml=colKeys.map(function(){ return subHeadCell; }).join('')+'<th style="padding:0 4px 4px;text-align:right;font-size:7px;color:'+MUT+'">Hrs</th><th style="padding:0 4px 4px;text-align:right;font-size:7px;color:'+MUT+'">$</th>';
 
   var bodyRows=empKeys.map(function(who){
     var E=byEmp[who], hasRate=E.rate!=null;
     var mainCells=colKeys.map(function(k){
       var C=E.cols[k], h=C?C.regH:0, c=C?C.regC:0;
       return '<td style="padding:4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+'">'+(h?f(h):dash())+'</td>'
-        +'<td style="padding:4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';color:'+INKS+'">'+(!hasRate?'—':(h?money(c):dash()))+'</td>';
+        +'<td style="padding:4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';border-right:'+COLSEP+';color:'+INKS+'">'+(!hasRate?'—':(h?money(c):dash()))+'</td>';
     }).join('');
     var mainRow='<tr>'
       +'<td style="padding:4px 8px 4px 0;font-weight:700;border-bottom:1px solid '+HAIR+';white-space:nowrap">'+esc(who)+(hasRate?'':' <span style="color:'+BRAND+';font-weight:400;font-size:9px">(no rate)</span>')+'</td>'
@@ -1031,7 +1059,7 @@ function buildCostReportInto(win, rows, rates){
     var otCells=colKeys.map(function(k){
       var C=E.cols[k], h=C?C.otH:0, c=C?C.otC:0;
       return '<td style="padding:2px 4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';color:'+BRAND+'">'+(h?f(h):'')+'</td>'
-        +'<td style="padding:2px 4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';color:'+BRAND+'">'+(h&&hasRate?money(c):'')+'</td>';
+        +'<td style="padding:2px 4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';border-right:'+COLSEP+';color:'+BRAND+'">'+(h&&hasRate?money(c):'')+'</td>';
     }).join('');
     var otRow='<tr style="background:'+TINT+'">'
       +'<td style="padding:2px 8px 2px 0;font-size:9.5px;color:'+BRAND+';border-bottom:1px solid '+HAIR+'">OT @ 1.5×</td>'
@@ -1046,7 +1074,7 @@ function buildCostReportInto(win, rows, rates){
   var footCells=colKeys.map(function(k){
     var col=colMeta[k];
     return '<td style="padding:6px 4px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">'+f(col.totH)+'</td>'
-      +'<td style="padding:6px 4px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">'+(col.totC?money(col.totC):dash())+'</td>';
+      +'<td style="padding:6px 4px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;border-right:'+COLSEP+'">'+(col.totC?money(col.totC):dash())+'</td>';
   }).join('');
   var grandH=grandRegH+grandOTH;
   var footRow='<tr style="border-top:2px solid '+INK+'"><td style="padding:6px 8px 6px 0;font-weight:700">Total</td><td></td>'+footCells
@@ -1058,13 +1086,13 @@ function buildCostReportInto(win, rows, rates){
   var logoUrl=(location.origin||'')+'/logo.png?v=20260803';
   var masthead='<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;padding-bottom:8px;font-family:'+FF+'">'
       +'<div style="display:flex;align-items:center;gap:10px"><img src="'+logoUrl+'" style="height:24px;width:auto;display:block" onerror="this.style.display=\'none\'"><span style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:'+MUT+'">Mobility Resource Associates Inc</span></div>'
-      +'<span style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:'+MUT+'">Cost Report · '+esc(period)+'</span></div>';
+      +'<span style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:'+MUT+'">Labor Cost Summary · '+esc(period)+'</span></div>';
 
   var body=masthead
     +'<div style="font-family:'+FF+';color:'+INK+';-webkit-font-smoothing:antialiased">'
       +'<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;padding-bottom:12px;border-bottom:3px solid '+INK+'">'
         +'<div style="display:flex;flex-direction:column;gap:10px">'
-          +'<h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-.028em;line-height:1">Cost Report</h1>'
+          +'<h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-.028em;line-height:1">Labor Cost Summary</h1>'
           +'<div style="display:flex;gap:24px;font-size:9.5px;line-height:1.35;flex-wrap:wrap">'
             +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Period</span><span style="font-weight:700">'+esc(period)+'</span></div>'
             +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Generated</span><span>'+dd+'</span></div>'
@@ -1090,7 +1118,7 @@ function buildCostReportInto(win, rows, rates){
     +'</div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid '+BORD+';font-family:'+FF+';font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+'">'
       +'<span>MRA · mobile.experiential · Confidential -- pay rate data</span><span>Generated automatically '+dd+'</span></div>';
-  var html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Cost Report '+period+'</title><style>'
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Labor Cost Summary '+period+'</title><style>'
     +'*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#e7ebf0}'
     +'.bar{position:sticky;top:0;z-index:20;background:#101827;color:#fff;padding:9px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px}'
     +'.bar button{background:#e04826;color:#fff;border:0;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer;font-size:12.5px}'
