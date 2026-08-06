@@ -1,5 +1,32 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ SHIPPED 2026-08-05 — Time Tracking: separate "Time Trends" report for Monthly / All-time ranges
+
+Rich sent 2 screenshots of the Finance report with "All time" selected: "the formatting is screwed... we
+don't really need to see the time cards in these formats. We were looking for trends over time and charts
+and graphs." Root cause: `buildFinanceReport()` in `time/index.html` always built the "Weekly Time Summary"
+format — a day-by-day grid PER WEEK, stacked one block after another. Fine for This week/Last week (1 block),
+tolerable for This month (~4-5 blocks), but unreadable for All time (his real data spans June–August, 9+ weeks
+→ 9+ stacked grids, no big-picture read at all).
+
+- **Fix, not a patch on the same report**: `buildFinanceReport()` now branches — if `$('fRange').value` is
+  `'m'` or `'all'`, it calls a new `buildTimeTrendsReport(rows, rangeLbl)` instead of building the weekly grid.
+  This week/Last week are completely unchanged (verified byte-for-byte behavior — same function, same code path).
+- **New report, chart-first, no grid**: masthead+stat-tile header (same visual language, reused INK/MUT/BRAND
+  design tokens from the Airy redesign) → **Hours by week** bar chart (chronological, reads as a real trend
+  over time) → **Hours by month** bar chart (only shown when the range spans 2+ calendar months) → **Hours by
+  job** → **Hours by person**. All four are simple CSS bar-rows (same pattern already used for job-code totals
+  in the weekly report) — no chart library, no day-by-day grid anywhere.
+- **Button adapts automatically** (`updateFinBtnLabel()`, called from `renderTracking()` on every range
+  change): the single 📊/📈 button relabels itself "📊 Finance report" for This week/Last week, "📈 Time
+  trends" for This month/All time, with a matching tooltip — so Rich sees which report he'll get before
+  clicking, no need for a second button.
+- Verified headless against a synthetic 9-week/4-job/6-person dataset: button label switches correctly across
+  all 4 range options; the All-time print shows all 4 chart sections with correct totals and explicitly does
+  NOT contain the "Hours by employee and day" grid header; the This-week print still produces byte-equivalent
+  Weekly Time Summary output (job code totals + day-by-day grid), confirming zero regression on the
+  recently-shipped Airy design. Screenshots of both reports eyeballed before shipping.
+
 ## ✅ SETTLED 2026-08-05 (rev 36.96) — Quote Generator customer format, FINAL: one intro paragraph + plain priced list
 
 Three quick round-trips after 36.93 shipped, each based on Rich actually looking at the real AWS quote render:
