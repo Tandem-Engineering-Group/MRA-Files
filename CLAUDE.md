@@ -1,5 +1,28 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-08-06 — My Work "Questions for you" had no source link (3 of 4 sections did)
+
+Rich, looking at a real question on his phone: "How do I see where this is coming from... didn't we ask that
+for every section?" Checked the actual rendering code for all 4 My Work brief sections — he was right, but the
+gap was narrower than he thought: **Waiting on you** (📧 Open email), **Appointments** (small 📧 icon), and
+**Teams messages** (💬 Open chat) all already use the `_mcMailHref()` helper to show a real link back to the
+source when the brief item carries a `link` field. **Questions for you** was the one section that never got
+this — no link field in its schema, no button in its render code, nothing.
+
+- **Fixed**: added the same 🔗 Source link to the Questions panel, reusing `_mcMailHref()` — no new mechanism,
+  just applying the existing one consistently.
+- ⚠️ **Existing questions won't show a link** — they were built before this fix and their source id/link was
+  never captured, so there's nothing to link to. Not a bug, just predates the fix; new questions going forward
+  will carry it once the routine change below is saved.
+- **Also true for Waiting/Appointments right now**: the code has always supported `x.link`, but the recurring
+  refresh routine's instructions only ever told it to capture `id` (a raw Graph message id) for those two
+  sections, never the actual clickable `link` (webLink). So even though the code path is real, it's likely been
+  rendering empty for those too. Gave Rich an updated Routine instructions block (superseding the projectMail
+  one from earlier today) adding `link` capture to questions/waiting/appts.
+- **Inbound this week** has no link mechanism at all (code or schema) — flagged as a known remaining gap, not
+  fixed yet; asked Rich whether he wants it too before building it (inbound items are shipment/tracking info,
+  less clearly "one single source message" than the other three).
+
 ## ✅ SHIPPED 2026-08-05 — Time Tracking: separate "Time Trends" report for Monthly / All-time ranges
 
 Rich sent 2 screenshots of the Finance report with "All time" selected: "the formatting is screwed... we
