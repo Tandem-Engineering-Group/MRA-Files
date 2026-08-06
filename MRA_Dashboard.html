@@ -3879,6 +3879,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"36.97", date:"2026-08-06", title:"📥 File project mail actually fixed — the 2026-07-24 fix was only half-finished", items:[
+    "Rich: \"it used to work... figure out what you did to f*** it up.\" Found the real story: on 7/24 (rev 36.43), mail was moved into its own <b>mail.json</b> file specifically so the 4x/day brief refresh couldn't wipe it — but that change shipped with a known gap (\"falls back to the previous behavior until the mail-publish flow is switched on\"). That flow was never built. mail.json got seeded once that day and nothing has written to it since — nobody broke a working thing, the automated half was simply never finished, and it slowly went stale over 13 days.",
+    "Real fix, no new Power Automate flow needed: <b>projectMail</b> now lives back inside <b>agent.json</b>, refreshed by the same 4x/day routine that's already proven reliable for Teams messages and pricing finds (same fetch-carry-forward-refresh pattern). The dashboard's read order flipped to match — agent.json's projectMail is now authoritative whenever present; the old mail.json blob only fills in if agent.json genuinely has nothing, instead of a 13-day-stale copy silently winning forever.",
+    "Seeded 6 real, current project-mail entries (Stryker, Oakland Schools, AWS Revamp, SWC MMOT - Hawaii, On Cloud Airstream, Trumpf) pulled from a live inbox scan and published immediately so the panel isn't empty while this rolls out." ] },
   { rev:"36.96", date:"2026-08-05", title:"🧩 Quote Generator — one general Scope of Work paragraph on top, clean priced list below (final format)", items:[
     "Rich clarified the real format after seeing 36.95: a real quote isn't a description under every single line item — it's ONE general statement-of-work paragraph up top, then a clean itemized price list. Landed it: whatever's typed in the existing <b>Work description</b> box now prints as a single intro paragraph above the section list (that field was already there — it just wasn't shown while categories were in use); each priced section below it goes back to bold title + price ONLY, nothing underneath. Removed the now-unused per-section body machinery (`_qCustClean`, `.q-secbody`) from 36.94/36.95." ] },
   { rev:"36.95", date:"2026-08-05", title:"🐛 Quote Generator — customer quote sections get their description back, internal notes stripped", items:[
@@ -19312,10 +19316,13 @@ function loadAgent(cb){ function done(a){ _MC_AGENT=a||null;
     // Cache the project-mail list on this device so it survives the scan overwriting agent.json without it.
     try{ if(a&&a.projectMail&&a.projectMail.length){ localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:a.projectMail})); }
       else { var _pc=JSON.parse(localStorage.getItem('mra_mc_pmail_v1')||'null'); if(_pc&&_pc.pm&&_pc.pm.length) localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:_pc.pm})); } }catch(e){}   // scan dropped projectMail -> re-stamp the cache so it never ages out on an active device
-    // SCAN-IMMUNE MAIL: projectMail also lives in its OWN blob (mail.json) that the brief-scan NEVER rewrites,
-    // so it can't be wiped. Pull it and override — it's the authoritative source whenever present. 404s harmlessly
-    // (falls back to agent.json / cache) until the "MRA Mail Publish" flow exists.
-    (function(){ function tryMail(u,nx){ fetch(u,{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(mj){
+    // MAIL FALLBACK ONLY: the standalone mail.json blob (built 2026-07-24 so the brief-scan couldn't wipe
+    // projectMail) never got its own recurring publish flow finished — it was seeded once and never touched
+    // again. agent.json's projectMail is now refreshed the SAME reliable way as teamsMsgs/pricingFinds (the
+    // routine fetches-carries-forward-refreshes it every run), so IT is authoritative whenever present.
+    // mail.json only fills in if agent.json genuinely has nothing (a real gap, not a stale copy winning).
+    (function(){ if(_MC_AGENT&&_MC_AGENT.projectMail&&_MC_AGENT.projectMail.length) return;
+      function tryMail(u,nx){ fetch(u,{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(mj){
         if(mj&&mj.projectMail&&mj.projectMail.length){ if(_MC_AGENT) _MC_AGENT.projectMail=mj.projectMail;
           try{ localStorage.setItem('mra_mc_pmail_v1', JSON.stringify({at:Date.now(), pm:mj.projectMail})); }catch(e){}
           try{ if(typeof _mcRerenderMC==='function') _mcRerenderMC(); }catch(e){} } }).catch(function(){ if(nx) nx(); }); }
