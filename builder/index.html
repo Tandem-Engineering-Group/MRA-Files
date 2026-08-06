@@ -46,7 +46,7 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
 <body>
 <header>
   <h1>🚚 MRA InfoWheels — 3D Builder</h1>
-  <span class="rev">Rev 4 · Brandon's real CAD scan, now fully segmented (10 parts, decimated) — body-only wrap color</span>
+  <span class="rev">Rev 4.1 · Brandon's real CAD scan, fully segmented (10 parts) and vertex-welded — solid panels, body-only wrap color</span>
 </header>
 <main>
   <div id="view3d"><div id="hint">drag = orbit · wheel/pinch = zoom · right-drag = pan</div></div>
@@ -78,7 +78,12 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
     interior, etc. keep their own finish. Per-part colors/finishes for those other parts (floor material, wall color,
     cabinet layout) aren't wired up yet — this is a real look-and-spin reference with the correct parts finally split
     apart, not the full configurator yet. Each part's own material data was blank in the export (generic Rhino default),
-    so every non-wrap color you see is a reasonable placeholder, not a measured color.</div>
+    so every non-wrap color you see is a reasonable placeholder, not a measured color.
+    <br><br><b>Rev 4.1</b>: the export's tessellation never shared vertices between adjacent faces — every triangle got
+    its own private corners even where it touched a neighbor, so nothing was actually stitched together (this is what
+    caused the "checkerboard hole" look on the body panels and interior walls). Fixed by welding coincident vertices
+    back together in every part — same real geometry, just properly connected — instead of guessing at new surface.
+    Ask Brandon to enable vertex welding on his next export so this isn't needed again.</div>
   </aside>
 </main>
 <script>/**
@@ -1632,9 +1637,9 @@ function ensureScanLoaded(cb){
       const geo=parseObj(text);
       // Glossy vehicle-wrap look on tinted parts (body + doors); everything else gets a plain
       // matte/semi-gloss placeholder finish per its role (matches the reference photos loosely).
-      // side:DoubleSide -- the decimated meshes have inconsistent triangle winding in places
-      // (an artifact of the quadric-decimation pass), which shows up as a "see-through checkerboard"
-      // under normal single-sided backface culling. Rendering both sides is the standard fix.
+      // side:DoubleSide is defensive (harmless either way) -- the real cause of the old "checkerboard
+      // hole" look was the source export never sharing vertices between adjacent faces (fixed by
+      // welding coincident vertices per part, see builder/parts/*.obj), not backface culling.
       const mat=new THREE.MeshPhysicalMaterial({color:p.tint?state.wrap:p.color, roughness:p.rough, metalness:p.metal,
         clearcoat:p.clearcoat||0, clearcoatRoughness:.25, envMapIntensity:.6, side:THREE.DoubleSide});
       const mesh=new THREE.Mesh(geo,mat); mesh.castShadow=true; mesh.receiveShadow=true;
