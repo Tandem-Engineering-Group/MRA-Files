@@ -443,6 +443,23 @@ The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
 Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
 
+- **2026-08-06 (19th recurrence) — FIRST TIME actually caught mid-hang, live in run history. Real new
+  evidence, not a re-guess.** Stalled again (banner at 42m). Per the standing ask below ("open the stuck
+  run FIRST, before cancelling, and see which step is still running"), Rich did exactly that and
+  screenshotted it. Confirmed: every step before `Create blob (V2)` completed fast and clean (`Select 1`
+  0.2s → `Get Shop Tasks` 29s → `Select 2` 0.1s → `Get Users` 0.2s → `Select 3` 0s → `Compose` 0.3s →
+  `Create file` 3s, all green checks, ~33s total) — **the hang is `Create blob (V2)` specifically**, still
+  spinning with no error at 39+ minutes elapsed. Confirmed its Settings tab: **Action timeout `PT2M`,
+  Retry policy Exponential interval, Count `4`, Interval `PT10S`** — exactly the fix applied back on
+  2026-07-29, still correctly in place. **This is the important part: those settings should force a
+  hard fail well under 10-15 minutes in the worst case, and they did not.** An action still hanging PAST
+  its own configured timeout+retries points away from "needs another timeout tweak" and toward the
+  underlying Azure Blob write itself being blocked on something Power Automate's retry policy can't route
+  around — most likely a **stuck lease/lock on the actual blob** (`pipeline` container, the file this step
+  writes) left behind by an earlier failed/aborted run. Told Rich to have his **partner** (owns Azure
+  Storage access) check that specific blob for an active lease and break it if present — this hasn't been
+  tried yet and is now the leading suspect, ahead of the `Get *` steps (already hardened + ruled out below).
+  ⚠️ Not yet confirmed — waiting on the partner to actually check for a lease.
 - **2026-08-04 (18th recurrence) — two prior "still open" questions FINALLY checked and BOTH ruled out,
   true cause still unknown.** Found THREE copies of this flow existing: `MRA Lists to JSON` (original),
   `Copy of - MRA Lists to JSON v2`, `Copy of - Copy of - MRA Lists to JSON v3`. Confirmed via screenshots
