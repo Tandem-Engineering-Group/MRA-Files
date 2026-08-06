@@ -1,0 +1,26 @@
+name: Dispatch catch-all (diagnostic)
+
+# TEMPORARY diagnostic. Matches repository_dispatch of ANY event type (no `types:` filter --
+# per GitHub's own docs, omitting `types` means it fires for every repository_dispatch, unlike
+# export.yml which only fires on types:[run-export]). Purpose: find out exactly what event_type
+# and payload "MRA Lists to JSON" is actually sending, since its HTTP notify step reports success
+# but export.yml has received zero matching triggers in over an hour. If this fires, the logged
+# event_type tells us definitively whether it's a mismatch (typo, wrong value) or something else.
+# If this does NOT fire either, the HTTP call isn't reaching GitHub's dispatch endpoint at all.
+# Delete this file once the mystery is solved -- it's not meant to be permanent.
+
+on:
+  repository_dispatch:
+
+jobs:
+  log-event:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump the full event payload
+        run: |
+          echo "=== event_type ==="
+          echo "${{ github.event.action }}"
+          echo "=== full event JSON ==="
+          cat <<'EOF'
+          ${{ toJSON(github.event) }}
+          EOF
