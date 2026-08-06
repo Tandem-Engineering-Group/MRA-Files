@@ -443,6 +443,16 @@ The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
 Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
 
+**✅ WATCHDOG BUILT 2026-08-06 (`.github/workflows/pipeline-watchdog.yml`, on both branches — it uses
+`schedule:`, which only reads from the DEFAULT branch, same rule as `export.yml`).** Checks the live
+`data.js`'s `listsAsOf` every 10 min; if stale past 20 min, the job **deliberately fails** with a clear
+message instead of silently logging — Rich already gets GitHub's own email notification on a failed
+workflow run for this repo (confirmed via a real email he'd received for a different workflow), so this
+reaches him with **zero new Power Automate flow, zero new secret/URL to manage** (his own call: "whatever
+is easiest"). Debounced via a tiny committed state file (`.github/watchdog-state.json`) — only fails once
+per stale episode, re-fails hourly if still unresolved, clears itself the moment the pipeline recovers.
+Don't rebuild this if it comes up again; check whether it's still there and firing correctly first.
+
 - **2026-08-06 (21st recurrence, same day as the 19th/20th) — a REAL, separate, GitHub-Actions-side
   problem found and fixed (does NOT explain every recurrence, but is a genuine compounding factor).**
   Rich pushed back hard on "it's just flaky Power Automate/Azure" and asked for an actual deep-dive
