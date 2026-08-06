@@ -650,7 +650,7 @@ function buildTimeTrendsReport(rows,rangeLbl){
     +'function applyOpts(){'
     +'var ori=document.getElementById("ori").value,fit=document.getElementById("fit").checked;'
     +'var w=816,h=1056; if(ori==="landscape"){var t=w;w=h;h=t;}'
-    +'var m=0.4,mpx=m*96;'
+    +'var m=0.3,mpx=m*96;'
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
     +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
@@ -705,16 +705,21 @@ function buildFinanceReport(){
   var INK='#16110F', INKS='#6B6360', MUT='#8A827D', DIS='#C9C3BF', HAIR='#F0EDEA', BORD='#E3DFDC', SURF='#FAF8F7', BRAND='#C1401F', TINT='#FBF1EE';
   var FF="'Helvetica Neue',Helvetica,Arial,sans-serif";
   // ---- Job code totals by employee (bar = share of the range's largest job) ----
+  // Rich: "it has to fit on one page ... maybe 2 rows of job code totals" -- laid out as 2 columns
+  // (grid-auto-flow:column fills column 1 top-to-bottom, then column 2) so N jobs take half the
+  // vertical space of a single stacked list. Bar/value widths tightened to fit a half-width column.
   var codeKeys=Object.keys(byCode).sort(function(a,b){ return byCode[b].h-byCode[a].h||a.localeCompare(b); });
   var maxJobTot=codeKeys.reduce(function(m,c){ return Math.max(m,byCode[c].h); },0)||1;
+  var codeRows=Math.max(1,Math.ceil(codeKeys.length/2));
   var codeHtml=codeKeys.map(function(c,i){
     var tot=byCode[c].h, w=Math.max(2,Math.round(tot/maxJobTot*1000)/10);
     var emps=Object.keys(byCodeEmp[c]||{}).sort(function(a,b){return byCodeEmp[c][b]-byCodeEmp[c][a];}).map(function(w2){return w2+' '+f(byCodeEmp[c][w2]);}).join(' · ');
-    return '<div style="display:grid;grid-template-columns:minmax(48px,auto) 1fr 150px 66px;align-items:center;gap:14px;padding:4px 0;border-bottom:1px solid '+(i===codeKeys.length-1?INK:HAIR)+';break-inside:avoid">'
-      +'<span style="font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums">'+esc(c)+'</span>'
-      +'<span style="font-size:10.5px">'+esc(byCode[c].name||'')+'<span style="display:block;font-size:8.5px;color:'+INKS+';margin-top:2px;font-variant-numeric:tabular-nums">'+esc(emps)+'</span></span>'
+    var lastInCol=(i===codeKeys.length-1)||(i===codeRows-1);
+    return '<div style="display:grid;grid-template-columns:minmax(34px,auto) 1fr 46px 52px;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid '+(lastInCol?INK:HAIR)+';break-inside:avoid">'
+      +'<span style="font-size:10px;font-weight:700;font-variant-numeric:tabular-nums">'+esc(c)+'</span>'
+      +'<span style="font-size:10px">'+esc(byCode[c].name||'')+'<span style="display:block;font-size:8px;color:'+INKS+';margin-top:1px;font-variant-numeric:tabular-nums">'+esc(emps)+'</span></span>'
       +'<span style="display:block;height:7px;background:'+HAIR+'"><span style="display:block;height:7px;width:'+w+'%;background:'+BRAND+'"></span></span>'
-      +'<span style="font-size:12px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums">'+f(tot)+'</span></div>';
+      +'<span style="font-size:11.5px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums">'+f(tot)+'</span></div>';
   }).join('');
   // Job totals PER WEEK, everyone combined — finance's ask: see what each job got charged that
   // week without adding it up by hand. Only shown when the range covers 2+ weeks.
@@ -766,14 +771,16 @@ function buildFinanceReport(){
           +'<div style="display:flex;flex-direction:column;gap:2px">'+lines+'</div></div>';
       }).join('');
       jobOrder.sort(function(a,b){ return byJob[b]-byJob[a]; });
-      var railLines=jobOrder.map(function(k){ return '<div>'+esc(k)+' · '+f(byJob[k])+'</div>'; }).join('');
+      // Wraps 2 (sometimes 3) short "code · hours" entries per line instead of one-per-line -- Rich:
+      // "maybe 2 rows" -- so a person working several jobs in a week doesn't stretch their whole row.
+      var railLines=jobOrder.map(function(k){ return '<span style="white-space:nowrap">'+esc(k)+' · '+f(byJob[k])+'</span>'; }).join('');
       var badge=E.calledIn?(' <span style="font-size:7px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:'+BRAND+';padding:1px 4px">Called in</span>'):'';
       return '<div style="display:grid;grid-template-columns:'+cols+';gap:8px;padding:8px 0;border-bottom:1px solid '+HAIR+';break-inside:avoid">'
         +'<div style="padding-right:8px">'
           +'<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:12.5px;font-weight:700;letter-spacing:-.015em">'+esc(who)+'</span>'+badge+'</div>'
           +'<div style="font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin-top:1px">ID '+esc(E.id||'—')+'</div>'
           +'<div style="font-size:17px;font-weight:700;letter-spacing:-.02em;margin-top:5px;font-variant-numeric:tabular-nums">'+f(E.tot)+'</div>'
-          +(railLines?('<div style="font-size:8.5px;color:'+INKS+';margin-top:2px;font-variant-numeric:tabular-nums">'+railLines+'</div>'):'')
+          +(railLines?('<div style="display:flex;flex-wrap:wrap;gap:0 8px;font-size:8.5px;color:'+INKS+';margin-top:2px;font-variant-numeric:tabular-nums">'+railLines+'</div>'):'')
         +'</div>'+cells+'</div>';
     }).join('');
     var footCells=dayTot.map(function(t){ return '<div style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums'+(t<=0?(';color:'+DIS):'')+'">'+f(t)+'</div>'; }).join('');
@@ -817,7 +824,8 @@ function buildFinanceReport(){
         +'</div>'
       +'</div>'
       +'<h2 style="margin:18px 0 8px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Job code totals by employee</h2>'
-      +'<div style="border-top:1px solid '+INK+';margin-bottom:18px">'+(codeHtml||('<div style="font-size:11px;color:'+MUT+';padding:8px 0">No job-coded work in this range.</div>'))+'</div>'
+      +(codeHtml?('<div style="border-top:1px solid '+INK+';margin-bottom:18px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat('+codeRows+',auto);grid-auto-flow:column;column-gap:24px">'+codeHtml+'</div>')
+        :('<div style="border-top:1px solid '+INK+';margin-bottom:18px"><div style="font-size:11px;color:'+MUT+';padding:8px 0">No job-coded work in this range.</div></div>'))
       +byWeekHtml
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">'
         +'<h2 style="margin:0;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Hours by employee and day</h2>'
@@ -852,7 +860,7 @@ function buildFinanceReport(){
     +'function applyOpts(){'
     +'var ori=document.getElementById("ori").value,fit=document.getElementById("fit").checked;'
     +'var w=816,h=1056; if(ori==="landscape"){var t=w;w=h;h=t;}'
-    +'var m=0.4,mpx=m*96;'
+    +'var m=0.3,mpx=m*96;'
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
     +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
