@@ -15,7 +15,17 @@ on:
 
 concurrency:
   group: mra-cloud-export
-  cancel-in-progress: false   # never interrupt a run mid-write; let it finish
+  # A newer trigger cancels a stale queued/running one instead of waiting behind it. Safe: the only
+  # write to the live site is one atomic single-file `az storage blob upload --overwrite` of data.js
+  # at the very end of the script -- a cancelled run never gets far enough to leave a half-written
+  # file live, it just contributes nothing and the old data.js stays put until a run actually finishes.
+  # This matters because "MRA Lists to JSON" fires a trigger ~every 2 min; with the old cancel-in-
+  # progress:false, triggers queued up faster than GitHub's shared windows-latest runners could drain
+  # them whenever that pool had any latency, and the back of that queue kept missing GitHub's own
+  # 15-min "no runner available" cutoff -- a real, measured ~73% failure/cancellation rate on
+  # 2026-08-06, not a one-off. Only the LATEST trigger's data matters anyway, so dropping stale queued
+  # runs is strictly better than serializing all of them.
+  cancel-in-progress: true
 
 permissions:
   contents: read
