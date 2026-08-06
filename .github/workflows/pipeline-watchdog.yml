@@ -1,10 +1,12 @@
 name: Pipeline staleness watchdog
 
-# Checks the LIVE board's listsAsOf timestamp every 10 min. If it's gone stale (the same
-# "DATA PIPELINE STALLED" condition the in-app banner already detects) for longer than the
-# threshold, pings Rich directly via a small Power Automate flow instead of relying on him to
-# notice the banner. Debounced so it re-notifies periodically while still stale, not every 10 min.
-# See CLAUDE.md's "RECURRING DATA PIPELINE STALLED" section for the history this is built for.
+# Checks the LIVE board's listsAsOf timestamp every 10 min -- the same "DATA PIPELINE STALLED"
+# condition the in-app banner already detects. If it's been stale too long, this job deliberately
+# FAILS with a clear message. Rich already gets GitHub's own email notification on a failed workflow
+# run for this repo (confirmed -- he's shown one arriving for a different workflow), so this reaches
+# him with zero extra setup: no new Power Automate flow, no new URL/secret to manage. Debounced so
+# it only fails once per stale episode (not every 10 min), and re-fails periodically if it's still
+# not fixed. See CLAUDE.md's "RECURRING DATA PIPELINE STALLED" section for the history this is for.
 
 on:
   schedule:
@@ -12,7 +14,7 @@ on:
   workflow_dispatch:      # manual "Run workflow" button, for testing
 
 permissions:
-  contents: write   # commits the small last-notified state file, only when it actually notifies
+  contents: write   # commits the small last-alerted state file, only when it actually fires
 
 concurrency:
   group: mra-pipeline-watchdog
@@ -24,31 +26,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check staleness and notify if needed
+      - name: Check staleness (fails on purpose to trigger GitHub's own failure-notification email)
         shell: bash
-        env:
-          WATCHDOG_NOTIFY_URL: ${{ secrets.PIPELINE_WATCHDOG_URL }}
         run: |
           set -e
           curl -s https://mrashopdash.z13.web.core.windows.net/data.js -o live-data.js
           python3 <<'PYEOF'
-          import re, json, os, subprocess
+          import re, json, os, subprocess, sys
           from datetime import datetime, timezone
 
           STALE_THRESHOLD_MIN = 20     # matches the in-app banner's own stall definition
-          RENOTIFY_AFTER_MIN = 60      # don't spam every 10 min; remind hourly while still stale
+          RENOTIFY_AFTER_MIN = 60      # don't fail every 10 min; re-alert hourly while still stale
           STATE_FILE = '.github/watchdog-state.json'
+
+          def git(*args):
+              subprocess.run(['git'] + list(args), check=True)
 
           content = open('live-data.js').read()
           m = re.search(r'=\s*(\{.*\})\s*;?\s*$', content, re.S)
           if not m:
               print('Could not parse data.js -- skipping this check.')
-              raise SystemExit(0)
+              sys.exit(0)
           data = json.loads(m.group(1))
           lists_as_of = data.get('listsAsOf')
           if not lists_as_of:
               print('No listsAsOf field in data.js -- skipping this check.')
-              raise SystemExit(0)
+              sys.exit(0)
 
           dt = datetime.fromisoformat(lists_as_of.replace('Z', '+00:00'))
           now = datetime.now(timezone.utc)
@@ -57,15 +60,14 @@ jobs:
 
           if stale_min < STALE_THRESHOLD_MIN:
               print('Fresh enough -- nothing to do.')
-              # Clear any stale-episode state so the next real stall starts a fresh debounce clock.
               if os.path.exists(STATE_FILE):
                   os.remove(STATE_FILE)
-                  subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
-                  subprocess.run(['git', 'config', 'user.email', 'github-actions[bot]@users.noreply.github.com'], check=True)
-                  subprocess.run(['git', 'add', STATE_FILE], check=True)
-                  subprocess.run(['git', 'commit', '-m', 'watchdog: pipeline recovered, clear stale state'], check=True)
-                  subprocess.run(['git', 'push'], check=True)
-              raise SystemExit(0)
+                  git('config', 'user.name', 'github-actions[bot]')
+                  git('config', 'user.email', 'github-actions[bot]@users.noreply.github.com')
+                  git('add', STATE_FILE)
+                  git('commit', '-m', 'watchdog: pipeline recovered, clear stale state')
+                  git('push')
+              sys.exit(0)
 
           last_notified = None
           if os.path.exists(STATE_FILE):
@@ -75,33 +77,23 @@ jobs:
           if last_notified is not None:
               since_last = (now - last_notified).total_seconds() / 60
               if since_last < RENOTIFY_AFTER_MIN:
-                  print(f'Already notified {since_last:.0f} min ago -- within the {RENOTIFY_AFTER_MIN} min debounce, skipping.')
-                  raise SystemExit(0)
-
-          notify_url = os.environ.get('WATCHDOG_NOTIFY_URL', '')
-          if not notify_url:
-              print('PIPELINE_WATCHDOG_URL secret not set yet -- would notify here, but nowhere to send it.')
-              raise SystemExit(0)
-
-          import urllib.request
-          payload = json.dumps({
-              'staleMinutes': round(stale_min),
-              'listsAsOf': lists_as_of,
-              'checkedAt': now.isoformat(),
-          }).encode()
-          req = urllib.request.Request(notify_url, data=payload, headers={'Content-Type': 'application/json'}, method='POST')
-          try:
-              urllib.request.urlopen(req, timeout=15)
-              print('Notification sent.')
-          except Exception as e:
-              print(f'Notification POST failed (non-fatal): {e}')
+                  print(f'Already alerted {since_last:.0f} min ago -- within the {RENOTIFY_AFTER_MIN} min debounce, skipping.')
+                  sys.exit(0)
 
           os.makedirs('.github', exist_ok=True)
           with open(STATE_FILE, 'w') as f:
               json.dump({'lastNotified': now.isoformat()}, f)
-          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
-          subprocess.run(['git', 'config', 'user.email', 'github-actions[bot]@users.noreply.github.com'], check=True)
-          subprocess.run(['git', 'add', STATE_FILE], check=True)
-          subprocess.run(['git', 'commit', '-m', f'watchdog: notified at {stale_min:.0f} min stale'], check=True)
-          subprocess.run(['git', 'push'], check=True)
+          git('config', 'user.name', 'github-actions[bot]')
+          git('config', 'user.email', 'github-actions[bot]@users.noreply.github.com')
+          git('add', STATE_FILE)
+          git('commit', '-m', f'watchdog: alerting at {stale_min:.0f} min stale')
+          git('push')
+
+          print('')
+          print('=' * 70)
+          print(f'DATA PIPELINE STALLED -- board has not synced from the Lists in {stale_min:.0f} minutes.')
+          print('Cancel the stuck run(s) in "MRA Lists to JSON" (Power Automate) and Run manually.')
+          print('See CLAUDE.md, "RECURRING DATA PIPELINE STALLED ISSUE" section, for history.')
+          print('=' * 70)
+          sys.exit(1)   # deliberate failure -- this is what triggers GitHub's email to Rich
           PYEOF
