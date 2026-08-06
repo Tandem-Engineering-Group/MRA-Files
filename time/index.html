@@ -891,18 +891,24 @@ function _rateMatch(rates, fullName){
 function openCostReport(){
   var rows=filtered();
   if(!rows.length){ alert('No time entries in this range to report.'); return; }
+
+  // Get the rates URL BEFORE opening any window -- a blocking prompt() fired immediately after
+  // window.open() is a known-bad pattern on iOS Safari (the new tab can open, the prompt gets
+  // silently suppressed, and it returns falsy right away, so the tab we just opened gets closed
+  // again a split second later: a "blink" and nothing else, every time on a device that hasn't
+  // saved the URL yet). Asking first, with no popup open yet, avoids that entirely.
+  var ratesUrl=localStorage.getItem(RATES_URL_KEY);
+  if(!ratesUrl){
+    ratesUrl=prompt('Paste the rates-flow URL (one-time -- this is saved on this device only, never in any file):');
+    if(!ratesUrl){ return; }
+    ratesUrl=ratesUrl.trim();
+    localStorage.setItem(RATES_URL_KEY, ratesUrl);
+  }
+
   var win=window.open('','_blank');
   if(!win){ alert('Allow pop-ups, then tap Cost report again.'); return; }
   win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>MRA Cost Report</title></head>'
     +'<body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#666;text-align:center">Loading pay rates…</body></html>');
-
-  var ratesUrl=localStorage.getItem(RATES_URL_KEY);
-  if(!ratesUrl){
-    ratesUrl=prompt('Paste the rates-flow URL (one-time -- this is saved on this device only, never in any file):');
-    if(!ratesUrl){ win.close(); return; }
-    localStorage.setItem(RATES_URL_KEY, ratesUrl.trim());
-    ratesUrl=ratesUrl.trim();
-  }
 
   fetch(ratesUrl, {method:'POST', headers:{'Content-Type':'application/json'}})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
