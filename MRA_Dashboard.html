@@ -188,12 +188,14 @@
   #projectsView .pv-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:11px}
   #projectsView .pv-card{padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);color:var(--txt);cursor:pointer;text-align:left;position:relative;font:inherit}
   #projectsView .pv-card:hover{border-color:var(--brand)}
+  #projectsView .pv-card.err{border-color:#f87171}#projectsView .pv-card.warn{border-color:#fbbf24}#projectsView .pv-card.ok{border-color:#4ade80}
   #projectsView .pv-card .pn{font-weight:800;font-size:13px;margin-bottom:2px;line-height:1.25}
   #projectsView .pv-card .pj{color:var(--muted);font-size:11px}
   #projectsView .pv-card .pv-cdate{color:var(--txt);font-size:11px;font-weight:600;margin-top:4px;opacity:.85}
   #projectsView .pv-card .pv-row2{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
   #projectsView .pv-card .pv-prog{height:6px;background:#8891a326;border-radius:10px;overflow:hidden;margin-top:7px}
   #projectsView .pv-card .pv-prog span{display:block;height:100%;background:var(--brand)}
+  #projectsView .pv-card.err .pv-prog span{background:#f87171}#projectsView .pv-card.warn .pv-prog span{background:#fbbf24}#projectsView .pv-card.ok .pv-prog span{background:#4ade80}
   #projectsView .pv-card .pv-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}
   #projectsView .pv-card .pv-chip.ok{background:#12352a;color:#4ade80}#projectsView .pv-card .pv-chip.warn{background:#3a2e12;color:#fbbf24}#projectsView .pv-card .pv-chip.err{background:#3a1620;color:#f87171}#projectsView .pv-card .pv-chip.done,#projectsView .pv-card .pv-chip.park,#projectsView .pv-card .pv-chip.upcoming{background:#1f2a3a;color:var(--muted)}
   #bayOccPanel,#pp-progress,#pp-attention{display:none!important}
@@ -3879,6 +3881,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.1", date:"2026-08-06", title:"🎨 Projects cards — border + progress bar now match the status color", items:[
+    "Rich: the status badge (Past due/Behind/On track) was the only colored thing on a project card — everything else, including the progress bar, was the same brand orange regardless of health. Now a card's border and its progress-bar fill both pick up the same red/amber/green as its badge, so you can scan the grid for trouble spots without reading every chip. Upcoming/Done/Parked cards are unchanged (neutral border, same as before)." ] },
   { rev:"37.0", date:"2026-08-06", title:"🔧 Fixed: Fleetio watchdog's \"Add to board + assign\" button did nothing", items:[
     "Rich: clicking <b>👤 Add to board + assign</b> inside a Fleetio issue popup did nothing at all. Root cause: that one button (unlike every other Assign button on the page) was missing <code>event.stopPropagation()</code> — the click bubbled up to a page-wide \"click outside closes the crew-picker\" listener, which closed the picker in the same instant it opened, so it never visibly appeared.",
     "Found + fixed a second, related bug while tracing this: the fallback logic that matches a Fleetio issue to a board job by asset-name digits was comparing the issue's own job number against itself instead of against each candidate job — so on a unit whose original job has since shipped (like issue #1280 / Siemens DBX J1110‑92), it could silently glue the issue onto a totally unrelated job instead of correctly falling back to the 🛠 General list. Fixed the comparison; verified headless against the real live issue #1280 — the picker now opens correctly and (since that unit's job shipped) correctly offers the General list instead of a wrong job." ] },
@@ -12536,7 +12540,7 @@ function renderProjCards(projects){
   const arr=(projects||[]).slice().sort((a,b)=>{ const ra=(rk[st(a)]!=null?rk[st(a)]:2), rb=(rk[st(b)]!=null?rk[st(b)]:2); return ra-rb || String(a.name||'').localeCompare(String(b.name||'')); });
   const cc=document.getElementById('projCardCount'); if(cc) cc.textContent=arr.length;
   box.innerHTML=arr.map(p=>{ const h=_pvHealth(p); const jn=(typeof projJobNum==='function')?projJobNum(p.name):(p.jobNum||'');
-    return '<button class="pv-card" onclick="openProjectEditor(\''+escJsAttr(p.name)+'\')">'
+    return '<button class="pv-card '+esc(h.c)+'" onclick="openProjectEditor(\''+escJsAttr(p.name)+'\')">'
       +'<div class="pn">'+esc(p.name)+(p.nonOfficial?' \uD83C\uDFF7':'')+'</div>'
       +'<div class="pj">'+(jn?esc(jn)+' \u00b7 ':'')+esc(p.pm||'No PM')+'</div>'
       +'<div class="pv-cdate">\uD83D\uDCC5 '+(p.startISO?esc(fmtMDY(p.startISO)):'\u2014')+' \u2192 '+(p.finishISO?esc(fmtMDY(p.finishISO)):'\u2014')+'</div>'
