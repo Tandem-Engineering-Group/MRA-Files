@@ -333,8 +333,8 @@ select.input-yellow option{background:var(--panel);color:var(--txt);}
   <div class="header-right">
     <button class="cheat-sheet-btn" onclick="openClientQuoteModal()" title="Build a printable quote for a customer">&#x1F9FE; CLIENT QUOTE</button>
     <button class="cheat-sheet-btn" onclick="openCheatSheet()" title="Open the sales cheat sheet">&#x1F4C4; SALES CHEAT SHEET</button>
-    <button class="cheat-sheet-btn" onclick="openPricingGate()" title="Edit Starlink plan &amp; hardware pricing (code protected)">&#x2699;&#xFE0F; PRICING SETTINGS</button>
-    <span class="version-badge" onclick="openModal('modal-changelog')" title="View changelog">v3.0</span>
+    <button class="cheat-sheet-btn" onclick="openPricingSettings()" title="Edit Starlink plan &amp; hardware pricing">&#x2699;&#xFE0F; PRICING SETTINGS</button>
+    <span class="version-badge" onclick="openModal('modal-changelog')" title="View changelog">v3.1</span>
   </div>
 </header>
 
@@ -692,10 +692,14 @@ select.input-yellow option{background:var(--panel);color:var(--txt);}
       <button class="modal-close" onclick="closeModal('modal-changelog')" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
+      <h3>v3.1 &mdash; August 2026</h3>
+      <ul>
+        <li>Removed the code prompt in front of Pricing Settings (Rich: "eliminate the 1974, just open") &mdash; the gear button now opens the editor directly. The shared write flow, once wired, still checks the code server-side before saving.</li>
+      </ul>
       <h3>v3.0 &mdash; August 2026</h3>
       <ul>
         <li>Added to the MRA Dashboard (☰ Menu → 📡 Starlink Pricing Calculator), linked from the Quote Generator too.</li>
-        <li>New <b>&#x2699;&#xFE0F; Pricing Settings</b> (code-protected): edit every plan's monthly/overage rate, hardware sell prices, handling fees, and the effective date right on this page — no code changes needed. Saved on this device immediately; can be wired to sync to every device (see the Power Automate setup note in the page source).</li>
+        <li>New <b>&#x2699;&#xFE0F; Pricing Settings</b>: edit every plan's monthly/overage rate, hardware sell prices, handling fees, and the effective date right on this page — no code changes needed. Saved on this device immediately; can be wired to sync to every device (see the Power Automate setup note in the page source).</li>
         <li>New <b>&#x1F9FE; Client Quote</b> button: builds a clean, printable one-page MRA-letterhead quote (monthly service, annual projection, one-time hardware, total due at installation) for the customer, pulling straight from whatever's set up in the calculator.</li>
         <li>Sales Cheat Sheet numbers (base plan price, handling fees) now update automatically when pricing is edited, instead of being hardcoded text.</li>
       </ul>
@@ -779,7 +783,7 @@ select.input-yellow option{background:var(--panel);color:var(--txt);}
           <h2><span class="cs-icon-dish"></span> <span class="brand-accent">STARLINK</span> PRICING CHEAT SHEET</h2>
           <div class="cs-subtitle">For MRA Sales Team &mdash; Quick Reference</div>
         </div>
-        <div class="cs-meta">Effective <span id="eff-date-2">May 1, 2026</span> &middot; v3.0</div>
+        <div class="cs-meta">Effective <span id="eff-date-2">May 1, 2026</span> &middot; v3.1</div>
       </div>
 
       <div class="cs-section-h">A. The Basics</div>
@@ -897,15 +901,7 @@ select.input-yellow option{background:var(--panel);color:var(--txt);}
       <button class="modal-close" onclick="closeModal('modal-pricing')" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <div id="pricing-gate">
-        <p style="margin-bottom:14px;">Enter the code to edit Starlink plan &amp; hardware pricing.</p>
-        <div class="field">
-          <input id="pr-pin" class="input-yellow" type="password" placeholder="Code" style="font-weight:400;max-width:200px;" onkeydown="if(event.key==='Enter'){event.preventDefault();checkPricingPin();}">
-        </div>
-        <button class="cheat-sheet-btn" style="background:var(--brand);border-color:var(--brand);color:#fff;" onclick="checkPricingPin()">Unlock</button>
-        <p id="pr-gate-err" class="muted hidden" style="color:var(--red);margin-top:8px;">Wrong code &mdash; try again.</p>
-      </div>
-      <div id="pricing-form" class="hidden"></div>
+      <div id="pricing-form"></div>
     </div>
   </div>
 </div>
@@ -967,11 +963,13 @@ let HARDWARE_CONFIG = JSON.parse(JSON.stringify(DEFAULT_HARDWARE_CONFIG));
 let PLANS_CONFIG    = JSON.parse(JSON.stringify(DEFAULT_PLANS_CONFIG));
 let EFFECTIVE_DATE  = DEFAULT_EFFECTIVE_DATE;
 
-// PW-protected pricing settings: PIN gate (same house code used by every other admin write in the
-// MRA dashboard — EOTM, Safety Upload, Design board, etc.), persisted per-device via localStorage
-// always, and pushed to a shared JSON blob (so every sales rep sees the same numbers) once
-// STARLINK_WRITE_URL is wired to a real Power Automate flow. Blank URL = local-device-only for now,
-// same fallback convention as the Quote Generator before its flow existed.
+// Pricing settings: no code gate on this page (Rich: "eliminate the 1974, just open") — persisted
+// per-device via localStorage always, and pushed to a shared JSON blob (so every sales rep sees the
+// same numbers) once STARLINK_WRITE_URL is wired to a real Power Automate flow. That flow's own
+// Condition step still checks PRICING_PIN server-side (same house code as every other admin write in
+// the MRA dashboard — EOTM, Safety Upload, Design board, etc.) so a stray POST can't write garbage;
+// it's just no longer asked for here in the UI. Blank URL = local-device-only for now, same fallback
+// convention as the Quote Generator before its flow existed.
 const PRICING_PIN = '1974';
 const PRICING_LOCAL_KEY = 'mra_starlink_pricing_v1';
 var STARLINK_READ_URL = 'starlink-pricing.json';   // relative — same folder as this page on the live site
@@ -1248,23 +1246,10 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ===== PRICING SETTINGS (PW-protected) =====
-function openPricingGate(){
-  $('pricing-gate').classList.remove('hidden');
-  $('pricing-form').classList.add('hidden');
-  $('pr-pin').value = '';
-  $('pr-gate-err').classList.add('hidden');
+// ===== PRICING SETTINGS =====
+function openPricingSettings(){
   openModal('modal-pricing');
-  setTimeout(()=>{ $('pr-pin').focus(); }, 60);
-}
-function checkPricingPin(){
-  if(($('pr-pin').value||'') === PRICING_PIN){
-    $('pricing-gate').classList.add('hidden');
-    $('pricing-form').classList.remove('hidden');
-    renderPricingForm();
-  } else {
-    $('pr-gate-err').classList.remove('hidden');
-  }
+  renderPricingForm();
 }
 function planRow(region, i){
   const p = PLANS_CONFIG[region].plans[i];
