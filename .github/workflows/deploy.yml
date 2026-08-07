@@ -415,6 +415,25 @@ jobs:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
+      # MRA Starlink Pricing Calculator — standalone sales tool hosted in /starlink/ (self-contained;
+      # no dependency on data.js). Also published at root /starlink.html for a clean link. Pricing is
+      # editable in-page (code-protected) and persists to localStorage always, plus a shared
+      # starlink-pricing.json blob once STARLINK_WRITE_URL is wired to a Power Automate flow — that
+      # blob is NOT part of this repo/deploy (same as quotes.json/eotm.txt/agent.json), it's written
+      # directly by the flow. Linked from the ☰ Menu + the Quote Generator.
+      - name: Upload Starlink Pricing Calculator (/starlink/)
+        if: ${{ hashFiles('starlink/index.html') != '' }}
+        run: |
+            az storage blob upload --account-name mrashopdash --container-name '$web' \
+              --name 'starlink/index.html' --file starlink/index.html --content-type 'text/html' \
+              --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+            az storage blob upload --account-name mrashopdash --container-name '$web' \
+              --name 'starlink.html' --file starlink/index.html --content-type 'text/html' \
+              --content-cache-control 'no-cache, must-revalidate' --overwrite --auth-mode key --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
       # 3D-model staging uploader — a one-off internal tool (self-contained page, chunked PUT
       # straight to Azure Blob) for moving files too large for chat/email into the private
       # 'pipeline' container. The page itself carries no secret; the destination + token are
