@@ -677,7 +677,10 @@ function buildTimeTrendsReport(rows,rangeLbl){
     +'var m=0.3,mpx=m*96;'
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
-    +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
+    // Size to natural content width, not a fixed page-width pixel value, before computing zoom --
+    // see the Cost Report\'s applyOpts for the full explanation of why a fixed pre-zoom width
+    // silently overflows past its own box once content is wider than one page.
+    +'s.style.zoom=1; s.style.width="max-content"; wrap.style.height="";'
     // Width MUST always fit the page -- there is no such thing as a print page continuing a
     // table's missing columns onto a second sheet, so a wide table that isn't shrunk enough gets
     // silently cut off at the page edge (Rich, 2026-08-07, on the Cost Report\'s many job columns:
@@ -905,7 +908,10 @@ function buildFinanceReport(){
     +'var m=0.3,mpx=m*96;'
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
-    +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
+    // Size to natural content width, not a fixed page-width pixel value, before computing zoom --
+    // see the Cost Report\'s applyOpts for the full explanation of why a fixed pre-zoom width
+    // silently overflows past its own box once content is wider than one page.
+    +'s.style.zoom=1; s.style.width="max-content"; wrap.style.height="";'
     // Width MUST always fit the page -- there is no such thing as a print page continuing a
     // table's missing columns onto a second sheet, so a wide table that isn't shrunk enough gets
     // silently cut off at the page edge (Rich, 2026-08-07, on the Cost Report\'s many job columns:
@@ -1339,29 +1345,20 @@ function buildCostReportInto(win, rows, rates){
     +'var m=0.3,mpx=m*96;'
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
-    +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
-    // Width MUST always fit the page -- there is no such thing as a print page continuing a
-    // table's missing columns onto a second sheet, so a wide table that isn't shrunk enough gets
-    // silently cut off at the page edge (Rich, 2026-08-07, on the Cost Report\'s many job columns:
-    // "how do you get it to print to one page or two pages or three pages... I thought we were
-    // formatting this to print"). The old code clamped the shrink at a floor of .92, which is fine
-    // for a report that only needed a mild trim but actively broke a report that genuinely needed
-    // to shrink further -- Math.max(.92, 0.4) still returns .92, silently overriding the real
-    // answer. Width-fit is now unconditional (no floor, no checkbox); the "Fit to 1 page" checkbox
-    // only controls whether height ALSO gets squeezed onto that one page, or is left to flow onto
-    // as many pages as it needs (2, 3, ...) via the browser\'s own pagination -- which already
-    // repeats the table header on every page (see the thead/tfoot CSS above), so a multi-page
-    // printout is a correct, readable result, not a failure.
-    // The table sits in a .hscroll (overflow-x:auto) div for a nice horizontal scroll -- but zoom
-    // scales a box and its content by the SAME factor, so the ratio between .hscroll\'s width and
-    // its (wider) table never changes no matter how far the whole sheet is zoomed out: checking
-    // scrollWidth (previous attempt) correctly measured the true width and picked a correct zoom
-    // number, but that zoom could never stop .hscroll from clipping the same proportion of columns
-    // it always was -- shrinking a photo of a cut-off table still shows a cut-off table. The only
-    // real fix is to stop clipping it at all: unclip every .hscroll for this measurement AND for
-    // the actual print/fit render, so the true width flows into #sheet\'s own layout and gets
-    // scaled down as ONE piece with everything else -- confirmed via Rich\'s real print preview
-    // still showing a scrollbar+cut columns after the scrollWidth-only attempt.
+    // THIRD attempt at this, and this is the actual root cause (Rich caught it with a real print --
+    // measured element positions this time, not eyeballed a screenshot or trusted PDF text
+    // extraction, both of which had silently passed a broken result before): #sheet was pinned to a
+    // FIXED page-width pixel value, then zoomed -- but zoom scales #sheet\'s box AND its overflowing
+    // .hscroll content by the SAME factor, so the ABSOLUTE overflow past #sheet\'s own (now-tiny)
+    // box is (content_width - sheet_fixed_width) * zoom, which only gets WORSE the more columns
+    // there are, not better. That overflow is invisible on a wide screen/browser tab (nothing there
+    // to clip it) but is exactly what the physical page edge cuts off when it actually prints --
+    // undetectable by screenshotting the popup (its viewport is wider than a real page) or checking
+    // PDF text presence (extracted text doesn\'t care if it was positioned off the page). The fix:
+    // never pin #sheet\'s width to the page size at all -- let it size to its own true content
+    // width, then zoom that whole (correctly-sized) box down until IT, not some artificial
+    // container around it, actually equals the page width. There is no mismatch left to overflow.
+    +'s.style.zoom=1; s.style.width="max-content"; wrap.style.height="";'
     +'document.querySelectorAll(".hscroll").forEach(function(el){ el.style.overflow="visible"; });'
     +'var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight;'
     +'var sc=Math.min(1,uW/cw); if(fit) sc=Math.min(sc,uH/ch);'
