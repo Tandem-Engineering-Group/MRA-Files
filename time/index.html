@@ -667,7 +667,7 @@ function buildTimeTrendsReport(rows,rangeLbl){
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
     +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option></select></label>'
-    +'<label><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
+    +'<label title="Width always fits the page; this also shrinks it to fit the height onto one page. Uncheck to keep full-size rows and let it flow onto as many pages as needed (headers repeat on each)."><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
     +'</div>'
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
     +'<scr'+'ipt>'
@@ -678,8 +678,21 @@ function buildTimeTrendsReport(rows,rangeLbl){
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
     +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
-    +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.max(.92,Math.min(1,uW/cw,uH/ch));'
-    +'s.style.zoom=sc;}'
+    // Width MUST always fit the page -- there is no such thing as a print page continuing a
+    // table's missing columns onto a second sheet, so a wide table that isn't shrunk enough gets
+    // silently cut off at the page edge (Rich, 2026-08-07, on the Cost Report\'s many job columns:
+    // "how do you get it to print to one page or two pages or three pages... I thought we were
+    // formatting this to print"). The old code clamped the shrink at a floor of .92, which is fine
+    // for a report that only needed a mild trim but actively broke a report that genuinely needed
+    // to shrink further -- Math.max(.92, 0.4) still returns .92, silently overriding the real
+    // answer. Width-fit is now unconditional (no floor, no checkbox); the "Fit to 1 page" checkbox
+    // only controls whether height ALSO gets squeezed onto that one page, or is left to flow onto
+    // as many pages as it needs (2, 3, ...) via the browser\'s own pagination -- which already
+    // repeats the table header on every page (see the thead/tfoot CSS above), so a multi-page
+    // printout is a correct, readable result, not a failure.
+    +'var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight;'
+    +'var sc=Math.min(1,uW/cw); if(fit) sc=Math.min(sc,uH/ch);'
+    +'s.style.zoom=sc;'
     +'}'
     // Direct call, not window.onload -- confirmed via headless testing that onload can silently
     // never fire on a document built via document.open()/write()/close(), leaving the report stuck
@@ -882,7 +895,7 @@ function buildFinanceReport(){
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
     +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option></select></label>'
-    +'<label><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
+    +'<label title="Width always fits the page; this also shrinks it to fit the height onto one page. Uncheck to keep full-size rows and let it flow onto as many pages as needed (headers repeat on each)."><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
     +'</div>'
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
     +'<scr'+'ipt>'
@@ -893,8 +906,21 @@ function buildFinanceReport(){
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
     +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
-    +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.max(.92,Math.min(1,uW/cw,uH/ch));'
-    +'s.style.zoom=sc;}'
+    // Width MUST always fit the page -- there is no such thing as a print page continuing a
+    // table's missing columns onto a second sheet, so a wide table that isn't shrunk enough gets
+    // silently cut off at the page edge (Rich, 2026-08-07, on the Cost Report\'s many job columns:
+    // "how do you get it to print to one page or two pages or three pages... I thought we were
+    // formatting this to print"). The old code clamped the shrink at a floor of .92, which is fine
+    // for a report that only needed a mild trim but actively broke a report that genuinely needed
+    // to shrink further -- Math.max(.92, 0.4) still returns .92, silently overriding the real
+    // answer. Width-fit is now unconditional (no floor, no checkbox); the "Fit to 1 page" checkbox
+    // only controls whether height ALSO gets squeezed onto that one page, or is left to flow onto
+    // as many pages as it needs (2, 3, ...) via the browser\'s own pagination -- which already
+    // repeats the table header on every page (see the thead/tfoot CSS above), so a multi-page
+    // printout is a correct, readable result, not a failure.
+    +'var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight;'
+    +'var sc=Math.min(1,uW/cw); if(fit) sc=Math.min(sc,uH/ch);'
+    +'s.style.zoom=sc;'
     +'}'
     // Direct call, not window.onload -- confirmed via headless testing that onload can silently
     // never fire on a document built via document.open()/write()/close(), leaving the report stuck
@@ -1241,7 +1267,7 @@ function buildCostReportInto(win, rows, rates){
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;margin-top:14px">'
         +'<h2 style="margin:0;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Hours &amp; cost by employee and job</h2>'
         +'<span style="font-size:8.5px;color:'+MUT+'">Straight time · OT rows in orange, time-and-a-half over 40/wk</span></div>'
-      +'<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10.5px;width:max-content;min-width:100%">'
+      +'<div class="hscroll"><table style="border-collapse:collapse;font-size:10.5px;width:max-content;min-width:100%">'
         +'<thead><tr><th rowspan="2" style="padding:0 8px 4px 0;text-align:left;font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+INK+';vertical-align:bottom">Employee</th>'
           +'<th rowspan="2" style="padding:0 8px 4px;text-align:right;font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+INK+';vertical-align:bottom">Rate</th>'
           +colHeadHtml+'</tr><tr>'+subHeadHtml+'</tr></thead>'
@@ -1269,12 +1295,13 @@ function buildCostReportInto(win, rows, rates){
     +'#sheetwrap{position:relative;overflow:hidden;padding:14px}'
     +'#sheet{transform-origin:top left;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto}'
     +'.pad{padding:0.4in}'
+    +'.hscroll{overflow-x:auto}'
     +'thead{display:table-header-group}tfoot{display:table-footer-group}tr{break-inside:avoid}'
     +'@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none}}'
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
     +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option></select></label>'
-    +'<label><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
+    +'<label title="Width always fits the page; this also shrinks it to fit the height onto one page. Uncheck to keep full-size rows and let it flow onto as many pages as needed (headers repeat on each)."><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
     +'<span style="color:#f87171;font-weight:700;margin-left:auto">🔒 Confidential -- do not share</span>'
     +'</div>'
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
@@ -1313,8 +1340,27 @@ function buildCostReportInto(win, rows, rates){
     +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
     +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
     +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
-    +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.max(.92,Math.min(1,uW/cw,uH/ch));'
-    +'s.style.zoom=sc;}'
+    // Width MUST always fit the page -- there is no such thing as a print page continuing a
+    // table's missing columns onto a second sheet, so a wide table that isn't shrunk enough gets
+    // silently cut off at the page edge (Rich, 2026-08-07, on the Cost Report\'s many job columns:
+    // "how do you get it to print to one page or two pages or three pages... I thought we were
+    // formatting this to print"). The old code clamped the shrink at a floor of .92, which is fine
+    // for a report that only needed a mild trim but actively broke a report that genuinely needed
+    // to shrink further -- Math.max(.92, 0.4) still returns .92, silently overriding the real
+    // answer. Width-fit is now unconditional (no floor, no checkbox); the "Fit to 1 page" checkbox
+    // only controls whether height ALSO gets squeezed onto that one page, or is left to flow onto
+    // as many pages as it needs (2, 3, ...) via the browser\'s own pagination -- which already
+    // repeats the table header on every page (see the thead/tfoot CSS above), so a multi-page
+    // printout is a correct, readable result, not a failure.
+    +'var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight;'
+    // The table sits in a .hscroll (overflow-x:auto) div for a nice on-screen horizontal scroll --
+    // but that same overflow:auto makes it its OWN scroll container, so its true content width
+    // never bubbles up into #sheet\'s own scrollWidth (which just reports the clipped/visible width).
+    // Measuring only s.scrollWidth silently missed however many columns were scrolled out of view --
+    // exactly what was getting cut off at the printed page edge. Check every .hscroll\'s real width too.
+    +'document.querySelectorAll(".hscroll").forEach(function(el){ cw=Math.max(cw,el.scrollWidth); });'
+    +'var sc=Math.min(1,uW/cw); if(fit) sc=Math.min(sc,uH/ch);'
+    +'s.style.zoom=sc;'
     +'}'
     // Direct calls, not window.onload -- confirmed via headless testing that onload can silently
     // never fire on a document built via document.open()/write()/close(), leaving both the chart
