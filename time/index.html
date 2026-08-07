@@ -1008,6 +1008,92 @@ function buildCostReportInto(win, rows, rates){
     if(rate!=null){ var c=h*rate; C.regC+=c; E.totRegC+=c; col.totC+=c; }
   });
 
+  // ---- Job Totals Over Time (Rich's ask, 2026-08-06): "as this thing builds out" -- a job-filterable
+  // This week / Last week / Year-to-date summary, INDEPENDENT of whichever single period the main
+  // table above is showing (reads the full entry history via activeEntries(), not just `rows`, so it
+  // doesn't change depending on what range was selected on the Time Tracking page before opening this
+  // report). Same per-employee-per-week 40hr OT split + rate lookup as the main matrix so the numbers
+  // always agree on any overlap -- e.g. if the main table is showing "This week", its grand total
+  // should match this panel's "This week / All jobs" figure exactly.
+  // Buckets a date belongs to -- NOT mutually exclusive: "Year to date" is a running cumulative
+  // total from Jan 1, so it naturally INCLUDES this week's and last week's hours too (an entry
+  // dated this week counts toward both 'tw' and 'ytd'), the same way any real YTD figure works.
+  function _periodBuckets(dateISO){
+    var d=new Date(dateISO+'T00:00:00'), now=new Date();
+    var tw0=startOfWeek(now), lw0=new Date(tw0); lw0.setDate(lw0.getDate()-7);
+    var out=[];
+    if(d>=tw0) out.push('tw');
+    else if(d>=lw0 && d<tw0) out.push('lw');
+    if(d.getFullYear()===now.getFullYear() && d<=now) out.push('ytd');
+    return out;
+  }
+  var allEntries=activeEntries();
+  var trendRateOf={};
+  allEntries.forEach(function(e){ var who=e.who||'—'; if(!(who in trendRateOf)){ var r=_rateMatch(rates,who); trendRateOf[who]=r?r.rate:null; } });
+  var trendByEmpWeek={};
+  allEntries.forEach(function(e){
+    if(fPayType(e)!=='Work' || !e.dateISO) return;
+    var who=e.who||'—', wk=ymd(startOfWeek(new Date(e.dateISO+'T00:00:00')));
+    if(!trendByEmpWeek[who]) trendByEmpWeek[who]={};
+    if(!trendByEmpWeek[who][wk]) trendByEmpWeek[who][wk]=[];
+    trendByEmpWeek[who][wk].push(e);
+  });
+  var TB={tw:{all:{h:0,c:0},byJob:{}}, lw:{all:{h:0,c:0},byJob:{}}, ytd:{all:{h:0,c:0},byJob:{}}};
+  function _tbTouch(bucket,key,label){ if(!TB[bucket].byJob[key]) TB[bucket].byJob[key]={label:label,h:0,c:0}; return TB[bucket].byJob[key]; }
+  Object.keys(trendByEmpWeek).forEach(function(who){
+    var rate=trendRateOf[who];
+    Object.keys(trendByEmpWeek[who]).forEach(function(wk){
+      var list=trendByEmpWeek[who][wk].slice().sort(function(a,b){
+        return (a.dateISO||'').localeCompare(b.dateISO||'') || String(a.ts||'').localeCompare(String(b.ts||''));
+      });
+      var running=0;
+      list.forEach(function(e){
+        var buckets=_periodBuckets(e.dateISO); var h=e.hours||0;
+        var regH=Math.max(0, Math.min(h, 40-running)), otH=h-regH;
+        running+=h;
+        if(!buckets.length) return;
+        var code=fCode(e), label=fCodeName(e);
+        var c=(rate!=null)?(regH*rate + otH*rate*1.5):0;
+        buckets.forEach(function(bucket){
+          TB[bucket].all.h+=h; TB[bucket].all.c+=c;
+          var jt=_tbTouch(bucket,code,label); jt.h+=h; jt.c+=c;
+        });
+      });
+    });
+  });
+  // Leave/holiday-type hours fold into the "All jobs" figure only (no job code, no OT) -- same rule
+  // the main matrix uses.
+  allEntries.forEach(function(e){
+    var pt=fPayType(e); if(pt==='Work' || !e.dateISO) return;
+    var buckets=_periodBuckets(e.dateISO); if(!buckets.length) return;
+    var who=e.who||'—', rate=trendRateOf[who], h=e.hours||0;
+    buckets.forEach(function(bucket){ TB[bucket].all.h+=h; TB[bucket].all.c+=(rate!=null?h*rate:0); });
+  });
+  var trendJobKeys=[];
+  ['ytd','tw','lw'].forEach(function(b){ Object.keys(TB[b].byJob).forEach(function(k){ if(trendJobKeys.indexOf(k)<0) trendJobKeys.push(k); }); });
+  trendJobKeys.sort(function(a,b){ return (TB.ytd.byJob[b]?TB.ytd.byJob[b].h:0)-(TB.ytd.byJob[a]?TB.ytd.byJob[a].h:0) || a.localeCompare(b); });
+  var trendJson={ all:{tw:TB.tw.all,lw:TB.lw.all,ytd:TB.ytd.all}, jobs:{} };
+  trendJobKeys.forEach(function(k){
+    trendJson.jobs[k]={ label:(TB.ytd.byJob[k]||TB.tw.byJob[k]||TB.lw.byJob[k]).label,
+      tw:TB.tw.byJob[k]||{h:0,c:0}, lw:TB.lw.byJob[k]||{h:0,c:0}, ytd:TB.ytd.byJob[k]||{h:0,c:0} };
+  });
+  var trendOptsHtml=trendJobKeys.map(function(k){ return '<option value="'+esc(k)+'">'+esc(k)+' · '+esc(trendJson.jobs[k].label)+'</option>'; }).join('');
+  var trendHtml='<div style="margin-top:22px;padding-top:14px;border-top:3px solid '+INK+'">'
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:10px;flex-wrap:wrap">'
+      +'<h2 style="margin:0;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Job totals over time</h2>'
+      +'<label style="font-size:9px;color:'+MUT+';display:flex;align-items:center;gap:6px">Job <select id="trendJobSel" onchange="updateTrend()" style="font-size:11px;padding:3px 6px;border-radius:5px;border:1px solid '+BORD+'"><option value="">All jobs</option>'+trendOptsHtml+'</select></label>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">'
+      +['tw','lw','ytd'].map(function(k){
+        var lbl=k==='tw'?'This week':(k==='lw'?'Last week':'Year to date');
+        return '<div style="border:1px solid '+BORD+';border-radius:8px;padding:10px 14px">'
+          +'<div style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+';margin-bottom:4px">'+lbl+'</div>'
+          +'<div id="trend-'+k+'-h" style="font-size:20px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums">0.00</div>'
+          +'<div id="trend-'+k+'-c" style="font-size:11px;color:'+INKS+';margin-top:2px;font-variant-numeric:tabular-nums">$0.00</div>'
+        +'</div>';
+      }).join('')
+    +'</div></div>';
+
   var empKeys=Object.keys(byEmp).sort(function(a,b){ return a.localeCompare(b); });
   var missingRate=empKeys.filter(function(w){ return byEmp[w].rate==null; });
   var jobKeys=Object.keys(colMeta).filter(function(k){return colMeta[k].isJob;}).sort(function(a,b){ return colMeta[b].totH-colMeta[a].totH || a.localeCompare(b); });
@@ -1048,7 +1134,7 @@ function buildCostReportInto(win, rows, rates){
       return '<td style="padding:4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+'">'+(h?f(h):dash())+'</td>'
         +'<td style="padding:4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';border-right:'+COLSEP+';color:'+INKS+'">'+(!hasRate?'—':(h?money(c):dash()))+'</td>';
     }).join('');
-    var mainRow='<tr>'
+    var mainRow='<tr style="break-inside:avoid'+(E.totOTH>0?';page-break-after:avoid':'')+'">'
       +'<td style="padding:4px 8px 4px 0;font-weight:700;border-bottom:1px solid '+HAIR+';white-space:nowrap">'+esc(who)+(hasRate?'':' <span style="color:'+BRAND+';font-weight:400;font-size:9px">(no rate)</span>')+'</td>'
       +'<td style="padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;color:'+INKS+';border-bottom:1px solid '+HAIR+'">'+(hasRate?f(E.rate):'—')+'</td>'
       +mainCells
@@ -1061,7 +1147,7 @@ function buildCostReportInto(win, rows, rates){
       return '<td style="padding:2px 4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';color:'+BRAND+'">'+(h?f(h):'')+'</td>'
         +'<td style="padding:2px 4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';border-right:'+COLSEP+';color:'+BRAND+'">'+(h&&hasRate?money(c):'')+'</td>';
     }).join('');
-    var otRow='<tr style="background:'+TINT+'">'
+    var otRow='<tr style="background:'+TINT+';break-inside:avoid">'
       +'<td style="padding:2px 8px 2px 0;font-size:9.5px;color:'+BRAND+';border-bottom:1px solid '+HAIR+'">OT @ 1.5×</td>'
       +'<td style="padding:2px 8px;text-align:right;font-size:9.5px;color:'+BRAND+';border-bottom:1px solid '+HAIR+'">'+(hasRate?f(E.rate*1.5):'')+'</td>'
       +otCells
@@ -1094,6 +1180,7 @@ function buildCostReportInto(win, rows, rates){
         +'<div style="display:flex;flex-direction:column;gap:10px">'
           +'<h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-.028em;line-height:1">Labor Cost Summary</h1>'
           +'<div style="display:flex;gap:24px;font-size:9.5px;line-height:1.35;flex-wrap:wrap">'
+            +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Department</span><span>210 Engineering</span></div>'
             +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Period</span><span style="font-weight:700">'+esc(period)+'</span></div>'
             +'<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+'">Generated</span><span>'+dd+'</span></div>'
           +'</div>'
@@ -1115,20 +1202,60 @@ function buildCostReportInto(win, rows, rates){
         +'<tfoot>'+footRow+'</tfoot>'
       +'</table></div>'
       +missingNote
+      +trendHtml
     +'</div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid '+BORD+';font-family:'+FF+';font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+'">'
       +'<span>MRA · mobile.experiential · Confidential -- pay rate data</span><span>Generated automatically '+dd+'</span></div>';
+  /* Print options bar + fit-to-page (same proven zoom-based auto-scale as the Finance/Time Trends
+     reports -- Rich's standing rule: every report must print correctly out of the box, no manual
+     fiddling). Landscape by default here (unlike the Finance report's portrait) since this table
+     is naturally wide -- more job columns than a typical week has crews. If it still overflows
+     past the 1-page floor scale, break-inside:avoid on every employee/OT row + the browser's
+     native thead-repeat means it flows cleanly onto additional pages with the header carried over,
+     rather than a mid-row cut. */
   var html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Labor Cost Summary '+period+'</title><style>'
     +'*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#e7ebf0}'
     +'.bar{position:sticky;top:0;z-index:20;background:#101827;color:#fff;padding:9px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px}'
     +'.bar button{background:#e04826;color:#fff;border:0;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer;font-size:12.5px}'
-    +'#sheetwrap{position:relative;padding:14px}'
-    +'#sheet{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto;max-width:100%}'
+    +'.bar label{color:#cdd6e2;display:flex;gap:6px;align-items:center;cursor:pointer}'
+    +'.bar select{font-size:12px;padding:3px 6px;border-radius:5px;border:1px solid #4a5568}'
+    +'#sheetwrap{position:relative;overflow:hidden;padding:14px}'
+    +'#sheet{transform-origin:top left;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto}'
     +'.pad{padding:0.4in}'
-    +'@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.bar{display:none}body{background:#fff}#sheetwrap{padding:0}#sheet{box-shadow:none}}'
-    +'</style><style id="pg">@page{size:letter landscape;margin:0.3in}</style></head><body>'
-    +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button><span style="color:#f87171;font-weight:700">🔒 Confidential -- do not share</span></div>'
+    +'thead{display:table-header-group}tfoot{display:table-footer-group}tr{break-inside:avoid}'
+    +'@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none}}'
+    +'</style><style id="pg"></style></head><body>'
+    +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
+    +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option></select></label>'
+    +'<label><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
+    +'<span style="color:#f87171;font-weight:700;margin-left:auto">🔒 Confidential -- do not share</span>'
+    +'</div>'
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
+    +'<scr'+'ipt>'
+    +'var TREND='+JSON.stringify(trendJson).replace(/<\//g,'<\\/')+';'
+    +'function f(n){ return (Math.round((n||0)*100)/100).toFixed(2); }'
+    +'function money(n){ return "$"+(Math.round((n||0)*100)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }'
+    +'function updateTrend(){'
+    +'var jk=document.getElementById("trendJobSel").value;'
+    +'var src=jk?TREND.jobs[jk]:TREND.all;'
+    +'["tw","lw","ytd"].forEach(function(k){'
+    +'var b=src?src[k]:{h:0,c:0};'
+    +'document.getElementById("trend-"+k+"-h").textContent=f(b?b.h:0)+" hrs";'
+    +'document.getElementById("trend-"+k+"-c").textContent=money(b?b.c:0);'
+    +'});'
+    +'}'
+    +'function applyOpts(){'
+    +'var ori=document.getElementById("ori").value,fit=document.getElementById("fit").checked;'
+    +'var w=816,h=1056; if(ori==="landscape"){var t=w;w=h;h=t;}'
+    +'var m=0.3,mpx=m*96;'
+    +'document.getElementById("pg").textContent="@page{size:letter "+ori+";margin:"+m+"in}";'
+    +'var s=document.getElementById("sheet"),wrap=document.getElementById("sheetwrap");'
+    +'s.style.zoom=1; s.style.width=(w-2*mpx)+"px"; wrap.style.height="";'
+    +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.max(.92,Math.min(1,uW/cw,uH/ch));'
+    +'s.style.zoom=sc;}'
+    +'}'
+    +'window.onload=function(){ updateTrend(); applyOpts(); };'
+    +'</scr'+'ipt>'
     +'</body></html>';
   win.document.open(); win.document.write(html); win.document.close();
 }
