@@ -658,7 +658,12 @@ function buildTimeTrendsReport(rows,rangeLbl){
     +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.max(.92,Math.min(1,uW/cw,uH/ch));'
     +'s.style.zoom=sc;}'
     +'}'
-    +'window.onload=applyOpts;'
+    // Direct call, not window.onload -- confirmed via headless testing that onload can silently
+    // never fire on a document built via document.open()/write()/close(), leaving the report stuck
+    // at zoom:1 with no error -- exactly the "have to finger-fuck it to print" failure mode this
+    // exists to prevent. A direct call needs nothing to wait for: everything before this script tag
+    // in the same document.write() stream has already been parsed by the time it runs.
+    +'applyOpts();'
     +'</scr'+'ipt>'
     +'</body></html>';
   var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups, then tap Finance report again.'); return; } w.document.open(); w.document.write(html); w.document.close();
@@ -868,7 +873,12 @@ function buildFinanceReport(){
     +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.max(.92,Math.min(1,uW/cw,uH/ch));'
     +'s.style.zoom=sc;}'
     +'}'
-    +'window.onload=applyOpts;'
+    // Direct call, not window.onload -- confirmed via headless testing that onload can silently
+    // never fire on a document built via document.open()/write()/close(), leaving the report stuck
+    // at zoom:1 with no error -- exactly the "have to finger-fuck it to print" failure mode this
+    // exists to prevent. A direct call needs nothing to wait for: everything before this script tag
+    // in the same document.write() stream has already been parsed by the time it runs.
+    +'applyOpts();'
     +'</scr'+'ipt>'
     +'</body></html>';
   var w=window.open('','_blank'); if(!w){ alert('Allow pop-ups, then tap Finance report again.'); return; } w.document.open(); w.document.write(html); w.document.close();
@@ -1072,27 +1082,41 @@ function buildCostReportInto(win, rows, rates){
   var trendJobKeys=[];
   ['ytd','tw','lw'].forEach(function(b){ Object.keys(TB[b].byJob).forEach(function(k){ if(trendJobKeys.indexOf(k)<0) trendJobKeys.push(k); }); });
   trendJobKeys.sort(function(a,b){ return (TB.ytd.byJob[b]?TB.ytd.byJob[b].h:0)-(TB.ytd.byJob[a]?TB.ytd.byJob[a].h:0) || a.localeCompare(b); });
-  var trendJson={ all:{tw:TB.tw.all,lw:TB.lw.all,ytd:TB.ytd.all}, jobs:{} };
+  // jobs is an ARRAY, not an object keyed by job code -- job codes are numeric-looking strings
+  // ("1201"), and JS objects always enumerate integer-like keys in ascending numeric order
+  // regardless of insertion order, which silently overrides the YTD sort the moment this crosses
+  // JSON.stringify into the popup's own script. An array has no such reordering.
+  var trendJson={ all:{tw:TB.tw.all,lw:TB.lw.all,ytd:TB.ytd.all}, jobs:[] };
   trendJobKeys.forEach(function(k){
-    trendJson.jobs[k]={ label:(TB.ytd.byJob[k]||TB.tw.byJob[k]||TB.lw.byJob[k]).label,
-      tw:TB.tw.byJob[k]||{h:0,c:0}, lw:TB.lw.byJob[k]||{h:0,c:0}, ytd:TB.ytd.byJob[k]||{h:0,c:0} };
+    trendJson.jobs.push({ code:k, label:(TB.ytd.byJob[k]||TB.tw.byJob[k]||TB.lw.byJob[k]).label,
+      tw:TB.tw.byJob[k]||{h:0,c:0}, lw:TB.lw.byJob[k]||{h:0,c:0}, ytd:TB.ytd.byJob[k]||{h:0,c:0} });
   });
-  var trendOptsHtml=trendJobKeys.map(function(k){ return '<option value="'+esc(k)+'">'+esc(k)+' · '+esc(trendJson.jobs[k].label)+'</option>'; }).join('');
+  // Bar chart, not cards+dropdown (Rich, 2026-08-06, after seeing the card version live: "I was
+  // thinking having like a bar line chart... showing all the projects" -- flipping through jobs
+  // one at a time via a dropdown wasn't the point; he wants every job visible at once for
+  // comparison). Grouped horizontal bars per job (This week / Last week / Year to date), a fixed
+  // 3-color legend (categorical palette, CVD-safe pair, same slots used any time this app needs
+  // 3 distinct series), capped to the busiest 12 jobs by YTD hours so it stays readable as the
+  // year's history grows -- the main table above already carries the full column set.
+  var TREND_COLORS={tw:'#eb6834', lw:'#2a78d6', ytd:'#1baf7a'};
+  var trendCap=12;
   var trendHtml='<div style="margin-top:22px;padding-top:14px;border-top:3px solid '+INK+'">'
-    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:10px;flex-wrap:wrap">'
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:4px;flex-wrap:wrap">'
       +'<h2 style="margin:0;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Job totals over time</h2>'
-      +'<label style="font-size:9px;color:'+MUT+';display:flex;align-items:center;gap:6px">Job <select id="trendJobSel" onchange="updateTrend()" style="font-size:11px;padding:3px 6px;border-radius:5px;border:1px solid '+BORD+'"><option value="">All jobs</option>'+trendOptsHtml+'</select></label>'
+      +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
+        +'<div style="display:flex;gap:12px;font-size:9px;color:'+INKS+'">'
+          +['tw','lw','ytd'].map(function(k){ var lbl=k==='tw'?'This week':(k==='lw'?'Last week':'Year to date');
+            return '<span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+TREND_COLORS[k]+'"></span>'+lbl+'</span>'; }).join('')
+        +'</div>'
+        +'<div id="trendMetricToggle" style="display:flex;border:1px solid '+BORD+';border-radius:6px;overflow:hidden;font-size:9.5px">'
+          +'<button type="button" data-metric="h" onclick="renderTrendChart(\'h\')" style="border:0;background:'+INK+';color:#fff;padding:3px 10px;cursor:pointer;font-weight:700">Hours</button>'
+          +'<button type="button" data-metric="c" onclick="renderTrendChart(\'c\')" style="border:0;background:transparent;color:'+INKS+';padding:3px 10px;cursor:pointer;font-weight:700">$</button>'
+        +'</div>'
+      +'</div>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">'
-      +['tw','lw','ytd'].map(function(k){
-        var lbl=k==='tw'?'This week':(k==='lw'?'Last week':'Year to date');
-        return '<div style="border:1px solid '+BORD+';border-radius:8px;padding:10px 14px">'
-          +'<div style="font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+';margin-bottom:4px">'+lbl+'</div>'
-          +'<div id="trend-'+k+'-h" style="font-size:20px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums">0.00</div>'
-          +'<div id="trend-'+k+'-c" style="font-size:11px;color:'+INKS+';margin-top:2px;font-variant-numeric:tabular-nums">$0.00</div>'
-        +'</div>';
-      }).join('')
-    +'</div></div>';
+    +(trendJobKeys.length>trendCap?('<div style="font-size:9px;color:'+MUT+';margin-bottom:6px">Showing the '+trendCap+' busiest jobs by year-to-date hours ('+(trendJobKeys.length-trendCap)+' more not shown) · full list is in the table above</div>'):'')
+    +'<div id="trendChart" style="margin-top:6px"></div>'
+    +'</div>';
 
   var empKeys=Object.keys(byEmp).sort(function(a,b){ return a.localeCompare(b); });
   var missingRate=empKeys.filter(function(w){ return byEmp[w].rate==null; });
@@ -1233,16 +1257,31 @@ function buildCostReportInto(win, rows, rates){
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
     +'<scr'+'ipt>'
     +'var TREND='+JSON.stringify(trendJson).replace(/<\//g,'<\\/')+';'
+    +'var TREND_CAP='+trendCap+';'
+    +'var TREND_COLORS={tw:"#eb6834",lw:"#2a78d6",ytd:"#1baf7a"};'
     +'function f(n){ return (Math.round((n||0)*100)/100).toFixed(2); }'
     +'function money(n){ return "$"+(Math.round((n||0)*100)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }'
-    +'function updateTrend(){'
-    +'var jk=document.getElementById("trendJobSel").value;'
-    +'var src=jk?TREND.jobs[jk]:TREND.all;'
-    +'["tw","lw","ytd"].forEach(function(k){'
-    +'var b=src?src[k]:{h:0,c:0};'
-    +'document.getElementById("trend-"+k+"-h").textContent=f(b?b.h:0)+" hrs";'
-    +'document.getElementById("trend-"+k+"-c").textContent=money(b?b.c:0);'
+    +'function renderTrendChart(metric){'
+    +'document.querySelectorAll("#trendMetricToggle button").forEach(function(b){'
+    +'var on=b.getAttribute("data-metric")===metric;'
+    +'b.style.background=on?"#16110F":"transparent"; b.style.color=on?"#fff":"#6B6360";'
     +'});'
+    +'var jobs=TREND.jobs.slice(0,TREND_CAP);'
+    +'var max=0;'
+    +'jobs.forEach(function(job){ ["tw","lw","ytd"].forEach(function(p){ max=Math.max(max, job[p][metric]||0); }); });'
+    +'max=max||1;'
+    +'var fmt=function(v){ return metric==="h"?(f(v)+" hrs"):money(v); };'
+    +'var html=jobs.map(function(job){'
+    +'var rows=["tw","lw","ytd"].map(function(p){'
+    +'var v=job[p][metric]||0, w=Math.max(v>0?2:0,Math.round(v/max*1000)/10);'
+    +'return "<div style=\\"display:grid;grid-template-columns:1fr 78px;align-items:center;gap:10px;padding:1.5px 0\\">"'
+    +'+"<span style=\\"display:block;height:7px;background:#F0EDEA;border-radius:3.5px\\"><span style=\\"display:block;height:7px;width:"+w+"%;background:"+TREND_COLORS[p]+";border-radius:3.5px\\"></span></span>"'
+    +'+"<span style=\\"font-size:10px;font-variant-numeric:tabular-nums;text-align:right\\">"+fmt(v)+"</span></div>";'
+    +'}).join("");'
+    +'return "<div style=\\"padding:6px 0;border-bottom:1px solid #F0EDEA;break-inside:avoid\\">"'
+    +'+"<div style=\\"font-size:10px;font-weight:700;margin-bottom:3px\\">"+job.code+" &middot; "+job.label+"</div>"+rows+"</div>";'
+    +'}).join("");'
+    +'document.getElementById("trendChart").innerHTML=html||"<div style=\\"font-size:11px;color:#8A827D\\">No job activity in this week, last week, or year to date.</div>";'
     +'}'
     +'function applyOpts(){'
     +'var ori=document.getElementById("ori").value,fit=document.getElementById("fit").checked;'
@@ -1254,7 +1293,12 @@ function buildCostReportInto(win, rows, rates){
     +'if(fit){var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight,sc=Math.max(.92,Math.min(1,uW/cw,uH/ch));'
     +'s.style.zoom=sc;}'
     +'}'
-    +'window.onload=function(){ updateTrend(); applyOpts(); };'
+    // Direct calls, not window.onload -- confirmed via headless testing that onload can silently
+    // never fire on a document built via document.open()/write()/close(), leaving both the chart
+    // and the fit-to-page zoom stuck at their defaults with no error. A direct call needs nothing
+    // to wait for: everything before this script tag in the same document.write() stream has
+    // already been parsed by the time it runs.
+    +'renderTrendChart("h"); applyOpts();'
     +'</scr'+'ipt>'
     +'</body></html>';
   win.document.open(); win.document.write(html); win.document.close();
