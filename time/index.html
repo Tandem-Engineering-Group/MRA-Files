@@ -1352,13 +1352,18 @@ function buildCostReportInto(win, rows, rates){
     // as many pages as it needs (2, 3, ...) via the browser\'s own pagination -- which already
     // repeats the table header on every page (see the thead/tfoot CSS above), so a multi-page
     // printout is a correct, readable result, not a failure.
+    // The table sits in a .hscroll (overflow-x:auto) div for a nice horizontal scroll -- but zoom
+    // scales a box and its content by the SAME factor, so the ratio between .hscroll\'s width and
+    // its (wider) table never changes no matter how far the whole sheet is zoomed out: checking
+    // scrollWidth (previous attempt) correctly measured the true width and picked a correct zoom
+    // number, but that zoom could never stop .hscroll from clipping the same proportion of columns
+    // it always was -- shrinking a photo of a cut-off table still shows a cut-off table. The only
+    // real fix is to stop clipping it at all: unclip every .hscroll for this measurement AND for
+    // the actual print/fit render, so the true width flows into #sheet\'s own layout and gets
+    // scaled down as ONE piece with everything else -- confirmed via Rich\'s real print preview
+    // still showing a scrollbar+cut columns after the scrollWidth-only attempt.
+    +'document.querySelectorAll(".hscroll").forEach(function(el){ el.style.overflow="visible"; });'
     +'var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight;'
-    // The table sits in a .hscroll (overflow-x:auto) div for a nice on-screen horizontal scroll --
-    // but that same overflow:auto makes it its OWN scroll container, so its true content width
-    // never bubbles up into #sheet\'s own scrollWidth (which just reports the clipped/visible width).
-    // Measuring only s.scrollWidth silently missed however many columns were scrolled out of view --
-    // exactly what was getting cut off at the printed page edge. Check every .hscroll\'s real width too.
-    +'document.querySelectorAll(".hscroll").forEach(function(el){ cw=Math.max(cw,el.scrollWidth); });'
     +'var sc=Math.min(1,uW/cw); if(fit) sc=Math.min(sc,uH/ch);'
     +'s.style.zoom=sc;'
     +'}'
