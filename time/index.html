@@ -166,7 +166,10 @@
         <option value="lw">Last week</option>
         <option value="m">This month</option>
         <option value="all">All time</option>
+        <option value="custom">Custom range&hellip;</option>
       </select>
+      <input type="date" id="fFrom" class="hide" title="From date">
+      <input type="date" id="fTo" class="hide" title="To date">
       <select id="fPerson"><option value="">All people</option></select>
       <select id="fJobF"><option value="">All jobs</option></select>
       <span class="sp" style="flex:1"></span>
@@ -438,6 +441,16 @@ function inRange(dateISO,range){
   if(range==='tw'){ var s=startOfWeek(now); return d>=s; }
   if(range==='lw'){ var s=startOfWeek(now); var ls=new Date(s); ls.setDate(ls.getDate()-7); return d>=ls && d<s; }
   if(range==='m'){ return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth(); }
+  if(range==='custom'){
+    // Rich, 2026-08-07: "eventually we'll have months of data ... what if the finance guy wants to
+    // see two weeks of data" -- a real from/to pair rather than more one-off presets, since the span
+    // he'll want keeps changing as the year's data builds out. Plain string compare works since
+    // dateISO is YYYY-MM-DD (lexicographic order == chronological order). Blank side = open-ended.
+    var fromV=$('fFrom').value, toV=$('fTo').value;
+    if(fromV && dateISO<fromV) return false;
+    if(toV && dateISO>toV) return false;
+    return true;
+  }
   return true;
 }
 function filtered(){
@@ -446,12 +459,22 @@ function filtered(){
     .sort(function(a,b){ return String(b.dateISO).localeCompare(String(a.dateISO))||String(b.ts).localeCompare(String(a.ts)); });
 }
 function updateFinBtnLabel(){
-  var r=$('fRange').value, trend=(r==='m'||r==='all'), b=$('finBtn'); if(!b) return;
+  var r=$('fRange').value, trend=(r==='m'||r==='all'||r==='custom'), b=$('finBtn'); if(!b) return;
   b.innerHTML=trend?'📈 Time trends':'📊 Hours report';
   b.title=trend?'Charts + trends over time (hours by week/month/job/person) — no day-by-day grid':'Weekly hours summary (job codes + employee IDs) in your payroll format';
 }
+function updateCustomRangeUI(){
+  var isCustom=$('fRange').value==='custom';
+  $('fFrom').classList.toggle('hide',!isCustom); $('fTo').classList.toggle('hide',!isCustom);
+  if(isCustom && !$('fFrom').value && !$('fTo').value){
+    // default to a sane starting window (last 14 days) rather than an empty picker Rich has to fill
+    // in from scratch every time -- open-ended is still one click away by clearing a side.
+    var to=new Date(), from=new Date(); from.setDate(from.getDate()-13);
+    $('fTo').value=ymd(to); $('fFrom').value=ymd(from);
+  }
+}
 function renderTracking(){
-  fillPersonFilter(); fillJobFilter(); updateFinBtnLabel();
+  fillPersonFilter(); fillJobFilter(); updateFinBtnLabel(); updateCustomRangeUI();
   var rows=filtered(); var tot=0, byJob={}, byPer={};
   rows.forEach(function(e){ tot+=e.hours; byJob[e.job]=(byJob[e.job]||0)+e.hours; byPer[e.who]=(byPer[e.who]||0)+e.hours; });
   $('grandTot').textContent=tot.toFixed(2).replace(/\.00$/,'.0');
@@ -1341,7 +1364,7 @@ function boot(){
   $('mgrLoginBtn').onclick=mgrClick; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrClick; var _lp=$('lockPinBtn'); if(_lp) _lp.onclick=pinUnlock;
   SSO.init(); applyMgr(); renderMyDay();
   $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
-  ['fRange','fPerson','fJobF'].forEach(function(id){ $(id).onchange=renderTracking; });
+  ['fRange','fPerson','fJobF','fFrom','fTo'].forEach(function(id){ $(id).onchange=renderTracking; });
   $('fWho').onchange=function(){ lset(LS.lastWho,$('fWho').value); renderMyDay(); }; $('fDate').addEventListener('change',renderMyDay);
   ['fHours','fTask'].forEach(function(id){ $(id).addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }); });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
