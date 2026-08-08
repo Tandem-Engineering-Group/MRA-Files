@@ -231,6 +231,17 @@ real SSO lands. Go STRAIGHT to real M365 sign-in ("real MRA logins") with roles 
     `/.auth/me` gating, repoint the data publish behind auth, give IT the exact callback URL.
   - (Optional stopgap offered to Rich: ship the MSAL.js soft gate now for logins-today, swap to SWA when ready.)
 
+- **🔒 SHIPPED 2026-08-06 — SEPARATE PASSWORD-PROTECTED COPY ON THE SWA (partner's ask: "up on azure
+  separately with a password").** The **MRA-Command-Center** Static Web App
+  (`https://wonderful-desert-0a27f7010.7.azurestaticapps.net`, deploy token = `AZURE_SWA_TOKEN` repo secret,
+  first deployed 2026-07-16) is now a REAL hosted copy, not a stale snapshot: `swa.yml` rewrites the
+  dashboard's runtime reads (data.js 30s poll / eotm.txt / eotm.png / design.json) to absolute live-site URLs
+  + sets/verifies a GET-only blob CORS rule on `mrashopdash`, so the copy live-refreshes off the existing
+  pipeline with zero pipeline changes; redeploys automatically when the dashboard changes on the default
+  branch. `staticwebapp.config.json` added (404→dashboard, no-cache). **The password = SWA built-in
+  "Password protection"** (portal → Settings → Configuration; needs Standard plan) — partner sets it, it
+  lives only in Azure. Interim lock until the Step-4 Entra SSO replaces it on the SAME SWA/URL. Public $web
+  board untouched. Full runbook: `SWA-HOSTING.md`.
 - **(c) ✉ EMAIL ON NEW TASK — ✅ BUILT + LIVE for PROJECT TASKS (2026-06-26).** Flow **"MRA Email"** (owner Rich,
   Office 365 Outlook conn `rmiller@gomra.com`): trigger **"When an item is created" on MRA Project Tasks** →
   **Get items** on **MRA Users** with Filter `Title eq '<Assigned>'` → **Send an email (V2)** To =

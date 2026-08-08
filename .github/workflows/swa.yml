@@ -1,19 +1,45 @@
-name: Deploy to Azure Static Web App (preview)
+name: Deploy to Azure Static Web App (Command Center)
 
-# Publishes a COPY of the dashboard to the MRA-Command-Center Static Web App
-# (wonderful-desert-0a27f7010.7.azurestaticapps.net). The live $web site is
-# completely untouched — this is the Step-4 login-migration preview. Auth rules
-# (floor = anonymous, everything else = gomra.com sign-in) get added to
-# staticwebapp.config.json once IT delivers the Entra client secret.
+# Publishes the dashboard to the MRA-Command-Center Azure Static Web App:
+#   https://wonderful-desert-0a27f7010.7.azurestaticapps.net
+# This is the SEPARATE, password-protected copy of the board. The public $web
+# site (https://mrashopdash.z13.web.core.windows.net/) is completely untouched.
 #
-# data.js is snapshotted from the live site at deploy time, so the preview
-# shows real board data as of the deploy (it does not live-refresh yet).
+# THE PASSWORD is not in this repo or workflow: it's the Static Web App's
+# built-in "Password protection" setting (Azure Portal -> the SWA -> Settings ->
+# Configuration -> Password protection -> protect both environments + set the
+# visitor password; requires the Standard hosting plan). Once it's on, every
+# request to the SWA URL gets a password page first. See SWA-HOSTING.md.
+#
+# LIVE DATA: at deploy time the dashboard's runtime reads (data.js poll,
+# eotm.txt, design.json, eotm.png) are rewritten to absolute URLs on the live
+# $web site, so this copy live-refreshes every 30s just like the real board —
+# no redeploy needed when board data changes. The cross-origin fetches need a
+# CORS rule on the storage account, which this workflow sets and then verifies
+# with a real Origin-header request. data.js is also snapshotted into the app
+# as a first-paint fallback. Writes (Power Automate flows) are absolute no-cors
+# POSTs already, so editing works from this copy unchanged.
+#
+# Deploys on every push that changes the dashboard (so the copy always tracks
+# the live board's code) and on demand via workflow_dispatch.
 
 on:
   workflow_dispatch:
+  push:
+    branches: [claude/exciting-keller-wm7u2p]
+    paths:
+      - 'MRA_Dashboard.html'
+      - 'index.html'
+      - 'staticwebapp.config.json'
+      - 'catalogue/**'
+      - '.github/workflows/swa.yml'
 
 permissions:
   contents: read
+
+env:
+  LIVE: https://mrashopdash.z13.web.core.windows.net
+  SWA_URL: https://wonderful-desert-0a27f7010.7.azurestaticapps.net
 
 jobs:
   swa:
@@ -21,15 +47,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Stage the app (dashboard + fresh data snapshot)
+      - name: Stage the app (rewire data reads to the live site)
         run: |
+          set -e
           mkdir -p swa-app
-          cp MRA_Dashboard.html swa-app/
           cp index.html swa-app/
+          cp staticwebapp.config.json swa-app/
+          if [ -f logo.png ]; then cp logo.png swa-app/; fi
+          if [ -f logo-full-dark.png ]; then cp logo-full-dark.png swa-app/; fi
+          if [ -f MRA_Project_Intake_Template.xlsx ]; then cp MRA_Project_Intake_Template.xlsx swa-app/; fi
           if [ -d builder ]; then cp -r builder swa-app/; cp builder/index.html swa-app/builder.html; fi
           if [ -d catalogue ]; then cp -r catalogue swa-app/; fi
-          curl -sSf -o swa-app/data.js "https://mrashopdash.z13.web.core.windows.net/data.js"
-          ls -la swa-app | head
+          # Point the dashboard's runtime reads at the LIVE site so this copy stays
+          # current without redeploys. Each rewrite is verified below — if the source
+          # strings ever change in MRA_Dashboard.html, this fails loudly instead of
+          # silently shipping a frozen board.
+          sed -e "s|fetch('data.js?t='|fetch('${LIVE}/data.js?t='|" \
+              -e "s|fetch('eotm.txt?cb='|fetch('${LIVE}/eotm.txt?cb='|" \
+              -e "s|fetch('design.json?cb='|fetch('${LIVE}/design.json?cb='|" \
+              -e "s|photo: \"eotm.png?cb=\"|photo: \"${LIVE}/eotm.png?cb=\"|" \
+              MRA_Dashboard.html > swa-app/MRA_Dashboard.html
+          for s in "${LIVE}/data.js?t=" "${LIVE}/eotm.txt?cb=" "${LIVE}/design.json?cb=" "${LIVE}/eotm.png?cb="; do
+            grep -qF "$s" swa-app/MRA_Dashboard.html || { echo "::error::live-data rewrite did not land: $s"; exit 1; }
+          done
+          # Snapshot data.js as the first-paint fallback (used only if the live fetch fails).
+          curl -sSf -o swa-app/data.js "${LIVE}/data.js"
+          ls -la swa-app | head -20
+
+      # The browser polls the live site's data.js from the SWA origin, which is a
+      # cross-origin fetch — allow it with a blob-service CORS rule (the static
+      # website endpoint honors blob CORS). GET/HEAD from any origin: everything
+      # under $web is public-read already, so this widens nothing.
+      - name: Allow cross-origin reads of the live board data (storage CORS)
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        run: |
+          echo "Blob CORS rules before:"
+          az storage cors list --services b --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" -o table || true
+          az storage cors clear --services b --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY"
+          az storage cors add --services b --methods GET HEAD OPTIONS \
+            --origins '*' --allowed-headers '*' --exposed-headers '*' --max-age 3600 \
+            --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY"
+          echo "CORS rule set."
 
       - name: Deploy to the Static Web App
         uses: Azure/static-web-apps-deploy@v1
@@ -38,4 +97,17 @@ jobs:
           action: upload
           app_location: swa-app
           skip_app_build: true
-          skip_api_build: true
+
+      - name: Verify the live-data poll works cross-origin
+        run: |
+          for i in 1 2 3 4 5; do
+            ACAO=$(curl -s -D- -o /dev/null -H "Origin: ${SWA_URL}" "${LIVE}/data.js" | tr -d '\r' | grep -i '^access-control-allow-origin:' || true)
+            if [ -n "$ACAO" ]; then echo "OK - live data readable from the SWA origin ($ACAO)"; exit 0; fi
+            echo "waiting for CORS to propagate ($i/5)..."; sleep 20
+          done
+          echo "::warning::The live site is not returning Access-Control-Allow-Origin — the Command Center copy will show its deploy-time data snapshot instead of live-refreshing. Re-run this workflow; if it persists, the storage static-website endpoint is ignoring blob CORS and the data read needs a different route."
+
+      - name: Where to find it
+        run: |
+          echo "Deployed: ${SWA_URL}"
+          echo "Password protection is a portal setting on the Static Web App (Settings -> Configuration) — see SWA-HOSTING.md."
