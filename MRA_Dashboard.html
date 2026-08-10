@@ -3884,6 +3884,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.9", date:"2026-08-10", title:"🔧 Fixed: Wrap Team Calendar edits never showed up for anyone else", items:[
+    "Rich: \"al added cisco to this calendar but its not showing.\" Root cause: this calendar's shared-sync setting (WRAPCAL_WRITE_URL) was correctly posting edits out when someone saved, but nothing ever fetched that shared file back down — every device just kept re-rendering its own local copy forever, so an edit made on one device could never appear on another. Added the missing fetch-on-open, matching the same pattern already used by the Quote Generator and other shared dashboard data. Still needs an \"MRA Wrap Cal\" Power Automate flow wired up (same house pattern as EOTM/Safety uploads) before this actually goes cross-device — until then it still behaves as local-only, but correctly, instead of silently dropping edits." ] },
   { rev:"37.8", date:"2026-08-10", title:"🔐 Jordan Thomas — same sign-in access as Mark &amp; Sarah", items:[
     "Rich: \"yes jordan same as mark and sarah pls.\" jthomas@gomra.com now signs in with the same <b>design</b> role as Sarah Williams and Mark Mustonen (Projects + editing, minus the InfoWheels Builder/Sales &amp; Planning/admin-only items), and Jordan Thomas is in the My Work allowlist alongside them." ] },
   { rev:"37.7", date:"2026-08-10", title:"🎨 Design Team board — added Jordan Thomas", items:[
@@ -16928,6 +16930,23 @@ function _wcLoad(){ try{ var r=localStorage.getItem(WRAPCAL_KEY); if(r) WRAPCAL=
   if(!WRAPCAL||!Array.isArray(WRAPCAL.sched)) WRAPCAL=_wcSeed();
   if(!Array.isArray(WRAPCAL.projects)||!WRAPCAL.projects.length) WRAPCAL.projects=_wcSeed().projects;
   if(!Array.isArray(WRAPCAL.keys)) WRAPCAL.keys=[]; }
+// Pull the shared copy (written by whoever last saved, on whatever device) so edits actually show up
+// for everyone else — the local load above is just an instant-paint fallback while this is in flight.
+// Rich, 2026-08-10: Al added "Cisco" and it never showed for anyone else — root cause was this half:
+// the write side (_wcSave, below) already posted to WRAPCAL_WRITE_URL, but nothing ever fetched the
+// shared file back down, so every device just kept re-rendering its own local copy forever.
+var _wcSharedTried=false;
+function _wcLoadShared(cb){ _wcSharedTried=true;
+  fetch('wrapcal.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .then(function(data){
+      if(data && Array.isArray(data.sched)){
+        WRAPCAL=data;
+        if(!Array.isArray(WRAPCAL.projects)||!WRAPCAL.projects.length) WRAPCAL.projects=_wcSeed().projects;
+        if(!Array.isArray(WRAPCAL.keys)) WRAPCAL.keys=[];
+        try{ localStorage.setItem(WRAPCAL_KEY,JSON.stringify(WRAPCAL)); }catch(e){}
+      }
+    }).catch(function(){}).then(function(){ if(cb) cb(); });
+}
 function _wcSave(){ try{ localStorage.setItem(WRAPCAL_KEY,JSON.stringify(WRAPCAL)); }catch(e){}
   if(WRAPCAL_WRITE_URL){ try{ fetch(WRAPCAL_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({pin:((typeof CLOSE_PIN!=='undefined'&&CLOSE_PIN)||'1974'),json:JSON.stringify(WRAPCAL)})}); }catch(e){} } }
 function _wcId(pfx){ return (pfx||'w')+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36); }
@@ -16997,7 +17016,8 @@ function renderWrapCal(){ var ov=document.getElementById('wrapcalOverlay'); if(!
     +'<div id="wcMonths">'+_wcMonthsHtml()+'</div>'
     +_wcEditHtml();
 }
-function openWrapCal(){ if(typeof closeDrops==='function') closeDrops(); _wcLoad(); var ov=document.getElementById('wrapcalOverlay'); if(!ov){ ov=document.createElement('div'); ov.id='wrapcalOverlay'; ov.className='mtg-overlay'; document.body.appendChild(ov); } ov.classList.add('show'); WC_EDIT=null; renderWrapCal(); }
+function openWrapCal(){ if(typeof closeDrops==='function') closeDrops(); _wcLoad(); var ov=document.getElementById('wrapcalOverlay'); if(!ov){ ov=document.createElement('div'); ov.id='wrapcalOverlay'; ov.className='mtg-overlay'; document.body.appendChild(ov); } ov.classList.add('show'); WC_EDIT=null; renderWrapCal();
+  if(WRAPCAL_WRITE_URL){ _wcLoadShared(function(){ if(ov.classList.contains('show')) renderWrapCal(); }); } }
 function closeWrapCal(){ var ov=document.getElementById('wrapcalOverlay'); if(ov) ov.classList.remove('show'); WC_EDIT=null; }
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var ov=document.getElementById('wrapcalOverlay'); if(ov&&ov.classList.contains('show')) closeWrapCal(); } });
 function wcEntryEdit(id){ WC_EDIT={t:'entry',id:id}; renderWrapCal(); var el=document.querySelector('.wc-edit'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }
