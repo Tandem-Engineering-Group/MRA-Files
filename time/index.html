@@ -667,7 +667,7 @@ function buildTimeTrendsReport(rows,rangeLbl){
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
     +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option></select></label>'
-    +'<label title="Width always fits the page; this also shrinks it to fit the height onto one page. Uncheck to keep full-size rows and let it flow onto as many pages as needed (headers repeat on each)."><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
+    +'<label title="Off by default so text stays full, readable size and flows onto as many pages as needed (headers repeat on each). Check this only if you specifically need everything squeezed onto one sheet — it will shrink the text to do it, sometimes a lot."><input type="checkbox" id="fit" onchange="applyOpts()"> Shrink to fit 1 page</label>'
     +'</div>'
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
     +'<scr'+'ipt>'
@@ -760,9 +760,9 @@ function buildFinanceReport(){
     var tot=byCode[c].h, w=Math.max(2,Math.round(tot/maxJobTot*1000)/10);
     var emps=Object.keys(byCodeEmp[c]||{}).sort(function(a,b){return byCodeEmp[c][b]-byCodeEmp[c][a];}).map(function(w2){return w2+' '+f(byCodeEmp[c][w2]);}).join(' · ');
     var lastInCol=(i===codeKeys.length-1)||(i===codeRows-1);
-    return '<div style="display:grid;grid-template-columns:minmax(34px,auto) 1fr 46px 52px;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid '+(lastInCol?INK:HAIR)+';break-inside:avoid">'
+    return '<div style="display:grid;grid-template-columns:minmax(34px,auto) minmax(0,1fr) 46px 52px;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid '+(lastInCol?INK:HAIR)+';break-inside:avoid">'
       +'<span style="font-size:12px;font-weight:700;font-variant-numeric:tabular-nums">'+esc(c)+'</span>'
-      +'<span style="font-size:12px">'+esc(byCode[c].name||'')+'<span style="display:block;font-size:10px;color:'+INKS+';margin-top:1px;font-variant-numeric:tabular-nums">'+esc(emps)+'</span></span>'
+      +'<span style="font-size:12px;min-width:0;max-width:300px">'+esc(byCode[c].name||'')+'<span style="display:block;font-size:10px;color:'+INKS+';margin-top:1px;font-variant-numeric:tabular-nums;overflow-wrap:break-word">'+esc(emps)+'</span></span>'
       +'<span style="display:block;height:7px;background:'+HAIR+'"><span style="display:block;height:7px;width:'+w+'%;background:'+BRAND+'"></span></span>'
       +'<span style="font-size:13.5px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums">'+f(tot)+'</span></div>';
   }).join('');
@@ -796,7 +796,7 @@ function buildFinanceReport(){
     var dayHas=dayDates.map(function(cd){ return W.empOrder.some(function(who){ return (W.emps[who].byDay[cd]||[]).length>0; }); });
     var headCells=dayIdx.map(function(i,k){ var bold=dayHas[k];
       return '<div style="font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:'+(bold?'700':'600')+(bold?'':(';color:'+MUT))+'">'+DOWF[(i+1)%7]+' '+esc(isoToMDY(dayDates[k]))+'</div>'; }).join('');
-    var head='<div style="display:grid;grid-template-columns:'+cols+';gap:8px;padding-bottom:5px;border-bottom:1px solid '+INK+'"><div></div>'+headCells+'</div>';
+    var head='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding-bottom:4px;border-bottom:1px solid '+INK+'"><div></div>'+headCells+'</div>';
     var empKeys=W.empOrder.slice().sort(function(a,b){ return String(a).localeCompare(String(b)); });
     var dayTot=dayDates.map(function(){return 0;});
     var empRows=empKeys.map(function(who){ var E=W.emps[who];
@@ -804,14 +804,14 @@ function buildFinanceReport(){
       var cells=dayDates.map(function(cd,k){
         var items=E.byDay[cd]||[];
         items.forEach(function(it){ dayTot[k]+=it.h; if(!it.exc){ if(!(it.code in byJob)){ byJob[it.code]=0; jobOrder.push(it.code); } byJob[it.code]+=it.h; } });
-        if(!items.length) return '<div style="border:1px dashed '+BORD+';padding:6px 8px;color:'+DIS+';font-size:14px;font-weight:700">—</div>';
+        if(!items.length) return '<div style="border:1px dashed '+BORD+';padding:5px 6px;color:'+DIS+';font-size:14px;font-weight:700">—</div>';
         var isExc=items.some(function(it){return it.exc;}), dTot=items.reduce(function(x,it){return x+it.h;},0);
         var lines=items.map(function(it){
           return '<div style="display:flex;justify-content:space-between;gap:4px;font-size:11px;font-variant-numeric:tabular-nums'+(it.exc?(';color:'+BRAND):'')+'">'
             +'<span'+(it.exc?(' style="font-weight:700"'):(' style="color:'+INKS+'"'))+'>'+esc(it.exc?'Called in':it.code)+'</span><span>'+f(it.h)+'</span></div>'
             +(it.tn?('<div style="font-size:10.5px;color:'+INKS+';font-style:italic">'+esc(it.tn)+'</div>'):'');
         }).join('');
-        return '<div style="background:'+(isExc?TINT:SURF)+';padding:6px 8px'+(isExc?(';box-shadow:inset 2px 0 0 '+BRAND):'')+'">'
+        return '<div style="background:'+(isExc?TINT:SURF)+';padding:5px 6px'+(isExc?(';box-shadow:inset 2px 0 0 '+BRAND):'')+'">'
           +'<div style="font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;margin-bottom:4px'+(isExc?(';color:'+BRAND):'')+'">'+f(dTot)+'</div>'
           +'<div style="display:flex;flex-direction:column;gap:2px">'+lines+'</div></div>';
       }).join('');
@@ -820,8 +820,8 @@ function buildFinanceReport(){
       // "maybe 2 rows" -- so a person working several jobs in a week doesn't stretch their whole row.
       var railLines=jobOrder.map(function(k){ return '<span style="white-space:nowrap">'+esc(k)+' · '+f(byJob[k])+'</span>'; }).join('');
       var badge=E.calledIn?(' <span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:'+BRAND+';padding:1px 4px">Called in</span>'):'';
-      return '<div style="display:grid;grid-template-columns:'+cols+';gap:8px;padding:8px 0;border-bottom:1px solid '+HAIR+';break-inside:avoid">'
-        +'<div style="padding-right:8px">'
+      return '<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:5px 0;border-bottom:1px solid '+HAIR+';break-inside:avoid">'
+        +'<div style="padding-right:6px">'
           +'<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:14.5px;font-weight:700;letter-spacing:-.015em">'+esc(who)+'</span>'+badge+'</div>'
           +'<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin-top:1px">ID '+esc(E.id||'—')+'</div>'
           +'<div style="font-size:19px;font-weight:700;letter-spacing:-.02em;margin-top:5px;font-variant-numeric:tabular-nums">'+f(E.tot)+'</div>'
@@ -830,7 +830,7 @@ function buildFinanceReport(){
     }).join('');
     var footCells=dayTot.map(function(t){ return '<div style="font-size:16px;font-weight:700;font-variant-numeric:tabular-nums'+(t<=0?(';color:'+DIS):'')+'">'+f(t)+'</div>'; }).join('');
     var wkGrand=dayTot.reduce(function(a,b){return a+b;},0);
-    var foot='<div style="display:grid;grid-template-columns:'+cols+';gap:8px;align-items:baseline;margin-top:10px;padding-top:8px;border-top:3px solid '+INK+'">'
+    var foot='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;align-items:baseline;margin-top:7px;padding-top:6px;border-top:3px solid '+INK+'">'
       +'<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+';font-weight:600">Day total<span style="display:block;font-size:20px;letter-spacing:-.02em;color:'+INK+';margin-top:3px;font-variant-numeric:tabular-nums">'+f(wkGrand)+'</span></div>'
       +footCells+'</div>';
     var cap = singleWeek ? '' : '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin:14px 0 4px">Week of '+esc(isoToMDY(wk))+'</div>';
@@ -869,7 +869,7 @@ function buildFinanceReport(){
         +'</div>'
       +'</div>'
       +'<h2 style="margin:18px 0 8px;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Job code totals by employee</h2>'
-      +(codeHtml?('<div style="border-top:1px solid '+INK+';margin-bottom:18px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat('+codeRows+',auto);grid-auto-flow:column;column-gap:24px">'+codeHtml+'</div>')
+      +(codeHtml?('<div style="border-top:1px solid '+INK+';margin-bottom:18px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:repeat('+codeRows+',auto);grid-auto-flow:column;column-gap:24px">'+codeHtml+'</div>')
         :('<div style="border-top:1px solid '+INK+';margin-bottom:18px"><div style="font-size:13px;color:'+MUT+';padding:8px 0">No job-coded work in this range.</div></div>'))
       +byWeekHtml
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">'
@@ -897,8 +897,8 @@ function buildFinanceReport(){
     +'@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none}}'
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
-    +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option></select></label>'
-    +'<label title="Width always fits the page; this also shrinks it to fit the height onto one page. Uncheck to keep full-size rows and let it flow onto as many pages as needed (headers repeat on each)."><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
+    +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option></select></label>'
+    +'<label title="Off by default so text stays full, readable size and flows onto as many pages as needed (headers repeat on each). Check this only if you specifically need everything squeezed onto one sheet — it will shrink the text to do it, sometimes a lot."><input type="checkbox" id="fit" onchange="applyOpts()"> Shrink to fit 1 page</label>'
     +'</div>'
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
     +'<scr'+'ipt>'
@@ -1200,25 +1200,25 @@ function buildCostReportInto(win, rows, rates){
       if(meta && meta.status && /shipped|hold/i.test(meta.status)) bits.push('<span style="color:'+BRAND+'">'+esc(meta.status)+'</span>');
       if(bits.length) sub='<span style="display:block;font-size:8.5px;font-weight:400;text-transform:none;letter-spacing:0;color:'+MUT+';margin-top:1px">'+bits.join(' · ')+'</span>';
     }
-    return '<th colspan="2" style="padding:0 4px 2px;text-align:center;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+BORD+';border-right:'+COLSEP+';white-space:nowrap">'
+    return '<th colspan="2" style="padding:0 3px 2px;text-align:center;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+BORD+';border-right:'+COLSEP+';max-width:130px;overflow-wrap:break-word">'
       +(cm.isJob?('<b style="color:'+INK+'">'+esc(k)+' · '+esc(cm.label)+'</b>'):esc(cm.label))+sub+'</th>';
-  }).join('')+'<th colspan="2" style="padding:0 4px 2px;text-align:center;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+BORD+'">Total</th>';
-  var subHeadCell='<th style="padding:0 4px 4px;text-align:right;font-size:9px;color:'+MUT+'">Hrs</th><th style="padding:0 4px 4px;text-align:right;font-size:9px;color:'+MUT+';border-right:'+COLSEP+'">$</th>';
-  var subHeadHtml=colKeys.map(function(){ return subHeadCell; }).join('')+'<th style="padding:0 4px 4px;text-align:right;font-size:9px;color:'+MUT+'">Hrs</th><th style="padding:0 4px 4px;text-align:right;font-size:9px;color:'+MUT+'">$</th>';
+  }).join('')+'<th colspan="2" style="padding:0 3px 2px;text-align:center;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:'+MUT+';border-bottom:1px solid '+BORD+'">Total</th>';
+  var subHeadCell='<th style="padding:0 3px 4px;text-align:right;font-size:9px;color:'+MUT+'">Hrs</th><th style="padding:0 3px 4px;text-align:right;font-size:9px;color:'+MUT+';border-right:'+COLSEP+'">$</th>';
+  var subHeadHtml=colKeys.map(function(){ return subHeadCell; }).join('')+'<th style="padding:0 3px 4px;text-align:right;font-size:9px;color:'+MUT+'">Hrs</th><th style="padding:0 3px 4px;text-align:right;font-size:9px;color:'+MUT+'">$</th>';
 
   var bodyRows=empKeys.map(function(who){
     var E=byEmp[who], hasRate=E.rate!=null;
     var mainCells=colKeys.map(function(k){
       var C=E.cols[k], h=C?C.regH:0, c=C?C.regC:0;
-      return '<td style="padding:4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+'">'+(h?f(h):dash())+'</td>'
-        +'<td style="padding:4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';border-right:'+COLSEP+';color:'+INKS+'">'+(!hasRate?'—':(h?money(c):dash()))+'</td>';
+      return '<td style="padding:3px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+'">'+(h?f(h):dash())+'</td>'
+        +'<td style="padding:3px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+';border-right:'+COLSEP+';color:'+INKS+'">'+(!hasRate?'—':(h?money(c):dash()))+'</td>';
     }).join('');
     var mainRow='<tr style="break-inside:avoid'+(E.totOTH>0?';page-break-after:avoid':'')+'">'
       +'<td style="padding:4px 8px 4px 0;font-weight:700;border-bottom:1px solid '+HAIR+';white-space:nowrap">'+esc(who)+(hasRate?'':' <span style="color:'+BRAND+';font-weight:400;font-size:11px">(no rate)</span>')+'</td>'
       +'<td style="padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;color:'+INKS+';border-bottom:1px solid '+HAIR+'">'+(hasRate?f(E.rate):'—')+'</td>'
       +mainCells
-      +'<td style="padding:4px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+'">'+f(E.totRegH)+'</td>'
-      +'<td style="padding:4px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+'">'+(hasRate?money(E.totRegC):'—')+'</td>'
+      +'<td style="padding:3px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+'">'+f(E.totRegH)+'</td>'
+      +'<td style="padding:3px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;border-bottom:1px solid '+HAIR+'">'+(hasRate?money(E.totRegC):'—')+'</td>'
       +'</tr>';
     if(E.totOTH<=0) return mainRow;
     var otCells=colKeys.map(function(k){
@@ -1307,7 +1307,7 @@ function buildCostReportInto(win, rows, rates){
     +'</style><style id="pg"></style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
     +'<label>Orientation <select id="ori" onchange="applyOpts()"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option></select></label>'
-    +'<label title="Width always fits the page; this also shrinks it to fit the height onto one page. Uncheck to keep full-size rows and let it flow onto as many pages as needed (headers repeat on each)."><input type="checkbox" id="fit" checked onchange="applyOpts()"> Fit to 1 page</label>'
+    +'<label title="Off by default so text stays full, readable size and flows onto as many pages as needed (headers repeat on each). Check this only if you specifically need everything squeezed onto one sheet — it will shrink the text to do it, sometimes a lot."><input type="checkbox" id="fit" onchange="applyOpts()"> Shrink to fit 1 page</label>'
     +'<span style="color:#f87171;font-weight:700;margin-left:auto">🔒 Confidential -- do not share</span>'
     +'</div>'
     +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+body+'</div></div></div>'
