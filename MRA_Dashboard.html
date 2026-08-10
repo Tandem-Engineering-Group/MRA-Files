@@ -3884,6 +3884,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.11", date:"2026-08-10", title:"🎨 Wrap Team Calendar: fixed hard-to-read colors + added color/name editing", items:[
+    "Rich: \"you cannot read the writing on the yellow... I want the ability to change the trailer color or job color after the fact.\" Day-strip text now automatically switches to dark or light depending on the trailer's color (yellow/light colors get dark text, dark colors keep white text) instead of always being white — fixes the illegible yellow \"SWC MMOT HI\" bars. Also added a ✎ edit button next to each trailer in the Trailers list so its name and color can be changed after the fact, without deleting and re-adding it (existing schedule entries keep pointing at the same trailer, they just pick up the new name/color automatically)." ] },
   { rev:"37.10", date:"2026-08-10", title:"🎨 Wrap Team Calendar is now LIVE cross-device", items:[
     "Follow-up to rev 37.9 below. The \"MRA Wrap Cal\" Power Automate flow is built and wired in (WRAPCAL_WRITE_URL set) — edits anyone makes on the Wrap Team Calendar now save to a shared file and show up on every device within a few seconds, not just the one that made the edit. ⚠️ Al's original \"Cisco\" addition from before this fix only ever existed in his own browser's local storage and could not be recovered — he'll need to re-add it once, and from now on it will show for everyone." ] },
   { rev:"37.9", date:"2026-08-10", title:"🔧 Fixed: Wrap Team Calendar edits never showed up for anyone else", items:[
@@ -16953,6 +16955,9 @@ function _wcSave(){ try{ localStorage.setItem(WRAPCAL_KEY,JSON.stringify(WRAPCAL
   if(WRAPCAL_WRITE_URL){ try{ fetch(WRAPCAL_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({pin:((typeof CLOSE_PIN!=='undefined'&&CLOSE_PIN)||'1974'),json:JSON.stringify(WRAPCAL)})}); }catch(e){} } }
 function _wcId(pfx){ return (pfx||'w')+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36); }
 function _wcProj(k){ var p=(WRAPCAL.projects||[]).filter(function(x){return x.key===k;})[0]; return p||{key:k,name:k,c:'#64748b'}; }
+function _wcContrastText(hex){ hex=String(hex||'').replace('#',''); if(hex.length===3) hex=hex.split('').map(function(c){return c+c;}).join('');
+  var r=parseInt(hex.substr(0,2),16)||0, g=parseInt(hex.substr(2,2),16)||0, b=parseInt(hex.substr(4,2),16)||0;
+  var lum=(0.299*r+0.587*g+0.114*b)/255; return lum>0.62?'#111':'#fff'; }
 function _wcISO(y,m,d){ return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
 function _wcFmt(iso){ if(!iso) return ''; var p=String(iso).split('-'); return (+p[1])+'/'+(+p[2]); }
 function _wcMonthsHtml(){
@@ -16971,7 +16976,7 @@ function _wcMonthsHtml(){
     for(i=0;i<first;i++){ out+='<td class="wc-blank"></td>'; cell++; }
     for(var d=1;d<=dim;d++){ if(cell%7===0 && cell>0) out+='</tr><tr>';
       var k=_wcISO(y,m,d);
-      var pills=(DAY[k]||[]).map(function(e){ var pr=_wcProj(e.p); return '<span class="wc-pill" style="background:'+pr.c+'" onclick="wcEntryEdit(\''+e.id+'\')" title="Click to edit">'+esc(pr.name.replace('On ',''))+' <span style="font-weight:600;opacity:.9">'+esc(e.ph||'')+'</span></span>'; }).join('');
+      var pills=(DAY[k]||[]).map(function(e){ var pr=_wcProj(e.p); return '<span class="wc-pill" style="background:'+pr.c+';color:'+_wcContrastText(pr.c)+'" onclick="wcEntryEdit(\''+e.id+'\')" title="Click to edit">'+esc(pr.name.replace('On ',''))+' <span style="font-weight:600;opacity:.9">'+esc(e.ph||'')+'</span></span>'; }).join('');
       var deps=(KEYMAP[k]||[]).map(function(kk){ return '<span class="wc-dep" onclick="wcKeyEdit(\''+kk.id+'\')" title="Click to edit">'+esc(kk.txt||'')+'</span>'; }).join('');
       out+='<td class="wc-day"><span class="wc-dn">'+d+'</span>'+pills+deps+'</td>'; cell++; }
     while(cell%7!==0){ out+='<td class="wc-blank"></td>'; cell++; }
@@ -17006,7 +17011,10 @@ function _wcEditHtml(){
   h+='<div class="wc-list">'+(WRAPCAL.keys||[]).slice().sort(function(a,b){return String(a.d).localeCompare(String(b.d));}).map(function(k){
       return '<div class="wc-lrow"><span style="color:var(--muted)">'+_wcFmt(k.d)+'</span> '+esc(k.txt||'')+' <a onclick="wcKeyEdit(\''+k.id+'\')" style="cursor:pointer;color:#7aa2d6">✎</a> <a onclick="wcKeyDel(\''+k.id+'\')" style="cursor:pointer;color:#f87171">🗑</a></div>'; }).join('')+'</div>';
   h+='<h3 style="margin:16px 0 6px">🎨 Trailers</h3><div class="wc-list">'+(WRAPCAL.projects||[]).map(function(p){
-      return '<div class="wc-lrow"><span class="wc-dot" style="background:'+p.c+'"></span><b>'+esc(p.name)+'</b> <a onclick="wcTrailerDel(\''+p.key+'\')" style="cursor:pointer;color:#f87171">🗑</a></div>'; }).join('')+'</div>';
+      if(WC_EDIT&&WC_EDIT.t==='trailer'&&WC_EDIT.key===p.key){
+        return '<div class="wc-lrow" style="gap:8px;align-items:center;flex-wrap:wrap"><input id="wcTE_name" value="'+escA(p.name)+'" style="'+inp+';width:170px"><input id="wcTE_color" type="color" value="'+escA(p.c)+'" style="width:44px;height:32px;border:1px solid var(--line);border-radius:7px;background:var(--panel);vertical-align:bottom"><button class="expandbtn" onclick="wcTrailerSave(\''+p.key+'\')">💾 Save</button><button class="expandbtn" onclick="wcTrailerCancel()">Cancel</button></div>';
+      }
+      return '<div class="wc-lrow"><span class="wc-dot" style="background:'+p.c+'"></span><b>'+esc(p.name)+'</b> <a onclick="wcTrailerEdit(\''+p.key+'\')" style="cursor:pointer;color:#7aa2d6">✎</a> <a onclick="wcTrailerDel(\''+p.key+'\')" style="cursor:pointer;color:#f87171">🗑</a></div>'; }).join('')+'</div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:6px"><label style="'+lab+'">New trailer<br><input id="wcT_name" placeholder="Trailer name" style="'+inp+';width:180px"></label><label style="'+lab+'">Color<br><input id="wcT_color" type="color" value="#16a34a" style="width:46px;height:32px;border:1px solid var(--line);border-radius:7px;background:var(--panel);vertical-align:bottom"></label><button class="expandbtn" onclick="wcTrailerAdd()">➕ Add trailer</button></div>';
   h+='</div>';
   return h;
@@ -17039,6 +17047,12 @@ function wcKeySave(){ var d=(document.getElementById('wcK_d')||{}).value, txt=((
   WC_EDIT=null; _wcSave(); renderWrapCal(); }
 function wcKeyDel(id){ if(!confirm('Delete this key date?')) return; WRAPCAL.keys=(WRAPCAL.keys||[]).filter(function(x){return x.id!==id;}); if(WC_EDIT&&WC_EDIT.id===id)WC_EDIT=null; _wcSave(); renderWrapCal(); }
 function wcTrailerAdd(){ var n=((document.getElementById('wcT_name')||{}).value||'').trim(), c=(document.getElementById('wcT_color')||{}).value||'#16a34a'; if(!n){ alert('Name the trailer.'); return; } WRAPCAL.projects.push({key:_wcId('t'),name:n,c:c}); _wcSave(); renderWrapCal(); }
+function wcTrailerEdit(key){ WC_EDIT={t:'trailer',key:key}; renderWrapCal(); var el=document.querySelector('.wc-edit'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }
+function wcTrailerCancel(){ WC_EDIT=null; renderWrapCal(); }
+function wcTrailerSave(key){ var n=((document.getElementById('wcTE_name')||{}).value||'').trim(), c=(document.getElementById('wcTE_color')||{}).value||'#64748b';
+  if(!n){ alert('Name the trailer.'); return; }
+  var p=(WRAPCAL.projects||[]).filter(function(x){return x.key===key;})[0]; if(p){ p.name=n; p.c=c; }
+  WC_EDIT=null; _wcSave(); renderWrapCal(); }
 function wcTrailerDel(key){ var used=(WRAPCAL.sched||[]).some(function(e){return e.p===key;}); if(used && !confirm('This trailer has schedule entries — delete it AND its entries?')) return; WRAPCAL.projects=(WRAPCAL.projects||[]).filter(function(p){return p.key!==key;}); WRAPCAL.sched=(WRAPCAL.sched||[]).filter(function(e){return e.p!==key;}); _wcSave(); renderWrapCal(); }
 function wcPrint(){ var w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
   var legend=(WRAPCAL.projects||[]).map(function(p){return '<span class="lg"><span class="sw" style="background:'+p.c+'"></span><b>'+esc(p.name)+'</b></span>';}).join('');
