@@ -248,9 +248,20 @@ var ROSTER_IDS={'Brent Burns':'674','Brian Glenn':'891','Kayla Roe':'815','Jacob
 var NAMES=lget(LS.names, ROSTER.slice());
 var CJOBS=lget(LS.jobs, ['Shop / General','All Purpose Leave','Holiday','Jury Duty','Lunch']);
 var EMPIDS=lget('mra_time_empids', JSON.parse(JSON.stringify(ROSTER_IDS)));
+// A device that's used this page before already has its OWN saved NAMES/EMPIDS list, so a code-level
+// ROSTER addition (like Sal Sr, 2026-08-11) never reaches it -- lget's default only applies the FIRST
+// time. Merge in any roster member missing from this device's list every boot instead (additive only,
+// never removes a locally-added name) so a new baseline hire shows up everywhere without a manual step.
+(function(){ var changedN=false, changedE=false;
+  ROSTER.forEach(function(n){ if(NAMES.indexOf(n)<0){ NAMES.push(n); changedN=true; } });
+  Object.keys(ROSTER_IDS).forEach(function(n){ if(EMPIDS[n]==null){ EMPIDS[n]=ROSTER_IDS[n]; changedE=true; } });
+  if(changedN) lset(LS.names,NAMES); if(changedE) lset('mra_time_empids',EMPIDS); })();
 /* auto-split foremen: their daily hours divide across whatever jobs the rest of the crew logged that
-   day, proportional to each job's share (Rich: Sal Sr is "the general foreman" -- he isn't on one job). */
-var AUTO_SPLIT=lget('mra_time_autosplit', {'Sal Sr':true});
+   day, proportional to each job's share (Rich: Sal Sr is "the general foreman" -- he isn't on one job).
+   Stored as explicit true/false (not add/delete) so "off" can be told apart from "never set" -- that's
+   what lets a NEW default (Sal Sr) get merged in below without ever overriding someone's real choice. */
+var AUTO_SPLIT=lget('mra_time_autosplit', {});
+if(!('Sal Sr' in AUTO_SPLIT)){ AUTO_SPLIT['Sal Sr']=true; lset('mra_time_autosplit',AUTO_SPLIT); }
 /* finance job-code names (code = J# without the J) */
 var JCNAMES={'1014':'MRA Internal','1420':'Oakland Schools','1428':'Mott','1479':'WFCU','1543':'Washtenaw Community College','1553':'Medtronic','1557':'Ferguson Roadshow (Bizbox)'};
 /* pay types that are NOT job work */
@@ -1464,7 +1475,7 @@ function boot(){
   $('mgrLoginBtn').onclick=mgrClick; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrClick; var _lp=$('lockPinBtn'); if(_lp) _lp.onclick=pinUnlock;
   SSO.init(); applyMgr(); renderMyDay();
   $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); return; }
-    var asn=e.target.getAttribute&&e.target.getAttribute('data-asn'); if(asn!=null){ if(e.target.checked) AUTO_SPLIT[asn]=true; else delete AUTO_SPLIT[asn]; lset('mra_time_autosplit',AUTO_SPLIT); updateEntryFormMode(); } });
+    var asn=e.target.getAttribute&&e.target.getAttribute('data-asn'); if(asn!=null){ AUTO_SPLIT[asn]=e.target.checked; lset('mra_time_autosplit',AUTO_SPLIT); updateEntryFormMode(); } });
   ['fRange','fPerson','fJobF','fFrom','fTo'].forEach(function(id){ $(id).onchange=renderTracking; });
   $('fWho').onchange=function(){ lset(LS.lastWho,$('fWho').value); renderMyDay(); updateEntryFormMode(); }; $('fDate').addEventListener('change',renderMyDay);
   ['fHours','fTask'].forEach(function(id){ $(id).addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }); });
