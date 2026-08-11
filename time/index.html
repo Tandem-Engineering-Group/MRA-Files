@@ -106,7 +106,8 @@
         <input id="fJob" list="jobList" placeholder="Start typing a job code or name…" autocomplete="off">
         <datalist id="jobList"></datalist>
         <div class="muted" style="font-size:11.5px;margin-top:2px">Can't find the job? Type anything — or pick <b>Shop / General</b> and describe it in Notes below.
-          &nbsp;·&nbsp; <button type="button" class="hchip" id="calledInBtn" style="padding:2px 10px;font-size:11.5px" title="Someone didn't come in — logs 0 hours, no job needed">🤒 Called in / no hours</button></div></div>
+          &nbsp;·&nbsp; <button type="button" class="hchip" id="calledInBtn" style="padding:2px 10px;font-size:11.5px" title="Someone didn't come in — logs 0 hours, no job needed">🤒 Called in / no hours</button></div>
+        <div class="muted" id="autoSplitHint" style="font-size:11.5px;margin-top:4px;display:none">🧮 <b>Auto-split foreman</b> — leave Job blank and his hours below will split automatically across whatever jobs the crew logged that day, proportionally. Type a specific job here instead to log him on just that one.</div></div>
       <div class="fld"><label for="fHours">Hours</label>
         <input type="number" id="fHours" min="0" max="24" step="0.25" inputmode="decimal" placeholder="0.0">
         <div class="hoursrow" id="hchips"></div></div>
@@ -242,11 +243,14 @@ var LS={ names:'mra_time_names', jobs:'mra_time_chargejobs', ents:'mra_time_entr
 function lget(k,def){ try{ var v=localStorage.getItem(k); return v==null?def:JSON.parse(v); }catch(e){ return def; } }
 function lset(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 /* roster = the crew on Luc's Job Cost punch report (hourly). Manage (1974) to add/edit. */
-var ROSTER=['Brent Burns','Brian Glenn','Kayla Roe','Jacob Rohn','Sal Jr','John Tindle'];
-var ROSTER_IDS={'Brent Burns':'674','Brian Glenn':'891','Kayla Roe':'815','Jacob Rohn':'719','Sal Jr':'860','John Tindle':'721'};
+var ROSTER=['Brent Burns','Brian Glenn','Kayla Roe','Jacob Rohn','Sal Jr','John Tindle','Sal Sr'];
+var ROSTER_IDS={'Brent Burns':'674','Brian Glenn':'891','Kayla Roe':'815','Jacob Rohn':'719','Sal Jr':'860','John Tindle':'721','Sal Sr':'672'};
 var NAMES=lget(LS.names, ROSTER.slice());
 var CJOBS=lget(LS.jobs, ['Shop / General','All Purpose Leave','Holiday','Jury Duty','Lunch']);
 var EMPIDS=lget('mra_time_empids', JSON.parse(JSON.stringify(ROSTER_IDS)));
+/* auto-split foremen: their daily hours divide across whatever jobs the rest of the crew logged that
+   day, proportional to each job's share (Rich: Sal Sr is "the general foreman" -- he isn't on one job). */
+var AUTO_SPLIT=lget('mra_time_autosplit', {'Sal Sr':true});
 /* finance job-code names (code = J# without the J) */
 var JCNAMES={'1014':'MRA Internal','1420':'Oakland Schools','1428':'Mott','1479':'WFCU','1543':'Washtenaw Community College','1553':'Medtronic','1557':'Ferguson Roadshow (Bizbox)'};
 /* pay types that are NOT job work */
@@ -299,7 +303,15 @@ function allJobOptions(){
    identity model: John picks his name once on his own phone, and it's still his name next time he
    opens the kiosk there, so his "Your week" box just shows up without re-picking every time. */
 function fillWho(){ var sel=$('fWho'); var cur=sel.value; sel.innerHTML='<option value="">— pick your name —</option>'+NAMES.map(function(n){return '<option>'+esc(n)+'</option>';}).join('');
-  var want=cur||lget(LS.lastWho,''); if(want&&NAMES.indexOf(want)>=0) sel.value=want; }
+  var want=cur||lget(LS.lastWho,''); if(want&&NAMES.indexOf(want)>=0) sel.value=want; updateEntryFormMode(); }
+/* Toggle the entry form into "auto-split foreman" mode when the selected person has AUTO_SPLIT on --
+   the Job field becomes optional (blank = auto-split, filled in = log him on that one job manually)
+   and the Hours field relabels since it's now his TOTAL for the day, not one job's slice of it. */
+function updateEntryFormMode(){
+  var who=$('fWho')?$('fWho').value:''; var on=!!(who&&AUTO_SPLIT[who]);
+  var hint=$('autoSplitHint'); if(hint) hint.style.display=on?'':'none';
+  var lbl=document.querySelector('label[for="fHours"]'); if(lbl) lbl.textContent=on?'Total hours today':'Hours';
+}
 function jobListItems(){
   var out=[], seen={}, codes={};
   // every distinct client job (dedup by full code·name, NOT by code — so all jobs sharing a J# still each show)
@@ -316,6 +328,7 @@ function submit(){
   var who=$('fWho').value.trim(), date=$('fDate').value||todayISO(), hours=num($('fHours').value), task=$('fTask').value.trim(), notes=$('fNotes').value.trim();
   var job=$('fJob').value.trim();
   if(!who){ alert('Pick your name.'); $('fWho').focus(); return; }
+  if(AUTO_SPLIT[who] && !job){ submitAutoSplit(who,date,hours); return; }
   if(!job){ alert('Pick a job to charge to.'); $('fJob').focus(); return; }
   // Real work needs real hours — but Called In / Sick / other non-work entries are a record that
   // someone was OUT, not hours worked, so 0 is valid there (Rich: "Brent called in... need an option for that").
@@ -334,12 +347,61 @@ function submit(){
   var ok=$('okMsg'); ok.textContent='✓ Saved '+e.hours+' hr'+(e.hours===1?'':'s')+' to '+e.job; ok.classList.remove('hide'); setTimeout(function(){ ok.classList.add('hide'); },2600);
   renderTracking(); renderMyDay(); $('fJob').focus();
 }
+/* Remove one entry from every array + the shared list, and fire the real SharePoint delete.
+   Shared by delEntry() (single, confirm-gated) and submitAutoSplit()'s regenerate path (bulk, one
+   confirm for the whole batch instead of one per row). */
+function _removeEntryEverywhere(id){
+  ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS);
+  if(SHARED) SHARED=SHARED.filter(function(e){return e.id!==id;});
+  if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({ action:'deleteTime', id:id })}); }catch(_){} }
+}
+/* Auto-split foreman (Rich: Sal Sr is "the general foreman" -- not on one job). Divides his total
+   hours for the day across whatever real job hours the REST of the crew logged that same date,
+   proportional to each job's share of the day. Leaves a hidden auto:true flag on each generated
+   entry (cleared the moment anyone manually edits it via saveEditEntry) so the crew-hours list can
+   badge them and a re-run knows which rows are safe to replace. */
+function submitAutoSplit(who,date,totalHours){
+  if(!(totalHours>0)){ alert('Enter '+who+'\'s total hours for the day.'); $('fHours').focus(); return; }
+  var buckets={};
+  activeEntries().forEach(function(e){
+    if(e.who===who || e.dateISO!==date) return;
+    if(fPayType(e)!=='Work') return;
+    var code=fCode(e)||('_'+e.job);
+    if(!buckets[code]) buckets[code]={hours:0, job:e.job};
+    buckets[code].hours+=(e.hours||0);
+    if(String(e.job||'').length>String(buckets[code].job||'').length) buckets[code].job=e.job; // keep the fullest label seen for this job
+  });
+  var codes=Object.keys(buckets);
+  var dayTotal=codes.reduce(function(s,c){return s+buckets[c].hours;},0);
+  if(!codes.length || dayTotal<=0){ alert('No one else has logged job hours for '+isoToMDY(date)+' yet — add the crew\'s entries first, or type a specific job above to log '+who+' on it manually.'); return; }
+  var prior=activeEntries().filter(function(e){ return e.who===who && e.dateISO===date && e.auto; });
+  if(prior.length){
+    if(!confirm(who+' already has an auto-split for '+isoToMDY(date)+' ('+prior.length+' job'+(prior.length===1?'':'s')+'). Replace it with a fresh split based on today\'s current numbers?')) return;
+    prior.forEach(function(e){ _removeEntryEverywhere(e.id); });
+  }
+  var made=codes.map(function(c){ return {code:c, job:buckets[c].job, hours:Math.round(totalHours*(buckets[c].hours/dayTotal)*4)/4}; });
+  var running=made.reduce(function(s,m){return s+m.hours;},0);
+  var drift=Math.round((totalHours-running)*100)/100;
+  if(Math.abs(drift)>=0.01){ made.sort(function(a,b){return b.hours-a.hours;}); made[0].hours=Math.round((made[0].hours+drift)*100)/100; }
+  var n=0;
+  made.filter(function(m){return m.hours>0;}).forEach(function(m){
+    var jn=''; var mm=String(m.job||'').match(/^\s*(J?\d{3,6})\b/i); if(mm) jn=mm[1];
+    var e={ id:uid(), who:who, dateISO:date, job:m.job, jobNum:jn, hours:m.hours, task:'Auto-split (foreman)', notes:'', auto:true, ts:new Date().toISOString() };
+    ENTS.push(e); lset(LS.ents, ENTS);
+    if(SHARED) SHARED.push(Object.assign({}, e, { empId:(EMPIDS[e.who]||''), payType:fPayType(e), shared:true }));
+    if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'addTime',empId:(EMPIDS[e.who]||''),code:fCode(e),payType:fPayType(e)}, e))}); }catch(_){} }
+    n++;
+  });
+  $('fHours').value=''; $('fTask').value=''; $('fNotes').value='';
+  var ok=$('okMsg'); ok.textContent='✓ Split '+totalHours+' hrs across '+n+' job'+(n===1?'':'s')+' for '+who; ok.classList.remove('hide'); setTimeout(function(){ ok.classList.add('hide'); },3200);
+  renderTracking(); renderMyDay();
+}
 
 /* ---------- manage ---------- */
 function canManage(){ return isMgr(); }
 function openMgr(){ if(!canManage()){ alert('Sign in with your MRA (Microsoft) account to manage names & jobs.'); if(typeof SSO!=='undefined' && !SSO.user) SSO.signIn(); return; } $('mgrCard').classList.remove('hide'); renderMgr(); $('mgrCard').scrollIntoView({behavior:'smooth',block:'start'}); }
 function renderMgr(){
-  $('nameList').innerHTML=NAMES.map(function(n,i){return '<li><span>'+esc(n)+'</span><input class="idbox" data-idn="'+esc(n)+'" value="'+esc(EMPIDS[n]||'')+'" placeholder="ID#" title="Payroll ID (for the finance report)"><button class="rowedit" data-en="'+i+'">✎</button><button class="rowdel" data-dn="'+i+'">×</button></li>';}).join('')||'<li class="muted">No names yet.</li>';
+  $('nameList').innerHTML=NAMES.map(function(n,i){return '<li><span>'+esc(n)+'</span><input class="idbox" data-idn="'+esc(n)+'" value="'+esc(EMPIDS[n]||'')+'" placeholder="ID#" title="Payroll ID (for the finance report)"><label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap;margin:0 4px" title="General foreman -- his daily hours auto-split across whatever jobs the crew logged that day, proportionally"><input type="checkbox" data-asn="'+esc(n)+'"'+(AUTO_SPLIT[n]?' checked':'')+'>🧮 auto-split</label><button class="rowedit" data-en="'+i+'">✎</button><button class="rowdel" data-dn="'+i+'">×</button></li>';}).join('')||'<li class="muted">No names yet.</li>';
   $('jobMList').innerHTML=CJOBS.map(function(n,i){return '<li><span>'+esc(n)+'</span><button class="rowedit" data-ej="'+i+'">✎</button><button class="rowdel" data-dj="'+i+'">×</button></li>';}).join('')||'<li class="muted">None — board jobs still show automatically.</li>';
 }
 function addName(){ var v=$('addName').value.trim(); if(!v) return; if(NAMES.some(function(n){return n.toLowerCase()===v.toLowerCase();})){ alert('Already in the list.'); return; } NAMES.push(v); lset(LS.names,NAMES); $('addName').value=''; fillWho(); fillPersonFilter(); renderMgr(); }
@@ -426,7 +488,7 @@ function renderMyDay(){
     var rows=byDay[d]; var dTot=rows.reduce(function(x,e){ return x+(e.hours||0); },0);
     var dow=DOW[new Date(d+'T00:00:00').getDay()];
     rows.forEach(function(e,i){ var tn=[e.task,e.notes].filter(Boolean).join(' \u2014 ');
-      html+='<tr><td>'+(i===0?('<b>'+esc(dow)+' '+esc(isoToMDY(d))+'</b>'):'')+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint">'+(canEditHere?('<button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">\u270e</button> <button class="rowdel" data-del="'+e.id+'" title="Delete">\u00d7</button>'):'')+'</td></tr>'; });
+      html+='<tr><td>'+(i===0?('<b>'+esc(dow)+' '+esc(isoToMDY(d))+'</b>'):'')+'</td><td>'+esc(e.job)+(e.auto?' <span class="muted" title="Auto-split (foreman)" style="font-size:10px">\ud83e\uddee</span>':'')+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint">'+(canEditHere?('<button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">\u270e</button> <button class="rowdel" data-del="'+e.id+'" title="Delete">\u00d7</button>'):'')+'</td></tr>'; });
     html+='<tr class="daysub"><td></td><td class="r muted" style="font-style:italic">Day total</td><td class="r"><b>'+dTot.toFixed(2).replace(/\.00$/,'.0')+'</b></td><td></td><td></td></tr>';
   });
   tb.innerHTML=html;
@@ -484,27 +546,15 @@ function renderTracking(){
   var sn=$('shareNote'); if(sn) sn.textContent = ro ? '☁ Showing everyone’s hours (shared list).' : (isMgr() ? 'Showing this device only — shared read-back not live yet (build the “MRA Time to JSON” flow).' : '');
   $('entRows').innerHTML=rows.length?rows.map(function(e){
     var tn=[e.task,e.notes].filter(Boolean).join(' — ');
-    return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint"><button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">✎</button> <button class="rowdel" data-del="'+e.id+'" title="Delete">×</button></td></tr>';
+    return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+(e.auto?' <span class="muted" title="Auto-split (foreman)" style="font-size:10px">🧮</span>':'')+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint"><button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">✎</button> <button class="rowdel" data-del="'+e.id+'" title="Delete">×</button></td></tr>';
   }).join(''):'<tr><td colspan="6" class="muted" style="padding:14px">No time entries yet.</td></tr>';
 }
-// ⚠️ 2026-08-04: this comment previously (wrongly) claimed the deleteTime branch was live in "MRA Time
-// Write" -- verified for real this session (safe throwaway entry: added, confirmed synced, POSTed
-// deleteTime, waited over an hour past the next time.json rebuild) that it is NOT. The POST is accepted
-// (202) but the SharePoint row's Created/Modified never change -- nothing on the flow side handles the
-// deleteTime action yet. Until that branch is actually built (Condition action=='deleteTime' -> Get
-// items filter EntryID eq '<id>' -> Delete item, same shape as editTime), clicking delete only removes
-// the row from this device/view; it WILL reappear on the next shared refresh.
+// ✅ 2026-08: the deleteTime branch in "MRA Time Write" is built + verified -- this really does remove
+// the SharePoint row, not just this device's view.
 function delEntry(id){
   if(!confirm('Delete this time entry? The SharePoint-side delete is wired up now, so this removes it for real.')) return;
   var ref=findEntryRef(id); if(!ref) return;
-  // Fixed 2026-08-04: an entry can exist in BOTH ENTS (local cache) and SHARED (the synced list) with
-  // the same id -- submit() pushes into both now, and a real server sync can too. Only clearing
-  // whichever array findEntryRef happened to check first left a stale duplicate in the other, so
-  // whichever view reads that one (e.g. "Your week" reads SHARED once signed in as a manager) still
-  // showed the deleted row. Clear it from BOTH, always.
-  ENTS=ENTS.filter(function(e){return e.id!==id;}); lset(LS.ents,ENTS);
-  if(SHARED) SHARED=SHARED.filter(function(e){return e.id!==id;});
-  if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({ action:'deleteTime', id:id })}); }catch(_){} }
+  _removeEntryEverywhere(id);
   renderTracking(); renderMyDay();
 }
 /* ---------- manager edit: fix a wrong job/hours/date on ANY entry (this device's own, or someone
@@ -535,7 +585,9 @@ function saveEditEntry(){
   if(!job){ alert('Pick a job to charge.'); return; }
   if(!(hours>0) && fPayType({job:job})==='Work'){ alert('Enter hours (more than 0).'); return; }
   var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
-  var updated=Object.assign({}, ref.e, { who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes });
+  // A manual save on an auto-split row is now Rich's hand-fixed number, not the formula's -- clear the
+  // auto flag so the 🧮 badge (and a future re-split) don't treat it as still computed.
+  var updated=Object.assign({}, ref.e, { who:who, dateISO:date, job:job, jobNum:jn, hours:hours, task:task, notes:notes, auto:false });
   // Fixed 2026-08-04: same dual-array issue as delEntry -- update BOTH copies whenever the id exists
   // in either, so the edit shows up no matter which array the current view happens to read from.
   var li=ENTS.findIndex(function(e){return e.id===id;}); if(li>=0){ ENTS[li]=Object.assign({}, ENTS[li], updated); lset(LS.ents,ENTS); }
@@ -1411,9 +1463,10 @@ function boot(){
   $('helpModal').addEventListener('click',function(e){ if(e.target===$('helpModal')) _hc(); });
   $('mgrLoginBtn').onclick=mgrClick; var _ll=$('lockLoginBtn'); if(_ll) _ll.onclick=mgrClick; var _lp=$('lockPinBtn'); if(_lp) _lp.onclick=pinUnlock;
   SSO.init(); applyMgr(); renderMyDay();
-  $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); } });
+  $('mgrCard').addEventListener('input',function(e){ var nm=e.target.getAttribute&&e.target.getAttribute('data-idn'); if(nm!=null){ var v=e.target.value.trim(); if(v) EMPIDS[nm]=v; else delete EMPIDS[nm]; lset('mra_time_empids',EMPIDS); return; }
+    var asn=e.target.getAttribute&&e.target.getAttribute('data-asn'); if(asn!=null){ if(e.target.checked) AUTO_SPLIT[asn]=true; else delete AUTO_SPLIT[asn]; lset('mra_time_autosplit',AUTO_SPLIT); updateEntryFormMode(); } });
   ['fRange','fPerson','fJobF','fFrom','fTo'].forEach(function(id){ $(id).onchange=renderTracking; });
-  $('fWho').onchange=function(){ lset(LS.lastWho,$('fWho').value); renderMyDay(); }; $('fDate').addEventListener('change',renderMyDay);
+  $('fWho').onchange=function(){ lset(LS.lastWho,$('fWho').value); renderMyDay(); updateEntryFormMode(); }; $('fDate').addEventListener('change',renderMyDay);
   ['fHours','fTask'].forEach(function(id){ $(id).addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }); });
   $('hchips').addEventListener('click',function(e){ var b=e.target.closest('.hchip'); if(!b) return; $('fHours').value=b.getAttribute('data-h'); document.querySelectorAll('.hchip').forEach(function(c){c.classList.toggle('on',c===b);}); });
   $('calledInBtn').addEventListener('click',function(){ $('fJob').value='Called In'; $('fHours').value='0'; document.querySelectorAll('.hchip.on').forEach(function(c){c.classList.remove('on');}); $('fNotes').focus(); });
@@ -1426,7 +1479,7 @@ function boot(){
     var t=e.target; var i;
     if((i=t.getAttribute('data-dn'))!=null){ NAMES.splice(+i,1); lset(LS.names,NAMES); fillWho(); fillPersonFilter(); renderMgr(); }
     else if((i=t.getAttribute('data-dj'))!=null){ CJOBS.splice(+i,1); lset(LS.jobs,CJOBS); fillJobs(); renderMgr(); }
-    else if((i=t.getAttribute('data-en'))!=null){ var old=NAMES[+i]; var v=prompt('Rename:',old); if(v&&v.trim()){ v=v.trim(); if(EMPIDS[old]!=null){ EMPIDS[v]=EMPIDS[old]; delete EMPIDS[old]; lset('mra_time_empids',EMPIDS);} NAMES[+i]=v; lset(LS.names,NAMES); fillWho(); fillPersonFilter(); renderMgr(); } }
+    else if((i=t.getAttribute('data-en'))!=null){ var old=NAMES[+i]; var v=prompt('Rename:',old); if(v&&v.trim()){ v=v.trim(); if(EMPIDS[old]!=null){ EMPIDS[v]=EMPIDS[old]; delete EMPIDS[old]; lset('mra_time_empids',EMPIDS);} if(AUTO_SPLIT[old]!=null){ AUTO_SPLIT[v]=AUTO_SPLIT[old]; delete AUTO_SPLIT[old]; lset('mra_time_autosplit',AUTO_SPLIT);} NAMES[+i]=v; lset(LS.names,NAMES); fillWho(); fillPersonFilter(); renderMgr(); updateEntryFormMode(); } }
     else if((i=t.getAttribute('data-ej'))!=null){ var v=prompt('Rename:',CJOBS[+i]); if(v&&v.trim()){ CJOBS[+i]=v.trim(); lset(LS.jobs,CJOBS); fillJobs(); renderMgr(); } }
   });
 }
