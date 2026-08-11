@@ -914,6 +914,10 @@ select.input-yellow option{background:var(--panel);color:var(--txt);}
         <textarea id="ci-notes" class="input-yellow" rows="2" placeholder="e.g. Billed quarterly" style="font-weight:400;resize:vertical;"></textarea>
       </div>
       <button class="cheat-sheet-btn" style="background:var(--brand);border-color:var(--brand);color:#fff;width:100%;padding:12px;font-size:13px;" onclick="generateClientQuote()">Generate Quote &rarr;</button>
+      <div id="ci-saved-wrap" style="margin-top:18px;border-top:1px solid var(--line,#333);padding-top:12px;">
+        <div class="field-label" style="margin-bottom:8px;">&#x1F4C2; Saved quotes <span style="text-transform:none;font-weight:400;">(this device)</span></div>
+        <div id="ci-saved-list" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1340,10 +1344,77 @@ function openClientQuoteModal(){
   $('ci-cust').value=''; $('ci-attn').value=''; $('ci-addr').value=''; $('ci-proj').value=''; $('ci-job').value=''; $('ci-prep').value=''; $('ci-notes').value=''; $('ci-doctype').value='Quote';
   $('ci-cust').style.borderColor='';
   openModal('modal-clientinfo');
+  renderSavedQuotesList();
   setTimeout(()=>{ $('ci-cust').focus(); }, 60);
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function moneyNum(s){ return parseFloat(String(s).replace(/[^0-9.\-]/g,'')) || 0; }
+// Snapshot everything a quote needs, INCLUDING the computed dollar amounts, not just the raw inputs --
+// so a quote saved today reprints identically even if plan pricing changes later (a real business
+// document shouldn't silently reprice itself just because the master price sheet changed).
+function _slGatherState(cust,attn,addr,proj,job,prep,notes,doctype){
+  const region = state.region;
+  const config = PLANS_CONFIG[region];
+  const planName = $('in-plan').value;
+  const plan = config.plans.find(p => p.name === planName);
+  const kitSel = document.querySelector('#in-kit option:checked');
+  return {
+    id: 'slq'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36),
+    savedAt: Date.now(),
+    cust, attn, addr, proj, job, prep, notes, doctype,
+    region, currency: config.currency,
+    planName, bandwidth: plan?plan.bandwidth:null, overageRate: plan?plan.overagePerBlock:null,
+    base: moneyNum($('out-base').textContent),
+    fee: moneyNum($('out-fee').textContent),
+    monthsNum: parseInt($('in-months').value,10)||1,
+    kitKey: $('in-kit').value,
+    kitLabel: kitSel ? kitSel.textContent.replace(/\s*\(incl.*$/,'') : '',
+    kitCost: moneyNum($('out-kit-cost').textContent),
+    mountOn: $('in-mount').checked,
+    mountCost: moneyNum($('out-mount-cost').textContent),
+  };
+}
+const STARLINK_QUOTES_KEY = 'mra_starlink_quotes_v1';
+function _slAllSaved(){ try{ return JSON.parse(localStorage.getItem(STARLINK_QUOTES_KEY)||'[]'); }catch(e){ return []; } }
+function _slSave(qs){
+  const list = _slAllSaved();
+  list.unshift(qs);
+  if(list.length>50) list.length = 50; // keep this from growing forever
+  try{ localStorage.setItem(STARLINK_QUOTES_KEY, JSON.stringify(list)); }catch(e){}
+  renderSavedQuotesList();
+}
+function slQuoteTotal(qs){ return (qs.base*qs.monthsNum) + (qs.fee*qs.monthsNum) + (qs.kitKey!=='none'?qs.kitCost:0) + (qs.mountOn?qs.mountCost:0); }
+function slReprint(id){
+  const qs = _slAllSaved().find(x=>x.id===id); if(!qs) return;
+  const html = buildClientQuoteHtml(qs);
+  const w = window.open('', '_blank');
+  if(!w){ alert('Please allow pop-ups for this site to generate the quote.'); return; }
+  w.document.write(html); w.document.close();
+}
+function slDeleteQuote(id){
+  if(!confirm('Delete this saved quote? This can’t be undone.')) return;
+  const list = _slAllSaved().filter(x=>x.id!==id);
+  try{ localStorage.setItem(STARLINK_QUOTES_KEY, JSON.stringify(list)); }catch(e){}
+  renderSavedQuotesList();
+}
+function renderSavedQuotesList(){
+  const wrap = $('ci-saved-list'); if(!wrap) return;
+  const list = _slAllSaved();
+  if(!list.length){ wrap.innerHTML = '<div style="font-size:12px;color:var(--muted,#888);">No saved quotes yet — generating one saves it here automatically.</div>'; return; }
+  wrap.innerHTML = list.map(function(qs){
+    const total = slQuoteTotal(qs);
+    const dt = new Date(qs.savedAt);
+    const dstr = (dt.getMonth()+1)+'/'+dt.getDate()+'/'+dt.getFullYear();
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line,#333);border-radius:8px;font-size:12px;">'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(qs.cust||'Untitled')+'</div>'
+      + '<div style="color:var(--muted,#888);font-size:11px;">'+esc(qs.doctype||'Quote')+' &middot; '+dstr+' &middot; '+esc(qs.currency||'USD')+' $'+total.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>'
+      + '</div>'
+      + '<button class="cheat-sheet-btn" style="padding:5px 10px;font-size:11px;" onclick="slReprint(\''+qs.id+'\')" title="Reprint this exact quote">&#x1F5A8;</button>'
+      + '<button class="cheat-sheet-btn" style="padding:5px 10px;font-size:11px;" onclick="slDeleteQuote(\''+qs.id+'\')" title="Delete">&times;</button>'
+      + '</div>';
+  }).join('');
+}
 function generateClientQuote(){
   const cust = ($('ci-cust').value||'').trim();
   const attn = ($('ci-attn').value||'').trim();
@@ -1354,7 +1425,9 @@ function generateClientQuote(){
   const notes = ($('ci-notes').value||'').trim();
   const doctype = ($('ci-doctype').value||'Quote');
   if(!cust){ $('ci-cust').focus(); $('ci-cust').style.borderColor='var(--red)'; return; }
-  const html = buildClientQuoteHtml(cust, proj, prep, attn, addr, job, doctype, notes);
+  const qs = _slGatherState(cust,attn,addr,proj,job,prep,notes,doctype);
+  _slSave(qs);
+  const html = buildClientQuoteHtml(qs);
   const w = window.open('', '_blank');
   if(!w){ alert('Please allow pop-ups for this site to generate the quote.'); return; }
   w.document.write(html); w.document.close();
@@ -1365,28 +1438,28 @@ function generateClientQuote(){
 // QTY x UNIT PRICE = TOTAL table (QTY = number of months for the two recurring lines, per Rich: "Quantity
 // is # of mos"), a document-value line, an Accepted signature block, and the standard Starlink reseller
 // SERVICE TERMS / SPEEDS / DATA / ROAMING / PAUSING / PAYMENT TERMS / TERMS OF USE boilerplate.
-function buildClientQuoteHtml(cust, proj, prep, attn, addr, job, doctype, notes){
-  const now = new Date();
+// Renders purely from a gathered quote-state object (see _slGatherState) -- never reads the live DOM --
+// so a saved quote can be reprinted byte-for-byte later even after the calculator's inputs have moved on.
+function buildClientQuoteHtml(qs){
+  const cust=qs.cust, proj=qs.proj, prep=qs.prep, attn=qs.attn, addr=qs.addr, job=qs.job, doctype=qs.doctype, notes=qs.notes;
+  const now = new Date(qs.savedAt||Date.now());
   const d = (now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
   const pad = n => ('0'+n).slice(-2);
-  const qno = pad(now.getFullYear()%100)+pad(now.getMonth()+1)+pad(now.getDate())+'-'+pad(now.getHours())+pad(now.getMinutes());
-  const region = state.region;
-  const currency = PLANS_CONFIG[region].currency;
-  const config = PLANS_CONFIG[region];
-  const planName = $('in-plan').value;
-  const plan = config.plans.find(p => p.name === planName);
-  const bandwidth = plan ? plan.bandwidth : null;
-  const overageRate = plan ? plan.overagePerBlock : null;
-  const base = moneyNum($('out-base').textContent);
-  const fee = moneyNum($('out-fee').textContent);
-  const monthsNum = parseInt($('in-months').value, 10) || 1;
-  const kitKey = $('in-kit').value;
+  const qno = qs.id ? (pad(now.getFullYear()%100)+pad(now.getMonth()+1)+pad(now.getDate())+'-'+qs.id.slice(-4).toUpperCase())
+    : (pad(now.getFullYear()%100)+pad(now.getMonth()+1)+pad(now.getDate())+'-'+pad(now.getHours())+pad(now.getMinutes()));
+  const region = qs.region;
+  const currency = qs.currency;
+  const bandwidth = qs.bandwidth;
+  const overageRate = qs.overageRate;
+  const base = qs.base;
+  const fee = qs.fee;
+  const monthsNum = qs.monthsNum;
+  const kitKey = qs.kitKey;
   const noHardware = kitKey === 'none';
-  const kitSel = document.querySelector('#in-kit option:checked');
-  const kitLabel = kitSel ? kitSel.textContent.replace(/\s*\(incl.*$/,'') : '';
-  const kitCost = moneyNum($('out-kit-cost').textContent);
-  const mountOn = $('in-mount').checked;
-  const mountCost = moneyNum($('out-mount-cost').textContent);
+  const kitLabel = qs.kitLabel;
+  const kitCost = qs.kitCost;
+  const mountOn = qs.mountOn;
+  const mountCost = qs.mountCost;
   const isChangeOrder = doctype === 'Change Order';
   const docLabel = isChangeOrder ? 'Change Order' : 'Quote';
   const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
