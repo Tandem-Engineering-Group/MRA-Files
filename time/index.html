@@ -245,17 +245,23 @@ function lset(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} 
 /* roster = the crew on Luc's Job Cost punch report (hourly). Manage (1974) to add/edit. */
 var ROSTER=['Brent Burns','Brian Glenn','Kayla Roe','Jacob Rohn','Sal Jr','John Tindle','Sal Sr'];
 var ROSTER_IDS={'Brent Burns':'674','Brian Glenn':'891','Kayla Roe':'815','Jacob Rohn':'719','Sal Jr':'860','John Tindle':'721','Sal Sr':'672'};
+// Roster members added to the CODE after a device may have already renamed/deleted their original entry
+// (2026-08-11: Sal Sr). Only THESE get the once-ever merge below -- the original 6 are never touched by
+// it, so renaming e.g. "Sal Jr" to "Sal Sanchez JR." can never resurrect a "Sal Jr" ghost duplicate.
+var NEW_ROSTER_ADDITIONS=['Sal Sr'];
 var NAMES=lget(LS.names, ROSTER.slice());
 var CJOBS=lget(LS.jobs, ['Shop / General','All Purpose Leave','Holiday','Jury Duty','Lunch']);
 var EMPIDS=lget('mra_time_empids', JSON.parse(JSON.stringify(ROSTER_IDS)));
 // A device that's used this page before already has its OWN saved NAMES/EMPIDS list, so a code-level
-// ROSTER addition (like Sal Sr, 2026-08-11) never reaches it -- lget's default only applies the FIRST
-// time. Merge in any roster member missing from this device's list every boot instead (additive only,
-// never removes a locally-added name) so a new baseline hire shows up everywhere without a manual step.
-(function(){ var changedN=false, changedE=false;
-  ROSTER.forEach(function(n){ if(NAMES.indexOf(n)<0){ NAMES.push(n); changedN=true; } });
-  Object.keys(ROSTER_IDS).forEach(function(n){ if(EMPIDS[n]==null){ EMPIDS[n]=ROSTER_IDS[n]; changedE=true; } });
-  if(changedN) lset(LS.names,NAMES); if(changedE) lset('mra_time_empids',EMPIDS); })();
+// ROSTER addition never reaches it -- lget's default only applies the FIRST time. Merge each NEW_ROSTER_
+// ADDITIONS name in exactly ONCE per device (tracked in mra_time_roster_seen), never again after that --
+// so a later rename or delete of that same name is a deliberate edit, not something to keep undoing.
+(function(){ var seen=lget('mra_time_roster_seen', []), changedN=false, changedE=false, changedS=false;
+  NEW_ROSTER_ADDITIONS.forEach(function(n){ if(seen.indexOf(n)>=0) return;
+    if(NAMES.indexOf(n)<0){ NAMES.push(n); changedN=true; }
+    if(EMPIDS[n]==null && ROSTER_IDS[n]!=null){ EMPIDS[n]=ROSTER_IDS[n]; changedE=true; }
+    seen.push(n); changedS=true; });
+  if(changedN) lset(LS.names,NAMES); if(changedE) lset('mra_time_empids',EMPIDS); if(changedS) lset('mra_time_roster_seen',seen); })();
 /* auto-split foremen: their daily hours divide across whatever jobs the rest of the crew logged that
    day, proportional to each job's share (Rich: Sal Sr is "the general foreman" -- he isn't on one job).
    Stored as explicit true/false (not add/delete) so "off" can be told apart from "never set" -- that's
