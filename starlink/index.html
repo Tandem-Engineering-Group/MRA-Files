@@ -915,7 +915,7 @@ select.input-yellow option{background:var(--panel);color:var(--txt);}
       </div>
       <button class="cheat-sheet-btn" style="background:var(--brand);border-color:var(--brand);color:#fff;width:100%;padding:12px;font-size:13px;" onclick="generateClientQuote()">Generate Quote &rarr;</button>
       <div id="ci-saved-wrap" style="margin-top:18px;border-top:1px solid var(--line,#333);padding-top:12px;">
-        <div class="field-label" style="margin-bottom:8px;">&#x1F4C2; Saved quotes <span style="text-transform:none;font-weight:400;">(this device)</span></div>
+        <div class="field-label" style="margin-bottom:8px;">&#x1F4C2; Saved quotes <span id="ci-saved-scope" style="text-transform:none;font-weight:400;">(this device)</span></div>
         <div id="ci-saved-list" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
       </div>
     </div>
@@ -1340,11 +1340,20 @@ function savePricingSettings(){
 }
 
 // ===== CLIENT QUOTE =====
+// Shared save-quote store: when STARLINK_QUOTES_WRITE_URL (an "MRA Starlink Quotes Write" flow, same shape
+// as "MRA Quote Write") is set, saved quotes live in starlink-quotes.json (visible from any device);
+// until then it's per-device localStorage only. Same pattern as the main Quote Generator's quotes.json.
+var STARLINK_QUOTES_WRITE_URL='';
+var _SL_QUOTES_SHARED=null, _slSharedTried=false;
+function _slLoadShared(cb){ _slSharedTried=true; function done(a){ if(Array.isArray(a)) _SL_QUOTES_SHARED=a; if(cb)cb(); }
+  fetch('../starlink-quotes.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(done)
+  .catch(function(){ fetch('starlink-quotes.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(done).catch(function(){ if(cb)cb(); }); }); }
 function openClientQuoteModal(){
   $('ci-cust').value=''; $('ci-attn').value=''; $('ci-addr').value=''; $('ci-proj').value=''; $('ci-job').value=''; $('ci-prep').value=''; $('ci-notes').value=''; $('ci-doctype').value='Quote';
   $('ci-cust').style.borderColor='';
   openModal('modal-clientinfo');
   renderSavedQuotesList();
+  if(STARLINK_QUOTES_WRITE_URL && !_slSharedTried){ _slLoadShared(function(){ if(document.getElementById('modal-clientinfo').classList.contains('visible')) renderSavedQuotesList(); }); }
   setTimeout(()=>{ $('ci-cust').focus(); }, 60);
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -1375,12 +1384,15 @@ function _slGatherState(cust,attn,addr,proj,job,prep,notes,doctype){
   };
 }
 const STARLINK_QUOTES_KEY = 'mra_starlink_quotes_v1';
-function _slAllSaved(){ try{ return JSON.parse(localStorage.getItem(STARLINK_QUOTES_KEY)||'[]'); }catch(e){ return []; } }
+function _slAllSaved(){ if(_SL_QUOTES_SHARED&&Array.isArray(_SL_QUOTES_SHARED)) return _SL_QUOTES_SHARED;
+  try{ return JSON.parse(localStorage.getItem(STARLINK_QUOTES_KEY)||'[]'); }catch(e){ return []; } }
+function _slSaveList(a){ a=a||[]; try{ localStorage.setItem(STARLINK_QUOTES_KEY, JSON.stringify(a)); }catch(e){}
+  if(STARLINK_QUOTES_WRITE_URL){ _SL_QUOTES_SHARED=a; try{ fetch(STARLINK_QUOTES_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({json:JSON.stringify(a)})}); }catch(e){} } }
 function _slSave(qs){
   const list = _slAllSaved();
   list.unshift(qs);
   if(list.length>50) list.length = 50; // keep this from growing forever
-  try{ localStorage.setItem(STARLINK_QUOTES_KEY, JSON.stringify(list)); }catch(e){}
+  _slSaveList(list);
   renderSavedQuotesList();
 }
 function slQuoteTotal(qs){ return (qs.base*qs.monthsNum) + (qs.fee*qs.monthsNum) + (qs.kitKey!=='none'?qs.kitCost:0) + (qs.mountOn?qs.mountCost:0); }
@@ -1394,11 +1406,12 @@ function slReprint(id){
 function slDeleteQuote(id){
   if(!confirm('Delete this saved quote? This can’t be undone.')) return;
   const list = _slAllSaved().filter(x=>x.id!==id);
-  try{ localStorage.setItem(STARLINK_QUOTES_KEY, JSON.stringify(list)); }catch(e){}
+  _slSaveList(list);
   renderSavedQuotesList();
 }
 function renderSavedQuotesList(){
   const wrap = $('ci-saved-list'); if(!wrap) return;
+  const scope = $('ci-saved-scope'); if(scope) scope.textContent = STARLINK_QUOTES_WRITE_URL ? '(shared · all devices)' : '(this device)';
   const list = _slAllSaved();
   if(!list.length){ wrap.innerHTML = '<div style="font-size:12px;color:var(--muted,#888);">No saved quotes yet — generating one saves it here automatically.</div>'; return; }
   wrap.innerHTML = list.map(function(qs){
