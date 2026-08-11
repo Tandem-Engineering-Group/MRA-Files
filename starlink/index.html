@@ -909,6 +909,10 @@ select.input-yellow option{background:var(--panel);color:var(--txt);}
         <label class="field-label">Prepared by</label>
         <input id="ci-prep" class="input-yellow" placeholder="Your name" style="font-weight:400;">
       </div>
+      <div class="field">
+        <label class="field-label">Notes <span style="text-transform:none;font-weight:400;">(optional, prints on the quote)</span></label>
+        <textarea id="ci-notes" class="input-yellow" rows="2" placeholder="e.g. Billed quarterly" style="font-weight:400;resize:vertical;"></textarea>
+      </div>
       <button class="cheat-sheet-btn" style="background:var(--brand);border-color:var(--brand);color:#fff;width:100%;padding:12px;font-size:13px;" onclick="generateClientQuote()">Generate Quote &rarr;</button>
     </div>
   </div>
@@ -1333,7 +1337,7 @@ function savePricingSettings(){
 
 // ===== CLIENT QUOTE =====
 function openClientQuoteModal(){
-  $('ci-cust').value=''; $('ci-attn').value=''; $('ci-addr').value=''; $('ci-proj').value=''; $('ci-job').value=''; $('ci-prep').value=''; $('ci-doctype').value='Quote';
+  $('ci-cust').value=''; $('ci-attn').value=''; $('ci-addr').value=''; $('ci-proj').value=''; $('ci-job').value=''; $('ci-prep').value=''; $('ci-notes').value=''; $('ci-doctype').value='Quote';
   $('ci-cust').style.borderColor='';
   openModal('modal-clientinfo');
   setTimeout(()=>{ $('ci-cust').focus(); }, 60);
@@ -1347,9 +1351,10 @@ function generateClientQuote(){
   const proj = ($('ci-proj').value||'').trim();
   const job = ($('ci-job').value||'').trim();
   const prep = ($('ci-prep').value||'').trim();
+  const notes = ($('ci-notes').value||'').trim();
   const doctype = ($('ci-doctype').value||'Quote');
   if(!cust){ $('ci-cust').focus(); $('ci-cust').style.borderColor='var(--red)'; return; }
-  const html = buildClientQuoteHtml(cust, proj, prep, attn, addr, job, doctype);
+  const html = buildClientQuoteHtml(cust, proj, prep, attn, addr, job, doctype, notes);
   const w = window.open('', '_blank');
   if(!w){ alert('Please allow pop-ups for this site to generate the quote.'); return; }
   w.document.write(html); w.document.close();
@@ -1360,7 +1365,7 @@ function generateClientQuote(){
 // QTY x UNIT PRICE = TOTAL table (QTY = number of months for the two recurring lines, per Rich: "Quantity
 // is # of mos"), a document-value line, an Accepted signature block, and the standard Starlink reseller
 // SERVICE TERMS / SPEEDS / DATA / ROAMING / PAUSING / PAYMENT TERMS / TERMS OF USE boilerplate.
-function buildClientQuoteHtml(cust, proj, prep, attn, addr, job, doctype){
+function buildClientQuoteHtml(cust, proj, prep, attn, addr, job, doctype, notes){
   const now = new Date();
   const d = (now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
   const pad = n => ('0'+n).slice(-2);
@@ -1423,7 +1428,7 @@ function buildClientQuoteHtml(cust, proj, prep, attn, addr, job, doctype){
     + '.q-accept{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:10px 14px;background:#fff5f2;border:1px solid #f6c9bb;border-radius:8px;font-size:12px}'
     + '.q-accept b{font-size:19px;color:#DF4826}'
     + '.q-terms{font-size:9.5px;color:#8a94a2;margin-top:16px;border-top:1px solid #eceef1;padding-top:8px;line-height:1.5}.q-terms b{color:#667}'
-    + '.q-sigline{display:flex;gap:24px;margin-top:20px;font-size:11px;color:#556}.q-sigline div{flex:1;border-top:1px solid #b7c0cc;padding-top:4px}'
+    + '.q-sigline{display:flex;gap:24px;margin-top:52px;font-size:11px;color:#556}.q-sigline div{flex:1;border-top:1px solid #b7c0cc;padding-top:4px}'
     + '@media print{.pbar{display:none}body{background:#fff}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.q-accept{break-inside:avoid;page-break-inside:avoid}}';
 
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Starlink '+docLabel+' &mdash; '+esc(cust)+'</title><style>'+css+'</style></head><body>'
@@ -1436,7 +1441,8 @@ function buildClientQuoteHtml(cust, proj, prep, attn, addr, job, doctype){
     + '<div class="q-curr">Currency '+currency+'</div>'
     + '<table class="q-t"><thead><tr><th>QTY</th><th>DESCRIPTION</th><th class="r">UNIT PRICE</th><th class="r">TOTAL</th></tr></thead><tbody>'+rows+'</tbody></table>'
     + '<div class="q-value">This '+docLabel+' is valid 20 days from Issue Date and has a value of '+currency+' $'+fmt(grandTotal)+'</div>'
-    + '<div class="q-note">Billed monthly ('+monthsNum+' month'+(monthsNum===1?'':'s')+' shown above'+(!noHardware||mountOn?' + hardware due at installation':'')+'). '+(isChangeOrder?('This '+docLabel+' becomes part of and in conformance with the existing contract/agreement between MRA and '+esc(cust)+(/[.!?]$/.test(cust)?'':'.')):'')+'</div>'
+    + (notes?('<div class="q-note">'+esc(notes).replace(/\n/g,'<br>')+'</div>'):'')
+    + (isChangeOrder?('<div class="q-note">This '+docLabel+' becomes part of and in conformance with the existing contract/agreement between MRA and '+esc(cust)+(/[.!?]$/.test(cust)?'':'.')+'</div>'):'')
     + '<div class="q-accept"><span>Accepted: The above prices and specifications of this '+docLabel.toLowerCase()+' are satisfactory and are hereby acknowledged and accepted.</span><b>$'+fmt(grandTotal)+'</b></div>'
     + '<div class="q-sigline"><div>Name, Title</div><div>Date</div><div>Signature</div></div>'
     + '<div class="q-terms">'
