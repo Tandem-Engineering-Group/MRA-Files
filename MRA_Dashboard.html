@@ -3886,6 +3886,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.24", date:"2026-08-13", title:"🔧 Fixed: DATA PIPELINE STALLED banner sat silent at 40+ min stale", items:[
+    "Rich caught the board sitting 41 minutes stale with no red banner. Root cause: the banner's own threshold was set to 40 minutes, while the separate GitHub email-alert watchdog uses 20 minutes — its code comment says the two are supposed to match; they didn't. Lowered the in-app threshold to 20 minutes to actually match. This only fixes the WARNING — the underlying \"MRA Lists to JSON\" stall itself still needs the same manual cancel-stuck-run-then-rerun in Power Automate as always." ] },
   { rev:"37.23", date:"2026-08-13", title:"💰 Billable badge also on the bay-card Fleetio list + the issue hover-detail card", items:[
     "Rich, after seeing the new badge on My Work: \"is it not supposed to flag here too\" (the trailer's own 🔧 N Fleetio list on its bay card). It wasn't wired into that render path — fixed, plus the same hover/tap detail card used in the Open Issues full-screen view and the Meeting view. A billable issue now shows 💰 billable wherever it appears on the board, not just the FLEETIO tab and My Work." ] },
   { rev:"37.22", date:"2026-08-13", title:"💰 Fleetio \"Billable\" flag — badge on the board + a Rich-only My Work box", items:[
@@ -19003,7 +19005,7 @@ function _staleCheck(D){
     var la=D&&D.listsAsOf; if(!la){ if(el) el.style.display='none'; return; }
     if(window._staleSnooze && Date.now()<window._staleSnooze){ if(el) el.style.display='none'; return; }
     var mins=Math.floor((Date.now()-Date.parse(la))/60000);
-    if(!(mins>40)){ if(el) el.style.display='none'; return; }   // pipeline normally refreshes every 2-3 min
+    if(!(mins>20)){ if(el) el.style.display='none'; return; }   // pipeline normally refreshes every 2-3 min; matches the GitHub email watchdog's 20-min threshold (was 40 — twice as long as intended, so the banner sat silent well past the point Rich expected a warning)
     if(!el){ el=document.createElement('div'); el.id='staleAlarm';
       el.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;background:#b91c1c;color:#fff;font-weight:800;text-align:center;padding:10px 16px;font-size:13.5px;box-shadow:0 3px 12px #0008;cursor:pointer;letter-spacing:.2px';
       el.onclick=function(){ el.style.display='none'; window._staleSnooze=Date.now()+15*60000; };
