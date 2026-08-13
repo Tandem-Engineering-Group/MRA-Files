@@ -3886,6 +3886,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.23", date:"2026-08-13", title:"💰 Billable badge also on the bay-card Fleetio list + the issue hover-detail card", items:[
+    "Rich, after seeing the new badge on My Work: \"is it not supposed to flag here too\" (the trailer's own 🔧 N Fleetio list on its bay card). It wasn't wired into that render path — fixed, plus the same hover/tap detail card used in the Open Issues full-screen view and the Meeting view. A billable issue now shows 💰 billable wherever it appears on the board, not just the FLEETIO tab and My Work." ] },
   { rev:"37.22", date:"2026-08-13", title:"💰 Fleetio \"Billable\" flag — badge on the board + a Rich-only My Work box", items:[
     "Rich set up a Billable (Check if yes) custom field on Fleetio Issues so an account exec can flag repair/service work as billable back to the customer, with the explanation just written into the issue's own Description (no second custom field needed). Wired the flag into the export pipeline (both branches, since the automated pipeline runs off the default branch) and verified against a real issue (#1063, Siemens DI, job J1524) end-to-end.",
     "Any billable issue now shows a <b>💰 billable</b> badge right on its row in the FLEETIO tab's ⚠ Open Issues list. New <b>💰 Billable — confirm quote</b> box on Rich's My Work (My Command block, Rich only) lists every billable issue with its note, a link into Fleetio, and a <b>✓ Handled</b> button to clear it once the quote's confirmed — same review-box pattern as 📦 Pricing to review, so nothing gets missed without adding a whole new mechanism." ] },
@@ -6086,9 +6088,10 @@ function fioIssueDetailHtml(num){ const it=fioIssue(num);
   const a=fAsg(it), today=(window.MRA_DATA||{}).todayISO||''; const age=it.openedISO?Math.max(0,daysBetween(today,it.openedISO)):(it.ageDays!=null?it.ageDays:null);
   const docs=it.docs||[], imgs=docs.filter(x=>/^image\//i.test(x.mime||'')), files=docs.filter(x=>!/^image\//i.test(x.mime||''));
   const chip = it.overdue?'<span class="badge red">overdue</span>':(age!=null?`<span class="badge grey">${age}d open</span>`:'');
+  const billChip = it.billable?'<span class="badge" style="background:#166534;color:#fff" title="Flagged billable back to the customer">💰 billable</span>':'';
   return `<div class="fl-detail-h"><div class="fl-detail-t"><span class="fionum">#${esc(it.num)}</span> ${esc(it.summary||'Issue')}</div>`
     +`<button class="expandbtn" onclick="fioCloseDetail()" title="Close (Esc)">✕</button></div>`
-    +`<div class="fl-detail-m">${esc(it.asset||'')}${it.jobNum?' · '+esc(it.jobNum):''} ${chip}</div>`
+    +`<div class="fl-detail-m">${esc(it.asset||'')}${it.jobNum?' · '+esc(it.jobNum):''} ${chip} ${billChip}</div>`
     +(a.length?`<div class="fl-detail-m">👤 ${esc(a.join(', '))}</div>`:'')
     +(it.reporter?`<div class="fl-detail-m">✍ ${esc(it.reporter)}${it.openedISO?' · opened '+fmtMDY(it.openedISO):''}</div>`:'')
     +(it.detail?`<div class="fl-detail-d">${esc(it.detail)}</div>`:`<div class="fl-detail-d" style="color:var(--faint)">(no description)</div>`)
@@ -10334,7 +10337,8 @@ function renderFloor(D){
       if(fl.length){
         tl+=`<div class="tasklist fleetlist">`+fl.map(it=>{
           const ov=it.overdue?` <span class="pill due" style="font-size:9px;padding:0 4px">overdue</span>`:"";
-          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>${FLEETIO_WRITE_URL?`<span class="fladd" style="color:#22c55e" onclick="fioResolveBtn('${escA(String(it.num))}')" title="Resolve this issue in Fleetio — asks for the short note Fleetio requires">✓</span>`:''}🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${fioArrow('issue',it.num)}</div>${fioDetHtml(it.num)}${fioDocsHtml(it.num)}`;
+          const bill=it.billable?` <span class="pill" style="font-size:9px;padding:0 4px;background:#166534;color:#fff" title="Flagged billable back to the customer">💰 billable</span>`:"";
+          return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>${FLEETIO_WRITE_URL?`<span class="fladd" style="color:#22c55e" onclick="fioResolveBtn('${escA(String(it.num))}')" title="Resolve this issue in Fleetio — asks for the short note Fleetio requires">✓</span>`:''}🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${bill}${fioArrow('issue',it.num)}</div>${fioDetHtml(it.num)}${fioDocsHtml(it.num)}`;
         }).join("")+`</div>`;
       }
       if(pj.length){
