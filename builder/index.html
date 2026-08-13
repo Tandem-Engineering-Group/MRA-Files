@@ -76,7 +76,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 5.7 · Brandon's real CAD scan, fixed door-jamb z-fight, correct quad diagonals, see-through glass, graphics + interior pickers</span>
+  <span class="rev" id="devRev" style="display:none">Rev 5.8 · fixed backwards/upside-down decal graphics, decals now on the awnings too</span>
 </header>
 <main>
   <div id="view3d">
@@ -167,8 +167,15 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     furniture piece are solid now. <b>Rev 5.6</b> fixed a door-jamb z-fight (interior walls beating the shell at
     their shared boundary). <b>Rev 5.7</b>: customer-facing redesign (Claude Design handoff) — light theme, Graphics
     &amp; Decals picker (procedural planar-UV projection on the shell since the export carries no real UVs), and a
-    real Interior Build-Out picker wired to the 5 actual furniture parts on hand. This dev note is hidden from
-    customers by default — append <code>?dev=1</code> to the URL to see it.</p>
+    real Interior Build-Out picker wired to the 5 actual furniture parts on hand. <b>Rev 5.8</b> fixed a real bug:
+    graphics rendered backwards/upside-down depending which side of the van you looked from (the planar projection
+    used one flat formula for every face, but the shell's left and right panels — and the roof/awnings — face
+    opposite directions in 3D space, so the same formula read correctly on one face and mirrored or inverted on
+    every other one). Replaced with a proper per-vertex-normal triplanar projection (each face picks its own U/V
+    axes off its own surface normal) and empirically verified, face by face, with a labeled test texture — not
+    just reasoned through, since two earlier attempts this same session looked right on paper and weren't.
+    Graphics now also apply to the rear and side awning canopies, not just the body shell. This dev note is hidden
+    from customers by default — append <code>?dev=1</code> to the URL to see it.</p>
   </aside>
 </main>
 <script>/**
@@ -1800,18 +1807,34 @@ function ensureScanLoaded(cb){
         geo.translate(-c.x,-c.y,-c.z); geo.scale(.9,.9,.9); geo.translate(c.x,c.y,c.z);
       }
       // Brandon's export carries zero real UVs anywhere (material data was blank from the start),
-      // so a wrap-graphic decal has nothing to map onto. Generate a simple planar projection on the
-      // shell only -- U from length (Z), V from height (Y) -- a standard stand-in for a boxy van's
-      // flat side panel when real UV unwrapping isn't available. Distorts on curved areas (roof,
-      // cab) but reads correctly on the flat cargo-box sides these wrap graphics are designed for.
-      if(p.key==='shell'){
+      // so a wrap-graphic decal has nothing to map onto. A single global (Z,Y) planar projection
+      // (the first attempt here) reads backwards on whichever side faces -X, because both the
+      // left and right side panels share the same UV formula while their surface normals point in
+      // OPPOSITE directions -- like looking at the same decal from the front on one side and from
+      // behind on the other. Fixed with real per-vertex-normal triplanar projection: pick U/V axes
+      // from whichever axis the normal is LEAST aligned with (the two axes spanning that face's own
+      // plane), and flip U when the dominant normal component is negative so the image reads the
+      // same left-to-right direction regardless of which way that panel actually faces.
+      if(['shell','rearawning','sideawning'].indexOf(p.key)>=0){
         geo.computeBoundingBox();
-        const bb=geo.boundingBox, pos=geo.getAttribute('position'), n=pos.count;
-        const zr=(bb.max.z-bb.min.z)||1, yr=(bb.max.y-bb.min.y)||1;
+        const bb=geo.boundingBox, pos=geo.getAttribute('position'), nrm=geo.getAttribute('normal'), n=pos.count;
+        const xr=(bb.max.x-bb.min.x)||1, yr=(bb.max.y-bb.min.y)||1, zr=(bb.max.z-bb.min.z)||1;
         const uv=new Float32Array(n*2);
         for(let vi=0; vi<n; vi++){
-          uv[vi*2]=(pos.getZ(vi)-bb.min.z)/zr;
-          uv[vi*2+1]=(pos.getY(vi)-bb.min.y)/yr;
+          const nx=nrm.getX(vi), ny=nrm.getY(vi), nz=nrm.getZ(vi);
+          const ax=Math.abs(nx), ay=Math.abs(ny), az=Math.abs(nz);
+          let u,v;
+          if(ax>=ay && ax>=az){                     // side-facing (left/right) -- plane is Z,Y
+            u=1-(pos.getZ(vi)-bb.min.z)/zr; v=(pos.getY(vi)-bb.min.y)/yr;
+            if(nx<0) u=1-u;                          // left side faces -X: mirror so text still reads L-to-R
+          } else if(ay>=ax && ay>=az){                // top/bottom-facing (roof, awning canopy) -- plane is X,Z
+            u=(pos.getX(vi)-bb.min.x)/xr; v=1-(pos.getZ(vi)-bb.min.z)/zr;
+            if(ny<0) u=1-u;
+          } else {                                    // front/rear-facing (cab face, rear doors) -- plane is X,Y
+            u=(pos.getX(vi)-bb.min.x)/xr; v=(pos.getY(vi)-bb.min.y)/yr;
+            if(nz<0) u=1-u;
+          }
+          uv[vi*2]=u; uv[vi*2+1]=v;
         }
         geo.setAttribute('uv', new THREE.BufferAttribute(uv,2));
       }
@@ -1881,21 +1904,26 @@ if(new URLSearchParams(location.search).get('dev')==='1'){
 const DECAL_FILES={ 'on-lightspray':'decals/on-lightspray.jpg', 'lexcare':'decals/lexcare.jpg',
   'mra-em-summit':'decals/mra-em-summit.jpg', 'mra-aam':'decals/mra-aam.jpg' };
 const _decalTexCache={}, _customDecalUrls={};
+// The graphic goes on the body shell AND the awning canopies (Rich: "should be on top of the
+// awnings too") -- a real vehicle wrap carries onto the awning fabric when it's deployed, and all
+// three parts got the same normal-aware UV treatment above so the same texture reads correctly on
+// each independently.
+const DECAL_TARGET_KEYS=['shell','rearawning','sideawning'];
 function applyDecal(){
-  const shellMesh=scanParts['shell']; if(!shellMesh) return;
+  const meshes=DECAL_TARGET_KEYS.map(k=>scanParts[k]).filter(Boolean); if(!meshes.length) return;
   const key=state.decal||'none';
   document.querySelectorAll('[data-decal]').forEach(b=>b.classList.toggle('on', b.dataset.decal===key));
   if(key==='none'){
-    shellMesh.material.map=null; shellMesh.material.color.set(state.wrap); shellMesh.material.needsUpdate=true; return;
+    meshes.forEach(m=>{ m.material.map=null; m.material.color.set(state.wrap); m.material.needsUpdate=true; }); return;
   }
   const url=DECAL_FILES[key]||_customDecalUrls[key]; if(!url) return;
   if(_decalTexCache[url]){
-    shellMesh.material.map=_decalTexCache[url]; shellMesh.material.color.set(0xffffff); shellMesh.material.needsUpdate=true; return;
+    meshes.forEach(m=>{ m.material.map=_decalTexCache[url]; m.material.color.set(0xffffff); m.material.needsUpdate=true; }); return;
   }
   new THREE.TextureLoader().load(url, tex=>{
     tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping;
     _decalTexCache[url]=tex;
-    if((state.decal||'none')===key){ shellMesh.material.map=tex; shellMesh.material.color.set(0xffffff); shellMesh.material.needsUpdate=true; }
+    if((state.decal||'none')===key) meshes.forEach(m=>{ m.material.map=tex; m.material.color.set(0xffffff); m.material.needsUpdate=true; });
   });
 }
 document.querySelectorAll('[data-decal]').forEach(b=>b.onclick=()=>{ state.decal=b.dataset.decal; applyDecal(); saveHash(); });
