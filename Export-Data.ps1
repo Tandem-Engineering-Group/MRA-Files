@@ -830,6 +830,11 @@ if (Test-Path $FleetioTokenFile) {
         }
         function Get-FleetJob($name) { if ($name -and ([string]$name -match '\bJ\d+[A-Za-z]?\b')) { return $matches[0] } else { return '' } }
         function FleetD10($s) { if ($s) { return ([string]$s).Substring(0,10) } else { return $null } }
+        # Fleetio checkbox custom fields come back as the literal STRING "false"/"true" (confirmed via a
+        # real API dump), not a real JSON boolean -- so a plain [bool] cast is wrong (PowerShell treats
+        # any non-empty string, including the word "false", as truthy). Compare explicitly instead.
+        function Get-FleetCheckbox($v) { if ($v -is [bool]) { return $v }
+            $s = ([string]$v).Trim().ToLower(); return ($s -eq 'true' -or $s -eq 'yes' -or $s -eq '1') }
         # Pull the assignee name(s) off an issue/work order, whatever field Fleetio uses.
         function Get-FleetAssignees($obj) {
             $out = New-Object System.Collections.ArrayList
@@ -890,13 +895,7 @@ if (Test-Path $FleetioTokenFile) {
         }
 
         $fIssues = New-Object System.Collections.ArrayList
-        $billDbgN = 0
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
-            if ($i.custom_fields -and $billDbgN -lt 6) {
-                $bv0 = $i.custom_fields.billable_check_if_yes_
-                Write-Output "  -> DEBUG issue $($i.id) (#$($i.number)) billable_check_if_yes_ raw value: '$bv0'  type: $(if ($null -eq $bv0) { '(null)' } else { $bv0.GetType().FullName })  [bool] cast: $([bool]$bv0)"
-                $billDbgN++
-            }
             $pr = ''
             if ($i.labels) { try { $pr = (@($i.labels | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { $_.name } }) -join ', ') } catch {} }
             $det = ''
@@ -908,7 +907,7 @@ if (Test-Path $FleetioTokenFile) {
                 detail = $det; reporter = (Get-FleetReporter $i); assignees = (Get-FleetAssignees $i)
                 backMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.back_to_mra_date } else { '' })
                 leaveMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.leaving_mra_date } else { '' })
-                billable = $(if ($i.custom_fields) { [bool]$i.custom_fields.billable_check_if_yes_ } else { $false })
+                billable = $(if ($i.custom_fields) { Get-FleetCheckbox $i.custom_fields.billable_check_if_yes_ } else { $false })
                 docs = (Get-FleetDocs $i $fhead)
             })
         }
