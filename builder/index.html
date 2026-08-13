@@ -76,7 +76,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 5.9 · fixed the recurring diagonal line for real (root cause found), TV+mount now actually visible</span>
+  <span class="rev" id="devRev" style="display:none">Rev 6.0 · decal graphics fixed for real: no more wheel-arch smearing/mirroring, no more full-vehicle-mockup ghosting on MRA EM Summit / MRA AAM</span>
 </header>
 <main>
   <div id="view3d">
@@ -187,8 +187,22 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     fixed a real bug in the TV + mount: it wasn't a toggle problem (the show/hide logic was always correct) — the
     TV/mount/frame parts were positioned behind the interior wall's finished surface, inside the wall cavity,
     completely hidden by the (correctly opaque) wall panel from every normal camera angle. Pulled the assembly
-    forward so it sits proud of the wall like an actual surface-mounted TV. This dev note is hidden from customers
-    by default — append <code>?dev=1</code> to the URL to see it.</p>
+    forward so it sits proud of the wall like an actual surface-mounted TV. <b>Rev 6.0</b> fixed two more real,
+    distinct graphics bugs Rich found from his own phone after Rev 5.9 shipped. First: the MRA EM Summit and
+    MRA AAM stock graphics are full-vehicle wrap MOCKUPS (they draw in the cab, wheels and windows as placement
+    reference for the print shop, same as a real wrap proof) — stretching the whole mockup onto just the body
+    shell smeared a faint ghost of that reference art across the box. Cropped both source images down to just
+    the box-panel region (verified against the real box's own front/rear edges in the artwork) so only the
+    actual graphic content applies now. Second, separate bug: the wheel arch / rocker panel is molded into the
+    same Shell mesh as the flat side wall, but curves away underneath — stretching the flat planar decal
+    projection across that curve smeared the photo content there, and right at the curve's underside some faces'
+    normals tipped into the WRONG projection axis entirely, producing mirrored/backwards fragments at the wheel
+    well (confirmed exactly from Rich's own circled screenshots — backwards "SHOEBOX" text on the Lexcare decal).
+    A real vehicle wrap doesn't wrap into the wheel-well curvature either — so the bottom ~22% of the panel's own
+    height (matched to the real wheel clearance) now always uses the plain, non-mirrored side formula pinned to
+    the image's own bottom edge, while the flat wall above it still gets the full image, unstretched and
+    uncropped. Verified on all 4 stock graphics, both the main panel and the wheel-arch area specifically, before
+    shipping. This dev note is hidden from customers by default — append <code>?dev=1</code> to the URL to see it.</p>
   </aside>
 </main>
 <script>/**
@@ -1861,12 +1875,30 @@ function ensureScanLoaded(cb){
         const bb=geo.boundingBox, pos=geo.getAttribute('position'), nrm=geo.getAttribute('normal'), n=pos.count;
         const xr=(bb.max.x-bb.min.x)||1, yr=(bb.max.y-bb.min.y)||1, zr=(bb.max.z-bb.min.z)||1;
         const uv=new Float32Array(n*2);
+        // The wheel arch / rocker panel is molded into this SAME shell mesh as the flat side wall,
+        // but it curves away underneath -- stretching the flat planar projection across that curve
+        // smears the decal's photo content there (Rich, from real screenshots: "showing you where
+        // the wheels are... you don't wrap it like this"), and right at the underside of the curve
+        // some faces tip far enough that their normal picks the WRONG projection branch entirely,
+        // producing mirrored/backwards fragments at the wheel well -- a real, distinct second bug,
+        // confirmed from his own phone screenshots, not the same issue as the full-vehicle-mockup
+        // crop fixed separately above. A real vehicle wrap doesn't wrap into the wheel-well curvature
+        // either -- it stays on the flat panel. So the bottom ~22% of the panel's own height (matched
+        // to the real wheel/arch clearance) always uses the plain non-mirrored side formula with V
+        // pinned to the image's own bottom edge -- one clean, undistorted trim strip -- while the flat
+        // wall above it still gets the FULL image, just renormalized so nothing is cropped off it.
+        const ARCH=.22;
         for(let vi=0; vi<n; vi++){
           const nx=nrm.getX(vi), ny=nrm.getY(vi), nz=nrm.getZ(vi);
           const ax=Math.abs(nx), ay=Math.abs(ny), az=Math.abs(nz);
+          const yFrac=(pos.getY(vi)-bb.min.y)/yr;
           let u,v;
-          if(ax>=ay && ax>=az){                     // side-facing (left/right) -- plane is Z,Y
-            u=1-(pos.getZ(vi)-bb.min.z)/zr; v=(pos.getY(vi)-bb.min.y)/yr;
+          if(p.key==='shell' && yFrac<ARCH){
+            u=1-(pos.getZ(vi)-bb.min.z)/zr; v=0;
+            if(nx<0) u=1-u;
+          } else if(ax>=ay && ax>=az){                // side-facing (left/right) -- plane is Z,Y
+            u=1-(pos.getZ(vi)-bb.min.z)/zr;
+            v=p.key==='shell' ? Math.max(0,(yFrac-ARCH)/(1-ARCH)) : (pos.getY(vi)-bb.min.y)/yr;
             if(nx<0) u=1-u;                          // left side faces -X: mirror so text still reads L-to-R
           } else if(ay>=ax && ay>=az){                // top/bottom-facing (roof, awning canopy) -- plane is X,Z
             u=(pos.getX(vi)-bb.min.x)/xr; v=1-(pos.getZ(vi)-bb.min.z)/zr;
