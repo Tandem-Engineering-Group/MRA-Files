@@ -28,6 +28,8 @@ jobs:
 
       - name: Check staleness (fails on purpose to trigger GitHub's own failure-notification email)
         shell: bash
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
           set -e
           curl -s https://mrashopdash.z13.web.core.windows.net/data.js -o live-data.js
@@ -57,6 +59,29 @@ jobs:
           now = datetime.now(timezone.utc)
           stale_min = (now - dt).total_seconds() / 60
           print(f'listsAsOf: {lists_as_of}  |  stale for {stale_min:.1f} min')
+
+          # Diagnostic: while stale, also pull the Power Automate watchdog's own state file
+          # (pipeline/lists-run-state.json) and print it every check, so a full timeline of what
+          # THAT watchdog was seeing during the whole stall episode is captured automatically in
+          # this job's logs -- no more depending on someone manually screenshotting Power Automate
+          # mid-outage and (every time so far) missing the window because the run recovered first.
+          if stale_min >= STALE_THRESHOLD_MIN:
+              try:
+                  subprocess.run(['az', 'storage', 'blob', 'download',
+                      '--account-name', 'mrashopdash', '--account-key', os.environ['AZURE_STORAGE_KEY'],
+                      '--container-name', 'pipeline', '--name', 'lists-run-state.json',
+                      '--file', 'lists-run-state.json', '--only-show-errors'], check=True,
+                      capture_output=True, text=True)
+                  state = json.load(open('lists-run-state.json'))
+                  run_started = state.get('startedAt')
+                  age_min = None
+                  if run_started:
+                      run_dt = datetime.fromisoformat(str(run_started).replace('Z', '+00:00'))
+                      age_min = (now - run_dt).total_seconds() / 60
+                  print(f"WATCHDOG STATE FILE (pipeline/lists-run-state.json): {json.dumps(state)}"
+                        + (f"  |  that run's own age: {age_min:.1f} min" if age_min is not None else ""))
+              except Exception as e:
+                  print(f'Could not read the watchdog state file: {e}')
 
           if stale_min < STALE_THRESHOLD_MIN:
               print('Fresh enough -- nothing to do.')
