@@ -46,7 +46,7 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
 <body>
 <header>
   <h1>🚚 MRA InfoWheels — 3D Builder</h1>
-  <span class="rev">Rev 4.1 · Brandon's real CAD scan, fully segmented (10 parts) and vertex-welded — solid panels, body-only wrap color</span>
+  <span class="rev">Rev 5 · Brandon's real CAD scan, 48 individually-named parts — body-only wrap color, real per-part detail</span>
 </header>
 <main>
   <div id="view3d"><div id="hint">drag = orbit · wheel/pinch = zoom · right-drag = pan</div></div>
@@ -72,18 +72,13 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
       <button id="linkBtn">🔗 Copy config link</button>
       <button id="resetBtn">↺ Reset</button>
     </div>
-    <div class="note"><b>Rev 4</b>: Brandon's design team sent the first fully-segmented export — 10 separate parts
-    (body, doors, wheels, interior, floor, walls, lights, TV, step) instead of one fused mesh. That's what makes body-only
-    wrap color possible: only the exterior shell + passenger doors pick up the color you choose — wheels, glass fixtures,
-    interior, etc. keep their own finish. Per-part colors/finishes for those other parts (floor material, wall color,
-    cabinet layout) aren't wired up yet — this is a real look-and-spin reference with the correct parts finally split
-    apart, not the full configurator yet. Each part's own material data was blank in the export (generic Rhino default),
-    so every non-wrap color you see is a reasonable placeholder, not a measured color.
-    <br><br><b>Rev 4.1</b>: the export's tessellation never shared vertices between adjacent faces — every triangle got
-    its own private corners even where it touched a neighbor, so nothing was actually stitched together (this is what
-    caused the "checkerboard hole" look on the body panels and interior walls). Fixed by welding coincident vertices
-    back together in every part — same real geometry, just properly connected — instead of guessing at new surface.
-    Ask Brandon to enable vertex welding on his next export so this isn't needed again.</div>
+    <div class="note"><b>Rev 5</b>: Brandon's design team sent a much richer follow-up export — 48 individually-named
+    parts across the cab, exterior, interior and furniture (chrome trim, headlights, seats, rims, tires, awnings,
+    millwork cabinets, the TV, etc.) instead of the first pass's 10 fused groups. Body-color wrap still only applies to
+    the true body-color surfaces (shell, sliding door frame, colored struts, cab body panels, mirror housings) — every
+    other part now carries its own reasoned finish instead of being lumped into one blanket "exterior"/"interior" bucket.
+    Per-part colors/finishes are still placeholders, not measured (the export's material data was blank, same as before) —
+    this is a real look-and-spin reference with genuinely separated parts, not the full configurator yet.</div>
   </aside>
 </main>
 <script>/**
@@ -1320,7 +1315,7 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
 
 } )();
 </script>
-<script>/* MRA InfoWheels 3D Builder — Rev 4 (real decimated CAD scan, now loaded as 10 segmented parts instead of one fused mesh; body-only wrap color) */
+<script>/* MRA InfoWheels 3D Builder — Rev 5 (real decimated CAD scan, now loaded as 48 individually-named parts; body-only wrap color) */
 (function(){
 'use strict';
 const FT=0.3048;
@@ -1571,24 +1566,70 @@ function applyWrap(){ M.wrap.color.set(state.wrap);
   if(nameEl) nameEl.innerHTML=match?match.title:('Custom <span>'+state.wrap.toUpperCase()+'</span>');
   document.getElementById('wrapCustom').classList.toggle('on',!match); }
 
-// ---- Real 3D scan: Brandon's design team sent the first fully-segmented Inventor export (10
-// separate parts instead of one fused mesh) — this is what unlocks body-only wrap color instead of
-// tinting the whole van. Each part is its own decimated OBJ (v/vn/f only, no UVs — same as before);
-// .mtl files were all an identical blank Rhino default (no real color data), so colors below are a
-// reasonable placeholder per part, not measured — only the wrap color (body + doors) is "real".
+// ---- Real 3D scan (rev 2, 2026-08-13): Brandon's design team sent a much richer follow-up export
+// -- 48 individually-named parts across CAB/EXTERIOR/INTERIOR/FURNITURE, vs. the first pass's 10
+// fused groups -- so many more surfaces can now take their own real material instead of being lumped
+// into one blanket "exterior"/"interior". Each part is its own decimated OBJ (v/vn/f only, no UVs);
+// .mtl files carried no real color data, so colors below are a reasoned placeholder per part (by
+// name/role), not measured -- only the wrap color (body-color parts, tint:true) is "real". The old
+// 10-part set's FLOOR.obj was dropped -- it doesn't share this export's coordinate origin (its width
+// spans nearly 2x the real vehicle width), so it would render floating in the wrong place; wait for a
+// floor part in a matching export rather than ship a visibly misplaced one.
 // Absolute paths — this same HTML is also served at root /builder.html, where a relative fetch
 // would resolve to the wrong URL.
 const SCAN_PARTS=[
-  {key:'exterior',  file:'exterior.obj',          tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
-  {key:'doors',     file:'PASSENGER DOORS.obj',   tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
-  {key:'interior',  file:'interior.obj',          tint:false, color:0xf1ede6, rough:.75, metal:0},
-  {key:'segwalls',  file:'SEG WALLS.obj',         tint:false, color:0xf1ede6, rough:.7,  metal:0},
-  {key:'floor',     file:'FLOOR.obj',             tint:false, color:0x8a8f96, rough:.8,  metal:0},
-  {key:'wheels',    file:'WHEELS.obj',            tint:false, color:0x1c1e22, rough:.55, metal:.2},
-  {key:'step',      file:'STEP.obj',              tint:false, color:0x2b2e33, rough:.6,  metal:.3},
-  {key:'extlights', file:'EXTERIOR LIGHTS.obj',   tint:false, color:0x15171a, rough:.4,  metal:.4},
-  {key:'ceillights',file:'CEILING LIGHTS.obj',    tint:false, color:0xfff8ec, rough:.5,  metal:0},
-  {key:'tv',        file:'TV.obj',                tint:false, color:0x0a0a0c, rough:.3,  metal:.1},
+  // -- EXTERIOR --
+  {key:'shell',        file:'EXTERIOR - Shell.obj',                   tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'slidedoorfr',  file:'EXTERIOR - Sliding Door Frame.obj',       tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'strutcolor',   file:'EXTERIOR - Rear Strut Color.obj',        tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'strutcolor2',  file:'EXTERIOR - Side Struts Colored.obj',     tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'slidedoorhw',  file:'EXTERIOR - Sliding Door Hardware.obj',   tint:false, color:0x4a4d52, rough:.35, metal:.75},
+  {key:'rearhw',       file:'EXTERIOR - Rear Hardware.obj',           tint:false, color:0x4a4d52, rough:.35, metal:.7},
+  {key:'sidehw',       file:'EXTERIOR - Side Hardware.obj',           tint:false, color:0x4a4d52, rough:.35, metal:.7},
+  {key:'strutmetal',   file:'EXTERIOR - Rear Strut Metal.obj',        tint:false, color:0x53565c, rough:.4,  metal:.75},
+  {key:'strutmetal2',  file:'EXTERIOR - Side Struts Metal.obj',       tint:false, color:0x53565c, rough:.4,  metal:.75},
+  {key:'roofrail',     file:'EXTERIOR - Roof Rail.obj',               tint:false, color:0x53565c, rough:.4,  metal:.7},
+  {key:'rims',         file:'EXTERIOR - Rims.obj',                    tint:false, color:0x9aa0a6, rough:.3,  metal:.85},
+  {key:'tires',        file:'EXTERIOR - Tires.obj',                   tint:false, color:0x15161a, rough:.9,  metal:0},
+  {key:'brakelights',  file:'EXTERIOR - Brake Lights.obj',            tint:false, color:0xb3392c, rough:.25, metal:.05},
+  {key:'toplights',    file:'EXTERIOR - Top Lights.obj',              tint:false, color:0xd9c896, rough:.25, metal:.05},
+  {key:'outlets',      file:'EXTERIOR - Electrical Outlets.obj',      tint:false, color:0x2b2e33, rough:.5,  metal:.1},
+  {key:'rearawning',   file:'EXTERIOR - Rear Awning.obj',             tint:false, color:0xcbb894, rough:.85, metal:0},
+  {key:'sideawning',   file:'EXTERIOR - Side Awning.obj',             tint:false, color:0xcbb894, rough:.85, metal:0},
+  {key:'solarpanels',  file:'EXTERIOR - Roof Solar Panels.obj',       tint:false, color:0x11151c, rough:.25, metal:.3},
+  {key:'extstep',      file:'EXTERIOR - Step.obj',                    tint:false, color:0x2b2e33, rough:.5,  metal:.4},
+  // -- CAB --
+  {key:'cabbody',      file:'CAB - Body Panels.obj',                  tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'mirrorlights',  file:'CAB - Side Mirror Indicator Lights.obj', tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'behindgrill',  file:'CAB - Area Behind Grill.obj',            tint:false, color:0x2b2e33, rough:.5,  metal:.3},
+  {key:'cabtub',       file:'CAB - Tub.obj',                          tint:false, color:0x34363b, rough:.5,  metal:.1},
+  {key:'blacktrim',    file:'CAB - Black Trim.obj',                   tint:false, color:0x101114, rough:.4,  metal:.2},
+  {key:'chrometrim',   file:'CAB - Chrome Trim.obj',                  tint:false, color:0xd7d9dc, rough:.12, metal:.9},
+  {key:'badging',      file:'CAB - Badging.obj',                      tint:false, color:0xc9ccd1, rough:.2,  metal:.7},
+  {key:'plate',        file:'CAB - License Plate Front.obj',          tint:false, color:0xe8e8e0, rough:.5,  metal:.05},
+  {key:'cabglass',     file:'CAB - Glass.obj',                        tint:false, color:0x1c2733, rough:.05, metal:0},
+  {key:'headhousing',  file:'CAB - Headlights Housing.obj',           tint:false, color:0x2b2e33, rough:.3,  metal:.5},
+  {key:'headlense',    file:'CAB - Headlights Lense.obj',             tint:false, color:0xeceeef, rough:.1,  metal:.05},
+  {key:'foghousing',   file:'CAB - Fog Light Housing.obj',            tint:false, color:0x2b2e33, rough:.3,  metal:.5},
+  {key:'foglense',     file:'CAB - Fog Light Lense.obj',               tint:false, color:0xeceeef, rough:.1,  metal:.05},
+  {key:'smalllights',  file:'CAB - Small Lights.obj',                  tint:false, color:0xeceeef, rough:.15, metal:.1},
+  {key:'mirrormirror', file:'CAB - Side Mirror-Mirror.obj',            tint:false, color:0xc7cbd1, rough:.05, metal:.95},
+  {key:'ipelements',   file:'CAB - IP Elements.obj',                   tint:false, color:0x24262a, rough:.5,  metal:.15},
+  {key:'seats',        file:'CAB - Seats.obj',                        tint:false, color:0x2a2724, rough:.7,  metal:0},
+  // -- INTERIOR --
+  {key:'framing',      file:'INTERIOR - Framing+Structure.obj',       tint:false, color:0x8a8f96, rough:.7,  metal:.05},
+  {key:'walls',        file:'INTERIOR - Walls+Space.obj',             tint:false, color:0xf1ede6, rough:.75, metal:0},
+  {key:'segframing',   file:'INTERIOR - SEG Framing.obj',             tint:false, color:0x53565c, rough:.4,  metal:.6},
+  {key:'ceillights',   file:'INTERIOR - Ceiling Lights.obj',          tint:false, color:0xfff8ec, rough:.5,  metal:0},
+  {key:'tvframe',      file:'INTERIOR - TV Frame.obj',                tint:false, color:0x101114, rough:.4,  metal:.15},
+  // -- FURNITURE --
+  {key:'lowercabinet', file:'FURNITURE - DS Lower Cabinet.obj',       tint:false, color:0x6b4a34, rough:.6,  metal:0},
+  {key:'countercabinet',file:'FURNITURE - PS CounterHeight Cabinet.obj', tint:false, color:0x6b4a34, rough:.6, metal:0},
+  {key:'tvmount',      file:'FURNITURE - TV Mount.obj',                tint:false, color:0x24262a, rough:.4,  metal:.3},
+  {key:'tv',           file:'FURNITURE - TV.obj',                     tint:false, color:0x0a0a0c, rough:.3,  metal:.1},
+  {key:'bench',        file:'FURNITURE - Upholstered Bench PS.obj',   tint:false, color:0x3d3733, rough:.75, metal:0},
+  // Deliberately excluded: "INTERIOR - SEG Space Claim Area" (a CAD space-reservation volume, not a
+  // real visible surface) and "INTERIOR - TV.obj" (a tiny stub, superseded by FURNITURE - TV.obj).
 ];
 let scanParts={}, scanLoading=false, scanLoaded=false;
 function parseObj(text){
