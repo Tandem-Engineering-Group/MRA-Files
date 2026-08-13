@@ -76,7 +76,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 6.0 · decal graphics fixed for real: no more wheel-arch smearing/mirroring, no more full-vehicle-mockup ghosting on MRA EM Summit / MRA AAM</span>
+  <span class="rev" id="devRev" style="display:none">Rev 6.1 · Graphics &amp; Decals rebuilt on real per-panel wrap art (passenger/driver/rear), interior decal bleed fixed</span>
 </header>
 <main>
   <div id="view3d">
@@ -202,7 +202,21 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     height (matched to the real wheel clearance) now always uses the plain, non-mirrored side formula pinned to
     the image's own bottom edge, while the flat wall above it still gets the full image, unstretched and
     uncropped. Verified on all 4 stock graphics, both the main panel and the wheel-arch area specifically, before
-    shipping. This dev note is hidden from customers by default — append <code>?dev=1</code> to the URL to see it.</p>
+    shipping. <b>Rev 6.1</b> is a real rebuild, not another patch: Rich sent the actual wrap proofs his design
+    team works from (passenger side, driver side, rear door — three genuinely different pieces of art, never one
+    image) and pointed out the deeper problem — a single texture stretched everywhere was ALWAYS the wrong model
+    for this mesh, and it had been bleeding the passenger-side photo onto the rear door, onto the wheel well, and
+    even onto interior-facing surfaces near the door opening. The Shell mesh now splits into four real material
+    regions via geometry groups (Three.js's actual multi-material mechanism, not a distorting texture atlas):
+    passenger side, driver side, rear door, and an "other" bucket (roof, the box's own front face against the
+    cab, interior-facing return flanges) that never receives a decal at all — closing the interior-bleed bug for
+    good. Each of the 4 stock graphics now carries 3 real crops taken directly from the actual wrap proof sheets,
+    not a guess. One real hardware limit found along the way: the rear graphic is wired up correctly, but this
+    CAD scan models the rear cargo doors in a fixed OPEN pose with only door-frame/jamb geometry where the closed
+    doors would be — there's no flat closed-door surface for that graphic to actually render on yet. Verified
+    all 4 stock graphics on both the passenger and driver sides, and confirmed the interior no longer shows any
+    decal content, before shipping. This dev note is hidden from customers by default — append <code>?dev=1</code>
+    to the URL to see it.</p>
   </aside>
 </main>
 <script>/**
@@ -1683,7 +1697,9 @@ function applyView(){
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===state.view));
 }
 function applyWrap(){ M.wrap.color.set(state.wrap);
-  Object.keys(scanParts).forEach(k=>{ const p=SCAN_PARTS.find(x=>x.key===k); if(p&&p.tint) scanParts[k].material.color.set(state.wrap); });
+  Object.keys(scanParts).forEach(k=>{ const p=SCAN_PARTS.find(x=>x.key===k); if(!p||!p.tint) return;
+    const mats=Array.isArray(scanParts[k].material)?scanParts[k].material:[scanParts[k].material];
+    mats.forEach(m=>m.color.set(state.wrap)); });   // shell's "other" region (no map, ever) always follows wrap color; a decal region's own applyDecal() call re-asserts white right after, same order dependency as before this region split
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -1870,40 +1886,98 @@ function ensureScanLoaded(cb){
       // from whichever axis the normal is LEAST aligned with (the two axes spanning that face's own
       // plane), and flip U when the dominant normal component is negative so the image reads the
       // same left-to-right direction regardless of which way that panel actually faces.
-      if(['shell','rearawning','sideawning'].indexOf(p.key)>=0){
+      //
+      // Rich, after seeing real per-panel wrap proofs (passenger side / driver side / rear door --
+      // three completely different pieces of art, never one image): a single stretched texture was
+      // always the wrong model for the shell specifically. It smeared the passenger-side photo onto
+      // the rear door, onto the wheel well, and even onto interior-facing surfaces near the door
+      // opening. The shell now splits into FOUR real material regions via geometry groups (Three.js's
+      // actual multi-material mechanism -- not a texture atlas, which would distort each panel's own
+      // aspect ratio): passenger side, driver side, rear door, and "other" (roof, the box's own
+      // front face tucked against the cab, any interior-facing return flange) which NEVER receives a
+      // decal at all, closing the interior-bleed bug for good. rearawning/sideawning keep the
+      // original single-texture behavior (no dedicated per-panel art exists for the awnings).
+      if(p.key==='shell'){
         geo.computeBoundingBox();
         const bb=geo.boundingBox, pos=geo.getAttribute('position'), nrm=geo.getAttribute('normal'), n=pos.count;
         const xr=(bb.max.x-bb.min.x)||1, yr=(bb.max.y-bb.min.y)||1, zr=(bb.max.z-bb.min.z)||1;
         const uv=new Float32Array(n*2);
-        // The wheel arch / rocker panel is molded into this SAME shell mesh as the flat side wall,
-        // but it curves away underneath -- stretching the flat planar projection across that curve
-        // smears the decal's photo content there (Rich, from real screenshots: "showing you where
-        // the wheels are... you don't wrap it like this"), and right at the underside of the curve
-        // some faces tip far enough that their normal picks the WRONG projection branch entirely,
-        // producing mirrored/backwards fragments at the wheel well -- a real, distinct second bug,
-        // confirmed from his own phone screenshots, not the same issue as the full-vehicle-mockup
-        // crop fixed separately above. A real vehicle wrap doesn't wrap into the wheel-well curvature
-        // either -- it stays on the flat panel. So the bottom ~22% of the panel's own height (matched
-        // to the real wheel/arch clearance) always uses the plain non-mirrored side formula with V
-        // pinned to the image's own bottom edge -- one clean, undistorted trim strip -- while the flat
-        // wall above it still gets the FULL image, just renormalized so nothing is cropped off it.
+        // The wheel arch / rocker panel curves away underneath the flat side wall -- stretching a
+        // flat planar projection across that curve smears the decal's photo content there (Rich,
+        // from real screenshots: "showing you where the wheels are... you don't wrap it like this"),
+        // and right at the underside some faces tip into the WRONG axis entirely, producing
+        // mirrored/backwards fragments at the wheel well. A real wrap doesn't cover the wheel well
+        // either, so the bottom ~22% of the panel's own height (matched to the real wheel clearance)
+        // always pins V to the image's own bottom edge -- one clean, undistorted trim strip -- while
+        // the flat wall above still gets the FULL image, renormalized so nothing is cropped off it.
         const ARCH=.22;
+        const R_PASSENGER=0, R_DRIVER=1, R_REAR=2, R_OTHER=3;
+        const triCount=n/3, regionOf=new Uint8Array(triCount);
+        for(let ti=0; ti<triCount; ti++){
+          const vi0=ti*3;
+          // one normal sample per face is enough -- these are flat, welded panels, not curved shading
+          const nx=nrm.getX(vi0), ny=nrm.getY(vi0), nz=nrm.getZ(vi0);
+          const ax=Math.abs(nx), ay=Math.abs(ny), az=Math.abs(nz);
+          let region;
+          if(ax>=ay && ax>=az) region = nx>0 ? R_PASSENGER : R_DRIVER;
+          else if(az>=ax && az>=ay) region = nz<0 ? R_REAR : R_OTHER;   // nz<0 faces away from the cab (cab sits at +Z) -- that's the real rear door; nz>0 is the box's own front face tucked against the cab, never visible
+          else region = R_OTHER;                                        // roof-facing -- no dedicated art
+          regionOf[ti]=region;
+          for(let k=0;k<3;k++){
+            const vi=vi0+k;
+            const yFrac=(pos.getY(vi)-bb.min.y)/yr;
+            let u,v;
+            if(region===R_PASSENGER || region===R_DRIVER){
+              u=1-(pos.getZ(vi)-bb.min.z)/zr;
+              if(region===R_DRIVER) u=1-u;   // the driver-side art is its OWN correctly-composed image now, not a mirror of the passenger side's -- flip so it reads the van's real left-to-right instead of backwards
+              if(yFrac<ARCH) v=0;
+              else v=Math.max(0,(yFrac-ARCH)/(1-ARCH));
+            } else if(region===R_REAR){
+              u=(pos.getX(vi)-bb.min.x)/xr; v=(pos.getY(vi)-bb.min.y)/yr;   // rear door doesn't share the side wall's wheel-arch curve -- no clamp needed
+            } else {
+              u=0; v=0;   // never sampled -- this region's material carries no map
+            }
+            uv[vi*2]=u; uv[vi*2+1]=v;
+          }
+        }
+        // Reorder into contiguous per-region runs -- geometry.groups (real multi-material) needs
+        // contiguous ranges, and face classification isn't naturally contiguous in the source buffer.
+        const order=Array.from({length:triCount},(_,i)=>i).sort((a,b)=>regionOf[a]-regionOf[b]);
+        const oldColor=geo.getAttribute('color');
+        const newPos=new Float32Array(n*3), newUv=new Float32Array(n*2), newNrm=new Float32Array(n*3);
+        const newColor=oldColor?new Float32Array(n*3):null;
+        let w=0;
+        for(const ti of order) for(let k=0;k<3;k++){
+          const vi=ti*3+k;
+          newPos[w*3]=pos.getX(vi); newPos[w*3+1]=pos.getY(vi); newPos[w*3+2]=pos.getZ(vi);
+          newUv[w*2]=uv[vi*2]; newUv[w*2+1]=uv[vi*2+1];
+          newNrm[w*3]=nrm.getX(vi); newNrm[w*3+1]=nrm.getY(vi); newNrm[w*3+2]=nrm.getZ(vi);
+          if(newColor){ newColor[w*3]=oldColor.getX(vi); newColor[w*3+1]=oldColor.getY(vi); newColor[w*3+2]=oldColor.getZ(vi); }
+          w++;
+        }
+        geo.setAttribute('position', new THREE.BufferAttribute(newPos,3));
+        geo.setAttribute('uv', new THREE.BufferAttribute(newUv,2));
+        geo.setAttribute('normal', new THREE.BufferAttribute(newNrm,3));
+        if(newColor) geo.setAttribute('color', new THREE.BufferAttribute(newColor,3));
+        const counts=[0,0,0,0]; for(const r of regionOf) counts[r]++;
+        let start=0;
+        for(let r=0;r<4;r++){ if(counts[r]>0){ geo.addGroup(start*3, counts[r]*3, r); start+=counts[r]; } }
+      } else if(['rearawning','sideawning'].indexOf(p.key)>=0){
+        geo.computeBoundingBox();
+        const bb=geo.boundingBox, pos=geo.getAttribute('position'), nrm=geo.getAttribute('normal'), n=pos.count;
+        const xr=(bb.max.x-bb.min.x)||1, yr=(bb.max.y-bb.min.y)||1, zr=(bb.max.z-bb.min.z)||1;
+        const uv=new Float32Array(n*2);
         for(let vi=0; vi<n; vi++){
           const nx=nrm.getX(vi), ny=nrm.getY(vi), nz=nrm.getZ(vi);
           const ax=Math.abs(nx), ay=Math.abs(ny), az=Math.abs(nz);
-          const yFrac=(pos.getY(vi)-bb.min.y)/yr;
           let u,v;
-          if(p.key==='shell' && yFrac<ARCH){
-            u=1-(pos.getZ(vi)-bb.min.z)/zr; v=0;
+          if(ax>=ay && ax>=az){
+            u=1-(pos.getZ(vi)-bb.min.z)/zr; v=(pos.getY(vi)-bb.min.y)/yr;
             if(nx<0) u=1-u;
-          } else if(ax>=ay && ax>=az){                // side-facing (left/right) -- plane is Z,Y
-            u=1-(pos.getZ(vi)-bb.min.z)/zr;
-            v=p.key==='shell' ? Math.max(0,(yFrac-ARCH)/(1-ARCH)) : (pos.getY(vi)-bb.min.y)/yr;
-            if(nx<0) u=1-u;                          // left side faces -X: mirror so text still reads L-to-R
-          } else if(ay>=ax && ay>=az){                // top/bottom-facing (roof, awning canopy) -- plane is X,Z
+          } else if(ay>=ax && ay>=az){
             u=(pos.getX(vi)-bb.min.x)/xr; v=1-(pos.getZ(vi)-bb.min.z)/zr;
             if(ny<0) u=1-u;
-          } else {                                    // front/rear-facing (cab face, rear doors) -- plane is X,Y
+          } else {
             u=(pos.getX(vi)-bb.min.x)/xr; v=(pos.getY(vi)-bb.min.y)/yr;
             if(nz<0) u=1-u;
           }
@@ -1911,11 +1985,14 @@ function ensureScanLoaded(cb){
         }
         geo.setAttribute('uv', new THREE.BufferAttribute(uv,2));
       }
-      const mat=new THREE.MeshPhysicalMaterial({color:p.tint?state.wrap:p.color, roughness:p.rough, metalness:p.metal,
+      const mkMat=()=>new THREE.MeshPhysicalMaterial({color:p.tint?state.wrap:p.color, roughness:p.rough, metalness:p.metal,
         clearcoat:p.clearcoat||0, clearcoatRoughness:.25, envMapIntensity:.6, side:THREE.DoubleSide, vertexColors:!!geo.getAttribute('color'),
         transparent:!!p.glass, opacity:p.glass?.35:1, transmission:p.glass?.9:0, ior:p.glass?1.5:1.5, depthWrite:!p.glass,
         emissive:p.tint?new THREE.Color(state.wrap):0x000000, emissiveIntensity:p.tint?.18:0});
-      const mesh=new THREE.Mesh(geo,mat); mesh.castShadow=true; mesh.receiveShadow=true;
+      const mesh = p.key==='shell'
+        ? new THREE.Mesh(geo, [mkMat(),mkMat(),mkMat(),mkMat()])   // [passenger, driver, rear, other] -- "other" never gets a map, so it always shows the plain wrap color
+        : new THREE.Mesh(geo, mkMat());
+      mesh.castShadow=true; mesh.receiveShadow=true;
       scanG.add(mesh); scanParts[p.key]=mesh;
       doneCount++; hint.textContent='⏳ Loading the real 3D scan… ('+doneCount+'/'+SCAN_PARTS.length+', one-time)';
     })
@@ -1974,30 +2051,43 @@ if(new URLSearchParams(location.search).get('dev')==='1'){
 }
 
 // ---- Graphics & Decals (rev 5.7) ----
-const DECAL_FILES={ 'on-lightspray':'decals/on-lightspray.jpg', 'lexcare':'decals/lexcare.jpg',
-  'mra-em-summit':'decals/mra-em-summit.jpg', 'mra-aam':'decals/mra-aam.jpg' };
+// Each stock graphic is now THREE real, separately-composed panels -- passenger side, driver side,
+// rear door -- cropped straight from Sarah's actual wrap proofs (the same 4-view sheets a print shop
+// would work from), not one photo stretched across the whole vehicle. That was the real bug behind
+// every "graphics are wrong" report this round: a single image can't correctly represent three
+// different real surfaces at once.
+const DECAL_FILES={
+  'on-lightspray':{passenger:'decals/on-lightspray-passenger.jpg', driver:'decals/on-lightspray-driver.jpg', rear:'decals/on-lightspray-rear.jpg'},
+  'lexcare':{passenger:'decals/lexcare-passenger.jpg', driver:'decals/lexcare-driver.jpg', rear:'decals/lexcare-rear.jpg'},
+  'mra-em-summit':{passenger:'decals/mra-em-summit-passenger.jpg', driver:'decals/mra-em-summit-driver.jpg', rear:'decals/mra-em-summit-rear.jpg'},
+  'mra-aam':{passenger:'decals/mra-aam-passenger.jpg', driver:'decals/mra-aam-driver.jpg', rear:'decals/mra-aam-rear.jpg'},
+};
 const _decalTexCache={}, _customDecalUrls={};
-// The graphic goes on the body shell AND the awning canopies (Rich: "should be on top of the
-// awnings too") -- a real vehicle wrap carries onto the awning fabric when it's deployed, and all
-// three parts got the same normal-aware UV treatment above so the same texture reads correctly on
-// each independently.
-const DECAL_TARGET_KEYS=['shell','rearawning','sideawning'];
-function applyDecal(){
-  const meshes=DECAL_TARGET_KEYS.map(k=>scanParts[k]).filter(Boolean); if(!meshes.length) return;
-  const key=state.decal||'none';
-  document.querySelectorAll('[data-decal]').forEach(b=>b.classList.toggle('on', b.dataset.decal===key));
-  if(key==='none'){
-    meshes.forEach(m=>{ m.material.map=null; m.material.color.set(state.wrap); m.material.needsUpdate=true; }); return;
-  }
-  const url=DECAL_FILES[key]||_customDecalUrls[key]; if(!url) return;
-  if(_decalTexCache[url]){
-    meshes.forEach(m=>{ m.material.map=_decalTexCache[url]; m.material.color.set(0xffffff); m.material.needsUpdate=true; }); return;
-  }
+function _loadDecalTex(url, cb){
+  if(_decalTexCache[url]){ cb(_decalTexCache[url]); return; }
   new THREE.TextureLoader().load(url, tex=>{
     tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping;
-    _decalTexCache[url]=tex;
-    if((state.decal||'none')===key) meshes.forEach(m=>{ m.material.map=tex; m.material.color.set(0xffffff); m.material.needsUpdate=true; });
+    _decalTexCache[url]=tex; cb(tex);
   });
+}
+function applyDecal(){
+  const key=state.decal||'none';
+  document.querySelectorAll('[data-decal]').forEach(b=>b.classList.toggle('on', b.dataset.decal===key));
+  const shell=scanParts['shell'];
+  const awnings=['rearawning','sideawning'].map(k=>scanParts[k]).filter(Boolean);
+  if(key==='none'){
+    if(shell) shell.material.forEach(m=>{ m.map=null; m.color.set(state.wrap); m.needsUpdate=true; });
+    awnings.forEach(m=>{ m.material.map=null; m.material.color.set(state.wrap); m.material.needsUpdate=true; });
+    return;
+  }
+  // A custom upload is one image with no separate per-panel art -- fall back to using it everywhere,
+  // same as every stock decal did before this fix (the best available option without real per-panel art).
+  const stock=DECAL_FILES[key];
+  const urls = stock || (_customDecalUrls[key] ? {passenger:_customDecalUrls[key], driver:_customDecalUrls[key], rear:_customDecalUrls[key]} : null);
+  if(!urls) return;
+  const applyToMat=(m,url)=>{ if(!url) return; _loadDecalTex(url, tex=>{ if((state.decal||'none')!==key) return; m.map=tex; m.color.set(0xffffff); m.needsUpdate=true; }); };
+  if(shell){ applyToMat(shell.material[0],urls.passenger); applyToMat(shell.material[1],urls.driver); applyToMat(shell.material[2],urls.rear); }
+  awnings.forEach(m=>applyToMat(m.material, urls.passenger));
 }
 document.querySelectorAll('[data-decal]').forEach(b=>b.onclick=()=>{ state.decal=b.dataset.decal; applyDecal(); saveHash(); });
 // "+ Upload logo" -- session-only (a data: URL is too big to round-trip through the shareable
