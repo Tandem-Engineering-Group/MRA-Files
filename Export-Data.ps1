@@ -902,7 +902,7 @@ if (Test-Path $FleetioTokenFile) {
                 detail = $det; reporter = (Get-FleetReporter $i); assignees = (Get-FleetAssignees $i)
                 backMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.back_to_mra_date } else { '' })
                 leaveMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.leaving_mra_date } else { '' })
-                billable = $(if ($i.custom_fields) { [bool]$i.custom_fields.billable_check_if_yes } else { $false })
+                billable = $(if ($i.custom_fields) { [bool]$i.custom_fields.billable_check_if_yes_ } else { $false })
                 docs = (Get-FleetDocs $i $fhead)
             })
         }
