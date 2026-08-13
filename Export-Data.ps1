@@ -891,6 +891,10 @@ if (Test-Path $FleetioTokenFile) {
 
         $fIssues = New-Object System.Collections.ArrayList
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
+            if ($i.id -eq 17752843) {
+                Write-Output "  -> DEBUG issue 17752843 custom_fields keys: $(if ($i.custom_fields) { ($i.custom_fields.PSObject.Properties.Name -join ', ') } else { '(none)' })"
+                Write-Output "  -> DEBUG issue 17752843 custom_fields raw: $($i.custom_fields | ConvertTo-Json -Depth 5 -Compress)"
+            }
             $pr = ''
             if ($i.labels) { try { $pr = (@($i.labels | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { $_.name } }) -join ', ') } catch {} }
             $det = ''
