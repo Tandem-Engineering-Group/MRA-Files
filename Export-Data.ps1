@@ -890,7 +890,13 @@ if (Test-Path $FleetioTokenFile) {
         }
 
         $fIssues = New-Object System.Collections.ArrayList
+        $billDbgN = 0
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
+            if ($i.custom_fields -and $billDbgN -lt 6) {
+                $bv0 = $i.custom_fields.billable_check_if_yes_
+                Write-Output "  -> DEBUG issue $($i.id) (#$($i.number)) billable_check_if_yes_ raw value: '$bv0'  type: $(if ($null -eq $bv0) { '(null)' } else { $bv0.GetType().FullName })  [bool] cast: $([bool]$bv0)"
+                $billDbgN++
+            }
             $pr = ''
             if ($i.labels) { try { $pr = (@($i.labels | ForEach-Object { if ($_ -is [string]) { $_ } elseif ($_.name) { $_.name } }) -join ', ') } catch {} }
             $det = ''
