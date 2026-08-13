@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>MRA File Staging Upload</title>
 <style>
   :root{color-scheme:dark}
@@ -9,6 +10,8 @@
   .drop{border:2px dashed #3a4660;border-radius:12px;padding:36px 16px;text-align:center;color:#93a0b8;cursor:pointer;transition:.15s}
   .drop.over{border-color:#e04826;background:#1c2436;color:#fff}
   .drop input{display:none}
+  .dirbtn{margin-top:10px;width:100%;padding:10px;border:1px solid #3a4660;border-radius:10px;background:transparent;color:#93a0b8;font-size:13px;cursor:pointer}
+  .dirbtn:hover{border-color:#e04826;color:#fff}
   .filelist{margin-top:16px;display:none}
   .frow{padding:10px 14px;background:#1c2436;border-radius:10px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
   .frow b{color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -38,6 +41,8 @@
     <div id="dropText">Drag files here (or a whole folder selection), or click to choose</div>
     <input type="file" id="fileInput" multiple>
   </div>
+  <button class="dirbtn" id="dirBtn" type="button">📁 Choose a folder instead</button>
+  <input type="file" id="dirInput" webkitdirectory multiple style="display:none">
 
   <div class="filelist" id="filelist"></div>
   <button class="go" id="goBtn">Upload all</button>
@@ -67,6 +72,8 @@
 
   var dropzone = document.getElementById('dropzone');
   var fileInput = document.getElementById('fileInput');
+  var dirBtn = document.getElementById('dirBtn');
+  var dirInput = document.getElementById('dirInput');
   var filelistEl = document.getElementById('filelist');
   var goBtn = document.getElementById('goBtn');
   var bar = document.getElementById('bar');
@@ -145,26 +152,51 @@
       for(var i=0;i<entries.length;i++){ await walkEntry(entries[i], out); }
     }
   }
+  // A folder that couldn't actually be read (webkitGetAsEntry missing/unreliable in this browser)
+  // surfaces as a phantom 0-byte "file" named after the folder, with no extension — e.g. dragging a
+  // folder full of subfolders "Interior", "Exterior", "CAB" produced exactly those four 0 KB entries
+  // instead of their real contents. A genuine intentional 0-byte file is rare and normally still has
+  // an extension, so this is a safe, targeted filter rather than a real-file false-positive risk.
+  function looksLikeUnreadableFolder(f){ return f.size === 0 && f.name.indexOf('.') < 0; }
+
   async function itemsFromDataTransfer(dataTransfer){
-    var out = [];
+    var out = [], skipped = 0;
     var items = dataTransfer.items;
-    if(items && items.length && items[0].webkitGetAsEntry){
-      var entries = [];
+    if(items && items.length){
+      var entries = [], plainFiles = [];
       for(var i=0;i<items.length;i++){
-        var entry = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
-        if(entry) entries.push(entry);
+        var it = items[i];
+        var entry = (it.webkitGetAsEntry && it.webkitGetAsEntry()) || null;
+        if(entry){ entries.push(entry); continue; }
+        var f = (it.getAsFile && it.getAsFile()) || null;
+        if(f) plainFiles.push(f);
       }
       for(var i=0;i<entries.length;i++){ await walkEntry(entries[i], out); }
+      for(var i=0;i<plainFiles.length;i++){ out.push({file:plainFiles[i], relPath:plainFiles[i].name}); }
     } else if(dataTransfer.files){
       for(var i=0;i<dataTransfer.files.length;i++){ out.push({file:dataTransfer.files[i], relPath:dataTransfer.files[i].name}); }
     }
-    return out;
+    var real = out.filter(function(it){ return !looksLikeUnreadableFolder(it.file); });
+    skipped = out.length - real.length;
+    return { items: real, skipped: skipped };
   }
 
   dropzone.addEventListener('click', function(){ fileInput.click(); });
   fileInput.addEventListener('change', function(e){
     var items = []; for(var i=0;i<e.target.files.length;i++){ items.push({file:e.target.files[i], relPath:e.target.files[i].name}); }
     addFiles(items); fileInput.value='';
+  });
+  // Native folder picker — sidesteps the drag-and-drop entry API entirely (unreliable in some
+  // browsers, per the "Interior"/"Exterior"/"CAB" 0-byte mix-up). webkitRelativePath is set
+  // directly by the browser on every file the OS folder dialog returns, no recursion needed.
+  dirBtn.addEventListener('click', function(){ dirInput.click(); });
+  dirInput.addEventListener('change', function(e){
+    var items = [];
+    for(var i=0;i<e.target.files.length;i++){
+      var f = e.target.files[i];
+      items.push({file:f, relPath: f.webkitRelativePath || f.name});
+    }
+    addFiles(items); dirInput.value='';
   });
   ['dragenter','dragover'].forEach(function(ev){
     dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.add('over'); });
@@ -175,12 +207,17 @@
   dropzone.addEventListener('drop', function(e){
     if(!e.dataTransfer) return;
     statusEl.textContent = 'Reading dropped files…'; statusEl.className = 'status';
-    itemsFromDataTransfer(e.dataTransfer).then(function(items){
-      statusEl.textContent = '';
-      if(items.length) addFiles(items);
+    itemsFromDataTransfer(e.dataTransfer).then(function(result){
+      if(result.items.length) addFiles(result.items);
+      if(result.skipped){
+        statusEl.className = 'status err';
+        statusEl.textContent = '⚠ Skipped ' + result.skipped + ' folder' + (result.skipped===1?'':'s') + ' this browser couldn\'t read directly — use "'+dirBtn.textContent+'" below instead.';
+      } else {
+        statusEl.textContent = '';
+      }
     }).catch(function(err){
       statusEl.className = 'status err';
-      statusEl.textContent = '⚠ Could not read the dropped folder: ' + err.message + ' — try clicking to choose files instead.';
+      statusEl.textContent = '⚠ Could not read the dropped folder: ' + err.message + ' — use "'+dirBtn.textContent+'" below instead.';
     });
   });
 
