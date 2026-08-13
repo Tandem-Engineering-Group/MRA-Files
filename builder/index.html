@@ -46,7 +46,7 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
 <body>
 <header>
   <h1>🚚 MRA InfoWheels — 3D Builder</h1>
-  <span class="rev">Rev 5 · Brandon's real CAD scan, 48 individually-named parts — body-only wrap color, real per-part detail</span>
+  <span class="rev">Rev 5.3 · Brandon's real CAD scan, fully re-triangulated (no more dropped roof/wall/cabinet faces)</span>
 </header>
 <main>
   <div id="view3d"><div id="hint">drag = orbit · wheel/pinch = zoom · right-drag = pan</div></div>
@@ -78,7 +78,15 @@ button[data-view="int"]:disabled{opacity:.35;pointer-events:none}
     the true body-color surfaces (shell, sliding door frame, colored struts, cab body panels, mirror housings) — every
     other part now carries its own reasoned finish instead of being lumped into one blanket "exterior"/"interior" bucket.
     Per-part colors/finishes are still placeholders, not measured (the export's material data was blank, same as before) —
-    this is a real look-and-spin reference with genuinely separated parts, not the full configurator yet.</div>
+    this is a real look-and-spin reference with genuinely separated parts, not the full configurator yet.
+    <b>Rev 5.3</b>: the roof, interior walls and cabinets were showing real holes — root cause found and fixed: the
+    decimation pipeline's mesh loader was silently dropping every quad-format face in Brandon's export (only keeping
+    faces already stored as triangles), which on parts like the Shell (96k dropped quad faces, mostly the roof panel)
+    and the lower cabinet (27.6k dropped) threw away over a third of the real geometry before simplification ever ran.
+    Brandon's CAD and his export were correct the whole time. Re-triangulated every one of the 47 parts from the
+    original export (fan-splitting quads into triangles, zero geometry lost this time) and re-ran decimation from
+    scratch — full re-verify against the actual re-exported CAD confirmed the roof, interior walls, and every
+    furniture piece are solid now.</div>
   </aside>
 </main>
 <script>/**
@@ -1581,6 +1589,7 @@ const SCAN_PARTS=[
   // -- EXTERIOR --
   {key:'shell',        file:'EXTERIOR - Shell.obj',                   tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
   {key:'slidedoorfr',  file:'EXTERIOR - Sliding Door Frame.obj',       tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  {key:'slidedoorgl',  file:'EXTERIOR - Sliding Door Glass.obj',       tint:false, color:0x1c2733, rough:.05, metal:0},
   {key:'strutcolor',   file:'EXTERIOR - Rear Strut Color.obj',        tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
   {key:'strutcolor2',  file:'EXTERIOR - Side Struts Colored.obj',     tint:true,  color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
   {key:'slidedoorhw',  file:'EXTERIOR - Sliding Door Hardware.obj',   tint:false, color:0x4a4d52, rough:.35, metal:.75},
