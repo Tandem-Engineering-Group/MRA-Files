@@ -1702,6 +1702,13 @@ function ensureScanLoaded(cb){
       doneCount++; hint.textContent='⏳ Loading the real 3D scan… ('+doneCount+'/'+SCAN_PARTS.length+', one-time)';
     })
   )).then(()=>{
+    // Ground the scan: the raw export's own vertical origin has nothing to do with the ground
+    // plane at y=0 -- the tire contact patch actually sat ~1.45m below it (confirmed via the
+    // live scene's bounding box), so the whole vehicle floated half-buried through the ground
+    // with no visible contact anywhere. Shift the group so its lowest point (the tires) sits
+    // exactly on y=0, same as the procedural van.
+    const box=new THREE.Box3().setFromObject(scanG);
+    scanG.position.y-=box.min.y;
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
