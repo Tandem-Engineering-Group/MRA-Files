@@ -76,7 +76,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 5.8 · fixed backwards/upside-down decal graphics, decals now on the awnings too</span>
+  <span class="rev" id="devRev" style="display:none">Rev 5.9 · fixed the recurring diagonal line for real (root cause found), TV+mount now actually visible</span>
 </header>
 <main>
   <div id="view3d">
@@ -174,8 +174,21 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     every other one). Replaced with a proper per-vertex-normal triplanar projection (each face picks its own U/V
     axes off its own surface normal) and empirically verified, face by face, with a labeled test texture — not
     just reasoned through, since two earlier attempts this same session looked right on paper and weren't.
-    Graphics now also apply to the rear and side awning canopies, not just the body shell. This dev note is hidden
-    from customers by default — append <code>?dev=1</code> to the URL to see it.</p>
+    Graphics now also apply to the rear and side awning canopies, not just the body shell. <b>Rev 5.9</b> found and
+    fixed the actual root cause of the thin diagonal line that kept recurring (this is the third report of it —
+    the first two fixes only removed the specific stray geometry Rich had spotted at the time, not the underlying
+    defect producing it): the Shell export contains dozens of genuine degenerate "sliver" triangles — near-zero
+    area, but stretching most of the length of the part, left over from the original CAD/triangulation pipeline —
+    that render as a thin line from any camera angle regardless of what's currently visible. Confirmed by
+    isolating it to the Shell mesh alone via bisection (hiding half the parts at a time), then confirming
+    geometrically: the worst offending triangles have a longest edge over 150x what their own area could support.
+    Fixed at the source — <code>parseObj()</code> now rejects any triangle that degenerate before it's added to
+    the geometry, for every part, not just Shell (same defect showed up in the Side Awning too once checked). Also
+    fixed a real bug in the TV + mount: it wasn't a toggle problem (the show/hide logic was always correct) — the
+    TV/mount/frame parts were positioned behind the interior wall's finished surface, inside the wall cavity,
+    completely hidden by the (correctly opaque) wall panel from every normal camera angle. Pulled the assembly
+    forward so it sits proud of the wall like an actual surface-mounted TV. This dev note is hidden from customers
+    by default — append <code>?dev=1</code> to the URL to see it.</p>
   </aside>
 </main>
 <script>/**
@@ -1757,9 +1770,28 @@ function parseObj(text){
     } else if(line.charCodeAt(0)===102 && line.charCodeAt(1)===32){   // "f "
       const parts=line.slice(2).trim().split(/\s+/);
       for(let k=1;k<parts.length-1;k++){                             // fan-triangulate, just in case
-        [parts[0],parts[k],parts[k+1]].forEach(tok=>{
+        const tri=[parts[0],parts[k],parts[k+1]].map(tok=>{
           const idx=tok.split('/').map(s=>s?parseInt(s,10):0);
-          const vi=(idx[0]-1)*3, ni=idx[2]?(idx[2]-1)*3:-1;
+          return { vi:(idx[0]-1)*3, ni:idx[2]?(idx[2]-1)*3:-1 };
+        });
+        // Reject degenerate sliver triangles before they ever reach the geometry. The Shell export
+        // carries a real, recurring defect: stray "wrap-around" faces connecting a vertex near one
+        // end of a seam to a vertex near the opposite end (near-zero width, but spanning nearly the
+        // whole length of the part) -- these render as a thin diagonal line cutting across the model
+        // from any angle (found and reported by Rich three times; confirmed by isolating it down to
+        // the Shell mesh alone via bisection, then confirmed geometrically -- dozens of triangles
+        // with a max edge over 150x their own area's square root). A real panel triangle never has
+        // this shape; a legitimate thin trim strip doesn't either. Skip anything this degenerate.
+        const p0=[vp[tri[0].vi],vp[tri[0].vi+1],vp[tri[0].vi+2]];
+        const p1=[vp[tri[1].vi],vp[tri[1].vi+1],vp[tri[1].vi+2]];
+        const p2=[vp[tri[2].vi],vp[tri[2].vi+1],vp[tri[2].vi+2]];
+        const e0=[p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]], e1=[p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]];
+        const cx=e0[1]*e1[2]-e0[2]*e1[1], cy=e0[2]*e1[0]-e0[0]*e1[2], cz=e0[0]*e1[1]-e0[1]*e1[0];
+        const area=.5*Math.sqrt(cx*cx+cy*cy+cz*cz);
+        const d=(a,b)=>Math.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2);
+        const maxEdge=Math.max(d(p0,p1),d(p1,p2),d(p2,p0));
+        if(maxEdge>1e-6 && (maxEdge*maxEdge)/(area+1e-12)>2000) continue;
+        tri.forEach(({vi,ni})=>{
           // This Rhino export is Z-up (confirmed: real wheel diameter shows up on the Z axis, not
           // Y); this scene is Y-up like the rest of the scene, so remap (x,y,z) -> (x,z,-y) here --
           // a -90 deg rotation about X that keeps the mesh right-handed (no mirroring/winding flip).
@@ -1806,6 +1838,15 @@ function ensureScanLoaded(cb){
         const c=new THREE.Vector3(); geo.boundingBox.getCenter(c);
         geo.translate(-c.x,-c.y,-c.z); geo.scale(.9,.9,.9); geo.translate(c.x,c.y,c.z);
       }
+      // Rich: "the TV mount doesn't appear when you click it, it's always gone." Confirmed by
+      // raycasting the real wall surface vs. the TV parts at the same X/Y: the finished interior
+      // wall face sits at Z~1.80 here, but the TV/mount/frame trio was exported sitting at Z~1.98-2.26
+      // -- entirely BEHIND the wall panel, inside the stud cavity (and the mount/frame even poke
+      // past the exterior shell skin). Toggling .visible was always working correctly; the geometry
+      // was just embedded inside the wall the whole time, hidden from every normal interior camera
+      // angle. Pull the whole assembly forward (toward the room) so the screen sits just proud of
+      // the real wall surface, like an actual surface-mounted TV.
+      if(['tv','tvmount','tvframe'].indexOf(p.key)>=0){ geo.translate(0,0,-.21); }
       // Brandon's export carries zero real UVs anywhere (material data was blank from the start),
       // so a wrap-graphic decal has nothing to map onto. A single global (Z,Y) planar projection
       // (the first attempt here) reads backwards on whichever side faces -X, because both the
