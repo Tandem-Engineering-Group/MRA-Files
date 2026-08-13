@@ -3886,6 +3886,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.25", date:"2026-08-13", title:"💰 Billable badge now shows on already-queued Fleetio tasks too (bay cards, crew columns, Meeting view)", items:[
+    "Rich: the Siemens DI pedestal issue (#1063, the first one he marked billable) wasn't showing the badge on its job card. Root cause: once a Fleetio issue is added as a shop task (➕), it renders through the normal assigned-task lines, not the unassigned-issues list the badge was first wired into — a completely separate render path. Added a shared fioBillBadge() helper and wired it into every place an assigned task shows its Fleetio link (bay cards, crew columns, the 🚦 full-screen job view, the Meeting view's Parking Lot list) — the badge now shows wherever a billable issue appears on the board, queued or not." ] },
   { rev:"37.24", date:"2026-08-13", title:"🔧 Fixed: DATA PIPELINE STALLED banner sat silent at 40+ min stale", items:[
     "Rich caught the board sitting 41 minutes stale with no red banner. Root cause: the banner's own threshold was set to 40 minutes, while the separate GitHub email-alert watchdog uses 20 minutes — its code comment says the two are supposed to match; they didn't. Lowered the in-app threshold to 20 minutes to actually match. This only fixes the WARNING — the underlying \"MRA Lists to JSON\" stall itself still needs the same manual cancel-stuck-run-then-rerun in Power Automate as always." ] },
   { rev:"37.23", date:"2026-08-13", title:"💰 Billable badge also on the bay-card Fleetio list + the issue hover-detail card", items:[
@@ -10322,10 +10324,10 @@ function renderFloor(D){
         gkeys.sort((a,b)=> (a===''?1:0)-(b===''?1:0) || (crewIdx(a)-crewIdx(b)) || a.localeCompare(b));
         const onlyUnassigned = gkeys.length===1 && gkeys[0]==='';
         const taskHtml=o=>{ const pend=isPendingClosed(j.project,o.raw);
-          const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';   // keep the Fleetio ↗ link after a task is assigned
+          const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'', fb=fm?fioBillBadge(fm[1]):'';   // keep the Fleetio ↗ link (and 💰 billable badge) after a task is assigned
           const odue=o.due?` <span class="duedate${(o.due<today)?' od':''}">📅 ${_due0Strike(o.cm,o.due)}${esc(fmtMD(o.due))}</span>`:'';
           const orep=repeatOf(o.cm)?' <span title="Repeats — closing it auto-creates the next one">🔁</span>':'';
-          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}${(!pend&&isHotTask(o.raw||o.disp))?" hot":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${odue}${orep}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}${_byLine(o.cm)}`; };
+          return `<div class="taskline${o.sal?" sal":""}${pend?" done":""}${(!pend&&isHotTask(o.raw||o.disp))?" hot":""}">${pend?"✓ ":closeHandle(j.project,o.raw)+taskTools(j.project,o.raw,false)}${esc(o.disp)}${odue}${orep}${fa}${fb}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':""}</div>${fm?fioDetHtml(fm[1]):''}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}${_byLine(o.cm)}`; };
         let inner="";
         gkeys.forEach(k=>{
           if(!onlyUnassigned){
@@ -10716,8 +10718,8 @@ function renderMeeting(){
     return `<div class="mtg-card" onclick="mtgSel(this)" title="Click to highlight this card while you walk the list"><div class="t">${esc(u.asset)} ${when}</div><div class="m">${u.jobNum?esc(u.jobNum)+' · ':''}${u.issues.length} open issue${u.issues.length===1?'':'s'}${u.unassigned?` · <span style="color:var(--amber);font-weight:700">${u.unassigned} unassigned</span>`:''} ${asgBtn}</div>${frLine}${onbList}${lis?`<ul>${lis}</ul>`:''}${u.issues.length>8?`<div class="m">+${u.issues.length-8} more…</div>`:''}</div>`;
   }).join('') : `<div class="mtg-empty">Nothing marked coming back in the next 30 days.</div>`;
   document.getElementById('mtgLot').innerHTML = M.lot.length ? M.lot.map(l=>{
-    const lis=l.tasks.slice(0,10).map(t=>{ const fm=String(t.raw||'').match(/🔧\s*#(\d+)/); const fa=fm?fioArrow('issue',fm[1]):'';
-      return `<li class="${t.who?'':'un'}">${esc(String(t.t).slice(0,60))}${fa} — <span class="who">${t.who?esc(t.who):'⚠ unassigned'}</span>${t.due?` <span class="mtg-due">due ${esc(fmtMDY(t.due))}</span>`:''}</li>`; }).join('');
+    const lis=l.tasks.slice(0,10).map(t=>{ const fm=String(t.raw||'').match(/🔧\s*#(\d+)/); const fa=fm?fioArrow('issue',fm[1]):''; const fb=fm?fioBillBadge(fm[1]):'';
+      return `<li class="${t.who?'':'un'}">${esc(String(t.t).slice(0,60))}${fa}${fb} — <span class="who">${t.who?esc(t.who):'⚠ unassigned'}</span>${t.due?` <span class="mtg-due">due ${esc(fmtMDY(t.due))}</span>`:''}</li>`; }).join('');
     // Same info as the Coming-back side (Rich's ask): dates/status, 🗓 Fleetio MRA range, GPS chip, open-editor.
     const fr=l.sub?null:_fioRange(_fioRetForJob(l.jobNum));
     const frLine=fr?`<div class="m" style="color:#7fb0ff;font-weight:700" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(fr)}</div>`:'';
@@ -11045,11 +11047,11 @@ function _ynTasksHtml(it,today){
   gkeys.sort((a,b)=>(a===''?1:0)-(b===''?1:0) || (crewIdx(a)-crewIdx(b)) || a.localeCompare(b));
   const onlyUn = gkeys.length===1 && gkeys[0]==='';
   const taskHtml=o=>{ const pend=isPendingClosed(proj,o.raw);
-    const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
+    const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'', fb=fm?fioBillBadge(fm[1]):'';
     const odue=o.due?` <span class="duedate${(o.due<today)?' od':''}">📅 ${_due0Strike(o.cm,o.due)}${esc(fmtMD(o.due))}</span>`:'';
           const orep=repeatOf(o.cm)?' <span title="Repeats — closing it auto-creates the next one">🔁</span>':'';
     const handles = editable ? (pend?'✓ ':(closeHandle(proj,o.raw)+taskTools(proj,o.raw,false)+qaChip(proj,o.raw))) : '';
-    return `<div class="taskline${o.sal?' sal':''}${pend?' done':''}${(!pend&&isHotTask(o.raw||o.disp))?' hot':''}">${handles}${esc(o.disp)}${odue}${orep}${fa}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':''}</div>`; };
+    return `<div class="taskline${o.sal?' sal':''}${pend?' done':''}${(!pend&&isHotTask(o.raw||o.disp))?' hot':''}">${handles}${esc(o.disp)}${odue}${orep}${fa}${fb}${pend?' <span style="color:var(--faint);font-size:10px">closing…</span>':''}</div>`; };
   let inner='';
   gkeys.forEach(k=>{ if(!onlyUn){ const hdr=k===''?'— unassigned —':(crewEmoji(k)+' '+esc(k));
       inner+=`<div class="tgrp-h">${hdr}${k===''?'':` <span class="tgrp-n">${grp[k].length}</span>`}</div>`; }
@@ -12525,15 +12527,15 @@ function renderSal(D){
       const brk=o.handle?`<span class="qa" onclick="event.stopPropagation();ptbOpen('${escJsAttr(o.proj||s.project)}','${escJsAttr(o.handle)}')" title="⚒ Break this schedule line into real shop tasks on this trailer — each becomes its own closable task; closing the last one flags this line 🟡 for the PM to verify (needs code)">⚒</span>`:'';
       const rng=(o.st0||o.due)?` <span class="duedate${odOver?' od':''}">▶ ${o.st0?esc(fmtMDY(o.st0)):'…'} → ${o.due?esc(fmtMDY(o.due)):'…'}</span>`:'';
       return `<li onclick="openProjectEditor('${escJsAttr(o.proj||s.project)}')" style="cursor:pointer" title="From the PROJECT schedule (${escA(o.proj||s.project)}) — click to open the project editor (needs code)">${brk}📋 ${esc(o.disp)}${rng}${o.ph?` <span class="opdate">· ${esc(o.ph)}</span>`:''}</li>`;
-    }).join("")+s.open.filter(o=>!o.isProj).slice().sort(_hotCmp).map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'';
+    }).join("")+s.open.filter(o=>!o.isProj).slice().sort(_hotCmp).map(o=>{const fm=(o.raw||'').match(/🔧\s*#(\d+)/), fa=fm?fioArrow('issue',fm[1]):'', fb=fm?fioBillBadge(fm[1]):'';
       const oent = o.op?` <span class="opdate">· added ${esc(fmtMDY(o.op))}</span>`:'';
       const odOver = o.due && !o.closed && daysBetween(o.due,today)<0;
       const odue = o.due?` <span class="duedate${odOver?' od':''}">📅 due ${esc(fmtMDY(o.due))}</span>`:'';
-      if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${oent}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}</li>`;
+      if(o.closed) return `<li class="done salclosed">✓ ${esc(o.disp)}${oent}${o.cl?` <span class="cldate">closed ${esc(fmtMDY(o.cl))}</span>`:''}${fa}${fb}</li>`;
       const pend=isPendingClosed(s.project,o.raw);
       const hot=!pend && isHotTask(o.raw||o.disp);
       const drag=(!pend&&o.raw)?` draggable="true" ondragstart="ftDragStart(event,'${escJsAttr(s.project)}','${escJsAttr(o.raw)}')" title="Drag onto another crew's column to re-assign, or onto a job card up top to move it to that trailer (needs code)"`:'';
-      return `<li class="${pend?'done':''}${hot?' hot':''}"${drag}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}${_byLine(o.cm)}</li>`;}).join("")}</ol></div>`; };
+      return `<li class="${pend?'done':''}${hot?' hot':''}"${drag}>${pend?"✓ ":closeHandle(s.project,o.raw)+taskTools(s.project,o.raw,false)}${esc(o.disp)}${odue}${oent}${(!pend&&o.raw)?qaChip(s.project,o.raw):''}${fa}${fb}${fm?fioDetHtml(fm[1]):""}${mediaHtml(_taskMedia(o.files,fm?fm[1]:null))}${_byLine(o.cm)}</li>`;}).join("")}</ol></div>`; };
   // ⚠ overdue chip in the panel header — distinct open crew tasks whose due date has passed.
   { const chip=document.getElementById('salOverChip');
     if(chip){ let n=0;
@@ -13082,6 +13084,10 @@ function fioDetHtml(num){ const it=fioIssue(num); const d=(it&&it.detail)?String
   // Full description always shown (no clamp) — a "tap to expand" click toggle used to sit here, but with
   // no clamp left to expand it did nothing; removed rather than leave a dead click handler on the line.
   return d?`<div class="fl-det" title="${escA(d)}">${esc(d)}</div>`:''; }
+// 💰 Billable badge for an ALREADY-QUEUED task line (once a Fleetio issue is added as a shop task via
+// ➕, it renders through the normal task-line paths, not the unassigned-issues fleetlist — this is the
+// one shared spot every such path calls so the badge never has to be re-added per render function.
+function fioBillBadge(num){ const it=fioIssue(num); return it&&it.billable?' <span class="badge" style="background:#166534;color:#fff" title="Flagged billable back to the customer">💰 billable</span>':''; }
 function fioTitle(kind,num,label){ return `<a class="fiotitle" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">${num?`<span class="fionum">#${esc(num)}</span> `:''}${esc(label)}<span class="fioarrow"> ↗</span></a>`; }
 function fioArrow(kind,num){ return ` <a class="fioarrow" href="${fioHref(kind,num)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open in Fleetio${num?' to close it there':''} ↗">↗</a>`; }
 // A hover-popover body listing Fleetio items, each a clickable ↗ link (issue / wo / svc).
