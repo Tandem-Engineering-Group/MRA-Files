@@ -80,7 +80,7 @@
     return;
   }
 
-  // queue = [{file, status:'pending'|'up'|'ok'|'err', el}]
+  // queue = [{file, relPath, status:'pending'|'up'|'ok'|'err', el}]
   var queue = [];
 
   function humanSize(n){
@@ -96,26 +96,76 @@
     queue.forEach(function(item, i){
       var row = document.createElement('div');
       row.className = 'frow';
-      row.innerHTML = '<b>'+item.file.name+'</b><span class="sz">'+humanSize(item.file.size)+'</span><span class="st '+item.status+'">'+STLABEL[item.status]+'</span>';
+      row.innerHTML = '<b>'+item.relPath+'</b><span class="sz">'+humanSize(item.file.size)+'</span><span class="st '+item.status+'">'+STLABEL[item.status]+'</span>';
       filelistEl.appendChild(row);
       item.el = row;
     });
     goBtn.style.display = queue.length ? 'block' : 'none';
   }
 
-  function addFiles(fileListLike){
+  // items = [{file, relPath}] — relPath keeps a folder's internal structure (so files with the
+  // same name in different subfolders, e.g. two "diffuse.png" textures, don't overwrite each other).
+  function addFiles(items){
     var added = 0;
-    for(var i=0;i<fileListLike.length;i++){
-      var f = fileListLike[i];
-      if(!f || f.size===0 && f.name==='') continue;   // folders sometimes surface as 0-byte/empty entries
-      queue.push({file:f, status:'pending'});
+    for(var i=0;i<items.length;i++){
+      var it = items[i], f = it.file || it;
+      if(!f || (f.size===0 && f.name==='')) continue;   // folders sometimes surface as 0-byte/empty entries
+      queue.push({file:f, relPath: it.relPath || f.name, status:'pending'});
       added++;
     }
     if(added){ statusEl.textContent=''; statusEl.className='status'; renderQueue(); }
   }
 
+  // Real folder support: plain dataTransfer.files never gives you a dropped folder's CONTENTS, only
+  // whatever loose files were dragged directly — a folder itself doesn't show up as a readable File.
+  // Walking into it requires the (widely-supported, despite the prefix) webkitGetAsEntry API to read
+  // each DataTransferItem as a file/directory entry and recurse. Falls back to plain files if that
+  // API isn't there (older browsers) so loose-file drags keep working exactly as before.
+  function readEntryFile(entry){
+    return new Promise(function(resolve, reject){ entry.file(resolve, reject); });
+  }
+  function readAllDirEntries(dirEntry){
+    var reader = dirEntry.createReader();
+    var all = [];
+    function readBatch(){
+      return new Promise(function(resolve, reject){ reader.readEntries(resolve, reject); }).then(function(entries){
+        if(!entries.length) return all;
+        all = all.concat(entries);
+        return readBatch();   // readEntries only returns a batch at a time — keep calling till it's empty
+      });
+    }
+    return readBatch();
+  }
+  async function walkEntry(entry, out){
+    if(entry.isFile){
+      var f = await readEntryFile(entry);
+      out.push({file:f, relPath: entry.fullPath.replace(/^\//, '')});
+    } else if(entry.isDirectory){
+      var entries = await readAllDirEntries(entry);
+      for(var i=0;i<entries.length;i++){ await walkEntry(entries[i], out); }
+    }
+  }
+  async function itemsFromDataTransfer(dataTransfer){
+    var out = [];
+    var items = dataTransfer.items;
+    if(items && items.length && items[0].webkitGetAsEntry){
+      var entries = [];
+      for(var i=0;i<items.length;i++){
+        var entry = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
+        if(entry) entries.push(entry);
+      }
+      for(var i=0;i<entries.length;i++){ await walkEntry(entries[i], out); }
+    } else if(dataTransfer.files){
+      for(var i=0;i<dataTransfer.files.length;i++){ out.push({file:dataTransfer.files[i], relPath:dataTransfer.files[i].name}); }
+    }
+    return out;
+  }
+
   dropzone.addEventListener('click', function(){ fileInput.click(); });
-  fileInput.addEventListener('change', function(e){ addFiles(e.target.files); fileInput.value=''; });
+  fileInput.addEventListener('change', function(e){
+    var items = []; for(var i=0;i<e.target.files.length;i++){ items.push({file:e.target.files[i], relPath:e.target.files[i].name}); }
+    addFiles(items); fileInput.value='';
+  });
   ['dragenter','dragover'].forEach(function(ev){
     dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.add('over'); });
   });
@@ -123,7 +173,15 @@
     dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.remove('over'); });
   });
   dropzone.addEventListener('drop', function(e){
-    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){ addFiles(e.dataTransfer.files); }
+    if(!e.dataTransfer) return;
+    statusEl.textContent = 'Reading dropped files…'; statusEl.className = 'status';
+    itemsFromDataTransfer(e.dataTransfer).then(function(items){
+      statusEl.textContent = '';
+      if(items.length) addFiles(items);
+    }).catch(function(err){
+      statusEl.className = 'status err';
+      statusEl.textContent = '⚠ Could not read the dropped folder: ' + err.message + ' — try clicking to choose files instead.';
+    });
   });
 
   function blockIdFor(i){
@@ -193,13 +251,13 @@
       var item = queue[qi];
       item.status = 'up';
       if(item.el) item.el.querySelector('.st').className='st up', item.el.querySelector('.st').textContent=STLABEL.up;
-      var blobName = (queue.length===1 && defaultBlobName) ? defaultBlobName : item.file.name;
+      var blobName = (queue.length===1 && defaultBlobName) ? defaultBlobName : item.relPath;
       try {
         await uploadOne(item, blobName);
         item.status = 'ok'; okCount++;
       } catch (err) {
         item.status = 'err'; errCount++;
-        console.error('upload failed for', item.file.name, err);
+        console.error('upload failed for', item.relPath, err);
       }
       if(item.el){ var stEl=item.el.querySelector('.st'); stEl.className='st '+item.status; stEl.textContent=STLABEL[item.status]; }
       doneBytes += item.file.size;
