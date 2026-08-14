@@ -76,7 +76,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 6.2 · Scene backdrop picker (Studio/City/Countryside/Event) + Awning Open/Closed toggle</span>
+  <span class="rev" id="devRev" style="display:none">Rev 6.3 · Removed the Scene backdrop picker (looked cartoonish, not customer-facing quality); Awning Closed now folds the hardware frame too, not just the fabric</span>
 </header>
 <main>
   <div id="view3d">
@@ -143,25 +143,6 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
         <div class="int-cat">Flooring</div>
         <div class="int-row"><span class="lbl">Flooring options</span><span class="soon">Coming soon</span></div>
       </div>
-    </div>
-
-    <div class="sec">
-      <h2>Scene</h2>
-      <div class="decal-grid">
-        <button class="decal-opt on" data-scene="studio" title="Plain studio background">
-          <span class="tile" style="display:flex;align-items:center;justify-content:center;font-size:26px;background:#eef1f4">⬜</span><span class="lbl">Studio</span>
-        </button>
-        <button class="decal-opt" data-scene="city" title="City street backdrop">
-          <span class="tile" style="display:flex;align-items:center;justify-content:center;font-size:26px;background:#c7cfd8">🏙️</span><span class="lbl">City</span>
-        </button>
-        <button class="decal-opt" data-scene="country" title="Countryside backdrop">
-          <span class="tile" style="display:flex;align-items:center;justify-content:center;font-size:26px;background:#cfe4c3">🌾</span><span class="lbl">Countryside</span>
-        </button>
-        <button class="decal-opt" data-scene="event" title="Roadshow event backdrop">
-          <span class="tile" style="display:flex;align-items:center;justify-content:center;font-size:26px;background:#f3d9c2">🎪</span><span class="lbl">Roadshow Event</span>
-        </button>
-      </div>
-      <div class="cap">Where the van is shown — a backdrop for screenshots/renders, no effect on the unit itself.</div>
     </div>
 
     <div class="sec">
@@ -244,18 +225,20 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     doors would be — there's no flat closed-door surface for that graphic to actually render on yet. Verified
     all 4 stock graphics on both the passenger and driver sides, and confirmed the interior no longer shows any
     decal content, before shipping. <b>Rev 6.2</b>: two new features, both built directly (no Claude Design
-    hand-off needed for either — same pattern as every other picker already in this builder). <b>Scene</b> —
-    a backdrop picker (Studio/City/Countryside/Roadshow Event) for screenshots/renders, purely cosmetic, no
-    effect on the unit itself. Built as a real cylinder painted on its inside face and placed around the van
-    (not a flat <code>scene.background</code> image, which wouldn't rotate as the camera orbits and would look
-    obviously fake) plus a matching ground texture per scene. <b>Awning Open/Closed toggle</b> — Brandon's CAD
-    export only has the awnings in their deployed pose, so "Closed" hinges each panel around its own real
-    mounting edge (found from its geometry, not guessed) and folds it flat onto the roofline, the same motion
-    these awnings actually use. This is a real approximation, not measured CAD for a closed pose — flagged to
-    Rich as such in the UI; if it doesn't match how these specific awnings actually stow, a real closed-position
-    export from Brandon's team would replace it directly. Verified both features from multiple camera angles
-    (side, rear, top-down, 3/4) before shipping — confirmed the awning fold doesn't clip through the shell and
-    the backdrop rotates correctly with the camera. This dev note is hidden from customers by default — append
+    hand-off needed for either — same pattern as every other picker already in this builder). <b>Rev 6.3</b>:
+    the Scene backdrop picker was pulled entirely — Rich's call, after seeing it live: procedurally-drawn canvas
+    scenery reads as cartoonish, not the photorealistic quality a customer-facing configurator needs, and a fake
+    backdrop is worse than no backdrop at all. Real city/countryside/event visuals need actual photography or an
+    HDRI environment map, not code-drawn shapes — revisit if Rich can source real reference images. Also fixed a
+    real Awning "Closed" bug Rich caught from his own phone: the rear awning's separate mounting-hardware mesh
+    (<code>rearhw</code> — confirmed by its own geometry to be exactly the awning's frame/bracket, nothing else
+    mixed in) wasn't included in the fold, so it stayed standing open even with the fabric closed — exactly his
+    "it's still there, it's the outside frame" report. It now folds and compresses together with the fabric
+    (a rigid rotation alone can't shorten a support arm, so the reach direction is also scaled down toward the
+    mounting edge to simulate real telescoping retraction), and its bare-metal color now tints to match the wrap
+    when closed so it blends into the roofline instead of standing out. Verified by raycasting the exact pixels
+    Rich pointed at to confirm the geometry really is closing (not just eyeballing it), plus renders from the
+    side, rear, top-down and 3/4 customer angle. This dev note is hidden from customers by default — append
     <code>?dev=1</code> to the URL to see it.</p>
   </aside>
 </main>
@@ -1503,7 +1486,7 @@ const SLOTS=4;                                        // cargo wall slots per si
 const state={ view:'ext', wrap:'#e04826', accent:'#23272e', floor:'oak', wall:'#f2f3f5', scan:false,
   slots:{L:['high','low','empty','bench'], R:['low','empty','high','empty']},
   decal:'none', interior:{bench:true,lowercabinet:true,countercabinet:true,tv:true,tvmount:true},
-  awning:'open', scene:'studio' };
+  awning:'open' };
 function saveHash(){ try{ location.hash=btoa(JSON.stringify(state)); }catch(e){} }
 function loadHash(){ try{ if(location.hash.length>4){ const s=JSON.parse(atob(location.hash.slice(1)));
   Object.assign(state,s); ['L','R'].forEach(k=>{ let a=(state.slots&&state.slots[k])||[];
@@ -1556,71 +1539,6 @@ const rubberTex=canvasTex((g,w,h)=>{ g.fillStyle='#2c2f33'; g.fillRect(0,0,w,h);
   for(let x=0;x<w;x+=22) for(let y=0;y<h;y+=22){ g.beginPath(); g.arc(x+11,y+11,5,0,7); g.fill(); } });
 rubberTex.repeat.set(4,4);
 const FLOORS={ oak:{map:oakTex,rough:.55}, vinyl:{map:vinylTex,rough:.8}, rubber:{map:rubberTex,rough:.95} };
-
-// ---- Scene backdrop picker (Rich: "a scene selector, city/country, where the band is") ----
-// A cyclorama: a big open-ended cylinder around the van with the scene painted on its INSIDE
-// face (BackSide), so it reads correctly from any orbit angle without needing a real skybox/HDRI
-// swap. Each backdrop is drawn as a horizontal band that tiles seamlessly (RepeatWrapping on U) so
-// there's no visible seam as the camera spins around. Ground texture + fog color change to match.
-function groundTex(draw){ return canvasTex(draw,512,512); }
-const GROUND_TEX={
-  studio:null,
-  asphalt:groundTex((g,w,h)=>{ g.fillStyle='#7c828a'; g.fillRect(0,0,w,h);
-    g.fillStyle='rgba(255,255,255,.05)'; for(let i=0;i<900;i++) g.fillRect(Math.random()*w,Math.random()*h,2,2);
-    g.fillStyle='rgba(0,0,0,.08)'; for(let i=0;i<900;i++) g.fillRect(Math.random()*w,Math.random()*h,2,2); }),
-  grass:groundTex((g,w,h)=>{ g.fillStyle='#5c8a4a'; g.fillRect(0,0,w,h);
-    for(let i=0;i<3000;i++){ g.fillStyle=['#4f7a3f','#6a9955','#578a48'][i%3];
-      g.fillRect(Math.random()*w,Math.random()*h,2,6); } }),
-  paver:groundTex((g,w,h)=>{ g.fillStyle='#c7bfae'; g.fillRect(0,0,w,h); g.strokeStyle='rgba(90,80,60,.35)'; g.lineWidth=2;
-    for(let x=0;x<=w;x+=64) for(let y=0;y<=h;y+=32){ const off=(y/32)%2?32:0; g.strokeRect(x+off,y,64,32); } })
-};
-for(const k in GROUND_TEX) if(GROUND_TEX[k]) GROUND_TEX[k].repeat.set(6,6);
-function backdropTex(topColor, botColor, draw){
-  const c=document.createElement('canvas'); c.width=2048; c.height=560;
-  const ctx=c.getContext('2d');
-  const sky=ctx.createLinearGradient(0,0,0,c.height*.72);
-  sky.addColorStop(0,topColor); sky.addColorStop(1,botColor);
-  ctx.fillStyle=sky; ctx.fillRect(0,0,c.width,c.height);
-  draw&&draw(ctx,c.width,c.height);
-  const t=new THREE.CanvasTexture(c); t.wrapS=THREE.RepeatWrapping; t.encoding=THREE.sRGBEncoding; t.repeat.set(2,1);
-  return t;
-}
-const SCENES={
-  studio:{ label:'Studio', bg:null, fog:0xdde3ea, ground:null },
-  city:{ label:'City', fog:0xc7cfd8, ground:'asphalt', bg:backdropTex('#aebfd2','#e3e8ee',(ctx,w,h)=>{
-    ctx.fillStyle='#8b96a8';
-    for(let x=0;x<w;x+=1){ const seed=Math.sin(x*.017)*Math.cos(x*.005); const bh=140+seed*90+((x*37)%97);
-      if(x%54<40) ctx.fillRect(x,h*.72-bh,40,bh); }
-    ctx.fillStyle='rgba(255,244,200,.5)';
-    for(let x=0;x<w;x+=17) for(let y=h*.72-160;y<h*.72;y+=13) if((x+y)%29<6) ctx.fillRect(x,y,4,5); }) },
-  country:{ label:'Countryside', fog:0xdcead6, ground:'grass', bg:backdropTex('#a9d3ec','#eef6e2',(ctx,w,h)=>{
-    ctx.fillStyle='#8fb877'; ctx.beginPath(); ctx.moveTo(0,h*.72);
-    for(let x=0;x<=w;x+=40) ctx.lineTo(x, h*.72-30-Math.sin(x*.01)*22-Math.sin(x*.003)*14);
-    ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.fill();
-    ctx.fillStyle='#5f7a4a';
-    for(let x=30;x<w;x+=190){ ctx.beginPath(); ctx.arc(x,h*.72-46,26,0,7); ctx.fill(); ctx.fillRect(x-3,h*.72-24,6,26); } }) },
-  event:{ label:'Roadshow Event', fog:0xf0d9c8, ground:'paver', bg:backdropTex('#f2b98f','#fde4cf',(ctx,w,h)=>{
-    ctx.fillStyle='rgba(224,72,38,.85)';
-    for(let x=0;x<w;x+=220){ ctx.beginPath(); ctx.moveTo(x,h*.72); ctx.lineTo(x+55,h*.72-95); ctx.lineTo(x+110,h*.72); ctx.fill(); }
-    ctx.fillStyle='rgba(255,255,255,.6)'; for(let x=60;x<w;x+=220) ctx.fillRect(x,h*.55,3,h*.17); }) }
-};
-// A flat scene.background texture doesn't rotate with the camera as you orbit -- it would look
-// obviously fake on a viewer whose whole point is spinning around the van. A real cylinder painted
-// on its inside face rotates correctly with the world, same as the ground, so it reads as an actual
-// backdrop from any angle instead of a flat sticker behind the model.
-const cyclorama=new THREE.Mesh(new THREE.CylinderGeometry(27,27,16,48,1,true),
-  new THREE.MeshBasicMaterial({side:THREE.BackSide, fog:false}));
-cyclorama.position.y=7; cyclorama.visible=false; scene.add(cyclorama);
-function applyScene(){
-  const key=state.scene||'studio', sc=SCENES[key]||SCENES.studio;
-  scene.fog.color.set(sc.fog);
-  if(sc.bg){ cyclorama.material.map=sc.bg; cyclorama.material.needsUpdate=true; cyclorama.visible=true; }
-  else cyclorama.visible=false;
-  if(sc.ground && GROUND_TEX[sc.ground]){ ground.material.map=GROUND_TEX[sc.ground]; ground.material.color.set(0xffffff); }
-  else { ground.material.map=null; ground.material.color.set(0xb9c2cc); }
-  ground.material.needsUpdate=true;
-  document.querySelectorAll('[data-scene]').forEach(b=>b.classList.toggle('on', b.dataset.scene===key));
-}
 
 const M={
   wrap:new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6, clearcoatRoughness:.25}),
@@ -1806,6 +1724,7 @@ function applyWrap(){ M.wrap.color.set(state.wrap);
   Object.keys(scanParts).forEach(k=>{ const p=SCAN_PARTS.find(x=>x.key===k); if(!p||!p.tint) return;
     const mats=Array.isArray(scanParts[k].material)?scanParts[k].material:[scanParts[k].material];
     mats.forEach(m=>m.color.set(state.wrap)); });   // shell's "other" region (no map, ever) always follows wrap color; a decal region's own applyDecal() call re-asserts white right after, same order dependency as before this region split
+  if(scanParts['rearhw']) applyAwning();   // rearhw's own closed-state tint tracks the wrap color too -- keep it in sync if the wrap color changes while the awning is closed
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -1893,7 +1812,22 @@ function applyAwning(){
   Object.values(AWNING_PIVOTS).forEach(pivot=>{
     const angle=closed?Math.PI/2*pivot.userData.closeSign:0;
     pivot.rotation[pivot.userData.closeAxis]=angle;
+    // Rotating a rigid support arm can't shorten it -- so a plain rotation always leaves the arm's
+    // tip sticking out past the folded fabric edge, reading as "still open" (Rich caught this exactly:
+    // "it is still there... it's the outside frame"). A real retractable arm telescopes shut, so also
+    // compress the reach direction (only that axis -- length along the van and panel thickness stay
+    // put) toward the mounting edge, simulating that retraction.
+    const s=closed?.22:1, scaleV={x:1,y:1,z:1}; scaleV[pivot.userData.reachAxis]=s;
+    pivot.scale.set(scaleV.x,scaleV.y,scaleV.z);
   });
+  // rearhw is the rear awning's own dark-gray mounting hardware (never body-tinted, unlike the
+  // fabric panels themselves). Folded flat on the roof and viewed edge-on from straight behind, its
+  // untinted gray reads as a distinct bar of "still-open hardware" even though it's genuinely
+  // stowed (confirmed by raycasting the exact pixels Rich pointed at -- it really is the closed,
+  // rotated mesh, just visually standing out against the body color). Tinting it to match the wrap
+  // when closed makes it blend into the roofline the same way the fabric already does.
+  const rearhwMesh=scanParts['rearhw'];
+  if(rearhwMesh) rearhwMesh.material.color.set(closed?state.wrap:0x4a4d52);
   document.querySelectorAll('[data-awning]').forEach(b=>b.classList.toggle('on', b.dataset.awning===(state.awning||'open')));
 }
 function parseObj(text){
@@ -2112,15 +2046,26 @@ function ensureScanLoaded(cb){
       // CAD... or I can have the CAD guys give you a picture of them closed"). Brandon's export only
       // has the deployed pose -- there's no separate closed-state mesh -- so this hinges the panel
       // around its own real mounting edge (found from its own geometry, not guessed) and folds it
-      // down flat against the body, the same motion these awnings actually use. It's a real
+      // flat against the roofline, the same motion these awnings actually use. It's a real
       // approximation, not measured CAD for a closed pose -- flagged to Rich as such.
-      if(['sideawning','rearawning'].indexOf(p.key)>=0){
+      // "rearhw" is the rear awning's own separate mounting-frame/hardware mesh (confirmed by its
+      // bounding box: same roof-height band, same footprint as rearawning, nothing else mixed in) --
+      // it has to fold along with the fabric or it's left standing open on its own, which is exactly
+      // the "outside frame is still open" bug Rich caught from his own screenshots.
+      if(['sideawning','rearawning','rearhw'].indexOf(p.key)>=0){
         geo.computeBoundingBox();
         const bb=geo.boundingBox;
+        const isSide=p.key==='sideawning';
+        const hinge = isSide ? {x:bb.max.x,y:bb.max.y,z:0} : {x:0,y:bb.max.y,z:bb.max.z};
+        // Bake the hinge to the geometry's own local origin (instead of just offsetting mesh.position)
+        // so a SCALE on the pivot compresses correctly toward the real mounting edge, not toward some
+        // unrelated point -- needed to shrink the support arm's reach when closed (see below).
+        geo.translate(-hinge.x,-hinge.y,-hinge.z);
         const pivot=new THREE.Group();
-        if(p.key==='sideawning'){ pivot.position.set(bb.max.x, bb.max.y, 0); pivot.userData.closeAxis='z'; pivot.userData.closeSign=1; }
-        else { pivot.position.set(0, bb.max.y, bb.max.z); pivot.userData.closeAxis='x'; pivot.userData.closeSign=-1; }
-        mesh.position.set(-pivot.position.x, -pivot.position.y, -pivot.position.z);
+        pivot.position.set(hinge.x,hinge.y,hinge.z);
+        pivot.userData.closeAxis = isSide?'z':'x';
+        pivot.userData.closeSign = isSide?1:-1;
+        pivot.userData.reachAxis = isSide?'x':'z';   // the direction the panel/arm extends outward -- compressed, not just rotated, when closed
         pivot.add(mesh);
         scanG.add(pivot);
         scanParts[p.key]=mesh; AWNING_PIVOTS[p.key]=pivot;
@@ -2257,13 +2202,12 @@ document.querySelectorAll('[data-interior]').forEach(cb=>{
   cb.checked=keys.every(k=>state.interior[k]!==false);
 });
 
-document.querySelectorAll('[data-scene]').forEach(b=>b.onclick=()=>{ state.scene=b.dataset.scene; applyScene(); saveHash(); });
 document.querySelectorAll('[data-awning]').forEach(b=>b.onclick=()=>{ state.awning=b.dataset.awning; applyAwning(); saveHash(); });
 
 // The real 3D scan is the only view now (Rich: "make the scan default, no other choice needed") —
 // the procedural placeholder van (extG/intG) stays built but hidden; wrap color still applies to
 // the scan mesh once it loads.
-applyWrap(); applyScene();
+applyWrap();
 extG.visible=false; intG.visible=false;
 ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); applyDecal(); applyInterior(); applyAwning(); });
 
