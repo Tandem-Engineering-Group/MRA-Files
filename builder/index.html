@@ -76,7 +76,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 6.3 · Removed the Scene backdrop picker (looked cartoonish, not customer-facing quality); Awning Closed now folds the hardware frame too, not just the fabric</span>
+  <span class="rev" id="devRev" style="display:none">Rev 6.4 · Removed the Awning Open/Closed toggle — awning stays in its deployed pose, no toggle</span>
 </header>
 <main>
   <div id="view3d">
@@ -145,14 +145,6 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
       </div>
     </div>
 
-    <div class="sec">
-      <h2>Awning</h2>
-      <div class="row">
-        <button class="btn-outline on" data-awning="open">☂️ Open</button>
-        <button class="btn-outline" data-awning="closed">📦 Closed</button>
-      </div>
-      <div class="cap">⚠️ Approximation — the CAD export only has the deployed pose, so "Closed" folds the panel down against the body at its real mounting edge. If this doesn't match how these awnings actually stow, send a real closed-position export and it'll be swapped in.</div>
-    </div>
 
     <div class="act">
       <button id="shotBtn" class="btn-outline">📸 Screenshot</button>
@@ -231,15 +223,16 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     backdrop is worse than no backdrop at all. Real city/countryside/event visuals need actual photography or an
     HDRI environment map, not code-drawn shapes — revisit if Rich can source real reference images. Also fixed a
     real Awning "Closed" bug Rich caught from his own phone: the rear awning's separate mounting-hardware mesh
-    (<code>rearhw</code> — confirmed by its own geometry to be exactly the awning's frame/bracket, nothing else
-    mixed in) wasn't included in the fold, so it stayed standing open even with the fabric closed — exactly his
-    "it's still there, it's the outside frame" report. It now folds and compresses together with the fabric
-    (a rigid rotation alone can't shorten a support arm, so the reach direction is also scaled down toward the
-    mounting edge to simulate real telescoping retraction), and its bare-metal color now tints to match the wrap
-    when closed so it blends into the roofline instead of standing out. Verified by raycasting the exact pixels
-    Rich pointed at to confirm the geometry really is closing (not just eyeballing it), plus renders from the
-    side, rear, top-down and 3/4 customer angle. This dev note is hidden from customers by default — append
-    <code>?dev=1</code> to the URL to see it.</p>
+    (<code>rearhw</code>) wasn't included in the fold, so it stayed standing open even with the fabric closed.
+    Fixed that specific bug (confirmed by raycasting the exact pixels Rich pointed at — the geometry really was
+    closing correctly after the fix) and it held up from every normal viewing angle, but from the exact
+    straight-on rear angle Rich checks from, the rear cargo doors — permanently modeled open in this CAD export,
+    with no closed-door geometry at all — still showed straight through into the cargo hold, and read as the
+    awning still being open. <b>Rev 6.4</b>: Rich's call — pulled the Awning Open/Closed toggle entirely. The
+    awning stays in its deployed pose, same as before any of this work started. Revisit once Brandon's team can
+    export the rear doors in a closed pose too, so "closed" actually means the back reads as shut, not just the
+    canopy folded. This dev note is hidden from customers by default — append <code>?dev=1</code> to the URL to
+    see it.</p>
   </aside>
 </main>
 <script>/**
@@ -1485,8 +1478,7 @@ const L=20.8*FT, W=6.75*FT, H=9.05*FT, FLOOR=1.75*FT, CAB=5.6*FT, HOOD=3.1*FT, H
 const SLOTS=4;                                        // cargo wall slots per side
 const state={ view:'ext', wrap:'#e04826', accent:'#23272e', floor:'oak', wall:'#f2f3f5', scan:false,
   slots:{L:['high','low','empty','bench'], R:['low','empty','high','empty']},
-  decal:'none', interior:{bench:true,lowercabinet:true,countercabinet:true,tv:true,tvmount:true},
-  awning:'open' };
+  decal:'none', interior:{bench:true,lowercabinet:true,countercabinet:true,tv:true,tvmount:true} };
 function saveHash(){ try{ location.hash=btoa(JSON.stringify(state)); }catch(e){} }
 function loadHash(){ try{ if(location.hash.length>4){ const s=JSON.parse(atob(location.hash.slice(1)));
   Object.assign(state,s); ['L','R'].forEach(k=>{ let a=(state.slots&&state.slots[k])||[];
@@ -1724,7 +1716,6 @@ function applyWrap(){ M.wrap.color.set(state.wrap);
   Object.keys(scanParts).forEach(k=>{ const p=SCAN_PARTS.find(x=>x.key===k); if(!p||!p.tint) return;
     const mats=Array.isArray(scanParts[k].material)?scanParts[k].material:[scanParts[k].material];
     mats.forEach(m=>m.color.set(state.wrap)); });   // shell's "other" region (no map, ever) always follows wrap color; a decal region's own applyDecal() call re-asserts white right after, same order dependency as before this region split
-  if(scanParts['rearhw']) applyAwning();   // rearhw's own closed-state tint tracks the wrap color too -- keep it in sync if the wrap color changes while the awning is closed
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -1806,30 +1797,6 @@ const SCAN_PARTS=[
   // real visible surface) and "INTERIOR - TV.obj" (a tiny stub, superseded by FURNITURE - TV.obj).
 ];
 let scanParts={}, scanLoading=false, scanLoaded=false;
-const AWNING_PIVOTS={};
-function applyAwning(){
-  const closed=state.awning==='closed';
-  Object.values(AWNING_PIVOTS).forEach(pivot=>{
-    const angle=closed?Math.PI/2*pivot.userData.closeSign:0;
-    pivot.rotation[pivot.userData.closeAxis]=angle;
-    // Rotating a rigid support arm can't shorten it -- so a plain rotation always leaves the arm's
-    // tip sticking out past the folded fabric edge, reading as "still open" (Rich caught this exactly:
-    // "it is still there... it's the outside frame"). A real retractable arm telescopes shut, so also
-    // compress the reach direction (only that axis -- length along the van and panel thickness stay
-    // put) toward the mounting edge, simulating that retraction.
-    const s=closed?.22:1, scaleV={x:1,y:1,z:1}; scaleV[pivot.userData.reachAxis]=s;
-    pivot.scale.set(scaleV.x,scaleV.y,scaleV.z);
-  });
-  // rearhw is the rear awning's own dark-gray mounting hardware (never body-tinted, unlike the
-  // fabric panels themselves). Folded flat on the roof and viewed edge-on from straight behind, its
-  // untinted gray reads as a distinct bar of "still-open hardware" even though it's genuinely
-  // stowed (confirmed by raycasting the exact pixels Rich pointed at -- it really is the closed,
-  // rotated mesh, just visually standing out against the body color). Tinting it to match the wrap
-  // when closed makes it blend into the roofline the same way the fabric already does.
-  const rearhwMesh=scanParts['rearhw'];
-  if(rearhwMesh) rearhwMesh.material.color.set(closed?state.wrap:0x4a4d52);
-  document.querySelectorAll('[data-awning]').forEach(b=>b.classList.toggle('on', b.dataset.awning===(state.awning||'open')));
-}
 function parseObj(text){
   const vp=[], vc=[], vn=[], positions=[], normals=[], colors=[];
   let hasColor=false;
@@ -2042,34 +2009,11 @@ function ensureScanLoaded(cb){
         ? new THREE.Mesh(geo, [mkMat(),mkMat(),mkMat(),mkMat()])   // [passenger, driver, rear, other] -- "other" never gets a map, so it always shows the plain wrap color
         : new THREE.Mesh(geo, mkMat());
       mesh.castShadow=true; mesh.receiveShadow=true;
-      // Awning open/closed toggle (Rich: "if you're able to close the awnings and you have the
-      // CAD... or I can have the CAD guys give you a picture of them closed"). Brandon's export only
-      // has the deployed pose -- there's no separate closed-state mesh -- so this hinges the panel
-      // around its own real mounting edge (found from its own geometry, not guessed) and folds it
-      // flat against the roofline, the same motion these awnings actually use. It's a real
-      // approximation, not measured CAD for a closed pose -- flagged to Rich as such.
-      // "rearhw" is the rear awning's own separate mounting-frame/hardware mesh (confirmed by its
-      // bounding box: same roof-height band, same footprint as rearawning, nothing else mixed in) --
-      // it has to fold along with the fabric or it's left standing open on its own, which is exactly
-      // the "outside frame is still open" bug Rich caught from his own screenshots.
-      if(['sideawning','rearawning','rearhw'].indexOf(p.key)>=0){
-        geo.computeBoundingBox();
-        const bb=geo.boundingBox;
-        const isSide=p.key==='sideawning';
-        const hinge = isSide ? {x:bb.max.x,y:bb.max.y,z:0} : {x:0,y:bb.max.y,z:bb.max.z};
-        // Bake the hinge to the geometry's own local origin (instead of just offsetting mesh.position)
-        // so a SCALE on the pivot compresses correctly toward the real mounting edge, not toward some
-        // unrelated point -- needed to shrink the support arm's reach when closed (see below).
-        geo.translate(-hinge.x,-hinge.y,-hinge.z);
-        const pivot=new THREE.Group();
-        pivot.position.set(hinge.x,hinge.y,hinge.z);
-        pivot.userData.closeAxis = isSide?'z':'x';
-        pivot.userData.closeSign = isSide?1:-1;
-        pivot.userData.reachAxis = isSide?'x':'z';   // the direction the panel/arm extends outward -- compressed, not just rotated, when closed
-        pivot.add(mesh);
-        scanG.add(pivot);
-        scanParts[p.key]=mesh; AWNING_PIVOTS[p.key]=pivot;
-      } else { scanG.add(mesh); scanParts[p.key]=mesh; }
+      // Awning stays in its deployed pose, full stop -- Rich's call after the open/closed toggle
+      // couldn't be made to look right (the rear cargo doors are permanently modeled open in this
+      // CAD export with no closed-door geometry at all, so any "closed" awning state still showed
+      // straight through into the cargo hold and read as broken). No toggle, no approximation.
+      scanG.add(mesh); scanParts[p.key]=mesh;
       doneCount++; hint.textContent='⏳ Loading the real 3D scan… ('+doneCount+'/'+SCAN_PARTS.length+', one-time)';
     })
   )).then(()=>{
@@ -2202,14 +2146,12 @@ document.querySelectorAll('[data-interior]').forEach(cb=>{
   cb.checked=keys.every(k=>state.interior[k]!==false);
 });
 
-document.querySelectorAll('[data-awning]').forEach(b=>b.onclick=()=>{ state.awning=b.dataset.awning; applyAwning(); saveHash(); });
-
 // The real 3D scan is the only view now (Rich: "make the scan default, no other choice needed") —
 // the procedural placeholder van (extG/intG) stays built but hidden; wrap color still applies to
 // the scan mesh once it loads.
 applyWrap();
 extG.visible=false; intG.visible=false;
-ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); applyDecal(); applyInterior(); applyAwning(); });
+ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); applyDecal(); applyInterior(); });
 
 function size(){ const el=document.getElementById('view3d');
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect=el.clientWidth/el.clientHeight; camera.updateProjectionMatrix(); }
