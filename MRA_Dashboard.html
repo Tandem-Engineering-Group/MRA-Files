@@ -3886,6 +3886,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.33", date:"2026-08-17", title:"🔧 Fixed: 📋 project-schedule tasks assigned to Vendor never showed on the floor board", items:[
+    "Rich: a real Trumpf (J1563) task — \"Install Trailer Keter Track & Skirting\", assigned to Vendor, dated today, In Progress — wasn't showing on its bay card. Confirmed the data synced correctly (it was really there, correctly linked to J1563/Bay 4 Back) and traced it to the crew-matching filter that decides which project-schedule tasks surface as a 📋 pill on bay cards — it recognized sal/wrap/electrician/doug/josh/jeff/maintenance/mra shop, but not <b>vendor</b>, so any task assigned to Vendor was silently filtered out regardless of how current or on-schedule it was. Added vendor to the recognized list." ] },
+  { rev:"37.32", date:"2026-08-17", title:"🔧 Estimate flow: automatic retry on connection failure + honest wait-time message", items:[
+    "Rich hit \"Couldn't reach the estimate flow\" again after the rev 37.31 fix, with the same real PDF, on a retry. Tested the actual live endpoint directly with his exact real extracted PDF text: it succeeded (returned a real estimate) but took ~19-20 seconds — and a baseline test with NO pdf at all, just a short typed description (how this feature has always worked since July), still took ~12 seconds on its own, because the ~110KB of reference data behind every single estimate call is the real cost, not the PDF text specifically. My rev 37.31 fix (capping PDF text) was real but incomplete — it wasn't the root cause. A single dropped connection on a 12-20 second request is a lot more likely on a weak mobile signal, and would read as this exact error even though the flow itself is healthy. Added one silent automatic retry before showing an error, and the \"thinking\" message now says up front that it can take up to ~20 seconds so a slow response doesn't look frozen." ] },
   { rev:"37.31", date:"2026-08-17", title:"🔧 Fixed: PDF upload could trigger \"Couldn't reach the estimate flow\"", items:[
     "Rich hit this within minutes of the PDF upload shipping (rev 37.30). Real-world test against the actual live estimate endpoint found the cause: that flow's prompt already carries ~110KB of reference data (26 real past quotes + 229 material families) before a word of the job description is added, and a live test showed response time scaling hard with payload size — a short typed description came back in ~3.5s, a realistic PDF-sized addition took ~19s. A longer PDF, or a slower connection, plausibly pushes that past whatever timeout the flow allows, which is exactly the failure Rich saw. Fixed by capping the PDF's extracted text at 6,000 characters (verified against the live endpoint to bring response time back down) with a clear on-screen note if a PDF's text got truncated, rather than silently cutting it." ] },
   { rev:"37.30", date:"2026-08-17", title:"📄 Quote Generator: upload a PDF and pull its text into the Estimate helper", items:[
@@ -11884,6 +11888,21 @@ function qHandlePdfFile(input){
   reader.readAsArrayBuffer(f);
   input.value='';   // allow re-selecting the same file later
 }
+// The estimate flow's own prompt is large regardless of what Rich types or uploads (26 past quotes +
+// 229 material families, ~110KB before a word of the job description is added) -- a real live test of
+// even a short typed description (no PDF at all) took ~12s against the actual endpoint, worse on a
+// slower/weaker connection. A single dropped mobile connection on a 12-20s request reads as "Couldn't
+// reach the estimate flow" even though the flow itself is fine -- so one silent automatic retry before
+// showing Rich an error recovers from that common case instead of making him click it again himself.
+function _qEstFetch(desc){
+  return fetch(QUOTE_ESTIMATE_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({promptText:_qEstPrompt(desc)})})
+    .then(function(r){ return r.text(); })
+    .then(function(t){
+      let j=null; try{ j=JSON.parse(t); }catch(e){ const m=t.match(/\{[\s\S]*\}/); if(m){ try{ j=JSON.parse(m[0]); }catch(e2){} } }
+      if(!j) throw new Error('bad-json');
+      return j;
+    });
+}
 function qGetEstimate(){
   const desc=((document.getElementById('qEstDesc')||{}).value||'').trim();
   const msg=document.getElementById('qEstMsg'), btn=document.getElementById('qEstBtn'), prev=document.getElementById('qEstPreview');
@@ -11891,18 +11910,19 @@ function qGetEstimate(){
   if(!desc){ if(msg){ msg.style.color='var(--red)'; msg.textContent='Describe the job first — vehicle/trailer, scope, size.'; } return; }
   if(typeof QUOTE_ESTIMATE_URL==='undefined' || !QUOTE_ESTIMATE_URL){
     if(msg){ msg.style.color='var(--red)'; msg.textContent='⚠ Not connected yet — say "build the quote estimate flow" and I\'ll wire it up.'; } return; }
-  if(msg){ msg.style.color='var(--muted)'; msg.textContent='✨ Thinking — grounding in your past quotes…'; }
+  if(msg){ msg.style.color='var(--muted)'; msg.textContent='✨ Thinking — grounding in your past quotes… (can take up to ~20s, it\'s pulling a lot of reference data)'; }
   if(btn) btn.disabled=true;
   window._qEstBusy=true;   // guards against the shared-quotes-loaded re-render (openQuote) orphaning this mid-flight
-  fetch(QUOTE_ESTIMATE_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({promptText:_qEstPrompt(desc)})})
-    .then(function(r){ return r.text(); })
-    .then(function(t){
-      let j=null; try{ j=JSON.parse(t); }catch(e){ const m=t.match(/\{[\s\S]*\}/); if(m){ try{ j=JSON.parse(m[0]); }catch(e2){} } }
-      if(!j) throw new Error('bad-json');
+  _qEstFetch(desc)
+    .catch(function(){
+      if(msg){ msg.style.color='var(--muted)'; msg.textContent='Connection hiccup — retrying once…'; }
+      return _qEstFetch(desc);   // one silent retry before giving up, since a single dropped connection on a 10-20s request is common on a weak signal
+    })
+    .then(function(j){
       _qEstRender(j);
       if(msg){ msg.style.color='var(--green)'; msg.textContent='✓ Estimate ready — review below, then add what you want.'; }
     })
-    .catch(function(){ if(msg){ msg.style.color='var(--red)'; msg.textContent='Couldn\'t reach the estimate flow — check it\'s turned on.'; } })
+    .catch(function(){ if(msg){ msg.style.color='var(--red)'; msg.textContent='Couldn\'t reach the estimate flow twice in a row — check it\'s turned on, or try again in a minute.'; } })
     .finally(function(){ if(btn) btn.disabled=false; window._qEstBusy=false; });
 }
 function _qEstRender(j){
@@ -18876,7 +18896,7 @@ function _pjRebuild(){
   try{
     const D=window.MRA_DATA||{}; const today=D.todayISO||localISO(Date.now());
     const lim=localISO(Date.parse(today)+14*86400000);
-    const CRW=/\bsal\b|wrap|electr|doug|josh|jeff|maintenance|mra\s*shop/i;
+    const CRW=/\bsal\b|wrap|electr|doug|josh|jeff|maintenance|mra\s*shop|vendor/i;
     (D.projects||[]).forEach(p=>{
       const rows=[];
       (p.tasks||[]).forEach(t=>{
