@@ -3886,6 +3886,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.37", date:"2026-08-17", title:"💵 Quote Generator: tax now defaults to 0% on new quotes", items:[
+    "Rich: \"no tax on default.\" The Quote Generator's default config (used for every brand-new quote and the Letterhead/Settings screen) had tax hardcoded to 6% — changed the default to 0%. Tax is still a normal per-quote field Rich can turn on when a job actually needs it; this only changes what a new quote starts at." ] },
+  { rev:"37.36", date:"2026-08-17", title:"🔧 FOUND THE ACTUAL BUG: the estimate flow was never failing to reach — its own response was cut off mid-string, every time, on any real job", items:[
+    "Rich pushed back hard after 37.35 didn't fix it (\"still same error\"). Rebuilt a real end-to-end test — an actual browser running the real page code, talking to the real live estimate flow through a local relay so its exact timing could be captured — instead of guessing again. Result: the flow was NEVER failing. Every single call came back HTTP 200 with a real, complete estimate in ~18-22 seconds -- but the flow's own JSON reply gets cut off mid-string on any real (non-trivial) job, every time, no exceptions. `_qEstFetch` then correctly saw invalid JSON and reported \"Couldn't reach the estimate flow\" -- a true statement about the SYMPTOM, but a wrong diagnosis of the CAUSE. All of rev 37.31/37.34/37.35 (payload size, cap size, retries, network-blame messaging) were chasing a connection problem that never existed. Fixed for real: `_repairTruncatedJson()` closes whatever string/array/object the cutoff left open (and, when the cut lands mid-key with nothing usable after it, backs up and drops that incomplete trailing field) so the actual estimate -- summary, labor lines, materials, all fully present before the cutoff -- parses correctly; only a trailing internal note may end up shortened, which is cosmetic. Verified against 3 different real truncated responses captured from the live flow (all repair cleanly) and 2 full real end-to-end browser runs against the live backend (both succeed on the first attempt now, no retry needed)." ] },
   { rev:"37.35", date:"2026-08-17", title:"🔧 Estimate flow: found the REAL reason for repeated \"couldn't reach\" failures — real job descriptions are just slow (15-25s), not the payload size", items:[
     "Rich hit \"Couldn't reach the estimate flow\" again even after the retry from rev 37.32 and the cap raise in 37.34 — both attempts failed for him, back to back. Timed the live endpoint directly with several payload shapes to find out why: a one-line test description returns in ~7-10s regardless of reference data size, but ANY real job description — a few sentences typed in, or the text pulled from a PDF — reliably takes 18-22 seconds, and that's true whether it's 1,500 characters or the full 127KB payload with all reference data included. The rev 37.31/37.34 theory (that a bigger request body slows it down) was wrong — trimming the payload barely moved the needle (127KB → 40KB only saved ~1.5s). The real driver is the estimate itself: any non-trivial description makes the flow generate a full multi-line breakdown, which just takes 18-22 seconds no matter what's sent. That's long enough that a phone on a weak signal — or a tab that gets backgrounded/the screen locks, which some mobile browsers suspend outright — can drop the connection, and a single retry of the same ~20s request is just as likely to hit the same problem again. Bumped to 2 retries (3 attempts total) with a short pause between each, and the \"thinking\" message now says plainly it takes 15-25 seconds and asks Rich to keep the tab open and the screen on until it's done, instead of a vague \"grounding in your past quotes\" message that undersold how long the real wait is." ] },
   { rev:"37.34", date:"2026-08-17", title:"🔧 Estimate PDF cap raised 6,000 → 24,000 characters — the 6,000 cap itself was the bottleneck", items:[
@@ -11622,7 +11626,7 @@ const MATERIALS_REF = [{"family": "Travis Mathew trailer driver-side wrap produc
 var QUOTE_ESTIMATE_URL='https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/30/workflows/305f8b3bb50542e382177d47601f4c88/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2uVDp_9luVhin9SI3F9Y-nULh3Kntxv6Z7_heVef2Mo';
 
 function _qCfg(){ let c={}; try{ c=JSON.parse(localStorage.getItem(QUOTE_CFG_KEY)||'{}'); }catch(e){}
-  return Object.assign({ company:'MRA', tag:'Mobile Experiential — Detroit, MI · Windsor, ON', addr:'', city:'', phone:'1.800.676.3520', email:'info@gomra.com', rate:120, markup:30, tax:6, supMode:'items', supPct:8, terms:'Quote valid 30 days from the date above. Pricing subject to material availability at time of order. Taxes and freight extra unless noted.' }, c); }
+  return Object.assign({ company:'MRA', tag:'Mobile Experiential — Detroit, MI · Windsor, ON', addr:'', city:'', phone:'1.800.676.3520', email:'info@gomra.com', rate:120, markup:30, tax:0, supMode:'items', supPct:8, terms:'Quote valid 30 days from the date above. Pricing subject to material availability at time of order. Taxes and freight extra unless noted.' }, c); }
 function _qSaveCfg(patch){ const c=Object.assign(_qCfg(), patch||{}); try{ localStorage.setItem(QUOTE_CFG_KEY, JSON.stringify(c)); }catch(e){} return c; }
 let QUOTE=null;
 function openQuote(){ if(typeof closeDrops==='function') closeDrops();
@@ -11898,11 +11902,55 @@ function qHandlePdfFile(input){
 // slower/weaker connection. A single dropped mobile connection on a 12-20s request reads as "Couldn't
 // reach the estimate flow" even though the flow itself is fine -- so one silent automatic retry before
 // showing Rich an error recovers from that common case instead of making him click it again himself.
+// The estimate flow's own response comes back cut off mid-string on any real (non-trivial) job --
+// confirmed directly against the live flow: it answers with a real, complete summary/lines/materials
+// EVERY time (never actually fails or times out), but a long trailing "notes" field gets truncated by
+// something in the flow itself, leaving invalid JSON. That's the true root cause of "Couldn't reach the
+// estimate flow" -- it was never a network/timeout problem, the flow answered fine and the client just
+// couldn't parse its own truncated-but-recoverable reply. This closes any string/array/object left open
+// by the cutoff so the real, complete summary/lines/materials (which always land BEFORE the truncated
+// tail) parse correctly -- only the trailing notes text may end up cut short, which is cosmetic.
+function _repairTruncatedJson(t){
+  // Closes whatever string/array/object is still open at the end of a prefix -- handles a cutoff
+  // mid-string VALUE (e.g. `"notes":"Budgetary est...`).
+  function close(prefix){
+    let inStr=false, esc=false; const stack=[];
+    for(let i=0;i<prefix.length;i++){
+      const c=prefix[i];
+      if(inStr){ if(esc){ esc=false; } else if(c==='\\'){ esc=true; } else if(c==='"'){ inStr=false; } continue; }
+      if(c==='"'){ inStr=true; continue; }
+      if(c==='{'||c==='['){ stack.push(c); }
+      else if(c==='}'||c===']'){ stack.pop(); }
+    }
+    let out=prefix;
+    if(inStr) out+='"';
+    for(let k=stack.length-1;k>=0;k--) out+=(stack[k]==='{'?'}':']');
+    return out;
+  }
+  let candidate=close(t);
+  try{ JSON.parse(candidate); return candidate; }catch(e){}
+  // A cutoff can also land mid-KEY (e.g. `...}],"not` -- a complete, self-closed string with no colon/value
+  // after it, which the string-value fix above can't repair). Back up past each trailing ,"..." boundary,
+  // dropping the incomplete field entirely, until something parses -- everything that came before it
+  // (summary/lines/materials, the fields that actually matter) is preserved either way.
+  let idx=t.lastIndexOf(',"');
+  while(idx>0){
+    candidate=close(t.slice(0,idx));
+    try{ JSON.parse(candidate); return candidate; }catch(e){}
+    idx=t.lastIndexOf(',"', idx-1);
+  }
+  return t;
+}
 function _qEstFetch(desc){
   return fetch(QUOTE_ESTIMATE_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({promptText:_qEstPrompt(desc)})})
     .then(function(r){ return r.text(); })
     .then(function(t){
-      let j=null; try{ j=JSON.parse(t); }catch(e){ const m=t.match(/\{[\s\S]*\}/); if(m){ try{ j=JSON.parse(m[0]); }catch(e2){} } }
+      let j=null;
+      try{ j=JSON.parse(t); }catch(e){
+        try{ j=JSON.parse(_repairTruncatedJson(t)); }catch(e2){
+          const m=t.match(/\{[\s\S]*\}/); if(m){ try{ j=JSON.parse(m[0]); }catch(e3){} }
+        }
+      }
       if(!j) throw new Error('bad-json');
       return j;
     });
