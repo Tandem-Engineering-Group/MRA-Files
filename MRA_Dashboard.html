@@ -3886,6 +3886,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.40", date:"2026-08-18", title:"🔧 Fixed: Sales &amp; Planning kept snapping back to the top during the live ~30s refresh", items:[
+    "Rich hit this presenting Sales & Planning in a real meeting — scroll down, wait ~30s, get bumped back to the top. Root cause: the periodic poll's Sales & Planning refresh called <code>renderSalesPlan()</code> directly, which rebuilds the whole overlay's HTML and resets its scroll to 0 — the exact same bug already fixed on the Meeting and Production Meeting views a while back, just never applied here. Wrapped it in the same <code>_preserveScroll()</code> helper those two already use (captures scroll position, re-renders, restores it, with a follow-up pass in case the Gantt's own sizing shifts things after the swap). Sales & Planning shares the identical overlay markup as those two views, so this is the same fix, not a new mechanism." ] },
   { rev:"37.39", date:"2026-08-18", title:"📋 VP Pipeline (Gino) refreshed to the 8/18 Active Sales Pipeline Report — 17 opportunities, real changes since 7/23", items:[
     "Rich sent the latest Salesforce export; cross-referenced it against the 7/23 snapshot baked into the dashboard. Real changes: <b>4 new</b> opportunities (Lucchese Bootmaker, Omnicell, Red Sage Communications, <b>Thurgood Marshall Foundation</b>) and <b>4 dropped off</b> the open list (Winnipeg Regional Health Authority, The Duracell Company, Health Sciences North/Sudbury Mammography, Staging Solutions) — none of the 4 dropped ones show up yet as real board projects, so they either signed and haven't been entered yet or were lost; worth Rich confirming with Gino which. Gather AI's probability moved 75%→80%; Ferguson's opportunity was renamed/replaced (\"Ferguson - Industrial\" → \"Ferguson new Trailer Extension 2027\", 75%→80%).",
     "Also: the report now shows a <b>second opportunity owner</b> (Frank Mancina, on Alcor Scientific) alongside Gino — the table's <b>owner label was hardcoded to \"Gino Bitonti\"</b>, so it would've quietly gone stale the moment ownership spread past one person. Fixed to compute the owner list from the data itself, added an <b>Owner column</b> to the table, and the importer (⬆ Upload VP report) now reads the report's Opportunity Owner + Number of Years columns too (previously silently dropped).",
@@ -19216,7 +19218,7 @@ function renderAll(){
   try{ updateUnasChip(); if(UNAS_OPEN) renderUnas(); }catch(_){}
   try{ if(PROJV2_OPEN) renderProjV2(); }catch(_){}   // 🆕 Projects V2 preview reflects live edits
   try{ if(PMT_OPEN && !_pmtBusy()) _preserveScroll('pmtOverlay', renderProdMeeting); }catch(_){}   // don't wipe a half-typed add row / open edit on the poll — and don't jump scroll to top
-  try{ if(SP_OPEN && !SP_FORM) renderSalesPlan(); }catch(_){}   // 📈 sales/planning view live-syncs too (not while typing in the form)   // ⚠ unassigned-task finder chip + live list
+  try{ if(SP_OPEN && !SP_FORM) _preserveScroll('spOverlay', renderSalesPlan); }catch(_){}   // 📈 sales/planning view live-syncs too (not while typing in the form) — was snapping back to the top on every ~30s poll, same class of bug already fixed on Meeting/Production Meeting   // ⚠ unassigned-task finder chip + live list
   if(VIEW==='history') renderHistory();
   if(VIEW==='mywork') try{ renderMyWork(); }catch(e){}
   if(GFS) renderGanttFS();
