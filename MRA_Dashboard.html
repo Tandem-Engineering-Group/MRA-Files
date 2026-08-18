@@ -3628,7 +3628,7 @@ const GENERAL_HELP = `
 
   <div class="hsec"><h4>② The tabs up top</h4>
     <p><span class="k">FLOOR</span> = what is happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile, the <b>Parking Lot</b> and an <b>Off-Site / Parts</b> tile), open tasks grouped by crew, and staff on leave (which opens on a month calendar with an 📤 Upload for vacation files). A <b>🔔 pulsing banner appears at the top when a unit is due back at MRA within 2 weeks</b> (tap it for details; it hides when nothing is due) — the full <b>↩️ Coming-Back list lives on the FLEETIO tab</b> and the 🗓 Meeting view. In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
-    <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, PM Load and team capacity. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
+    <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, PM Load and team capacity. A project's % complete is <b>weighted by each task's Type</b> — Production/fab tasks count for more than Design tasks — so a project full of finished design work but untouched fabrication doesn't read as further along than it really is; it's fully automatic, nothing to tag by hand. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
     <span class="k">🔍 Search</span> (top bar, or press <b>/</b>) = find <b>anything</b> across the whole board — a job (open <b>or</b> completed), a project, a unit, an equipment job, a client, a person, or any task wording — and click a result to jump right to it. For <b>closed-task detective work</b>, use <span class="k">☰ Actions ▸ 🔎 Search closed / history</span> (or the link at the bottom of the 🔍 box): a full-page search you can filter to <b>✓ Closed tasks only</b> — every closed line shows its <b>closed date</b> and crew, searchable by job #, job name, task wording or person, with time + status filters.</p></div>
@@ -3886,6 +3886,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.38", date:"2026-08-18", title:"📊 Project % complete now weighted by task Type — fab work counts for more than design work", items:[
+    "Rich: closing a bunch of easy design tasks made a project's % jump even though the actual fabrication hadn't started — the old math (projPctCalc) was a flat average across every task, so 30 quick design tasks and 5 grueling fab tasks counted identically. Fixed: each task's Type (already on every task, no workbook change) now carries a weight — Production Task ×3, Materials ×2, Design Task/Hard Date ×1 (unrecognized/blank type also ×1) — and the project's % is the weighted average instead of a flat one. Example: 30 design tasks done + 5 fab tasks not started now reads 67%, not the old 86%. Fully automatic — nothing to tag per task, same on-screen % everywhere it already showed (Project Progress, Gantt bar fill, PM Load, exec/PM reports, My Work)." ] },
   { rev:"37.37", date:"2026-08-17", title:"💵 Quote Generator: tax now defaults to 0% on new quotes", items:[
     "Rich: \"no tax on default.\" The Quote Generator's default config (used for every brand-new quote and the Letterhead/Settings screen) had tax hardcoded to 6% — changed the default to 0%. Tax is still a normal per-quote field Rich can turn on when a job actually needs it; this only changes what a new quote starts at." ] },
   { rev:"37.36", date:"2026-08-17", title:"🔧 FOUND THE ACTUAL BUG: the estimate flow was never failing to reach — its own response was cut off mid-string, every time, on any real job", items:[
@@ -7859,13 +7861,22 @@ function projTaskPct(st){ st=String(st||''); const m=st.match(/(\d{1,3})\s*%/);
   if(/^completed$/i.test(st.trim())) return 100;
   return null; }   // null = no explicit % (Not Started / plain In Progress / On Hold / blank)
 function isProjOnHold(t){ return /on\s*hold/i.test(String((t&&t.st)||'')); }
-// Overall % = AVERAGE of each task's own % (done=100, explicit "NN%" counts, rest=0), EXCLUDING On-Hold tasks
-// entirely (they don't count in the numerator OR denominator) — so a parked/held task no longer drags % down.
+// Overall % = WEIGHTED average of each task's own % (done=100, explicit "NN%" counts, rest=0), EXCLUDING
+// On-Hold tasks entirely (they don't count in the numerator OR denominator) — so a parked/held task no
+// longer drags % down. Weight comes from the task's own Type (already on every task, no workbook change
+// needed) — Production/fab work counts for more than Design work, so a project full of quick design tasks
+// can't read as "almost done" while the actual build hasn't started. Fully automatic — nothing to hand-tag
+// per task; Rich just sees the result. Type match is case-insensitive; an unrecognized/blank type falls
+// back to weight 1 (same as Design Task) rather than being dropped.
+const PROJ_TYPE_WEIGHT = { 'production task':3, 'materials':2, 'design task':1, 'hard date':1 };
+function projTaskWeight(t){ const ty=String((t&&t.type)||'').trim().toLowerCase();
+  return PROJ_TYPE_WEIGHT.hasOwnProperty(ty) ? PROJ_TYPE_WEIGHT[ty] : 1; }
 function projPctCalc(p){ var tasks=(p&&p.tasks)||[];
   var base=tasks.filter(function(t){ return !isMeetingTask(t) && !isProjOnHold(t); });
   if(!base.length) return 0;
-  var sum=base.reduce(function(a,t){ if(projIsDone(t)) return a+100; var pc=projTaskPct(t.st); return a+(pc!=null?pc:0); },0);
-  return Math.round(sum/base.length); }
+  var wSum=0, wTotal=0;
+  base.forEach(function(t){ var w=projTaskWeight(t); var pc=projIsDone(t)?100:(projTaskPct(t.st)!=null?projTaskPct(t.st):0); wSum+=w*pc; wTotal+=w; });
+  return wTotal>0 ? Math.round(wSum/wTotal) : 0; }
 function projBaseStatus(st){ st=String(st||'').replace(/\s*\d{1,3}\s*%\s*/,' ').trim();   // drop the "25%"
   const f=PROJ_STATUS_OPTIONS.find(s=>s.toLowerCase()===st.toLowerCase()); return f||st; }
 // ===== Design-task VERIFICATION workflow (rev 8.5) =====
