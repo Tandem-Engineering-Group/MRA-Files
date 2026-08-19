@@ -446,12 +446,28 @@ Rich is done being told to re-apply the same fix — check this section before s
 **✅ WATCHDOG BUILT 2026-08-06 (`.github/workflows/pipeline-watchdog.yml`, on both branches — it uses
 `schedule:`, which only reads from the DEFAULT branch, same rule as `export.yml`).** Checks the live
 `data.js`'s `listsAsOf` every 10 min; if stale past 20 min, the job **deliberately fails** with a clear
-message instead of silently logging — Rich already gets GitHub's own email notification on a failed
-workflow run for this repo (confirmed via a real email he'd received for a different workflow), so this
-reaches him with **zero new Power Automate flow, zero new secret/URL to manage** (his own call: "whatever
-is easiest"). Debounced via a tiny committed state file (`.github/watchdog-state.json`) — only fails once
-per stale episode, re-fails hourly if still unresolved, clears itself the moment the pipeline recovers.
-Don't rebuild this if it comes up again; check whether it's still there and firing correctly first.
+message instead of silently logging. Debounced via a tiny committed state file
+(`.github/watchdog-state.json`) — only fails once per stale episode, re-fails hourly if still
+unresolved, clears itself the moment the pipeline recovers. Don't rebuild this if it comes up again;
+check whether it's still there and firing correctly first.
+- **⚠️ 2026-08-19 — the notification itself was BROKEN, not just the underlying stall.** A real stall
+  hit (banner showed "1h 56m" on Rich's phone); the watchdog DID fire correctly (confirmed in its own
+  run history — a genuine failure logged during the episode), but Rich: **"you never fix it and to
+  reach out didn't work"** — no email ever reached him. Root cause found: this workflow relied on
+  **GitHub's own failure-notification email** (the "zero new setup" design from 2026-08-06, based on
+  Rich once seeing a similar email for a *different* workflow — that assumption doesn't hold here).
+  GitHub sends a **scheduled** workflow's failure email to whoever **last modified that workflow file
+  on the default branch** — which was **Claude's own commit identity** (`noreply@anthropic.com`), not
+  Rich's real GitHub account. So the email had nowhere real to land, structurally, regardless of any
+  notification setting on Rich's side. **Fixed**: the watchdog now ALSO sends a real, direct email via
+  the same **`MC_MAILSEND`** Power Automate flow the dashboard itself already uses for Tell-Claude /
+  pricing-approval emails (`rmiller@gomra.com`, proven mechanism, zero dependency on GitHub accounts or
+  notification settings). Verified the exact POST mechanism against the live flow (real 202, then sent
+  a one-time labeled test email) before relying on it in the workflow. Still deliberately fails the
+  GitHub Actions job too (keeps the run-history trail), but the **email is now the real notification
+  path** — if this recurs and Rich says the email itself didn't arrive, the bug is somewhere else
+  (MC_MAILSEND itself, or his inbox rules) — don't re-diagnose the GitHub-notification angle again,
+  it's confirmed dead.
 
 - **2026-08-06 (21st recurrence, same day as the 19th/20th) — a REAL, separate, GitHub-Actions-side
   problem found and fixed (does NOT explain every recurrence, but is a genuine compounding factor).**
