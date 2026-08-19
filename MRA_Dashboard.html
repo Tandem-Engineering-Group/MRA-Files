@@ -1365,8 +1365,8 @@
   .cal-dn{font-size:11px;color:var(--muted);font-weight:800;display:block;margin-bottom:4px}
   .cal-day.cal-today .cal-dn{color:var(--brand)}
   .cal-pills{display:flex;flex-direction:column;gap:2.5px}
-  .cal-pill{display:block;background:var(--panel);border-left:3px solid var(--bc,var(--brand));border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;color:var(--txt);line-height:1.35;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .cal-pill .cal-tag{font-weight:900;color:var(--bc,var(--brand));margin-right:4px}
+  .cal-pill{display:block;background:var(--bctint,var(--panel));border-left:4px solid var(--bc,var(--brand));border-radius:4px;padding:2px 6px 2px 5px;font-size:10px;font-weight:600;color:var(--txt);line-height:1.5;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cal-pill .cal-tag{font-weight:900;letter-spacing:.2px;background:var(--bc,var(--brand));color:var(--bctxt,#fff);border-radius:3px;padding:1px 5px;margin-right:5px;display:inline-block}
   .cal-pill.cal-ovr{outline:1.5px dashed var(--amber);outline-offset:-1.5px}
   .cal-dep{display:block;margin-top:3px;font-size:9px;font-weight:800;color:#f87171;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cal-hol{display:block;margin-top:3px;font-size:8.5px;font-weight:700;color:#60a5fa;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -3935,6 +3935,12 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.49", date:"2026-08-19", title:"📅 Bay Schedule: brighter colors + fixed a real bug behind both the clutter AND the multi-bay-move question", items:[
+    "Rich: \"colors sorta muted, need to brighten.\" Pills now get a real tinted background plus a solid-color badge for the bay tag (computed in JS, not CSS color-mix, so it holds up on older shop iPads too) — same treatment on both calendars.",
+    "While digging into why the grid still looked busy, found the actual root cause of two things at once. Rich, separately, looking at Medtronic – Buildout showing Bay 5 Back 6/15→11/13: \"sometimes we put it into bay five for a week, then throw it into bay three... not sure what the best way is to handle that.\" The seeding from rev 37.47 was drawing a job's WHOLE PROJECT date range into whatever bay happens to be set right now — wrong on two fronts: it painted a false 5-month bar (the actual clutter culprit, not just the color), and that same false bar would have silently blocked any real attempt to plan the bay-3 move later in the project, since the seed thought it was stuck in bay 5 the whole time.",
+    "Fixed at the source: the board has no field for \"moved bays on this date,\" so seeding now only ever claims <b>today</b> — never a future guess. Each day it either extends that bay's still-open auto-seeded stretch by one more day, or — the moment the job's real bay changes — freezes the old stretch at its last known day and starts a fresh one in the new bay. The moment you manually edit a seeded entry it stops being auto-managed, so it's never silently touched again. This also means the multi-bay-move planning Rich asked about already works today: add one entry for Bay 5 this week, a separate entry for Bay 3 next week, same job name — the calendar was always able to hold that, the seeding was just fabricating a false conflict against it.",
+    "One-time cleanup runs automatically the next time anyone opens the calendar: every pre-fix entry (all of them were seed artifacts, not real plans yet) gets cleared and rebuilt correctly — no manual data fix needed.",
+    "Verified headless: old long-range entries purge and reseed to today-only; re-opening same-day doesn't duplicate; simulating a bay change correctly freezes the old bay's entry and starts a new one in the new bay; a manually-edited entry is never re-extended by the seeder." ] },
   { rev:"37.48", date:"2026-08-19", title:"🎨📅 Bay Schedule + Wrap Team calendars redesigned to match each other", items:[
     "Rich, after using the new Bay Schedule live: \"graphics for the calendar are kinda weak.\" Fair — the flat solid-color bars that worked fine for a handful of trailers got visually noisy once 8 real bays were all stacking bars in the same day cells. Gave it a real design pass: rounded card-style day cells, color-accented left-border pills (bay/trailer name reads as a bold tag, not a wall of solid color), rounded legend chips, and today/weekend highlighting. Then, per \"make the wrap one same design,\" ported the identical treatment onto the <b>Wrap Team Calendar</b> too — both now render through one shared set of styles (<span class=\"k\">.cal-*</span> classes + a shared print stylesheet) so they can't drift apart again; a future tweak to one applies to both automatically.",
     "Also finished wiring the cross-device sync Rich asked for — Bay Schedule bookings now sync everywhere the same way the Wrap Team Calendar already did (a new \"MRA Bay Cal\" flow, same shared-sync pattern).",
@@ -17328,6 +17334,12 @@ function _wcProj(k){ var p=(WRAPCAL.projects||[]).filter(function(x){return x.ke
 function _wcContrastText(hex){ hex=String(hex||'').replace('#',''); if(hex.length===3) hex=hex.split('').map(function(c){return c+c;}).join('');
   var r=parseInt(hex.substr(0,2),16)||0, g=parseInt(hex.substr(2,2),16)||0, b=parseInt(hex.substr(4,2),16)||0;
   var lum=(0.299*r+0.587*g+0.114*b)/255; return lum>0.62?'#111':'#fff'; }
+// Rich, 2026-08-19: pill colors read "sorta muted" — a thin border + colored text wasn't enough pop.
+// Computed here (not via CSS color-mix, for older-Safari safety on the shop iPads) so each pill gets a
+// real tinted background behind a solid-color bay/trailer TAG badge, not just a hairline accent.
+function _calTint(hex,alpha){ hex=String(hex||'').replace('#',''); if(hex.length===3) hex=hex.split('').map(function(c){return c+c;}).join('');
+  var r=parseInt(hex.substr(0,2),16)||0, g=parseInt(hex.substr(2,2),16)||0, b=parseInt(hex.substr(4,2),16)||0;
+  return 'rgba('+r+','+g+','+b+','+alpha+')'; }
 function _wcISO(y,m,d){ return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
 function _wcFmt(iso){ if(!iso) return ''; var p=String(iso).split('-'); return (+p[1])+'/'+(+p[2]); }
 // US federal holidays, computed by rule (not a fixed date list) so they're correct for whatever year(s)
@@ -17373,7 +17385,7 @@ function _wcMonthsHtml(opts){
     for(var d=1;d<=dim;d++){ if(cell%7===0 && cell>0) out+='</tr><tr>';
       var k=_wcISO(y,m,d);
       var dow=new Date(y,m,d).getDay();
-      var pills=(DAY[k]||[]).map(function(e){ var pr=_wcProj(e.p); return '<span class="cal-pill" style="--bc:'+pr.c+'" onclick="wcEntryEdit(\''+e.id+'\')" title="Click to edit"><b class="cal-tag">'+esc(pr.name.replace('On ',''))+'</b>'+esc(e.ph||'')+'</span>'; }).join('');
+      var pills=(DAY[k]||[]).map(function(e){ var pr=_wcProj(e.p); return '<span class="cal-pill" style="--bc:'+pr.c+';--bctint:'+_calTint(pr.c,.22)+';--bctxt:'+_wcContrastText(pr.c)+'" onclick="wcEntryEdit(\''+e.id+'\')" title="Click to edit"><b class="cal-tag">'+esc(pr.name.replace('On ',''))+'</b>'+esc(e.ph||'')+'</span>'; }).join('');
       var deps=(KEYMAP[k]||[]).map(function(kk){ return '<span class="cal-dep" onclick="wcKeyEdit(\''+kk.id+'\')" title="Click to edit">'+esc(kk.txt||'')+'</span>'; }).join('');
       var hols=(HOLMAP[k]||[]).map(function(hh){ return '<span class="cal-hol">'+esc(hh.txt)+'</span>'; }).join('');
       var cls='cal-day'+(k<todayK?' cal-past':'')+(k===todayK?' cal-today':'')+((dow===0||dow===6)?' cal-weekend':'');
@@ -17487,6 +17499,19 @@ function _bcId(){ return 'b'+Date.now().toString(36)+Math.floor(Math.random()*12
 function _bcSeed(){ return { sched:[] }; }
 function _bcLoad(){ try{ var r=localStorage.getItem(BAYCAL_KEY); if(r) BAYCAL=JSON.parse(r); }catch(e){}
   if(!BAYCAL||!Array.isArray(BAYCAL.sched)) BAYCAL=_bcSeed(); }
+// One-time cleanup: every entry from BEFORE the auto/manual distinction existed (2026-08-19) lacks the
+// `auto` field entirely — and since real user-planned entries didn't exist yet at that point either
+// (this shipped same-day as the feature itself), every one of them is guaranteed leftover from the old
+// flawed seed logic (whole-project-length bars in whatever bay happened to be set). Safe to drop outright;
+// the fixed seeder rebuilds today-forward from here. Idempotent — every entry gets a real true/false
+// `auto` value from here on, so this has nothing left to do after the first run ever clears it.
+function _bcMigrateOldSeeds(){
+  try{
+    var before=(BAYCAL.sched||[]).length;
+    BAYCAL.sched=(BAYCAL.sched||[]).filter(function(e){ return e.auto!==undefined; });
+    if(BAYCAL.sched.length!==before) _bcSave();
+  }catch(e){}
+}
 var _bcSharedTried=false;
 function _bcLoadShared(cb){ _bcSharedTried=true;
   fetch('baycal.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); })
@@ -17511,6 +17536,19 @@ function _bcJobNames(){ var s=[]; try{ var D=window.MRA_DATA||{}; (D.jobs||[]).f
 // starting point instead of making him re-type what's already sitting in each bay. Only ADDS a real
 // physical-bay occupant if nothing already covers today for that exact bay+job (so re-opening the
 // calendar never creates duplicates, and it never overwrites anything Rich has already planned/edited).
+// Rich, 2026-08-19: "sometimes we put it into bay five for a week, then throw it into bay three" —
+// a trailer's real bay history is several separate stints, not one block. The FIRST version of this
+// seeded a job's whole PROJECT date range into whatever bay happens to be set right now, which was
+// wrong two ways at once: it drew a false months-long bar for a bay it'll actually leave much sooner,
+// AND that fake long bar would falsely conflict-block Rich's own real plan to move it into a
+// different bay later in the project. There's no dedicated "moved bays on this date" field anywhere
+// in the board data, so the only honest thing this can seed is "as of today, it's physically HERE" —
+// never a future guess. Each day this runs, it either extends the CURRENT bay's still-open auto-seeded
+// stint by one more day (continuous occupancy), or — the moment the job's real `bay` field changes —
+// leaves that old stint frozen at its last known day and starts a fresh one in the new bay. The
+// `auto:true` flag is how this tells "a stint it's still tracking" apart from anything Rich has
+// actually clicked into and edited by hand (bcEntrySave clears the flag the moment that happens) —
+// so it can safely keep extending its own seeded stints without ever touching a real, hand-planned entry.
 function _bcSeedFromBoard(){
   try{
     var D=window.MRA_DATA||{};
@@ -17520,10 +17558,11 @@ function _bcSeedFromBoard(){
       if(!j.bay || BAY_CAL_BAYS.indexOf(j.bay)<0) return;
       if((j.status||'').toLowerCase()==='shipped' || j.category==='leave') return;
       var name=j.project||''; if(!name) return;
-      var from=(j.startISO && j.startISO<=today)?j.startISO:today;
-      var to=(j.completionISO && j.completionISO>=from)?j.completionISO:today;
-      var already=(BAYCAL.sched||[]).some(function(e){ return e.bay===j.bay && e.name===name && _bcOverlap(today,today,e.from,e.to||e.from); });
-      if(!already){ BAYCAL.sched.push({id:_bcId(),bay:j.bay,name:name,from:from,to:to,notes:'',ovr:false}); changed=true; }
+      var sameBayJob=(BAYCAL.sched||[]).filter(function(e){ return e.bay===j.bay && e.name===name; });
+      if(sameBayJob.some(function(e){ return _bcOverlap(today,today,e.from,e.to||e.from); })) return;   // already covers today (auto or manual) — nothing to do
+      var lastAuto=sameBayJob.filter(function(e){ return e.auto; }).sort(function(a,b){ return String(b.to||b.from).localeCompare(String(a.to||a.from)); })[0];
+      if(lastAuto && (lastAuto.to||lastAuto.from)<today){ lastAuto.to=today; changed=true; return; }
+      BAYCAL.sched.push({id:_bcId(),bay:j.bay,name:name,from:today,to:today,notes:'',ovr:false,auto:true}); changed=true;
     });
     if(changed) _bcSave();
   }catch(e){}
@@ -17553,7 +17592,7 @@ function _bcMonthsHtml(opts){
       var k=_bcISO(y,m,d);
       var dow=new Date(y,m,d).getDay();
       var ents=(DAY[k]||[]).slice().sort(function(a,b){ return BAY_CAL_BAYS.indexOf(a.bay)-BAY_CAL_BAYS.indexOf(b.bay); });
-      var pills=ents.map(function(e){ var c=_bcBayColor(e.bay); return '<span class="cal-pill'+(e.ovr?' cal-ovr':'')+'" style="--bc:'+c+'" onclick="bcEntryEdit(\''+e.id+'\')" title="'+escA(e.bay+' — '+e.name+(e.notes?(' · '+e.notes):'')+(e.ovr?' — ⚠ override (same-day turnover)':''))+'"><b class="cal-tag">'+esc(_bcAbbr(e.bay))+'</b>'+esc(e.name||'')+(e.ovr?' ⚠':'')+'</span>'; }).join('');
+      var pills=ents.map(function(e){ var c=_bcBayColor(e.bay); return '<span class="cal-pill'+(e.ovr?' cal-ovr':'')+'" style="--bc:'+c+';--bctint:'+_calTint(c,.22)+';--bctxt:'+_wcContrastText(c)+'" onclick="bcEntryEdit(\''+e.id+'\')" title="'+escA(e.bay+' — '+e.name+(e.notes?(' · '+e.notes):'')+(e.ovr?' — ⚠ override (same-day turnover)':''))+'"><b class="cal-tag">'+esc(_bcAbbr(e.bay))+'</b>'+esc(e.name||'')+(e.ovr?' ⚠':'')+'</span>'; }).join('');
       var hols=(HOLMAP[k]||[]).map(function(hh){ return '<span class="cal-hol">'+esc(hh.txt)+'</span>'; }).join('');
       var cls='cal-day'+(k<todayK?' cal-past':'')+(k===todayK?' cal-today':'')+((dow===0||dow===6)?' cal-weekend':'');
       out+='<td class="'+cls+'"><span class="cal-dn">'+d+'</span><div class="cal-pills">'+pills+'</div>'+hols+'</td>'; cell++; }
@@ -17595,8 +17634,8 @@ function renderBayCal(){ var ov=document.getElementById('baycalOverlay'); if(!ov
     +_bcEditHtml();
   setThemeBtn(document.getElementById('bcThemeBtn'));
 }
-function openBayCal(){ if(typeof closeDrops==='function') closeDrops(); _bcLoad(); _bcSeedFromBoard(); var ov=document.getElementById('baycalOverlay'); if(!ov){ ov=document.createElement('div'); ov.id='baycalOverlay'; ov.className='mtg-overlay'; document.body.appendChild(ov); } ov.classList.add('show'); BC_EDIT=null; renderBayCal();
-  if(BAYCAL_WRITE_URL){ _bcLoadShared(function(){ _bcSeedFromBoard(); if(ov.classList.contains('show')) renderBayCal(); }); } }
+function openBayCal(){ if(typeof closeDrops==='function') closeDrops(); _bcLoad(); _bcMigrateOldSeeds(); _bcSeedFromBoard(); var ov=document.getElementById('baycalOverlay'); if(!ov){ ov=document.createElement('div'); ov.id='baycalOverlay'; ov.className='mtg-overlay'; document.body.appendChild(ov); } ov.classList.add('show'); BC_EDIT=null; renderBayCal();
+  if(BAYCAL_WRITE_URL){ _bcLoadShared(function(){ _bcMigrateOldSeeds(); _bcSeedFromBoard(); if(ov.classList.contains('show')) renderBayCal(); }); } }
 function closeBayCal(){ var ov=document.getElementById('baycalOverlay'); if(ov) ov.classList.remove('show'); BC_EDIT=null; }
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var ov=document.getElementById('baycalOverlay'); if(ov&&ov.classList.contains('show')) closeBayCal(); } });
 function bcEntryEdit(id){ BC_EDIT={t:'entry',id:id}; renderBayCal(); var el=document.querySelector('#baycalOverlay .wc-edit'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }
@@ -17618,8 +17657,8 @@ function bcEntrySave(){
     if(!confirm(msg)) return;
     ovr=true;
   }
-  if(excludeId){ var e=(BAYCAL.sched||[]).filter(function(x){return x.id===excludeId;})[0]; if(e){ e.bay=bay; e.name=name; e.from=from; e.to=to; e.notes=notes; e.ovr=ovr; } }
-  else { BAYCAL.sched.push({id:_bcId(),bay:bay,name:name,from:from,to:to,notes:notes,ovr:ovr}); }
+  if(excludeId){ var e=(BAYCAL.sched||[]).filter(function(x){return x.id===excludeId;})[0]; if(e){ e.bay=bay; e.name=name; e.from=from; e.to=to; e.notes=notes; e.ovr=ovr; e.auto=false; } }
+  else { BAYCAL.sched.push({id:_bcId(),bay:bay,name:name,from:from,to:to,notes:notes,ovr:ovr,auto:false}); }
   BC_EDIT=null; _bcSave(); renderBayCal();
 }
 function bcEntryDel(id){ if(!confirm('Delete this bay booking?')) return; BAYCAL.sched=(BAYCAL.sched||[]).filter(function(x){return x.id!==id;}); if(BC_EDIT&&BC_EDIT.id===id) BC_EDIT=null; _bcSave(); renderBayCal(); }
@@ -17633,7 +17672,7 @@ function _calPrintCss(){
     +'.cal-t{border-collapse:separate;border-spacing:3px;width:100%;table-layout:fixed}.cal-t th{font-size:10px;text-transform:uppercase;color:#64748b;padding:5px 4px;text-align:left}'
     +'.cal-day{border:1px solid #e2e8f0;border-radius:6px;height:74px;vertical-align:top;padding:4px 5px}.cal-day.cal-weekend{background:#f8fafc}.cal-day.cal-past{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.04) 0,rgba(0,0,0,.04) 5px,transparent 5px,transparent 10px);opacity:.6}.cal-blank{border:0;background:transparent}'
     +'.cal-dn{font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:3px}.cal-pills{display:flex;flex-direction:column;gap:2px}'
-    +'.cal-pill{display:block;background:#f8fafc;border-left:3px solid var(--bc,#e04826);border-radius:3px;padding:2px 5px;font-size:9.5px;font-weight:600;color:#1e293b;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cal-pill .cal-tag{font-weight:900;color:var(--bc,#e04826);margin-right:3px}'
+    +'.cal-pill{display:block;background:var(--bctint,#f8fafc);border-left:4px solid var(--bc,#e04826);border-radius:3px;padding:2px 5px 2px 4px;font-size:9.5px;font-weight:600;color:#1e293b;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cal-pill .cal-tag{font-weight:900;background:var(--bc,#e04826);color:var(--bctxt,#fff);border-radius:3px;padding:1px 4px;margin-right:4px;display:inline-block}'
     +'.cal-dep{display:block;margin-top:2px;font-size:8.5px;font-weight:800;color:#b91c1c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     +'.cal-hol{display:block;margin-top:2px;font-size:9px;font-weight:700;color:#2563eb;font-style:italic}'
     +'@page{size:letter portrait;margin:.4in}@media print{.pbar{display:none}body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:100%}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.cal-mo{break-inside:avoid}}';
