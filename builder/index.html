@@ -76,7 +76,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 6.4 · Removed the Awning Open/Closed toggle — awning stays in its deployed pose, no toggle</span>
+  <span class="rev" id="devRev" style="display:none">Rev 6.5 · Real SEG graphic panels wired in (ceiling, driver/passenger walls, cab wall)</span>
 </header>
 <main>
   <div id="view3d">
@@ -231,7 +231,11 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     awning still being open. <b>Rev 6.4</b>: Rich's call — pulled the Awning Open/Closed toggle entirely. The
     awning stays in its deployed pose, same as before any of this work started. Revisit once Brandon's team can
     export the rear doors in a closed pose too, so "closed" actually means the back reads as shut, not just the
-    canopy folded. This dev note is hidden from customers by default — append <code>?dev=1</code> to the URL to
+    canopy folded. <b>Rev 6.5</b>: added the real SEG graphic panels (ceiling center/DS/PS, driver-side wall,
+    passenger wall, cab wall) — an earlier pass wrongly wrote these off as non-visual CAD placeholders from the
+    file naming alone ("Space Claim") without opening the geometry; Rich and Brandon were right that they're
+    real, correctly-sized panel volumes. Shown in a neutral fabric tone since there's no real graphic/texture
+    system yet. This dev note is hidden from customers by default — append <code>?dev=1</code> to the URL to
     see it.</p>
   </aside>
 </main>
@@ -1469,7 +1473,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
 
 } )();
 </script>
-<script>/* MRA InfoWheels 3D Builder — Rev 5 (real decimated CAD scan, now loaded as 48 individually-named parts; body-only wrap color) */
+<script>/* MRA InfoWheels 3D Builder — Rev 6.5 (real decimated CAD scan + real SEG graphic panels; body-only wrap color) */
 (function(){
 'use strict';
 const FT=0.3048;
@@ -1793,8 +1797,28 @@ const SCAN_PARTS=[
   {key:'tvmount',      file:'FURNITURE - TV Mount.obj',                tint:false, color:0x24262a, rough:.4,  metal:.3},
   {key:'tv',           file:'FURNITURE - TV.obj',                     tint:false, color:0x0a0a0c, rough:.3,  metal:.1},
   {key:'bench',        file:'FURNITURE - Upholstered Bench PS.obj',   tint:false, color:0x3d3733, rough:.75, metal:0},
-  // Deliberately excluded: "INTERIOR - SEG Space Claim Area" (a CAD space-reservation volume, not a
-  // real visible surface) and "INTERIOR - TV.obj" (a tiny stub, superseded by FURNITURE - TV.obj).
+  // -- SEG graphic panels -- 2026-08-19 correction: an earlier pass here wrongly dismissed the whole
+  // SEG/ folder as non-visual CAD placeholders based on file size/naming alone ("Space Claim") without
+  // actually opening the geometry. Rich + Brandon pushed back, and checking the real vertex data proved
+  // them right: each file is a correctly-sized, correctly-positioned thin flat panel EXACTLY where and
+  // how big the real SEG graphic goes (e.g. "DS 68X156In" is genuinely 68in x 156in, confirmed against
+  // its own bounding box) — that's exactly the geometry a configurator needs, engineering-placeholder
+  // framing or not. Wired in as neutral off-white fabric-colored panels (no real graphic/texture system
+  // yet, so this is a placeholder appearance, not a placeholder SHAPE). The driver-side wall run has 4
+  // overlapping file variants in the export (50in vs 68in wide, one continuous panel vs split
+  // Forward+Rear) — picked the single continuous 68in-wide option as the default for full-width
+  // coverage; the narrower/split variants aren't wired in (they'd overlap this one), pending Brandon
+  // confirming whether panel width should instead follow whatever cabinet is placed on that wall.
+  {key:'segcabwall',   file:'SEG - Cab Wall 62x78in.obj',              tint:false, color:0xf2efe6, rough:.85, metal:0},
+  {key:'segceilc',     file:'SEG - Ceiling Center 22.5X169In.obj',     tint:false, color:0xf2efe6, rough:.85, metal:0},
+  {key:'segceilds',    file:'SEG - Ceiling DS 22.5X169In.obj',         tint:false, color:0xf2efe6, rough:.85, metal:0},
+  {key:'segceilps',    file:'SEG - Ceiling PS 22.5X169In.obj',         tint:false, color:0xf2efe6, rough:.85, metal:0},
+  {key:'segds',        file:'SEG - DS 68X156In.obj',                  tint:false, color:0xf2efe6, rough:.85, metal:0},
+  {key:'segps',        file:'SEG - PS 79x50in.obj',                   tint:false, color:0xf2efe6, rough:.85, metal:0},
+  // Deliberately excluded: "INTERIOR - SEG Space Claim Area" (unlike the panels above, this ONE really
+  // is a large enclosing reservation VOLUME for the whole SEG zone, not an individual panel — including
+  // it would render as a giant box swallowing everything else) and "INTERIOR - TV.obj" (a tiny stub,
+  // superseded by FURNITURE - TV.obj).
 ];
 let scanParts={}, scanLoading=false, scanLoaded=false;
 function parseObj(text){
@@ -2157,7 +2181,7 @@ function size(){ const el=document.getElementById('view3d');
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect=el.clientWidth/el.clientHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize',size); size();
 let spin=false; document.getElementById('spinBtn').onclick=e=>{ spin=!spin; e.target.classList.toggle('on',spin); };
-window._cam=camera; window._ctl=controls;   // test hook
+window._cam=camera; window._ctl=controls; window._scanParts=scanParts; window._THREE=THREE;   // test hook
 (function loop(){ requestAnimationFrame(loop); if(spin) van.rotation.y+=.004; controls.update(); renderer.render(scene,camera); })();
 })();
 </script>
