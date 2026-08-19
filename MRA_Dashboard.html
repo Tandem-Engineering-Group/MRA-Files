@@ -2755,8 +2755,8 @@
           <div><label>Status</label><select id="ejStatus"></select></div>
         </div>
         <div style="margin:2px 0 4px">
-          <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>📅 Bay Schedule <span style="color:var(--faint);font-weight:400">— planned bookings for this job (real bay stays the field above)</span></span><button type="button" class="btn-ghost" style="padding:3px 10px;font-size:11.5px;white-space:nowrap;border-color:rgba(59,130,246,.5);color:#93c5fd" onclick="ejOpenBayCal()" title="Opens the Bay Schedule calendar with this job's name (and current bay) ready to book — e.g. plan it into Bay 5 this week, then Bay 3 next week">📅 Schedule a bay…</button></label>
-          <div id="ejBayCalList" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+          <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>📅 Bay Schedule <span style="color:var(--faint);font-weight:400">— planned bookings for this job (real bay stays the field above)</span></span><button type="button" class="btn-ghost" style="padding:3px 10px;font-size:11.5px;white-space:nowrap;border-color:rgba(59,130,246,.5);color:#93c5fd" onclick="ejOpenBayCal()" title="Opens the full Bay Schedule calendar for a month-view — same data as below, bigger picture">🗓 Full calendar…</button></label>
+          <div id="ejBayCalList" style="font-size:12.5px;margin-top:6px"></div>
         </div>
         <div class="addrow2">
           <div><label>Start date</label><input id="ejStart" type="date"></div>
@@ -3939,6 +3939,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.51", date:"2026-08-19", title:"📅 Bay Schedule on ✎ Edit job is now a REAL inline editor, not just a readout", items:[
+    "Rich, pushing back on rev 37.50 (below): \"to adjust the b[ay] timing from here without clicking [into] the other screen. I thought I've asked for this three times.\" Fair — a read-only line plus a button that jumped to a different screen still isn't editing from here. Fixed for real: every existing Bay Schedule booking for this job now shows its own <b>editable From/To date fields right in the Edit-job modal</b> (auto-saves the moment you change one) plus a 🗑 to delete it, and a small <b>bay + From + To + ➕ Add</b> row underneath to book a new one — all without leaving this screen.",
+    "Same protection as the full calendar, not a lighter version of it: changing a date here runs through the exact same conflict check (a shared <span class=\"k\">_bcResolveConflict</span> helper now backs both the calendar's own form AND this inline editor, so the popup/override rule can't drift between the two). <span class=\"k\">🗓 Full calendar…</span> still opens the real month view for the bigger picture, but it's no longer required just to nudge a date.",
+    "Verified headless: inline date edits save and correctly stop the entry from being auto-managed by the seeder; adding a non-conflicting booking works; adding a conflicting one pops the same warning and correctly saves nothing on Cancel; delete works — all with zero page errors." ] },
   { rev:"37.50", date:"2026-08-19", title:"📅 Bay Schedule now reachable from ✎ Edit job too, not just the calendar screen", items:[
     "Rich: \"the ability to schedule it from this screen as well as from the calendar screen... I don't see that. Do you see that here?\" He was right — the Bay dropdown on ✎ Edit job only ever showed the CURRENT bay, with no way in from there to plan ahead. Rather than build a second, separate bay-planner inline in an already-busy modal, Edit job now shows a live one-line readout of this job's existing Bay Schedule bookings (e.g. <span class=\"k\">B4B 6/22 → 9/11</span>) right under the Bay field, plus a <span class=\"k\">📅 Schedule a bay…</span> button that jumps straight into the real Bay Schedule calendar with this job's name AND current bay already filled in — same data, same conflict-checked editor, no separate mechanism to keep in sync.",
     "Verified headless: the readout shows the job's real bookings, the button correctly closes Edit job and opens Bay Schedule with the name/bay pre-filled ready to add a new one." ] },
@@ -17577,25 +17581,72 @@ function _bcSeedFromBoard(){
     if(changed) _bcSave();
   }catch(e){}
 }
-// Rich, 2026-08-19: "I don't see [multi-bay scheduling] here [Edit job] too... the ability to schedule
-// it from this screen as well as from the calendar screen." Rather than duplicate the calendar's own
-// conflict-checked editor inline in an already-busy modal, Edit job gets a live readout of this job's
-// existing bookings + a button straight into the real Bay Schedule calendar with the job name (and
-// current bay) pre-filled — same underlying data either way, no separate mechanism to keep in sync.
-function _ejBayCalSummary(name){
-  if(!name) return '';
-  try{
-    var rows=((BAYCAL&&BAYCAL.sched)||[]).filter(function(e){ return e.name===name; })
-      .sort(function(a,b){ return String(a.from).localeCompare(String(b.from)); });
-    if(!rows.length) return '<span style="color:var(--faint)">Nothing scheduled yet.</span>';
-    return rows.map(function(e){
-      return '<span style="display:inline-block;margin:2px 10px 2px 0"><b style="color:var(--txt)">'+esc(_bcAbbr(e.bay))+'</b> '+_bcFmt(e.from)+(e.to&&e.to!==e.from?(' → '+_bcFmt(e.to)):'')+(e.ovr?' ⚠':'')+'</span>';
-    }).join('');
-  }catch(err){ return ''; }
+// Rich, 2026-08-19 (asked 3 times over): "the ability to adjust the b[ay] timing from here without
+// clicking [into] the other screen." The first pass here (a read-only readout + a button jumping to
+// the full calendar) still made him leave this modal to change a date — not what he was asking for.
+// This is now a REAL inline editor: every existing booking for this job gets its own From/To date
+// inputs (auto-save on change) + delete, plus an add-new row — all going through the exact same
+// conflict-check/override popup as the full calendar (_bcResolveConflict), so double-booking
+// protection is identical either way; there's just no separate screen to visit for it anymore.
+function _ejBayCalRows(name){
+  try{ return ((BAYCAL&&BAYCAL.sched)||[]).filter(function(e){ return e.name===name; })
+    .sort(function(a,b){ return String(a.from).localeCompare(String(b.from)); }); }catch(err){ return []; }
+}
+function _ejBayCalEditorHtml(name){
+  var inp='padding:4px 5px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:11.5px;width:112px;flex:0 0 auto';
+  var rows=_ejBayCalRows(name);
+  var h=!rows.length?'<div style="color:var(--faint);margin-bottom:6px">Nothing scheduled yet.</div>':rows.map(function(e){
+    return '<div style="display:flex;gap:5px;align-items:center;flex-wrap:nowrap;margin-bottom:4px">'
+      +'<b style="width:30px;flex:0 0 auto;color:'+_bcBayColor(e.bay)+'" title="'+escA(e.bay)+'">'+esc(_bcAbbr(e.bay))+'</b>'
+      +'<input type="date" value="'+escA(e.from)+'" style="'+inp+'" onchange="ejBcRowSave(\''+e.id+'\')" id="ejbcFrom_'+e.id+'">'
+      +'<span style="color:var(--faint);flex:0 0 auto">→</span>'
+      +'<input type="date" value="'+escA(e.to||e.from)+'" style="'+inp+'" onchange="ejBcRowSave(\''+e.id+'\')" id="ejbcTo_'+e.id+'">'
+      +(e.ovr?'<span style="color:var(--amber);flex:0 0 auto" title="Same-day turnover override">⚠</span>':'')
+      +'<a onclick="ejBcRowDel(\''+e.id+'\')" style="cursor:pointer;color:#f87171;flex:0 0 auto" title="Delete this booking">🗑</a>'
+      +'</div>';
+  }).join('');
+  var bayOpts=BAY_CAL_BAYS.map(function(b){ return '<option value="'+escA(b)+'">'+esc(_bcAbbr(b))+'</option>'; }).join('');
+  h+='<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:4px">'
+    +'<select id="ejbcNewBay" style="'+inp+';width:64px" title="Bay">'+bayOpts+'</select>'
+    +'<input type="date" id="ejbcNewFrom" style="'+inp+'">'
+    +'<span style="color:var(--faint);flex:0 0 auto">→</span>'
+    +'<input type="date" id="ejbcNewTo" style="'+inp+'">'
+    +'<button type="button" class="btn-ghost" style="padding:3px 9px;font-size:11.5px;flex:0 0 auto" onclick="ejBcAddNew()">➕ Add</button>'
+    +'</div>';
+  return h;
 }
 function _ejRefreshBayCal(){
   var el=document.getElementById('ejBayCalList'); if(!el) return;
-  el.innerHTML=_ejBayCalSummary(window._ejProj);
+  el.innerHTML=_ejBayCalEditorHtml(window._ejProj);
+  var bayEl=document.getElementById('ejbcNewBay'), curBay=(document.getElementById('ejBay')||{}).value;
+  if(bayEl && curBay && BAY_CAL_BAYS.indexOf(curBay)>=0) bayEl.value=curBay;
+}
+function ejBcRowSave(id){
+  var e=(BAYCAL.sched||[]).filter(function(x){return x.id===id;})[0]; if(!e) return;
+  var from=(document.getElementById('ejbcFrom_'+id)||{}).value||e.from;
+  var to=(document.getElementById('ejbcTo_'+id)||{}).value||from;
+  if(to<from){ alert('The "To" date can\'t be before "From".'); _ejRefreshBayCal(); return; }
+  var res=_bcResolveConflict(e.bay,from,to,id);
+  if(!res.ok){ _ejRefreshBayCal(); return; }
+  e.from=from; e.to=to; e.ovr=res.ovr; e.auto=false;
+  _bcSave(); _ejRefreshBayCal();
+}
+function ejBcRowDel(id){
+  if(!confirm('Delete this bay booking?')) return;
+  BAYCAL.sched=(BAYCAL.sched||[]).filter(function(x){return x.id!==id;});
+  _bcSave(); _ejRefreshBayCal();
+}
+function ejBcAddNew(){
+  var name=window._ejProj; if(!name) return;
+  var bay=(document.getElementById('ejbcNewBay')||{}).value;
+  var from=(document.getElementById('ejbcNewFrom')||{}).value;
+  var to=(document.getElementById('ejbcNewTo')||{}).value||from;
+  if(!bay||!from){ alert('Pick a bay and a From date.'); return; }
+  if(to<from){ alert('The "To" date can\'t be before "From".'); return; }
+  var res=_bcResolveConflict(bay,from,to,null);
+  if(!res.ok) return;
+  BAYCAL.sched.push({id:_bcId(),bay:bay,name:name,from:from,to:to,notes:'',ovr:res.ovr,auto:false});
+  _bcSave(); _ejRefreshBayCal();
 }
 function ejOpenBayCal(){
   var name=window._ejProj||(document.getElementById('ejProject')||{}).value||'';
@@ -17680,6 +17731,16 @@ function closeBayCal(){ var ov=document.getElementById('baycalOverlay'); if(ov) 
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var ov=document.getElementById('baycalOverlay'); if(ov&&ov.classList.contains('show')) closeBayCal(); } });
 function bcEntryEdit(id){ BC_EDIT={t:'entry',id:id}; renderBayCal(); var el=document.querySelector('#baycalOverlay .wc-edit'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }
 function bcEntryCancel(){ BC_EDIT=null; renderBayCal(); }
+// Shared by every place that saves a bay booking (the calendar's own form, and the inline Edit-job
+// editor below) so the conflict popup + override rule is defined exactly once.
+function _bcResolveConflict(bay,from,to,excludeId){
+  var conflicts=_bcConflicts(bay,from,to,excludeId);
+  if(!conflicts.length) return {ok:true,ovr:false};
+  var lines=conflicts.map(function(c){ return '• '+c.name+' ('+_bcFmt(c.from)+(c.to&&c.to!==c.from?(' → '+_bcFmt(c.to)):'')+')'; }).join('\n');
+  var msg='🚫 '+bay+' is already scheduled:\n\n'+lines+'\n\nYou can\'t double-book the same bay for overlapping dates.\n\nClick OK ONLY if this is a same-day turnover (one leaving, another arriving that same day) to override and save anyway — Cancel to pick different dates.';
+  if(!confirm(msg)) return {ok:false};
+  return {ok:true,ovr:true};
+}
 function bcEntrySave(){
   var bay=(document.getElementById('bcE_bay')||{}).value;
   var name=((document.getElementById('bcE_name')||{}).value||'').trim();
@@ -17689,14 +17750,9 @@ function bcEntrySave(){
   if(!bay||!name||!from){ alert('Pick a bay, a trailer/job name, and a From date.'); return; }
   if(to<from){ alert('The "To" date can\'t be before the "From" date.'); return; }
   var excludeId=(BC_EDIT&&BC_EDIT.t==='entry')?BC_EDIT.id:null;
-  var conflicts=_bcConflicts(bay,from,to,excludeId);
-  var ovr=false;
-  if(conflicts.length){
-    var lines=conflicts.map(function(c){ return '• '+c.name+' ('+_bcFmt(c.from)+(c.to&&c.to!==c.from?(' → '+_bcFmt(c.to)):'')+')'; }).join('\n');
-    var msg='🚫 '+bay+' is already scheduled:\n\n'+lines+'\n\nYou can\'t double-book the same bay for overlapping dates.\n\nClick OK ONLY if this is a same-day turnover (one leaving, another arriving that same day) to override and save anyway — Cancel to pick different dates.';
-    if(!confirm(msg)) return;
-    ovr=true;
-  }
+  var res=_bcResolveConflict(bay,from,to,excludeId);
+  if(!res.ok) return;
+  var ovr=res.ovr;
   if(excludeId){ var e=(BAYCAL.sched||[]).filter(function(x){return x.id===excludeId;})[0]; if(e){ e.bay=bay; e.name=name; e.from=from; e.to=to; e.notes=notes; e.ovr=ovr; e.auto=false; } }
   else { BAYCAL.sched.push({id:_bcId(),bay:bay,name:name,from:from,to:to,notes:notes,ovr:ovr,auto:false}); }
   BC_EDIT=null; _bcSave(); renderBayCal();
