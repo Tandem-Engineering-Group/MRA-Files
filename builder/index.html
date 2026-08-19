@@ -77,13 +77,14 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 6.8 · Per-position cabinet choice — None/Low(20")/High(34.5") independently, both sides</span>
+  <span class="rev" id="devRev" style="display:none">Rev 6.9 · Awning Open/Closed is back, now with real closed-position geometry (canopy only, not the rear doors)</span>
 </header>
 <main>
   <div id="view3d">
     <div class="viewbtns">
       <button id="spinBtn">↻ Auto-spin</button>
       <button id="resetBtn">↺ Reset View</button>
+      <button id="awningBtn" title="Toggle the awning between deployed and rolled-up/closed">🏕 Awning: Open</button>
     </div>
     <div id="hint">drag = orbit · wheel/pinch = zoom · right-drag = pan</div>
   </div>
@@ -257,8 +258,18 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     now 5 independent selectors, one per real wall position (driver-side Forward/Center/Rear, passenger-side
     Forward/Rear), each choosing None / Low (20") / High (34.5") — Brandon's export has both heights for every
     position. The 20" files were 11-12MB each in their raw form; decimated the same way as the body scan
-    elsewhere in this file (~62k triangles down to ~6k per part) before wiring them in. This dev note is
-    hidden from customers by default — append <code>?dev=1</code> to the URL to see it.</p>
+    elsewhere in this file (~62k triangles down to ~6k per part) before wiring them in. <b>Rev 6.9</b>: Rich —
+    "I thought he had closed versions too... you're missing a bunch of stuff." Right — an "AWNINGS CLOSED"
+    folder existed in the export the whole time (rear + passenger-side canopy, both in a genuine
+    rolled-up/closed pose) and got missed in the earlier passes. Decimated both (525k/522k triangles down to
+    ~25k each, 114-116MB down to ~2.3MB each) and brought back the 🏕 Awning: Open/Closed button — pulled in
+    rev 6.4 because "closed" back then was just the same open canopy folded procedurally, which still read as
+    open from Rich's checking angle. This time it's real geometry, not a fold. <b>Still an open limit, said
+    plainly:</b> this export has no closed-pose geometry for the REAR CARGO DOORS themselves, only the awning
+    canopy — so from the exact straight-on rear angle, the doors still read as open even with the awning
+    closed. That was the actual reason the toggle got pulled the first time, and this rev does not fix it;
+    it needs Brandon to export the doors closed too. This dev note is hidden from customers by default —
+    append <code>?dev=1</code> to the URL to see it.</p>
   </aside>
 </main>
 <script>/**
@@ -1495,7 +1506,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
 
 } )();
 </script>
-<script>/* MRA InfoWheels 3D Builder — Rev 6.8 (per-position cabinet height choice, both sides; body-only wrap color) */
+<script>/* MRA InfoWheels 3D Builder — Rev 6.9 (real awning Open/Closed geometry; body-only wrap color) */
 (function(){
 'use strict';
 const FT=0.3048;
@@ -1510,7 +1521,8 @@ const state={ view:'ext', wrap:'#e04826', accent:'#23272e', floor:'oak', wall:'#
   // with a low cabinet... in multiple spots both sides") — each of the 5 real wall positions picks
   // independently between 'none' / 'low' (20in) / 'high' (34.5in), instead of one on/off toggle for
   // the whole side. See CAB_POS below for which scanParts key each position+height maps to.
-  cabinets:{dsfwd:'high', dsctr:'high', dsrear:'high', psfwd:'high', psrear:'high'} };
+  cabinets:{dsfwd:'high', dsctr:'high', dsrear:'high', psfwd:'high', psrear:'high'},
+  awning:'open' };
 function saveHash(){ try{ location.hash=btoa(JSON.stringify(state)); }catch(e){} }
 function loadHash(){ try{ if(location.hash.length>4){ const s=JSON.parse(atob(location.hash.slice(1)));
   Object.assign(state,s); ['L','R'].forEach(k=>{ let a=(state.slots&&state.slots[k])||[];
@@ -1793,6 +1805,19 @@ const SCAN_PARTS=[
   {key:'outlets',      file:'EXTERIOR - Electrical Outlets.obj',      tint:false, color:0x2b2e33, rough:.5,  metal:.1},
   {key:'rearawning',   file:'EXTERIOR - Rear Awning.obj',             tint:true,  color:0xe04826, rough:.5,  metal:.05},
   {key:'sideawning',   file:'EXTERIOR - Side Awning.obj',             tint:true,  color:0xe04826, rough:.5,  metal:.05},
+  // Real closed-position geometry (Rich, rev 6.9: "I thought he had closed versions too... you're
+  // missing a bunch of stuff" — right, an "AWNINGS CLOSED" folder existed in the export the whole
+  // time and got overlooked). Decimated the same way as everything else here (525k/522k tris ->
+  // ~25k each, 114-116MB -> ~2.3MB each). NOT added to the special UV/decal-mapping branch below that
+  // 'rearawning'/'sideawning' get — a rolled-up canopy has no visible flat face for a graphic to
+  // read on, so these just take a plain wrap-tinted finish like the fabric itself.
+  // ⚠ Known limit, not fixed by this: this export still has no closed-pose geometry for the REAR
+  // CARGO DOORS themselves (only the awning canopy) — that's the actual reason the old Open/Closed
+  // toggle got pulled in rev 6.4 ("the rear cargo doors... still showed straight through into the
+  // cargo hold"). This fixes the canopy-fold half of that problem with real geometry instead of a
+  // procedural fold; the open-door sightline issue needs Brandon to export the doors closed too.
+  {key:'rearawningclosed', file:'EXTERIOR - Rear Awning Closed.obj',      tint:true, color:0xe04826, rough:.5, metal:.05},
+  {key:'psawningclosed',   file:'EXTERIOR - Passenger Side Awning Closed.obj', tint:true, color:0xe04826, rough:.5, metal:.05},
   {key:'solarpanels',  file:'EXTERIOR - Roof Solar Panels.obj',       tint:false, color:0x11151c, rough:.25, metal:.3},
   {key:'extstep',      file:'EXTERIOR - Step.obj',                    tint:false, color:0x2b2e33, rough:.5,  metal:.4},
   // -- CAB --
@@ -2240,12 +2265,29 @@ document.querySelectorAll('[data-cabpos]').forEach(sel=>{
   sel.onchange=()=>{ state.cabinets[pos]=sel.value; applyCabinets(); saveHash(); };
 });
 
+// Awning open/closed (rev 6.9) -- real closed-position geometry this time, not a procedural fold.
+// See the SCAN_PARTS entries above for the honest caveat: this covers the canopy only, not the rear
+// cargo doors (no closed-pose door geometry exists in this export).
+function applyAwning(){
+  const open=state.awning!=='closed';
+  if(scanParts['rearawning']) scanParts['rearawning'].visible=open;
+  if(scanParts['sideawning']) scanParts['sideawning'].visible=open;
+  if(scanParts['rearawningclosed']) scanParts['rearawningclosed'].visible=!open;
+  if(scanParts['psawningclosed']) scanParts['psawningclosed'].visible=!open;
+  const btn=document.getElementById('awningBtn');
+  if(btn) btn.textContent=open?'🏕 Awning: Open':'🏕 Awning: Closed';
+}
+document.getElementById('awningBtn').onclick=()=>{
+  state.awning=(state.awning==='closed')?'open':'closed';
+  applyAwning(); saveHash();
+};
+
 // The real 3D scan is the only view now (Rich: "make the scan default, no other choice needed") —
 // the procedural placeholder van (extG/intG) stays built but hidden; wrap color still applies to
 // the scan mesh once it loads.
 applyWrap();
 extG.visible=false; intG.visible=false;
-ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); applyDecal(); applyInterior(); applyCabinets(); });
+ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); applyDecal(); applyInterior(); applyCabinets(); applyAwning(); });
 
 function size(){ const el=document.getElementById('view3d');
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect=el.clientWidth/el.clientHeight; camera.updateProjectionMatrix(); }
