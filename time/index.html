@@ -427,7 +427,7 @@ function addJob(){ var v=$('addJob').value.trim(); if(!v) return; if(CJOBS.some(
 /* ---------- MRA (Microsoft) sign-in + shared read-back ---------- */
 var SHARED=null; /* everyone's entries, loaded from time.json once a manager signs in */
 function _nmKey(s){ return String(s||'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' '); }
-var ROLE_BY_EMAIL={ 'rmiller@gomra.com':'admin','akarloff@gomra.com':'admin','luciana.giglio@gomra.com':'admin','qolivito@gomra.com':'admin','megan.fraser@gomra.com':'editor','bchoy@gomra.com':'editor','nsolomos@gomra.com':'editor','swilliams@gomra.com':'design','markm@gomra.com':'design','cindyi@gomra.com':'shopedit','rwheeler@gomra.com':'shopedit','tony@gomra.com':'exec','johnr@gomra.com':'exec','gbitonti@gomra.com':'exec','jeberhart@gomra.com':'closer','jsellers@gomra.com':'closer' };
+var ROLE_BY_EMAIL={ 'rmiller@gomra.com':'admin','akarloff@gomra.com':'admin','luciana.giglio@gomra.com':'admin','qolivito@gomra.com':'admin','megan.fraser@gomra.com':'editor','bchoy@gomra.com':'editor','nsolomos@gomra.com':'editor','swilliams@gomra.com':'design','markm@gomra.com':'design','cindyi@gomra.com':'shopedit','rwheeler@gomra.com':'shopedit','tony@gomra.com':'exec','johnr@gomra.com':'exec','gbitonti@gomra.com':'exec','kmaynard@gomra.com':'exec','jeberhart@gomra.com':'closer','jsellers@gomra.com':'closer' };
 var ROLE_BY_NAME=(function(){ var m={}, g={admin:['Rich Miller','Al Karloff','Luciana Giglio','Quintin Olivito'],editor:['Megan Fraser','Brandon Choy','Niko Solomos'],design:['Sarah Williams','Mark Mustonen'],exec:['Tony Amato','John Renaud','Gino Bitonti'],shopedit:['Cindy Irland','Robin Wheeler'],closer:['Joshua Eberhart','Jeff Sellers']}; for(var r in g)g[r].forEach(function(n){ m[_nmKey(n)]=r; }); return m; })();
 var HOURS_ROLES=['admin','editor','exec'];  /* who may see hours + the finance report */
 var SSO=(function(){
@@ -784,13 +784,18 @@ function buildTimeTrendsReport(rows,rangeLbl){
 function buildFinanceReport(){
   var rows=filtered();
   var rng=$('fRange').value;
-  var rangeLbl={tw:'This week',lw:'Last week',m:'This month',all:'All time'}[rng]||'';
+  var rangeLbl={tw:'This week',lw:'Last week',m:'This month',all:'All time',custom:'Custom range'}[rng]||'';
   if(!rows.length){ alert('No time entries in this range to report.'); return; }
-  // Monthly / All time: the day-by-day weekly grid below is built to read as ONE pay period — stacked
-  // across many weeks (or the whole history) it turns into a wall of near-identical grids with no
-  // big-picture read (Rich: "the formatting is screwed... we were looking for trends over time and
-  // charts"). Those two ranges get a completely different report instead — see buildTimeTrendsReport.
-  if(rng==='m'||rng==='all'){ buildTimeTrendsReport(rows,rangeLbl); return; }
+  // Monthly / All time / Custom range: the day-by-day weekly grid below is built to read as ONE pay
+  // period — stacked across many weeks (or the whole history) it turns into a wall of near-identical
+  // grids with no big-picture read (Rich: "the formatting is screwed... we were looking for trends over
+  // time and charts"). A custom range is exactly the same risk (that's the whole point of Rich's "print
+  // 2 weeks / a month / whatever" ask — it's arbitrary length) so it gets the same trends treatment,
+  // matching what 📈 Time trends already promises on the button label (updateFinBtnLabel already
+  // flagged custom as trend-mode; this just makes the actual report match that promise). See
+  // buildTimeTrendsReport — it derives its own printed date-range label from the real rows, so an
+  // arbitrary custom span always prints correctly regardless of what's in rangeLbl above.
+  if(rng==='m'||rng==='all'||rng==='custom'){ buildTimeTrendsReport(rows,rangeLbl); return; }
   var dates=rows.map(function(e){return e.dateISO;}).sort();
   var period=isoToMDY(dates[0])+' – '+isoToMDY(dates[dates.length-1]);
   var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
