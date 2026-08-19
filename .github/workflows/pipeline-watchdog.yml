@@ -2,11 +2,18 @@ name: Pipeline staleness watchdog
 
 # Checks the LIVE board's listsAsOf timestamp every 10 min -- the same "DATA PIPELINE STALLED"
 # condition the in-app banner already detects. If it's been stale too long, this job deliberately
-# FAILS with a clear message. Rich already gets GitHub's own email notification on a failed workflow
-# run for this repo (confirmed -- he's shown one arriving for a different workflow), so this reaches
-# him with zero extra setup: no new Power Automate flow, no new URL/secret to manage. Debounced so
-# it only fails once per stale episode (not every 10 min), and re-fails periodically if it's still
-# not fixed. See CLAUDE.md's "RECURRING DATA PIPELINE STALLED" section for the history this is for.
+# FAILS with a clear message AND sends Rich a direct email (see below) -- his own words, 2026-08-19:
+# a real stall happened, the job did fire (confirmed in the run history), but "reach out didn't
+# work" -- GitHub's failure-notification email was never actually landing for him. Root cause:
+# GitHub sends a scheduled workflow's failure email to whoever last modified that workflow file on
+# the default branch, which was Claude's own commit identity (noreply@anthropic.com), not Rich's
+# real GitHub account -- so the "zero extra setup" assumption this comment used to make was wrong.
+# Fixed by adding a real, direct email via the SAME MC_MAILSEND Power Automate flow the dashboard
+# itself already uses for "Tell Claude"/pricing-approval emails (proven, not GitHub-account-
+# dependent) -- so this reaches rmiller@gomra.com regardless of whose GitHub identity owns the
+# commit. Debounced so it only fires once per stale episode (not every 10 min), and re-fires
+# periodically if it's still not fixed. See CLAUDE.md's "RECURRING DATA PIPELINE STALLED" section
+# for the full history this is for.
 
 on:
   schedule:
@@ -26,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check staleness (fails on purpose to trigger GitHub's own failure-notification email)
+      - name: Check staleness (fails on purpose, and emails Rich directly)
         shell: bash
         env:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
@@ -34,15 +41,28 @@ jobs:
           set -e
           curl -s https://mrashopdash.z13.web.core.windows.net/data.js -o live-data.js
           python3 <<'PYEOF'
-          import re, json, os, subprocess, sys
+          import re, json, os, subprocess, sys, urllib.request
           from datetime import datetime, timezone
 
           STALE_THRESHOLD_MIN = 20     # matches the in-app banner's own stall definition
           RENOTIFY_AFTER_MIN = 60      # don't fail every 10 min; re-alert hourly while still stale
           STATE_FILE = '.github/watchdog-state.json'
+          MC_MAILSEND = 'https://default57714027b784449484126e3b00c9bf.2c.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/09/workflows/7ba4c77598ca4828b4d81b19adf6ad68/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=PZKfuzfqqSjvD2o2o7i3BhF2ANhYYITbG9-I_zm2ZfI'
 
           def git(*args):
               subprocess.run(['git'] + list(args), check=True)
+
+          def send_email(subject, html):
+              # Same flow + payload shape the dashboard itself uses for direct emails to Rich --
+              # proven, and NOT dependent on GitHub account/notification settings at all.
+              try:
+                  body = json.dumps({'to': 'rmiller@gomra.com', 'subject': subject, 'html': html}).encode('utf-8')
+                  req = urllib.request.Request(MC_MAILSEND, data=body, method='POST',
+                      headers={'Content-Type': 'text/plain;charset=UTF-8'})
+                  urllib.request.urlopen(req, timeout=20)
+                  print('Direct email sent to rmiller@gomra.com.')
+              except Exception as e:
+                  print(f'Direct email FAILED to send: {e}')
 
           content = open('live-data.js').read()
           m = re.search(r'=\s*(\{.*\})\s*;?\s*$', content, re.S)
@@ -65,6 +85,7 @@ jobs:
           # THAT watchdog was seeing during the whole stall episode is captured automatically in
           # this job's logs -- no more depending on someone manually screenshotting Power Automate
           # mid-outage and (every time so far) missing the window because the run recovered first.
+          state_summary = ''
           if stale_min >= STALE_THRESHOLD_MIN:
               try:
                   subprocess.run(['az', 'storage', 'blob', 'download',
@@ -78,8 +99,8 @@ jobs:
                   if run_started:
                       run_dt = datetime.fromisoformat(str(run_started).replace('Z', '+00:00'))
                       age_min = (now - run_dt).total_seconds() / 60
-                  print(f"WATCHDOG STATE FILE (pipeline/lists-run-state.json): {json.dumps(state)}"
-                        + (f"  |  that run's own age: {age_min:.1f} min" if age_min is not None else ""))
+                  state_summary = json.dumps(state) + (f"  (that run's own age: {age_min:.1f} min)" if age_min is not None else '')
+                  print(f"WATCHDOG STATE FILE (pipeline/lists-run-state.json): {state_summary}")
               except Exception as e:
                   print(f'Could not read the watchdog state file: {e}')
 
@@ -120,5 +141,15 @@ jobs:
           print('Cancel the stuck run(s) in "MRA Lists to JSON" (Power Automate) and Run manually.')
           print('See CLAUDE.md, "RECURRING DATA PIPELINE STALLED ISSUE" section, for history.')
           print('=' * 70)
-          sys.exit(1)   # deliberate failure -- this is what triggers GitHub's email to Rich
+
+          send_email(
+              f'⚠ MRA board stalled — {stale_min:.0f} min, needs a manual restart',
+              (f'<p><b>The MRA dashboard has not synced from the Lists in {stale_min:.0f} minutes.</b> '
+               f'New jobs/tasks/bring-backs are NOT saving to the board right now.</p>'
+               f'<p><b>Fix:</b> open Power Automate → "MRA Lists to JSON" → cancel the stuck run(s) → Run manually.</p>'
+               f'<p style="color:#666;font-size:13px">listsAsOf: {lists_as_of}'
+               + (f'<br>Power Automate watchdog state: {state_summary}' if state_summary else '')
+               + '</p>')
+          )
+          sys.exit(1)   # also fails the job on purpose, for GitHub's own run history / any other watchers
           PYEOF
