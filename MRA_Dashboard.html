@@ -3438,7 +3438,12 @@ let RANGE = 'all';           // projects gantt range (months or 'all')
 let VIEW = 'floor';
 try{ VIEW = localStorage.getItem('mra_view')||'floor'; RANGE = JSON.parse(localStorage.getItem('mra_range'))||3; }catch(e){ RANGE=3; }
 // Deep-link a tab: ...?view=mywork opens the live board on that tab (used by the daily-email "log in to close" button).
-try{ const _vq=new URLSearchParams(location.search).get('view'); if(_vq && ['floor','projects','fleetio','assets','mywork'].indexOf(_vq)>=0) VIEW=_vq; }catch(e){}
+// The URL wins over the remembered device preference, matching normal web behavior for an explicit link.
+try{ const _vq=new URLSearchParams(location.search).get('view'); if(_vq && ['floor','floordetail','projects','fleetio','assets','mywork','history'].indexOf(_vq)>=0) VIEW=_vq; }catch(e){}
+// The REAL intended view, independent of any transient "safe default while auth is still resolving" — a
+// role check running before SSO settles must never permanently clobber this (see applyRoleUI + setView).
+let _wantedView = VIEW;
+let _urlSyncedOnce = false;   // set true after renderAll()'s first pass reflects VIEW into the address bar once
 let GWIN_DAYS=null; try{ const _gw=parseInt(localStorage.getItem('mra_gwin'),10); if(_gw>=7&&_gw<=365) GWIN_DAYS=_gw; }catch(e){}  // gantt zoom: continuous window length (days); overrides RANGE presets when set
 let PFILTER='';   // projects tab: filter by project name / PM / job # (matches task text)
 let PROJ_SORT='start'; try{ const _ps=localStorage.getItem('mra_proj_sort'); if(_ps) PROJ_SORT=_ps; }catch(e){}  // projects Gantt row order
@@ -3654,7 +3659,8 @@ const GENERAL_HELP = `
     <span class="k">PROJECTS</span> = the long-term programs with milestone gates, % complete, PM Load and team capacity. A project's % complete is <b>weighted by each task's Type</b> — Production/fab tasks count for more than Design tasks — so a project full of finished design work but untouched fabrication doesn't read as further along than it really is; it's fully automatic, nothing to tag by hand. Open any task to edit it, add a subtask, or <b>⇄ move / ⧉ copy it to another project</b>.
     <span class="k">FLEETIO</span> = fleet maintenance (open issues, work orders, service due/overdue) — it has its own <b>?</b> guide on that tab.
     <span class="k">ASSETS</span> = the fleet <b>and</b> the equipment in one place, with a <b>🚛 By Unit</b> / <b>📦 By Job</b> toggle and a live <b>unit map</b> up top. <b>By Unit</b> (the default) is the physical fleet, built <b>live from Fleetio</b> (merged over the office list): Type, Year, Make, Job/Tour, plus <b>Status</b>, <b>Miles</b>, an <b>Open</b> badge (open Fleetio issues + work orders), and <b>compliance dates</b> for DOT/Inspection, Reg and Ins (red = expired/overdue, amber = due soon — IFTA stays from the office list); the <b>📍 Location</b> column is live GPS from Samsara. <b>By Job</b> lists each client job by Job # with the equipment on it (click a card for the units on that job). <b>Canadian assets</b> show a 🍁; a <b>blue mitten</b> = in Michigan; an orange <b>MRA</b> chip = at the MRA facility. Filter with the <b>flag buttons</b> (All · MRA · 🧤 · 🍁) and <b>⚠ Compliance issues only</b>.
-    <span class="k">🔍 Search</span> (top bar, or press <b>/</b>) = find <b>anything</b> across the whole board — a job (open <b>or</b> completed), a project, a unit, an equipment job, a client, a person, or any task wording — and click a result to jump right to it. For <b>closed-task detective work</b>, use <span class="k">☰ Actions ▸ 🔎 Search closed / history</span> (or the link at the bottom of the 🔍 box): a full-page search you can filter to <b>✓ Closed tasks only</b> — every closed line shows its <b>closed date</b> and crew, searchable by job #, job name, task wording or person, with time + status filters.</p></div>
+    <span class="k">🔍 Search</span> (top bar, or press <b>/</b>) = find <b>anything</b> across the whole board — a job (open <b>or</b> completed), a project, a unit, an equipment job, a client, a person, or any task wording — and click a result to jump right to it. For <b>closed-task detective work</b>, use <span class="k">☰ Actions ▸ 🔎 Search closed / history</span> (or the link at the bottom of the 🔍 box): a full-page search you can filter to <b>✓ Closed tasks only</b> — every closed line shows its <b>closed date</b> and crew, searchable by job #, job name, task wording or person, with time + status filters.
+    Every tab has its <b>own real link</b> now (the address bar updates as you switch, e.g. <span class="k">?view=projects</span>) — bookmark or share a link straight to one tab, the browser's back/forward buttons move between tabs, and <b>refreshing keeps you on the tab you were on</b> instead of bouncing you back to Floor.</p></div>
 
   <div class="hsec"><h4>②ᵐ 🙋 MY WORK — your own page</h4>
     <p>When you sign in you land on <span class="k">MY WORK</span> — a one-page snapshot of <b>your</b> stuff, the same clean look as the reports we email out. Up top is a <b>stat strip</b> (open items · overdue · due this week · to verify · marked ready · my projects), then, in order:</p>
@@ -3909,6 +3915,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.43", date:"2026-08-19", title:"🔗 Every tab now has its own real link — and refreshing on Projects/Fleetio/Assets no longer bounces you back to Floor", items:[
+    "Rich: \"if you're on the Project tab and you hit refresh it takes you back to the main page.\" Found the real cause — a page refresh briefly shows an \"anonymous / role not known yet\" state while sign-in is still resolving, and that transient state was PERMANENTLY overwriting your remembered tab back to Floor before your real role (which was allowed on Projects the whole time) ever got a chance to confirm it. Fixed: the brief safe-default now only changes what's on screen, never your saved preference — once your real role resolves, if it turns out you were allowed on the original tab all along, it's restored for real.",
+    "Also did what you asked for a separate reason — the address bar now updates as you switch tabs (e.g. .../MRA_Dashboard.html?view=projects), so every tab is a real, bookmarkable, shareable link, and the browser's back/forward buttons move between tabs correctly. Verified both the fix and the original bug's exact timing with a standalone simulation before shipping." ] },
   { rev:"37.42", date:"2026-08-19", title:"🔒 Right-click / view-source deterrent on the live board", items:[
     "Rich: the board is \"very open\" — right-click → view source lets anyone see the whole page and everything embedded in it. Added a live-host-only script that blocks the right-click context menu (except inside text fields, so paste still works) and the common view-source/devtools shortcuts (Ctrl/Cmd+U, F12, Ctrl/Cmd+Shift+I/J/C).",
     "⚠ Honest limit, said plainly so it doesn't get oversold: this is a deterrent, not real security — a browser has to receive the full page to run it, so anyone with real technical skill (devtools opened before the page loads, curl, typing view-source: directly, or just disabling JS) still sees everything. It stops the casual case Rich described, not a determined one. Actual lockdown means the data isn't served to the public at all — that's the SWA/auth-gated-hosting migration already scoped in this file's history, which needs the partner (Azure) + IT (Entra), not something a script can do." ] },
@@ -6464,6 +6473,16 @@ function ssoRole(){
   return 'staff';
 }
 function ssoCaps(){ const r=ssoRole(); return r?ROLE_CAPS[r]:null; }
+// Visual-only fallback for applyRoleUI()'s role gate below — switches what's ON SCREEN without ever
+// touching localStorage/_wantedView/the URL. Needed because applyRoleUI() runs once IMMEDIATELY on
+// load (a deliberate "safe default while MSAL is still resolving", see the call site far below) and
+// again once the real role is known; without this split, that first transient "we don't know the role
+// yet" pass would permanently overwrite a restored/deep-linked view (e.g. reloading on Projects) back
+// to Floor before the real role ever got a chance to confirm it was allowed all along — this was a
+// real, reported bug: refreshing on a tab kept bouncing back to Floor for people who were fully
+// entitled to be there, purely because of MSAL's timing.
+function _softForceFloor(){ try{ setView('floor', {persist:false, updateUrl:false}); }catch(e){} }
+function _viewAllowed(caps, v){ if(v==='mywork') return mwTabAllowed(); return !caps || caps.tabs.indexOf(v)>=0; }
 // Apply tab + menu visibility for the current role (no-op when not gating).
 function applyRoleUI(){
   const caps=ssoCaps();
@@ -6473,7 +6492,7 @@ function applyRoleUI(){
   });
   // MY WORK tab: limited to the MYWORK allowlist (Rich 2026-07-17), independent of role.
   { const mw=document.querySelector('.tab[data-view="mywork"]'); if(mw) mw.style.display = mwTabAllowed() ? '' : 'none'; }
-  if(typeof VIEW!=='undefined' && VIEW==='mywork' && !mwTabAllowed()){ try{ setView('floor'); }catch(e){} }
+  if(typeof VIEW!=='undefined' && VIEW==='mywork' && !mwTabAllowed()){ _softForceFloor(); }
   const hide=caps?caps.hide:[];
   document.querySelectorAll('[data-perm]').forEach(el=>{
     el.style.display = (hide.indexOf(el.getAttribute('data-perm'))>=0) ? 'none' : '';
@@ -6486,7 +6505,13 @@ function applyRoleUI(){
   if(!isSuperAdmin()) document.querySelectorAll('[data-perm="throughput"],[data-perm="deadtrackers"],[data-perm="mycmd"]').forEach(el=>{ el.style.display='none'; });
   // Closer (Josh): ✓ close their own tasks only — reveal close, hide every other edit control.
   document.body.classList.toggle('closeronly', (typeof ssoIsCloser==='function' && ssoIsCloser()));
-  if(caps && typeof VIEW!=='undefined' && caps.tabs.indexOf(VIEW)<0){ try{ setView('floor'); }catch(e){} }
+  if(caps && typeof VIEW!=='undefined' && !_viewAllowed(caps, VIEW)){
+    _softForceFloor();
+  } else if(caps && typeof _wantedView!=='undefined' && _wantedView && VIEW!==_wantedView && _viewAllowed(caps, _wantedView)){
+    // The role has now resolved (or re-resolved) and it turns out the ORIGINALLY intended view — the one
+    // an earlier transient/anon pass had to softly hide — was allowed all along. Restore it for real now.
+    setView(_wantedView, {replaceUrl:true});
+  }
   // one-login bridge: signed-in editor/admin/design gets edit rights automatically (sign-out reloads -> clears)
   if(ssoEnforcing() && ssoCanEdit() && !CLOSE_PIN){ CLOSE_PIN='1974'; CURRENT_USER=SSO.name()||'Signed in'; }
   // First load after a non-admin signs in: land them on their My Work page IF they're allowed to see it
@@ -17758,7 +17783,11 @@ function _floorCompactCss(){ if(document.getElementById('floorCompactCss')) retu
   // wall (TV) mode: no top tabs — efficient use of the screen
   +'body.wall .tabs{display:none!important}';
   document.head.appendChild(s); }
-function setView(v){
+// opts.persist=false / opts.updateUrl=false are used ONLY by applyRoleUI()'s transient "safe default
+// while auth is still resolving" fallback — a real user-driven tab click never passes these, so it
+// always persists + updates the address bar normally. See _wantedView above for why this split exists.
+function setView(v,opts){
+  opts=opts||{};
   if(v==='fleet'||v==='equipment') v='assets';   // FLEET + EQUIPMENT merged into the ASSETS tab
   // 🔐 role gate: a locked tab either prompts sign-in (nobody signed in) or falls back to floor.
   if(typeof ssoEnforcing==='function' && ssoEnforcing() && v!=='history'){
@@ -17766,7 +17795,17 @@ function setView(v){
     if(caps && caps.tabs.indexOf(v)<0){ if(!SSO.user){ SSO.signIn(); return; } v='floor'; }
   }
   // 'history' has no tab of its own — it opens via ☰ Actions ▸ 🔎 Search closed / history (or the 🔍 modal's footer link)
-  VIEW=v; try{localStorage.setItem('mra_view',v);}catch(e){}
+  VIEW=v;
+  if(opts.persist!==false){
+    try{localStorage.setItem('mra_view',v);}catch(e){}
+    _wantedView=v;   // a REAL switch (not a transient safe-default) — this is now the actual target to restore to
+  }
+  if(opts.updateUrl!==false){
+    try{
+      const u=new URL(location.href); u.searchParams.set('view',v);
+      history[opts.replaceUrl?'replaceState':'pushState']({mraView:v}, '', u.toString());
+    }catch(e){}
+  }
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
   { const _fl=(v==='floor'||v==='floordetail'); const _fv=document.getElementById('floorView'); if(_fv){ try{ _floorCompactCss(); }catch(e){} _fv.classList.toggle('hidden',!_fl); _fv.classList.toggle('floor-compact', v==='floor'); } }
   document.getElementById('projectsView').classList.toggle('hidden',v!=='projects');
@@ -17781,6 +17820,14 @@ function setView(v){
   if(typeof closeDrops==='function') closeDrops();              // close any open menu when switching tabs
   if(typeof _toTopSync==='function') _toTopSync();              // refresh the floating Actions button (FLOOR only)
 }
+// Back/forward between tabs: since setView() now pushes a history entry per real tab switch, react to
+// the browser's own back/forward navigation the same way — read the view it's landing on and switch to
+// it WITHOUT pushing yet another entry (the browser already moved history for us here).
+window.addEventListener('popstate', function(ev){
+  let v=null;
+  try{ v=(ev.state&&ev.state.mraView) || new URLSearchParams(location.search).get('view'); }catch(e){}
+  if(v) try{ setView(v, {updateUrl:false}); }catch(e){}
+});
 function setRange(m){
   RANGE=m; try{localStorage.setItem('mra_range',JSON.stringify(m));}catch(e){}
   GWIN_DAYS=null; try{localStorage.removeItem('mra_gwin');}catch(e){}   // a preset overrides the zoom slider
@@ -19256,7 +19303,10 @@ function renderAll(){
       if(dtbShared() && Date.now()-DTB_LASTWRITE>15000) dtbFetchRemote().then(r=>{ const o2=document.getElementById('dtbOverlay'); if(r&&o2&&o2.classList.contains('show')&&!(DTB_EDIT.note||DTB_EDIT.gen||DTB_EDIT.asg)&&Date.now()-DTB_LASTWRITE>15000){ DTB=r; dtbSaveLocal(); renderDesignTeam(); } });
       else renderDesignTeam(); } }   // keep the Design board live (pull shared file if sharing's on), but don't clobber an in-progress edit OR a just-saved add
   try{ applyRoleUI(); }catch(e){}
-  setView(VIEW);
+  setView(VIEW, {persist:false, updateUrl:false});   // renderAll() re-runs this every ~30s poll just to keep the DOM in sync with the CURRENT view — not a real navigation, so never re-touch localStorage or push a new history entry here (that's what real tab clicks are for)
+  if(!_urlSyncedOnce && VIEW===_wantedView){   // ONE-TIME, and only once the role check has settled (VIEW back in sync with the real intended target) — makes a bare bookmarked URL reflect the tab it actually landed on, without risking stamping a transient safe-default view while auth is still resolving
+    _urlSyncedOnce=true;
+    try{ const u=new URL(location.href); if(u.searchParams.get('view')!==VIEW){ u.searchParams.set('view',VIEW); history.replaceState({mraView:VIEW},'',u.toString()); } }catch(e){} }
   restoreWallScroll(_wsnap);
   document.querySelectorAll('#rangeBtns .rb').forEach(b=>b.classList.toggle('active',(b.dataset.m==='all'?'all':+b.dataset.m)===RANGE));
   const _stamp=D.generatedAt?fmtStamp(D.generatedAt):(D.generatedText||"—");
