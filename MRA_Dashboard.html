@@ -2754,6 +2754,10 @@
           <div><label>Bay</label><select id="ejBay"></select></div>
           <div><label>Status</label><select id="ejStatus"></select></div>
         </div>
+        <div style="margin:2px 0 4px">
+          <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>📅 Bay Schedule <span style="color:var(--faint);font-weight:400">— planned bookings for this job (real bay stays the field above)</span></span><button type="button" class="btn-ghost" style="padding:3px 10px;font-size:11.5px;white-space:nowrap;border-color:rgba(59,130,246,.5);color:#93c5fd" onclick="ejOpenBayCal()" title="Opens the Bay Schedule calendar with this job's name (and current bay) ready to book — e.g. plan it into Bay 5 this week, then Bay 3 next week">📅 Schedule a bay…</button></label>
+          <div id="ejBayCalList" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+        </div>
         <div class="addrow2">
           <div><label>Start date</label><input id="ejStart" type="date"></div>
           <div><label>Completion date</label><input id="ejComp" type="date"></div>
@@ -3935,6 +3939,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.50", date:"2026-08-19", title:"📅 Bay Schedule now reachable from ✎ Edit job too, not just the calendar screen", items:[
+    "Rich: \"the ability to schedule it from this screen as well as from the calendar screen... I don't see that. Do you see that here?\" He was right — the Bay dropdown on ✎ Edit job only ever showed the CURRENT bay, with no way in from there to plan ahead. Rather than build a second, separate bay-planner inline in an already-busy modal, Edit job now shows a live one-line readout of this job's existing Bay Schedule bookings (e.g. <span class=\"k\">B4B 6/22 → 9/11</span>) right under the Bay field, plus a <span class=\"k\">📅 Schedule a bay…</span> button that jumps straight into the real Bay Schedule calendar with this job's name AND current bay already filled in — same data, same conflict-checked editor, no separate mechanism to keep in sync.",
+    "Verified headless: the readout shows the job's real bookings, the button correctly closes Edit job and opens Bay Schedule with the name/bay pre-filled ready to add a new one." ] },
   { rev:"37.49", date:"2026-08-19", title:"📅 Bay Schedule: brighter colors + fixed a real bug behind both the clutter AND the multi-bay-move question", items:[
     "Rich: \"colors sorta muted, need to brighten.\" Pills now get a real tinted background plus a solid-color badge for the bay tag (computed in JS, not CSS color-mix, so it holds up on older shop iPads too) — same treatment on both calendars.",
     "While digging into why the grid still looked busy, found the actual root cause of two things at once. Rich, separately, looking at Medtronic – Buildout showing Bay 5 Back 6/15→11/13: \"sometimes we put it into bay five for a week, then throw it into bay three... not sure what the best way is to handle that.\" The seeding from rev 37.47 was drawing a job's WHOLE PROJECT date range into whatever bay happens to be set right now — wrong on two fronts: it painted a false 5-month bar (the actual clutter culprit, not just the color), and that same false bar would have silently blocked any real attempt to plan the bay-3 move later in the project, since the seed thought it was stuck in bay 5 the whole time.",
@@ -7542,6 +7549,9 @@ function openEditJob(row){
   const bb=document.getElementById('ejBringBack'); if(bb) bb.style.display = DONE_STATUSES.includes((j.status||"").toLowerCase())?'':'none';
   document.getElementById('ejMsg').textContent=""; document.getElementById('ejSubmit').disabled=false;
   document.getElementById('editModal').classList.add('show');
+  _bcLoad(); _bcMigrateOldSeeds(); _bcSeedFromBoard();
+  _ejRefreshBayCal();
+  if(BAYCAL_WRITE_URL){ _bcLoadShared(function(){ _bcMigrateOldSeeds(); _bcSeedFromBoard(); _ejRefreshBayCal(); }); }
 }
 function closeEdit(e){ if(!e || e.target.id==='editModal' || e.target.classList.contains('modal-close'))
   document.getElementById('editModal').classList.remove('show'); }
@@ -17566,6 +17576,36 @@ function _bcSeedFromBoard(){
     });
     if(changed) _bcSave();
   }catch(e){}
+}
+// Rich, 2026-08-19: "I don't see [multi-bay scheduling] here [Edit job] too... the ability to schedule
+// it from this screen as well as from the calendar screen." Rather than duplicate the calendar's own
+// conflict-checked editor inline in an already-busy modal, Edit job gets a live readout of this job's
+// existing bookings + a button straight into the real Bay Schedule calendar with the job name (and
+// current bay) pre-filled — same underlying data either way, no separate mechanism to keep in sync.
+function _ejBayCalSummary(name){
+  if(!name) return '';
+  try{
+    var rows=((BAYCAL&&BAYCAL.sched)||[]).filter(function(e){ return e.name===name; })
+      .sort(function(a,b){ return String(a.from).localeCompare(String(b.from)); });
+    if(!rows.length) return '<span style="color:var(--faint)">Nothing scheduled yet.</span>';
+    return rows.map(function(e){
+      return '<span style="display:inline-block;margin:2px 10px 2px 0"><b style="color:var(--txt)">'+esc(_bcAbbr(e.bay))+'</b> '+_bcFmt(e.from)+(e.to&&e.to!==e.from?(' → '+_bcFmt(e.to)):'')+(e.ovr?' ⚠':'')+'</span>';
+    }).join('');
+  }catch(err){ return ''; }
+}
+function _ejRefreshBayCal(){
+  var el=document.getElementById('ejBayCalList'); if(!el) return;
+  el.innerHTML=_ejBayCalSummary(window._ejProj);
+}
+function ejOpenBayCal(){
+  var name=window._ejProj||(document.getElementById('ejProject')||{}).value||'';
+  var bay=(document.getElementById('ejBay')||{}).value||'';
+  closeEdit();
+  openBayCal();
+  setTimeout(function(){
+    var nameEl=document.getElementById('bcE_name'); if(nameEl) nameEl.value=name;
+    var bayEl=document.getElementById('bcE_bay'); if(bayEl && bay && BAY_CAL_BAYS.indexOf(bay)>=0) bayEl.value=bay;
+  }, 30);
 }
 function _bcMonthsHtml(opts){
   opts=opts||{};
