@@ -3364,6 +3364,27 @@
 
 <script src="data.js"></script>
 <script>
+// 🔒 Casual view-source / right-click deterrent (Rich 2026-08-19). IMPORTANT — this is NOT real
+// security and can't be: a browser has to receive the full HTML/JS/embedded data to run the page at
+// all, so anyone with real technical skill (F12 dev tools before this fires, curl, disabling JS, or
+// just view-source: typed directly in the address bar) can still get everything regardless of this
+// script. What it DOES stop is the common case Rich actually described — someone idly right-clicking
+// or hitting Ctrl+U out of curiosity. Live host only (fail-open everywhere else, same convention as
+// SSO below) so local testing/dev copies aren't affected.
+(function(){
+  const LOCKDOWN_HOSTS=['mrashopdash.z13.web.core.windows.net'];
+  if(LOCKDOWN_HOSTS.indexOf(location.hostname)<0) return;
+  document.addEventListener('contextmenu', function(e){
+    const t=e.target;
+    if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;   // keep right-click paste working in form fields
+    e.preventDefault();
+  });
+  document.addEventListener('keydown', function(e){
+    const k=(e.key||'').toUpperCase();
+    const blockCombo=(e.ctrlKey||e.metaKey) && (k==='U' || (e.shiftKey && (k==='I'||k==='J'||k==='C')));
+    if(k==='F12' || blockCombo){ e.preventDefault(); e.stopPropagation(); }
+  }, true);
+})();
 const REFRESH_SECONDS = 30;
 const DAY = 86400000;
 const SHIP_WINDOW_DAYS = 14;   // shipped jobs older than this drop off the floor (still in History)
@@ -3625,7 +3646,8 @@ const GENERAL_HELP = `
       <li><b>Sales view</b> (Vicki S) → same as Staff, plus the <b>📈 Sales &amp; Planning</b> menu item — read-only there too (no adding/editing prospects, no promoting, no VP-report upload).</li>
       <li><b>Admin</b> (Rich Miller, Al Karloff, Luciana Giglio, Quintin Olivito) → everything, plus manage logins / holidays / Employee of the Month and verify design work.</li>
     </ul>
-    <p><b>One login is all you need to edit.</b> Once you are signed in with an editing role you can add, assign, close, move and change things with <b>no separate number code</b> — being signed in is your permission. (The old number code still works only as a fallback on a shared shop-floor screen where nobody signs in individually.) <b>Hover the signed-in pill</b> to see the email and access level the board resolved for you. <b>Can not get in, or missing something you should see?</b> Tell Rich — he fixes access. The TVs and the floor never ask for a login.</p></div>
+    <p><b>One login is all you need to edit.</b> Once you are signed in with an editing role you can add, assign, close, move and change things with <b>no separate number code</b> — being signed in is your permission. (The old number code still works only as a fallback on a shared shop-floor screen where nobody signs in individually.) <b>Hover the signed-in pill</b> to see the email and access level the board resolved for you. <b>Can not get in, or missing something you should see?</b> Tell Rich — he fixes access. The TVs and the floor never ask for a login.</p>
+    <p>Right-click and the common view-source/devtools shortcuts (Ctrl/Cmd+U, F12, Ctrl/Cmd+Shift+I/J/C) are blocked on the live board as a casual deterrent — this stops idle browsing, not a determined technical look (the browser still has to receive the full page to run it). Real lockdown of who can even reach the data at all is a bigger hosting change, not a script.</p></div>
 
   <div class="hsec"><h4>② The tabs up top</h4>
     <p><span class="k">FLOOR</span> = what is happening in the shop right now: bay status (incl. a combined <b>Next Up / On Hold</b> tile, the <b>Parking Lot</b> and an <b>Off-Site / Parts</b> tile), open tasks grouped by crew, and staff on leave (which opens on a month calendar with an 📤 Upload for vacation files). A <b>🔔 pulsing banner appears at the top when a unit is due back at MRA within 2 weeks</b> (tap it for details; it hides when nothing is due) — the full <b>↩️ Coming-Back list lives on the FLEETIO tab</b> and the 🗓 Meeting view. In Edit mode, a shop task's <b>✎</b> can <b>⇄ move / ⧉ copy it to another trailer</b>.
@@ -3887,6 +3909,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.42", date:"2026-08-19", title:"🔒 Right-click / view-source deterrent on the live board", items:[
+    "Rich: the board is \"very open\" — right-click → view source lets anyone see the whole page and everything embedded in it. Added a live-host-only script that blocks the right-click context menu (except inside text fields, so paste still works) and the common view-source/devtools shortcuts (Ctrl/Cmd+U, F12, Ctrl/Cmd+Shift+I/J/C).",
+    "⚠ Honest limit, said plainly so it doesn't get oversold: this is a deterrent, not real security — a browser has to receive the full page to run it, so anyone with real technical skill (devtools opened before the page loads, curl, typing view-source: directly, or just disabling JS) still sees everything. It stops the casual case Rich described, not a determined one. Actual lockdown means the data isn't served to the public at all — that's the SWA/auth-gated-hosting migration already scoped in this file's history, which needs the partner (Azure) + IT (Entra), not something a script can do." ] },
   { rev:"37.41", date:"2026-08-18", title:"🔐 New read-only login for Vicki S — Sales &amp; Planning only", items:[
     "Rich: give vickis@gomra.com read-only access to Sales & Planning under the ☰ Menu. New <b>salesview</b> role: same baseline tabs as a normal staff sign-in (Floor/My Work/Fleetio/Assets — nothing extra there), plus the <b>📈 Sales & Planning</b> menu item unhidden. Like the existing <b>viewer</b> role, it's excluded from ssoCanEdit() so every add/edit/promote/upload action inside Sales & Planning is blocked with the same \"your sign-in is view-only\" message — nothing to remember to lock down separately." ] },
   { rev:"37.40", date:"2026-08-18", title:"🔧 Fixed: Sales &amp; Planning kept snapping back to the top during the live ~30s refresh", items:[
