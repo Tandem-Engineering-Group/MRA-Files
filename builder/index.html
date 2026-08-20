@@ -77,7 +77,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     <button id="linkBtnTop" class="btn-outline">Save &amp; Share</button>
     <a id="quoteBtn" class="btn-solid" href="mailto:rmiller@gomra.com?subject=InfoWheels%20quote%20request" target="_blank" rel="noopener">Request a Quote</a>
   </div>
-  <span class="rev" id="devRev" style="display:none">Rev 6.9 · Awning Open/Closed is back, now with real closed-position geometry (canopy only, not the rear doors)</span>
+  <span class="rev" id="devRev" style="display:none">Rev 7.0 · Fixed the Low(20") cabinet fronts (placeholder pending real CAD) + bench/PS-rear-cabinet conflict</span>
 </header>
 <main>
   <div id="view3d">
@@ -268,7 +268,21 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
     plainly:</b> this export has no closed-pose geometry for the REAR CARGO DOORS themselves, only the awning
     canopy — so from the exact straight-on rear angle, the doors still read as open even with the awning
     closed. That was the actual reason the toggle got pulled the first time, and this rev does not fix it;
-    it needs Brandon to export the doors closed too. This dev note is hidden from customers by default —
+    it needs Brandon to export the doors closed too. <b>Rev 7.0</b>: Rich, comparing a Low(20") cabinet
+    against a High(34.5") one side by side: "you're missing the front and sides... they're not correct."
+    Confirmed by actually opening the raw CAD instead of re-guessing at decimation settings — Brandon's
+    20in-cabinet export is 500+ disconnected pieces per position (every screw/hinge/trim strip its own
+    solid), and searching all of them for a component shaped like a front door finds real ones (~778 sq
+    in each) ONLY on DS-Forward; Center/Rear/PS-Forward/PS-Rear never had a front modeled at all in the
+    source file. Re-decimating a dozen different ways (including a per-connected-component pass that
+    can't accidentally erase a small piece) reproduced the identical open skeleton every time, because
+    there was nothing there to preserve — this was a gap in the CAD, not a decimation bug. Added flat
+    placeholder fronts on those 4 positions so they read as closed cabinets instead of open skeletons;
+    swap for the real doors once Brandon exports them. Also fixed a real conflict Rich caught in the same
+    message — the Upholstered Bench and the PS-rear cabinet occupy the same physical spot and used to be
+    able to show at once (both defaulted on); picking one now turns the other off automatically. SEG panel
+    coverage (front/driver/passenger wall) is a separate, still-open ask — Rich asked to hold that for a
+    follow-up so this rev could focus on the furniture. This dev note is hidden from customers by default —
     append <code>?dev=1</code> to the URL to see it.</p>
   </aside>
 </main>
@@ -1506,7 +1520,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
 
 } )();
 </script>
-<script>/* MRA InfoWheels 3D Builder — Rev 6.9 (real awning Open/Closed geometry; body-only wrap color) */
+<script>/* MRA InfoWheels 3D Builder — Rev 7.0 (Low-cabinet front placeholders + bench/cabinet conflict fix) */
 (function(){
 'use strict';
 const FT=0.3048;
@@ -1521,7 +1535,11 @@ const state={ view:'ext', wrap:'#e04826', accent:'#23272e', floor:'oak', wall:'#
   // with a low cabinet... in multiple spots both sides") — each of the 5 real wall positions picks
   // independently between 'none' / 'low' (20in) / 'high' (34.5in), instead of one on/off toggle for
   // the whole side. See CAB_POS below for which scanParts key each position+height maps to.
-  cabinets:{dsfwd:'high', dsctr:'high', dsrear:'high', psfwd:'high', psrear:'high'},
+  // psrear defaults to 'none', not 'high' — the Upholstered Bench (PS) occupies that exact same
+  // physical spot, and the two used to default on TOGETHER (a real, shippable conflict Rich caught:
+  // "you have a cabinet in bench that can be selected on the same time... which is impossible").
+  // See the bench/psrear mutual-exclusion wiring further down.
+  cabinets:{dsfwd:'high', dsctr:'high', dsrear:'high', psfwd:'high', psrear:'none'},
   awning:'open' };
 function saveHash(){ try{ location.hash=btoa(JSON.stringify(state)); }catch(e){} }
 function loadHash(){ try{ if(location.hash.length>4){ const s=JSON.parse(atob(location.hash.slice(1)));
@@ -2103,10 +2121,6 @@ function ensureScanLoaded(cb){
         ? new THREE.Mesh(geo, [mkMat(),mkMat(),mkMat(),mkMat()])   // [passenger, driver, rear, other] -- "other" never gets a map, so it always shows the plain wrap color
         : new THREE.Mesh(geo, mkMat());
       mesh.castShadow=true; mesh.receiveShadow=true;
-      // Awning stays in its deployed pose, full stop -- Rich's call after the open/closed toggle
-      // couldn't be made to look right (the rear cargo doors are permanently modeled open in this
-      // CAD export with no closed-door geometry at all, so any "closed" awning state still showed
-      // straight through into the cargo hold and read as broken). No toggle, no approximation.
       scanG.add(mesh); scanParts[p.key]=mesh;
       doneCount++; hint.textContent='⏳ Loading the real 3D scan… ('+doneCount+'/'+SCAN_PARTS.length+', one-time)';
     })
@@ -2118,6 +2132,7 @@ function ensureScanLoaded(cb){
     // exactly on y=0, same as the procedural van.
     const box=new THREE.Box3().setFromObject(scanG);
     scanG.position.y-=box.min.y;
+    _addLowCabFrontStubs();
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
@@ -2233,12 +2248,24 @@ function applyInterior(){
 document.querySelectorAll('[data-interior]').forEach(cb=>{
   cb.onchange=()=>{
     cb.dataset.interior.split('-').forEach(k=>{ if(k in state.interior) state.interior[k]=cb.checked; });
+    // Bench and the PS-rear cabinet occupy the same physical spot -- can't have both (Rich, rev 7.0:
+    // "you have a cabinet in bench that can be selected on the same time... which is impossible").
+    if(cb.dataset.interior==='bench' && cb.checked && state.cabinets.psrear!=='none'){
+      state.cabinets.psrear='none';
+      const psrearSel=document.querySelector('[data-cabpos="psrear"]'); if(psrearSel) psrearSel.value='none';
+      applyCabinets();
+    }
     applyInterior(); saveHash();
   };
   // reflect any state loaded from a shared link (e.g. ?interior all off) into the checkbox itself
   const keys=cb.dataset.interior.split('-');
   cb.checked=keys.every(k=>state.interior[k]!==false);
 });
+// One-time reconcile for links saved before this fix existed (bench + a psrear cabinet both true).
+if(state.interior.bench && state.cabinets.psrear!=='none'){
+  state.cabinets.psrear='none';
+  const psrearSel=document.querySelector('[data-cabpos="psrear"]'); if(psrearSel) psrearSel.value='none';
+}
 
 // Per-position cabinet height choice (Rich, rev 6.8: "a button for each cabinet to add subtract the
 // high cabinet with a low cabinet... in multiple spots both sides"). Each position maps to two real
@@ -2259,10 +2286,48 @@ function applyCabinets(){
     });
   });
 }
+// Rich (rev 7.0), comparing a Low(20") cabinet against the High(34.5") one: "you're missing the front
+// and sides... they're not correct." Verified by inspecting the raw CAD directly rather than guessing:
+// Brandon's 20in-cabinet export is 500+ separate disconnected pieces per position (screws/hinges/trim
+// all modeled as individual solids), and searching every one of them for a component shaped like a
+// front door (thin in depth, spanning the cabinet's length and height) finds NOTHING for 4 of the 5
+// positions -- DS-Forward is the only one whose raw export actually contains real front-door panels
+// (2 of them, ~778 sq in each). Center/Rear/PS-Forward/PS-Rear never had a front modeled at all, so no
+// amount of re-decimating could recover it (confirmed: re-ran decimation multiple ways, including a
+// careful per-connected-component pass that fully preserves every small piece -- same open skeleton
+// every time, because the panel simply isn't in the source file). These flat placeholder fronts stand
+// in until Brandon exports real doors for those 4 positions -- swap them out then, don't re-derive.
+const LOWCAB_FRONT_STUB={
+  dscabctrlo:  {y:[-0.898,-0.467], z:[-0.865, 0.424], x:1.93},
+  dscabrearlo: {y:[-0.975,-0.467], z:[-2.190,-0.865], x:1.93},
+  pscabfwdlo:  {y:[-0.975,-0.467], z:[-1.222,-0.274], x:0.399},
+  pscabrearlo: {y:[-0.975,-0.467], z:[-2.227,-1.279], x:0.399},
+};
+function _addLowCabFrontStubs(){
+  Object.keys(LOWCAB_FRONT_STUB).forEach(key=>{
+    const part=scanParts[key]; if(!part) return;
+    const s=LOWCAB_FRONT_STUB[key], th=.02;
+    const geo=new THREE.BoxGeometry(th, s.y[1]-s.y[0], s.z[1]-s.z[0]);
+    const mat=new THREE.MeshPhysicalMaterial({color:0x6b4a34, roughness:.6, metalness:0, side:THREE.DoubleSide});
+    const mesh=new THREE.Mesh(geo, mat);
+    mesh.position.set(s.x-th/2, (s.y[0]+s.y[1])/2, (s.z[0]+s.z[1])/2);
+    mesh.castShadow=true; mesh.receiveShadow=true;
+    part.add(mesh);
+  });
+}
 document.querySelectorAll('[data-cabpos]').forEach(sel=>{
   const pos=sel.dataset.cabpos;
   sel.value=state.cabinets[pos]||'high';   // reflect any state loaded from a shared link
-  sel.onchange=()=>{ state.cabinets[pos]=sel.value; applyCabinets(); saveHash(); };
+  sel.onchange=()=>{
+    state.cabinets[pos]=sel.value;
+    // Same conflict as above, from the other direction: picking a PS-rear cabinet turns the bench off.
+    if(pos==='psrear' && sel.value!=='none' && state.interior.bench){
+      state.interior.bench=false;
+      const benchCb=document.querySelector('[data-interior="bench"]'); if(benchCb) benchCb.checked=false;
+      applyInterior();
+    }
+    applyCabinets(); saveHash();
+  };
 });
 
 // Awning open/closed (rev 6.9) -- real closed-position geometry this time, not a procedural fold.
@@ -2293,7 +2358,7 @@ function size(){ const el=document.getElementById('view3d');
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect=el.clientWidth/el.clientHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize',size); size();
 let spin=false; document.getElementById('spinBtn').onclick=e=>{ spin=!spin; e.target.classList.toggle('on',spin); };
-window._cam=camera; window._ctl=controls; window._scanParts=scanParts; window._THREE=THREE;   // test hook
+window._cam=camera; window._ctl=controls; window._scanParts=scanParts; window._THREE=THREE; window._state=state;   // test hook
 (function loop(){ requestAnimationFrame(loop); if(spin) van.rotation.y+=.004; controls.update(); renderer.render(scene,camera); })();
 })();
 </script>
