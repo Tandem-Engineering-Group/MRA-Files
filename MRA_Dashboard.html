@@ -2514,6 +2514,8 @@
             <option value="all">All time</option>
           </select>
           <button class="expandbtn" onclick="renderFinance(true)" title="Pull the latest shared hours">🔄 Refresh</button>
+          <button class="expandbtn" onclick="printFinanceReport()" title="Printable Labor Cost Report for the selected range">🖨 Labor cost report</button>
+          <button class="expandbtn" onclick="printOvertimeReport()" title="Printable breakdown of every overtime week — who, when, how much">🖨 Overtime detail</button>
           <a class="expandbtn" href="time/index.html" target="_blank" rel="noopener" title="Enter time, or run the full printable Finance/Cost reports">🧾 Time entry &amp; full reports ↗</a>
         </div>
       </div>
@@ -3787,7 +3789,8 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>②ᶠ 💰 FINANCE — hours &amp; cost reporting</h4>
     <p>A <span class="k">FINANCE</span> tab sits in the main tab bar, limited to <b>Rich &amp; Kyle Maynard only</b> — it's hidden entirely for everyone else, and doesn't unlock with the shared manager PIN (it needs a real Microsoft sign-in as one of those two accounts).</p>
     <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. Defaults to <b>💵 Dollars</b>; the one <b>💵 Dollars / ⏱ Hours</b> toggle up top switches the tiles, the weekly chart, and both ranked lists together. Pick a date range, then read: Total/Regular/Overtime tiles, employees, jobs charged, a weekly bar chart, and ranked <b>By job</b> / <b>By person</b> lists (each shows $ and hours together).</p>
-    <p>Regular/Overtime hours show up even before pay rates are set up. First time you switch to $, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report.</p></div>
+    <p>Regular/Overtime hours show up even before pay rates are set up. First time you switch to $, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report.</p>
+    <p>Two print buttons make it a real leave-behind document: <span class="k">🖨 Labor cost report</span> (stat tiles + weekly chart + full By-job/By-person tables) and <span class="k">🖨 Overtime detail</span> (who's actually costing overtime, and which weeks) — both for whatever date range is currently picked.</p></div>
 
   <div class="hsec"><h4>②ʳ ⏩ Pushing &amp; sliding due dates</h4>
     <p>When a task slips, you can push it out and <b>the old date stays visible, struck through</b>, next to the new one (<span class="k"><s>7/14</s> → 7/24</span>) — on the task everywhere, so everyone can see it moved.</p>
@@ -4022,6 +4025,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.56", date:"2026-08-20", title:"🖨 Two new printable FINANCE reports — Labor Cost Report + Overtime Detail", items:[
+    "<b>🖨 Labor cost report</b> — a print-ready Labor Cost Report for the selected date range: Total/Regular/Overtime $ (or hours), a cost-by-week bar chart, and full By-job / By-person tables with running totals. Same design language as the Time Tracking Finance/Cost print reports, so it reads as part of the same family.",
+    "<b>🖨 Overtime detail</b> — a dedicated report answering \"who's costing us overtime, and when\": a By-person summary (weeks with OT, OT hours, OT $) plus a line for every single overtime week. This wasn't visible anywhere before — the tiles only ever showed the OVERALL Regular/Overtime split, not who/when.",
+    "Both fall back cleanly to hours-only (clearly labeled, never mislabeled as $) if pay rates aren't set up on that device yet — same one-time setup as everywhere else on this tab." ] },
   { rev:"37.55", date:"2026-08-20", title:"💰 FINANCE tab now defaults to $, splits out Regular/Overtime, real $ by job", items:[
     "The FINANCE tab now <b>defaults to Dollars</b> (was Hours) with one global 💵 Dollars / ⏱ Hours toggle that drives the tiles, the weekly chart, and both ranked lists together — one control instead of three separate ones.",
     "Stat tiles now show <b>Total / Regular / Overtime</b> for whichever metric is selected — Regular/Overtime hours show up even before pay rates are set up, since overtime never depended on having a rate on file.",
@@ -6583,7 +6590,8 @@ function financeTabAllowed(){
    mra_time_ratesurl device key, same per-employee-per-week 40hr split) so the numbers here
    always agree with the detailed report if someone opens both. */
 const FIN_RATES_KEY='mra_time_ratesurl';
-let FIN_ENTRIES=null, FIN_METRIC='c', FIN_LOADING=false;
+let FIN_ENTRIES=null, FIN_METRIC='c', FIN_LOADING=false, FIN_LAST=null;
+const FIN_RANGE_LABELS={tw:'This week', lw:'Last week', '2w':'Last 2 weeks', m:'This month', all:'All time'};
 function _finMapEntries(arr){
   if(!Array.isArray(arr)) return [];
   return arr.filter(it=>it && (it.Hours!=null || it.JobName || it.Title)).map(it=>({
@@ -6756,6 +6764,9 @@ function renderFinance(force){
       }
       rankedList(calcAll.byJob, 'finByJob');
       rankedList(calcAll.byEmp, 'finByPerson');
+
+      // stash everything the print reports need, so they don't re-fetch rates a second time
+      FIN_LAST = { range, wantCost, haveCost, rates: rates||[], rows, weekKeys, byWeek, calcAll, grand, empCount, jobCount };
     }
 
     if(!wantCost){ finish([]); return; }   // Hours mode never needs pay rates
@@ -6770,6 +6781,140 @@ function renderFinance(force){
         finish(null);
       });
   }, force);
+}
+
+/* ---------- FINANCE printable reports ---------- design tokens match the existing Time Tracking
+   Finance/Cost print reports exactly (same INK/MUT/BRAND/etc hex values) so a printout from here
+   looks like it belongs to the same family, not a bolted-on second style. ---------- */
+const _FIN_PRINT_TOK = { INK:'#16110F', INKS:'#6B6360', MUT:'#8A827D', DIS:'#C9C3BF', HAIR:'#F0EDEA', BORD:'#E3DFDC', SURF:'#FAF8F7', BRAND:'#C1401F', TINT:'#FBF1EE' };
+function _finPrintShell(title, bodyHtml, orientation){
+  const T=_FIN_PRINT_TOK;
+  const css='*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#e7ebf0}'
+    +'.bar{position:sticky;top:0;z-index:20;background:#101827;color:#fff;padding:9px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px}'
+    +'.bar button{background:'+T.BRAND+';color:#fff;border:0;border-radius:7px;padding:8px 16px;font-weight:800;cursor:pointer;font-size:14.5px}'
+    +'.bar label{color:#cdd6e2;display:flex;gap:6px;align-items:center;cursor:pointer}'
+    +'#sheetwrap{position:relative;overflow:hidden;padding:14px}'
+    +'#sheet{transform-origin:top left;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto;width:'+(orientation==='landscape'?'11in':'8.5in')+'}'
+    +'.pad{padding:0.5in;font-family:Segoe UI,Arial,sans-serif;color:'+T.INK+'}'
+    +'table{border-collapse:collapse;width:100%;font-size:12.5px}'
+    +'th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:'+T.MUT+';padding:0 8px 5px 0;border-bottom:1px solid '+T.INK+'}'
+    +'th.r,td.r{text-align:right}'
+    +'td{padding:6px 8px 6px 0;border-bottom:1px solid '+T.HAIR+'}'
+    +'tr:last-child td{border-bottom:none}'
+    +'tfoot td{font-weight:700;border-top:1px solid '+T.INK+';border-bottom:none;padding-top:7px}'
+    +'@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.bar{display:none}body{background:#fff}#sheetwrap{padding:0;overflow:visible}#sheet{box-shadow:none;width:auto}}';
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+css+'</style></head><body>'
+    +'<div class="bar"><button onclick="window.print()">🖨 Print / Save PDF</button>'
+    +'<span style="color:#f87171;font-weight:700;margin-left:auto">🔒 Confidential — pay/cost data</span></div>'
+    +'<div id="sheetwrap"><div id="sheet"><div class="pad">'+bodyHtml+'</div></div></div>'
+    +'</body></html>';
+  const w=window.open('','_blank'); if(!w){ alert('Allow pop-ups, then try again.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+function _finPrintTile(T,label,val){
+  return '<div style="flex:1;min-width:110px;border:1px solid '+T.BORD+';border-radius:9px;padding:9px 12px"><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:'+T.MUT+'">'+esc(label)+'</div><div style="font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px">'+val+'</div></div>';
+}
+function printFinanceReport(){
+  if(!FIN_LAST || !FIN_LAST.rows){ alert('Nothing to print yet — the page is still loading. Try again in a moment.'); return; }
+  const T=_FIN_PRINT_TOK, F=FIN_LAST, haveCost=F.haveCost, grand=F.grand;
+  const now=new Date(), stamp=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
+  const rangeLbl=FIN_RANGE_LABELS[F.range]||F.range;
+
+  const tiles = haveCost
+    ? [_finPrintTile(T,'Total $',financeMoney(grand.c)),_finPrintTile(T,'Regular $',financeMoney(grand.regC)),_finPrintTile(T,'Overtime $',financeMoney(grand.otC)),
+       _finPrintTile(T,'Total hours',grand.h.toFixed(1)),_finPrintTile(T,'Employees',F.empCount),_finPrintTile(T,'Jobs charged',F.jobCount)].join('')
+    : [_finPrintTile(T,'Total hours',grand.h.toFixed(1)),_finPrintTile(T,'Regular hours',grand.regH.toFixed(1)),_finPrintTile(T,'Overtime hours',grand.otH.toFixed(1)),
+       _finPrintTile(T,'Employees',F.empCount),_finPrintTile(T,'Jobs charged',F.jobCount)].join('');
+  const ratesNote = haveCost ? '' : '<div style="margin:10px 0;padding:9px 12px;background:'+T.TINT+';border-radius:8px;font-size:12px;color:'+T.INKS+'">Pay rates aren’t set up on this device, so this print shows <b>hours only</b> — open the FINANCE tab, switch to 💵 Dollars, and set up pay rates once to include $ figures here.</div>';
+
+  const weekVals=F.weekKeys.map(wk=>{ const wg=_finGrand(_finCostCalc(F.byWeek[wk].rows, F.rates).byEmp); return haveCost?wg.c:wg.h; });
+  const weekMax=Math.max.apply(null, weekVals.concat([0.0001]));
+  const chart = F.weekKeys.length ? ('<div style="display:flex;gap:8px;align-items:flex-end;height:130px;margin-top:6px">' + F.weekKeys.map((wk,i)=>{
+      const v=weekVals[i], h=Math.max(3,Math.round(v/weekMax*100));
+      const lbl=_finWeekLabel(F.byWeek[wk].d), valTxt = haveCost ? financeMoney(v) : (Math.round(v*10)/10)+'h';
+      return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">'
+        +'<div style="font-size:9.5px;font-weight:700;margin-bottom:3px">'+valTxt+'</div>'
+        +'<div style="width:100%;max-width:26px;border-radius:3px 3px 0 0;background:'+T.BRAND+';height:'+h+'px"></div>'
+        +'<div style="font-size:9px;color:'+T.MUT+';margin-top:5px">'+esc(lbl)+'</div></div>';
+    }).join('') + '</div>') : '<div style="color:'+T.MUT+';font-style:italic;font-size:12px">No hours in this range.</div>';
+
+  function table(byMap, nameHead){
+    const names=Object.keys(byMap).sort((a,b)=>(byMap[b].regC+byMap[b].otC)-(byMap[a].regC+byMap[a].otC) || (byMap[b].regH+byMap[b].otH)-(byMap[a].regH+byMap[a].otH));
+    let totH=0, totReg=0, totOT=0;
+    const rows=names.map(n=>{ const x=byMap[n], h=x.regH+x.otH, c=x.regC+x.otC; totH+=h; totReg+=x.regC; totOT+=x.otC;
+      return '<tr><td>'+esc(n)+'</td><td class="r">'+h.toFixed(2)+'</td>'+(haveCost?('<td class="r">'+financeMoney(x.regC)+'</td><td class="r">'+financeMoney(x.otC)+'</td><td class="r"><b>'+financeMoney(c)+'</b></td>'):'')+'</tr>'; }).join('')
+      || '<tr><td colspan="'+(haveCost?5:2)+'" style="color:'+T.MUT+';font-style:italic">No hours in this range.</td></tr>';
+    const foot = names.length ? ('<tr><td>Total</td><td class="r">'+totH.toFixed(2)+'</td>'+(haveCost?('<td class="r">'+financeMoney(totReg)+'</td><td class="r">'+financeMoney(totOT)+'</td><td class="r">'+financeMoney(totReg+totOT)+'</td>'):'')+'</tr>') : '';
+    return '<table><thead><tr><th>'+esc(nameHead)+'</th><th class="r">Hours</th>'+(haveCost?'<th class="r">Regular $</th><th class="r">Overtime $</th><th class="r">Total $</th>':'')+'</tr></thead><tbody>'+rows+'</tbody>'+(foot?('<tfoot>'+foot+'</tfoot>'):'')+'</table>';
+  }
+
+  const body = '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid '+T.BRAND+';padding-bottom:8px;margin-bottom:12px">'
+    +'<div><h1 style="margin:0;font-size:20px">MRA Labor Cost Report</h1><div style="color:'+T.MUT+';font-size:11px;margin-top:2px">'+esc(rangeLbl)+' · Generated '+stamp+'</div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+tiles+'</div>'
+    +ratesNote
+    +'<h2 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:'+T.INKS+';margin:18px 0 4px">'+(haveCost?'Cost':'Hours')+' by week</h2>'+chart
+    +'<h2 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:'+T.INKS+';margin:18px 0 6px">By job</h2>'+table(F.calcAll.byJob,'Job')
+    +'<h2 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:'+T.INKS+';margin:18px 0 6px">By person</h2>'+table(F.calcAll.byEmp,'Employee')
+    +'<div style="margin-top:20px;padding-top:6px;border-top:1px solid '+T.BORD+';font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:'+T.MUT+'">MRA · mobile.experiential · Confidential'+(haveCost?' — pay rate data':'')+'</div>';
+  _finPrintShell('MRA Labor Cost Report — '+rangeLbl, body, 'portrait');
+}
+// Per-employee-per-week overtime hit list: which weeks actually triggered OT, and what it cost.
+// Standard payroll-management view (spot repeat OT, control cost) that the aggregate tiles/lists
+// above don't show on their own -- they only carry the OVERALL Regular/Overtime split, not WHO/WHEN.
+function _finOvertimeRows(rows, rates){
+  const rateOf={};
+  rows.forEach(e=>{ const who=e.who||'—'; if(!(who in rateOf)){ const r=_finRateMatch(rates,who); rateOf[who]=r?r.rate:null; } });
+  const byEmpWeek={};
+  rows.forEach(e=>{ if(e.payType!=='Work'||!e.dateISO) return; const who=e.who||'—', wkD=_finStartOfWeek(new Date(e.dateISO+'T00:00:00')), wk=+wkD;
+    (byEmpWeek[who]=byEmpWeek[who]||{})[wk]=(byEmpWeek[who][wk]||{d:wkD,list:[]}); byEmpWeek[who][wk].list.push(e); });
+  const out=[];
+  Object.keys(byEmpWeek).forEach(who=>{
+    const rate=rateOf[who];
+    Object.keys(byEmpWeek[who]).forEach(wk=>{
+      const bucket=byEmpWeek[who][wk];
+      const sorted=bucket.list.slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')||String(a.ts||'').localeCompare(String(b.ts||'')));
+      let running=0, regH=0, otH=0;
+      sorted.forEach(e=>{ const h=e.hours||0, r=Math.max(0,Math.min(h,40-running)), o=h-r; running+=h; regH+=r; otH+=o; });
+      if(otH>0.005) out.push({ who, weekStart:bucket.d, regH, otH, otC: rate!=null?otH*rate*1.5:null });
+    });
+  });
+  out.sort((a,b)=> b.otH-a.otH || a.weekStart-b.weekStart);
+  return out;
+}
+function printOvertimeReport(){
+  if(!FIN_LAST || !FIN_LAST.rows){ alert('Nothing to print yet — the page is still loading. Try again in a moment.'); return; }
+  const T=_FIN_PRINT_TOK, F=FIN_LAST, haveCost=F.haveCost;
+  const now=new Date(), stamp=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
+  const rangeLbl=FIN_RANGE_LABELS[F.range]||F.range;
+  const otRows=_finOvertimeRows(F.rows, F.rates);
+  const totOTH=otRows.reduce((a,r)=>a+r.otH,0), totOTC=otRows.reduce((a,r)=>a+(r.otC||0),0);
+  const byPerson={};
+  otRows.forEach(r=>{ (byPerson[r.who]=byPerson[r.who]||{weeks:0,otH:0,otC:0}); byPerson[r.who].weeks++; byPerson[r.who].otH+=r.otH; byPerson[r.who].otC+=(r.otC||0); });
+  const personNames=Object.keys(byPerson).sort((a,b)=>byPerson[b].otH-byPerson[a].otH);
+
+  const tiles=[_finPrintTile(T,'Overtime weeks',otRows.length), _finPrintTile(T,'Overtime hours',totOTH.toFixed(1)),
+    haveCost?_finPrintTile(T,'Overtime $',financeMoney(totOTC)):_finPrintTile(T,'Employees w/ OT',personNames.length)].join('');
+  const ratesNote = haveCost ? '' : '<div style="margin:10px 0;padding:9px 12px;background:'+T.TINT+';border-radius:8px;font-size:12px;color:'+T.INKS+'">Pay rates aren’t set up on this device, so $ figures aren’t shown here — hours only.</div>';
+
+  const summaryRows = personNames.length ? personNames.map(n=>{ const x=byPerson[n];
+      return '<tr><td>'+esc(n)+'</td><td class="r">'+x.weeks+'</td><td class="r">'+x.otH.toFixed(2)+'</td>'+(haveCost?('<td class="r">'+financeMoney(x.otC)+'</td>'):'')+'</tr>'; }).join('')
+    : '<tr><td colspan="'+(haveCost?4:3)+'" style="color:'+T.MUT+';font-style:italic">No overtime in this range.</td></tr>';
+  const detailRows = otRows.length ? otRows.map(r=>{
+      return '<tr><td>'+esc(r.who)+'</td><td>'+esc(_finWeekLabel(r.weekStart))+'</td><td class="r">'+r.regH.toFixed(2)+'</td><td class="r">'+r.otH.toFixed(2)+'</td>'+(haveCost?('<td class="r">'+(r.otC!=null?financeMoney(r.otC):'—')+'</td>'):'')+'</tr>'; }).join('')
+    : '<tr><td colspan="'+(haveCost?5:4)+'" style="color:'+T.MUT+';font-style:italic">No overtime in this range.</td></tr>';
+
+  const body = '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid '+T.BRAND+';padding-bottom:8px;margin-bottom:12px">'
+    +'<div><h1 style="margin:0;font-size:20px">MRA Overtime Detail</h1><div style="color:'+T.MUT+';font-size:11px;margin-top:2px">'+esc(rangeLbl)+' · Generated '+stamp+'</div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+tiles+'</div>'
+    +ratesNote
+    +'<h2 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:'+T.INKS+';margin:18px 0 6px">By person</h2>'
+    +'<table><thead><tr><th>Employee</th><th class="r">Weeks w/ OT</th><th class="r">OT hours</th>'+(haveCost?'<th class="r">OT $</th>':'')+'</tr></thead><tbody>'+summaryRows+'</tbody></table>'
+    +'<h2 style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:'+T.INKS+';margin:18px 0 6px">Every overtime week</h2>'
+    +'<table><thead><tr><th>Employee</th><th>Week of</th><th class="r">Regular hrs</th><th class="r">OT hrs</th>'+(haveCost?'<th class="r">OT $</th>':'')+'</tr></thead><tbody>'+detailRows+'</tbody></table>'
+    +'<div style="margin-top:20px;padding-top:6px;border-top:1px solid '+T.BORD+';font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:'+T.MUT+'">MRA · mobile.experiential · Confidential'+(haveCost?' — pay rate data':'')+'</div>';
+  _finPrintShell('MRA Overtime Detail — '+rangeLbl, body, 'portrait');
 }
 
 const SSO = (function(){
