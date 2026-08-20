@@ -1244,11 +1244,22 @@ function buildFinanceReport(){
    loading placeholder so Safari/iPad never treats the later async-filled content as a blocked
    popup; the real report is written in once the rates come back. ---- */
 var RATES_URL_KEY='mra_time_ratesurl';
+// A renamed roster entry (e.g. "Sal Jr" -> "Sal Sanchez JR." after someone edited the roster on
+// their own device) must still match the rates list under whichever name it has there. Confirmed
+// live 2026-08-20: time.json has BOTH "Sal Jr" (older rows) and "Sal Sanchez JR." (rows logged
+// after the rename) for the same person (EmpId0 860) -- the old exact/last-token match failed on
+// both the trailing period ("jr." !== "jr") AND the inserted middle name ("sanchez jr" as a whole
+// != "jr"). Tries, in order: exact full name -> rates entry is a bare last name -> same first AND
+// last token (ignoring any middle name/initial), so an inserted/dropped middle token doesn't break
+// the match, without loosely matching two different people who only share a first OR last token.
+function _rateNorm(s){ return String(s||'').trim().toLowerCase().replace(/\.+$/,''); }
+function _rateTokens(s){ return _rateNorm(s).split(/\s+/).filter(Boolean); }
 function _rateMatch(rates, fullName){
-  var full=String(fullName||'').trim().toLowerCase(); if(!full) return null;
-  var last=full.split(/\s+/).pop();
-  var hit=rates.find(function(r){ return r.name && String(r.name).trim().toLowerCase()===full; });
-  if(!hit) hit=rates.find(function(r){ return r.name && String(r.name).trim().toLowerCase()===last; });
+  var qt=_rateTokens(fullName); if(!qt.length) return null;
+  var qFull=qt.join(' '), qFirst=qt[0], qLast=qt[qt.length-1];
+  var hit=rates.find(function(r){ return r.name && _rateTokens(r.name).join(' ')===qFull; });
+  if(!hit) hit=rates.find(function(r){ return r.name && _rateTokens(r.name).join(' ')===qLast; });
+  if(!hit) hit=rates.find(function(r){ var rt=_rateTokens(r.name); return rt.length && rt[0]===qFirst && rt[rt.length-1]===qLast; });
   return hit||null;
 }
 // ---- Finance dashboard summary math: same per-employee-per-week 40hr OT split as the printable

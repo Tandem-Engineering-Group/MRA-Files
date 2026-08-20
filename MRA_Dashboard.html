@@ -6616,11 +6616,17 @@ function _finInRange(dateISO, range){
   if(range==='m') return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
   return true;
 }
+// Same fix as time/index.html's _rateMatch (see its comment) -- handles a renamed roster entry
+// (e.g. "Sal Jr" -> "Sal Sanchez JR.") still matching the rates list: exact full name -> rates
+// entry is a bare last name -> same first AND last token, ignoring any middle name/initial.
+function _finRateNorm(s){ return String(s||'').trim().toLowerCase().replace(/\.+$/,''); }
+function _finRateTokens(s){ return _finRateNorm(s).split(/\s+/).filter(Boolean); }
 function _finRateMatch(rates, fullName){
-  const full=String(fullName||'').trim().toLowerCase(); if(!full) return null;
-  const last=full.split(/\s+/).pop();
-  let hit=rates.find(r=>r.name && String(r.name).trim().toLowerCase()===full);
-  if(!hit) hit=rates.find(r=>r.name && String(r.name).trim().toLowerCase()===last);
+  const qt=_finRateTokens(fullName); if(!qt.length) return null;
+  const qFull=qt.join(' '), qFirst=qt[0], qLast=qt[qt.length-1];
+  let hit=rates.find(r=>r.name && _finRateTokens(r.name).join(' ')===qFull);
+  if(!hit) hit=rates.find(r=>r.name && _finRateTokens(r.name).join(' ')===qLast);
+  if(!hit) hit=rates.find(r=>{ const rt=_finRateTokens(r.name); return rt.length && rt[0]===qFirst && rt[rt.length-1]===qLast; });
   return hit||null;
 }
 function financeMoney(n){ return '$'+(Math.round((n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
