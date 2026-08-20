@@ -95,6 +95,36 @@
   .kpi .ksub{font-size:11px; color:var(--muted); margin-top:5px; font-weight:600}
   .kpi .kgo{font-size:10px; color:var(--muted); margin-top:6px; font-weight:600; opacity:.7}
 
+  /* ---------- FINANCE view (charts) ---------- */
+  .fin-head{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px}
+  .fin-controls{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .fin-controls select{background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:9px; padding:7px 10px; font-size:13px}
+  .fin-tiles.kpis{grid-template-columns:repeat(4,1fr)}
+  .fin-ratesmsg{margin:2px 0 14px; font-size:12.5px; color:var(--muted)}
+  .fin-ratesmsg button{margin-right:8px}
+  .fin-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:4px}
+  .fin-card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px}
+  .fin-card-wide{grid-column:1/-1}
+  .fin-card h3{margin:0 0 12px; font-size:13px; letter-spacing:.6px; color:var(--muted); text-transform:uppercase; font-weight:700}
+  .fin-card-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+  .fin-card-head h3{margin:0}
+  .fin-toggle{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  .fin-toggle button{border:0; background:transparent; color:var(--muted); padding:5px 12px; font-size:12px; font-weight:700; cursor:pointer}
+  .fin-toggle button.on{background:var(--brand); color:#fff}
+  /* Column (bar) chart — weeks along the baseline, one series at a time (Hours | $ toggle), never dual-axis */
+  .fin-colchart{display:flex; align-items:flex-end; gap:6px; height:180px; padding-top:20px; border-bottom:1px solid var(--line); position:relative}
+  .fin-col{flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative}
+  .fin-col .bar{width:100%; max-width:26px; border-radius:4px 4px 0 0; background:var(--blue); position:relative; transition:height .25s ease}
+  .fin-col .val{font-size:10.5px; color:var(--txt); font-weight:700; margin-bottom:3px; white-space:nowrap}
+  .fin-col .lbl{font-size:10px; color:var(--muted); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
+  .fin-empty{color:var(--muted); font-style:italic; font-size:12.5px; padding:20px 4px; text-align:center}
+  /* Ranked horizontal bar lists (by job / by person) — single hue, sorted desc, value at the tip */
+  .fin-barlist .row{display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px}
+  .fin-barlist .row .nm{flex:0 0 34%; color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .fin-barlist .row .tk{flex:1; background:var(--panel2); border-radius:4px; height:16px; overflow:hidden; position:relative}
+  .fin-barlist .row .tk .fill{display:block; height:100%; border-radius:4px 0 0 4px; background:var(--blue)}
+  .fin-barlist .row .vv{flex:0 0 auto; min-width:64px; text-align:right; font-weight:700; color:var(--txt); font-variant-numeric:tabular-nums}
+
   /* ---------- Panels / layout ---------- */
   .grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; align-items:start}
   .span3{grid-column:1 / -1}
@@ -2461,13 +2491,50 @@
   </div>
 
   <!-- ===================== FINANCE VIEW (Rich + Kyle Maynard only) =====================
-       Embeds the Time Tracking app's own Finance dashboard (hours/$ tiles, per-employee cost
-       breakdown, report buttons) rather than re-implementing that math a second time here —
-       same iframe-embed pattern already used elsewhere in this project (Command Center embeds
-       this very dashboard the same way). Lazy-loaded: src is only set the first time this tab
-       is actually opened, so signing in as anyone else never even fetches it. -->
+       A REAL reporting/analytics page — not the Time Tracking entry kiosk. Reads the shared
+       time.json (same public export Time Tracking itself reads) straight into this page and
+       renders real charts client-side: hours/$ by week, by job, by person. Pure viewing +
+       report-launch; time is still entered on the separate Time Tracking page (linked, not
+       embedded). Rendered by renderFinance() below. -->
   <div id="financeView" class="hidden">
-    <iframe id="financeFrame" title="Finance" style="width:100%;height:calc(100vh - 150px);border:0;display:block;background:#0c1420"></iframe>
+    <div class="panel">
+      <div class="fin-head">
+        <h2 style="margin:0">💰 Finance</h2>
+        <div class="fin-controls">
+          <select id="finRange" onchange="renderFinance()">
+            <option value="tw">This week</option>
+            <option value="lw">Last week</option>
+            <option value="2w" selected>Last 2 weeks</option>
+            <option value="m">This month</option>
+            <option value="all">All time</option>
+          </select>
+          <button class="expandbtn" onclick="renderFinance(true)" title="Pull the latest shared hours">🔄 Refresh</button>
+          <a class="expandbtn" href="time/index.html" target="_blank" rel="noopener" title="Enter time, or run the full printable Finance/Cost reports">🧾 Time entry &amp; full reports ↗</a>
+        </div>
+      </div>
+      <div class="kpis fin-tiles" id="finTiles"></div>
+      <div id="finRatesMsg" class="fin-ratesmsg"></div>
+      <div class="fin-grid">
+        <div class="fin-card fin-card-wide">
+          <div class="fin-card-head">
+            <h3>Hours &amp; cost by week</h3>
+            <div class="fin-toggle" id="finTrendToggle">
+              <button data-m="h" class="on" onclick="finSetTrendMetric('h')">Hours</button>
+              <button data-m="c" onclick="finSetTrendMetric('c')">$</button>
+            </div>
+          </div>
+          <div id="finTrendChart" class="fin-colchart"></div>
+        </div>
+        <div class="fin-card">
+          <h3>By job</h3>
+          <div id="finByJob" class="fin-barlist"></div>
+        </div>
+        <div class="fin-card">
+          <h3>By person</h3>
+          <div id="finByPerson" class="fin-barlist"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ===================== HISTORY VIEW ===================== -->
@@ -3720,7 +3787,8 @@ const GENERAL_HELP = `
 
   <div class="hsec"><h4>②ᶠ 💰 FINANCE — hours &amp; cost reporting</h4>
     <p>A <span class="k">FINANCE</span> tab sits in the main tab bar, limited to <b>Rich &amp; Kyle Maynard only</b> — it's hidden entirely for everyone else, and doesn't unlock with the shared manager PIN (it needs a real Microsoft sign-in as one of those two accounts).</p>
-    <p>It shows hours + $ tiles for whatever date range is picked, a per-employee cost breakdown, and buttons to run the labor-hours report or the detailed pay-rate/overtime cost report — the same reporting already built into <b>Time Tracking</b>, just reachable as its own tab here instead of a separate page. First time you open it, it'll ask once for the pay-rates source (saved on that device only, never in this file).</p></div>
+    <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. Pick a date range, then read: a stat strip ($ cost · hours · employees · jobs charged), a <b>Hours &amp; cost by week</b> bar chart (toggle Hours/$), and ranked <b>By job</b> / <b>By person</b> lists.</p>
+    <p>First time you switch it to $, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so the numbers always agree.</p></div>
 
   <div class="hsec"><h4>②ʳ ⏩ Pushing &amp; sliding due dates</h4>
     <p>When a task slips, you can push it out and <b>the old date stays visible, struck through</b>, next to the new one (<span class="k"><s>7/14</s> → 7/24</span>) — on the task everywhere, so everyone can see it moved.</p>
@@ -3955,8 +4023,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
-  { rev:"37.54", date:"2026-08-20", title:"💰 New FINANCE tab — Rich &amp; Kyle Maynard only", items:[
-    "A new <b>FINANCE</b> tab in the main tab bar (alongside Floor/Projects/Fleetio/etc.) shows live hours + $ reporting from Time Tracking — a per-employee cost breakdown for whatever date range is selected, plus one-click buttons to run the labor-hours report or the detailed pay-rate/OT cost report. It embeds the Finance dashboard already built into Time Tracking rather than duplicating that math a second time.",
+  { rev:"37.54", date:"2026-08-20", title:"💰 New FINANCE tab — real charts, Rich &amp; Kyle Maynard only", items:[
+    "A new <b>FINANCE</b> tab in the main tab bar (alongside Floor/Projects/Fleetio/etc.) is a real reporting/analytics page, not a place to enter time — that still happens on the separate Time Tracking page (linked from here, not embedded). Shows a <b>stat strip</b> ($ cost/hours/employees/jobs charged for the selected date range), a <b>Hours &amp; cost by week</b> bar chart with a Hours/$ toggle, and ranked <b>By job</b> / <b>By person</b> bar lists — computed live from the shared time data, no page reload needed.",
+    "Pay-rate $ figures use the same one-time device-saved rates source and the same per-employee-per-week overtime math as the existing Cost report, so the numbers always agree if you open both. A link to the full printable Finance/Cost reports (and time entry itself) stays one click away.",
     "Strictly limited to <b>rmiller@gomra.com</b> and <b>kmaynard@gomra.com</b> — the tab is hidden from everyone else, including other admins, and isn't tied to any existing role tier. Requires actually signing in with Microsoft (the shared manager PIN does not unlock it, by design)." ] },
   { rev:"37.53", date:"2026-08-20", title:"✂️ Cut Optimizer added to the ☰ Menu — plus a real bug fix", items:[
     "Rich brought over his standalone <b>Cut Optimizer Pro</b> (2D rectangular sheet-cutting + linear/1D cut layout planner, Excel import/export, printable PDF fabrication plan) — now live at <b>☰ Menu → ✂️ Cut Optimizer</b>, restyled to the same dark theme as Time Tracking, the Product Catalogue and the Starlink Pricing Calculator.",
@@ -6503,6 +6572,192 @@ function financeTabAllowed(){
   if(typeof SSO==='undefined' || !SSO.active() || !SSO.ready || SSO.failed || !SSO.user) return false;
   return FINANCE_EMAILS.indexOf(SSO.email())>=0;
 }
+
+/* ---------- FINANCE view: real charts, not the Time Tracking entry kiosk ----------
+   Reads the shared time.json (public export, same file Time Tracking itself reads) straight
+   into THIS page and computes hours/$ trends client-side — no iframe, no duplicated entry form.
+   Rate lookup + the OT-aware $ math mirror time/index.html's Cost report exactly (same
+   mra_time_ratesurl device key, same per-employee-per-week 40hr split) so the numbers here
+   always agree with the detailed report if someone opens both. */
+const FIN_RATES_KEY='mra_time_ratesurl';
+let FIN_ENTRIES=null, FIN_TREND_METRIC='h', FIN_LOADING=false;
+function _finMapEntries(arr){
+  if(!Array.isArray(arr)) return [];
+  return arr.filter(it=>it && (it.Hours!=null || it.JobName || it.Title)).map(it=>({
+    who: it.Title||it.Employee||it.EmpID||'',
+    dateISO: String(it.DateWorked||'').slice(0,10),
+    job: it.JobName||'', jobNum: String(it.JobCode||'').trim(),
+    hours: parseFloat(it.Hours!=null?it.Hours:0)||0,
+    payType: it.PayType||'Work', ts: it.Created||''
+  }));
+}
+function _finStartOfWeek(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
+function _finWeekLabel(d){ return (d.getMonth()+1)+'/'+d.getDate(); }
+function _finInRange(dateISO, range){
+  if(range==='all'||!dateISO) return !!dateISO;
+  const d=new Date(dateISO+'T00:00:00'), now=new Date();
+  if(range==='tw') return d>=_finStartOfWeek(now);
+  if(range==='lw'){ const s=_finStartOfWeek(now), ls=new Date(s); ls.setDate(ls.getDate()-7); return d>=ls && d<s; }
+  if(range==='2w'){ const s=_finStartOfWeek(now), ls=new Date(s); ls.setDate(ls.getDate()-14); return d>=ls; }
+  if(range==='m') return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  return true;
+}
+function _finRateMatch(rates, fullName){
+  const full=String(fullName||'').trim().toLowerCase(); if(!full) return null;
+  const last=full.split(/\s+/).pop();
+  let hit=rates.find(r=>r.name && String(r.name).trim().toLowerCase()===full);
+  if(!hit) hit=rates.find(r=>r.name && String(r.name).trim().toLowerCase()===last);
+  return hit||null;
+}
+function financeMoney(n){ return '$'+(Math.round((n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function loadFinanceEntries(cb, force){
+  if(FIN_ENTRIES && !force){ cb(FIN_ENTRIES); return; }
+  fetch('time.json?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
+    .then(a=>{ FIN_ENTRIES=_finMapEntries(a); cb(FIN_ENTRIES); })
+    .catch(()=>{ FIN_ENTRIES=FIN_ENTRIES||[]; cb(FIN_ENTRIES); });
+}
+// Per-employee-per-week 40hr OT split (same rule as the Cost report): Work hours past 40 in an
+// employee's own calendar week are OT at 1.5x; leave/holiday hours never carry OT.
+function _finCostCalc(rows, rates){
+  const rateOf={};
+  rows.forEach(e=>{ const who=e.who||'—'; if(!(who in rateOf)){ const r=_finRateMatch(rates,who); rateOf[who]=r?r.rate:null; } });
+  const byEmp={};
+  const emp=who=>byEmp[who]||(byEmp[who]={rate:rateOf[who],h:0,c:0});
+  const byEmpWeek={};
+  rows.forEach(e=>{ if(e.payType!=='Work'||!e.dateISO) return; const who=e.who||'—', wk=+_finStartOfWeek(new Date(e.dateISO+'T00:00:00'));
+    (byEmpWeek[who]=byEmpWeek[who]||{})[wk]=(byEmpWeek[who][wk]||[]).concat([e]); });
+  Object.keys(byEmpWeek).forEach(who=>{
+    const E=emp(who), rate=E.rate;
+    Object.values(byEmpWeek[who]).forEach(list=>{
+      const sorted=list.slice().sort((a,b)=>(a.dateISO||'').localeCompare(b.dateISO||'')||String(a.ts||'').localeCompare(String(b.ts||'')));
+      let running=0;
+      sorted.forEach(e=>{ const h=e.hours||0, regH=Math.max(0,Math.min(h,40-running)), otH=h-regH; running+=h; E.h+=h;
+        if(rate!=null) E.c += regH*rate + otH*rate*1.5; });
+    });
+  });
+  rows.forEach(e=>{ if(e.payType==='Work'||!e.dateISO) return; const who=e.who||'—', h=e.hours||0, E=emp(who);
+    E.h+=h; if(E.rate!=null) E.c+=h*E.rate; });
+  return byEmp;
+}
+function financeSetupRates(){
+  const u=prompt('Paste the rates-flow URL (one-time — saved on this device only, never in any file):');
+  if(!u) return; localStorage.setItem(FIN_RATES_KEY,u.trim()); renderFinance();
+}
+function financeResetRates(){ localStorage.removeItem(FIN_RATES_KEY); renderFinance(); }
+function finSetTrendMetric(m){ FIN_TREND_METRIC=m;
+  document.querySelectorAll('#finTrendToggle button').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
+  renderFinance(); }
+function _finTile(cls,n,l){ return '<div class="kpi '+cls+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
+function _finBarRow(name, val, max, fmt){
+  const pct = max>0 ? Math.max(2,Math.round(val/max*100)) : 0;
+  return '<div class="row"><span class="nm" title="'+escA(name)+'">'+esc(name)+'</span>'
+    +'<span class="tk"><span class="fill" style="width:'+pct+'%"></span></span>'
+    +'<span class="vv">'+fmt+'</span></div>';
+}
+function renderFinance(force){
+  const view=document.getElementById('financeView'); if(!view || view.classList.contains('hidden')) return;
+  if(FIN_LOADING) return; FIN_LOADING=true;
+  loadFinanceEntries(entries=>{
+    FIN_LOADING=false;
+    const range=(document.getElementById('finRange')||{}).value||'2w';
+    const rows=entries.filter(e=>_finInRange(e.dateISO, range));
+    const hours=rows.reduce((a,e)=>a+(e.hours||0),0);
+    const empSet={}, jobSet={};
+    rows.forEach(e=>{ empSet[e.who||'—']=1; if(e.job) jobSet[e.job]=1; });
+    const empCount=Object.keys(empSet).length, jobCount=Object.keys(jobSet).length;
+
+    // weekly buckets (chronological), capped to the most recent 12 so "All time" stays readable
+    const byWeek={};
+    rows.forEach(e=>{ if(!e.dateISO) return; const wkD=_finStartOfWeek(new Date(e.dateISO+'T00:00:00')), wk=+wkD;
+      if(!byWeek[wk]) byWeek[wk]={d:wkD, h:0, rowsForCost:[]}; byWeek[wk].h+=e.hours||0; byWeek[wk].rowsForCost.push(e); });
+    let weekKeys=Object.keys(byWeek).map(Number).sort((a,b)=>a-b);
+    const weekTruncated = weekKeys.length>12;
+    if(weekTruncated) weekKeys=weekKeys.slice(-12);
+
+    // by job / by person (hours now; $ filled in once rates resolve)
+    const jobAgg={}, perAgg={};
+    rows.forEach(e=>{ const jn=e.job||'(no job)'; (jobAgg[jn]=jobAgg[jn]||{h:0,c:0}).h+=e.hours||0;
+      const who=e.who||'—'; (perAgg[who]=perAgg[who]||{h:0,c:0}).h+=e.hours||0; });
+
+    const tilesBase=()=>_finTile('sched',hours.toFixed(1),'Hours')+_finTile('active',empCount,'Employees')+_finTile('pipe',jobCount,'Jobs charged');
+
+    function paintNoRates(){
+      document.getElementById('finTiles').innerHTML=_finTile('proj','—','$ Cost')+tilesBase();
+      document.getElementById('finRatesMsg').innerHTML='<button class="expandbtn" onclick="financeSetupRates()">🔑 Set up pay rates</button> One-time, saved on this device only — same rates the Detailed Cost report uses.';
+      paintCharts(null);
+    }
+    function paintWithRates(byEmpAll, byEmpWeekly){
+      let totC=0; Object.keys(byEmpAll).forEach(w=>totC+=byEmpAll[w].c);
+      document.getElementById('finTiles').innerHTML=_finTile('proj',financeMoney(totC),'$ Cost')+tilesBase();
+      document.getElementById('finRatesMsg').innerHTML='';
+      paintCharts({byEmpAll, byEmpWeekly});
+    }
+    function paintCharts(cost){
+      // trend (weekly) chart — showCost gates BOTH the value lookup and the label/color, so a
+      // $ value is never rendered when cost data isn't actually loaded (silently mislabeling
+      // hours as dollars would be a real accuracy bug on a finance page).
+      const showCost = (FIN_TREND_METRIC==='c') && !!cost;
+      const toggleEl=document.getElementById('finTrendToggle');
+      if(toggleEl) toggleEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.m===(showCost?'c':'h')));
+      const trendEl=document.getElementById('finTrendChart');
+      if(!weekKeys.length){ trendEl.innerHTML='<div class="fin-empty">No hours in this range.</div>'; }
+      else{
+        const vals=weekKeys.map(wk=> showCost ? (cost.byEmpWeekly[wk]||0) : byWeek[wk].h);
+        const max=Math.max.apply(null, vals.concat([0.0001]));
+        const note=(FIN_TREND_METRIC==='c' && !cost) ? '<div class="fin-empty" style="padding:0 0 8px;text-align:left">Set up pay rates (below) to see this chart in $.</div>' : '';
+        trendEl.innerHTML = note + (weekTruncated?'<div class="fin-empty" style="padding:0 0 8px;text-align:left">Showing the most recent 12 weeks.</div>':'')
+          + '<div style="display:flex;gap:6px;align-items:flex-end;height:180px">' + weekKeys.map((wk,i)=>{
+            const v=vals[i], h=Math.max(3,Math.round(v/max*150));
+            const lbl=_finWeekLabel(byWeek[wk].d);
+            const valTxt = showCost ? financeMoney(v) : (Math.round(v*10)/10)+'h';
+            return '<div class="fin-col" title="'+escA(lbl+' — '+valTxt)+'"><span class="val">'+valTxt+'</span><span class="bar" style="height:'+h+'px;background:'+(showCost?'var(--brand)':'var(--blue)')+'"></span><span class="lbl">'+esc(lbl)+'</span></div>';
+          }).join('') + '</div>';
+      }
+      // by job / by person ranked lists
+      if(cost){
+        Object.keys(cost.byEmpAll).forEach(who=>{ if(perAgg[who]) perAgg[who].c=cost.byEmpAll[who].c; });
+      }
+      const jobNames=Object.keys(jobAgg).sort((a,b)=>jobAgg[b].h-jobAgg[a].h);
+      const jobCap=jobNames.slice(0,8), jobMax=Math.max.apply(null, jobCap.map(n=>jobAgg[n].h).concat([0.0001]));
+      document.getElementById('finByJob').innerHTML = jobCap.length
+        ? jobCap.map(n=>_finBarRow(n, jobAgg[n].h, jobMax, (Math.round(jobAgg[n].h*10)/10)+'h')).join('')
+          + (jobNames.length>8?'<div class="fin-empty" style="padding:6px 0 0;text-align:left">+'+(jobNames.length-8)+' more not shown</div>':'')
+        : '<div class="fin-empty">No hours in this range.</div>';
+      const perNames=Object.keys(perAgg).sort((a,b)=>perAgg[b].h-perAgg[a].h);
+      const perCap=perNames.slice(0,8), perMax=Math.max.apply(null, perCap.map(n=>perAgg[n].h).concat([0.0001]));
+      document.getElementById('finByPerson').innerHTML = perCap.length
+        ? perCap.map(n=>{ const hTxt=(Math.round(perAgg[n].h*10)/10)+'h'; const val = (cost && perAgg[n].c!=null) ? (financeMoney(perAgg[n].c)+' · '+hTxt) : hTxt;
+            return _finBarRow(n, perAgg[n].h, perMax, val); }).join('')
+          + (perNames.length>8?'<div class="fin-empty" style="padding:6px 0 0;text-align:left">+'+(perNames.length-8)+' more not shown</div>':'')
+        : '<div class="fin-empty">No hours in this range.</div>';
+    }
+
+    if(!rows.length){
+      document.getElementById('finTiles').innerHTML=_finTile('proj','$0','$ Cost')+tilesBase();
+      document.getElementById('finRatesMsg').innerHTML='';
+      paintCharts(null);
+      return;
+    }
+    const ratesUrl=localStorage.getItem(FIN_RATES_KEY);
+    if(!ratesUrl){ paintNoRates(); return; }
+    fetch(ratesUrl,{method:'POST',headers:{'Content-Type':'application/json'}})
+      .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
+      .then(rates=>{
+        rates=(rates||[]).filter(r=>r&&r.name);
+        const byEmpAll=_finCostCalc(rows, rates);
+        const byEmpWeekly={};
+        weekKeys.forEach(wk=>{ byEmpWeekly[wk]=0; const wrows=byWeek[wk].rowsForCost;
+          const wc=_finCostCalc(wrows, rates); Object.keys(wc).forEach(w=>byEmpWeekly[wk]+=wc[w].c); });
+        paintWithRates(byEmpAll, byEmpWeekly);
+      })
+      .catch(err=>{
+        document.getElementById('finTiles').innerHTML=_finTile('proj','—','$ Cost')+tilesBase();
+        document.getElementById('finRatesMsg').innerHTML='<span style="color:var(--red)">Could not load pay rates ('+esc(err.message)+').</span> <button class="expandbtn" onclick="renderFinance()">Retry</button> <button class="expandbtn" onclick="financeResetRates()">Re-enter URL</button>';
+        paintCharts(null);
+      });
+  }, force);
+}
+
 const SSO = (function(){
   const TENANT='1dc2dfee-5d93-4f0c-aa97-2344b72fe6b0';
   const CLIENT='fad6a2aa-2dab-4c46-ad3a-29e7040036ae';
@@ -18206,7 +18461,7 @@ function setView(v,opts){
   document.getElementById('historyView').classList.toggle('hidden',v!=='history');
   if(v==='history') renderHistory();
   if(v==='mywork') renderMyWork();
-  if(v==='finance'){ const fr=document.getElementById('financeFrame'); if(fr && !fr.src) fr.src='time/index.html'; }
+  if(v==='finance') renderFinance();
   if(v==='assets') setAssetLens(ASSET_LENS);   // show the right lens + render it
   if(_MINI_BY_VIEW[v]) setTimeout(()=>refreshMiniMap(v), 40);   // mount/refresh the unit map once the tab is visible
   if(typeof closeDrops==='function') closeDrops();              // close any open menu when switching tabs
