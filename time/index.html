@@ -159,7 +159,8 @@
   <div class="card hide" id="hoursCard">
     <h2 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <span>Tracked hours</span>
-      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm hide" id="costBtn" title="Cost report with pay rates and overtime -- visible to you only">💰 Cost report</button><button class="tbtn sm" id="refreshBtn" title="Pull the latest shared hours from everyone (reloads the shared list)">🔄 Refresh</button><button class="tbtn sm" id="sampleBtn" title="Reload the real 7/13–17 demo week">🧪 Reload demo week</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
+      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm hide" id="costBtn" title="Cost report with pay rates and overtime -- visible to you only">💰 Cost report</button><button class="tbtn sm" id="refreshBtn" title="Pull the latest shared hours from everyone (reloads the shared list)">🔄 Refresh</button><button class="tbtn sm" id="paylocityBtn" title="Import the daily Paylocity 'Employee Time Cards by Cost Center with Notes' PDF -- pulls in each person's hours, leaving the job blank for you to assign">📥 Import Paylocity</button><button class="tbtn sm" id="sampleBtn" title="Reload the real 7/13–17 demo week">🧪 Reload demo week</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
+    <input type="file" id="paylocityFile" accept="application/pdf" class="hide">
     <div id="shareNote" class="muted" style="font-size:11.5px;margin:0 0 8px"></div>
     <div class="filtrow noprint">
       <select id="fRange">
@@ -224,6 +225,25 @@
       <button class="tbtn primary" id="editSaveBtn">Save changes</button>
       <button class="tbtn" id="editCancelBtn">Cancel</button>
       <span id="editMsg" class="ok-msg hide">✓ Saved</span>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT PAYLOCITY (manager only) -->
+<div class="helpov noprint" id="paylocityModal">
+  <div class="helpbox" style="max-width:760px">
+    <button class="helpx" id="paylocityClose" aria-label="Close">✕</button>
+    <h2 style="font-size:19px">📥 Import Paylocity time cards</h2>
+    <p class="lead" id="paylocityLead">Drop in the "Employee Time Cards by Cost Center with Notes" PDF you get from Paylocity — this pulls in each person's hours. The job is filled in automatically only when Paylocity already has one tagged; otherwise it's left blank for you to assign.</p>
+    <div id="paylocitySummary" style="font-size:13px;margin-bottom:10px"></div>
+    <div style="overflow:auto;max-height:360px;border:1px solid var(--line);border-radius:10px" id="paylocityPreviewWrap">
+      <table class="t"><thead><tr><th>Date</th><th>Employee</th><th>Pay type / Job</th><th class="r">Hrs</th><th>Note</th></tr></thead>
+      <tbody id="paylocityRows"></tbody></table>
+    </div>
+    <div class="submitrow">
+      <button class="tbtn primary" id="paylocityConfirmBtn">Import</button>
+      <button class="tbtn" id="paylocityCancelBtn">Cancel</button>
+      <span id="paylocityMsg" class="ok-msg hide"></span>
     </div>
   </div>
 </div>
@@ -363,6 +383,162 @@ function submit(){
   $('fJob').value=''; $('fHours').value=''; $('fTask').value=''; $('fNotes').value=''; document.querySelectorAll('.hchip.on').forEach(function(c){c.classList.remove('on');});
   var ok=$('okMsg'); ok.textContent='✓ Saved '+e.hours+' hr'+(e.hours===1?'':'s')+' to '+e.job; ok.classList.remove('hide'); setTimeout(function(){ ok.classList.add('hide'); },2600);
   renderTracking(); renderMyDay(); $('fJob').focus();
+}
+/* ---------- 📥 Import Paylocity ("Employee Time Cards by Cost Center with Notes" PDF) ----------
+   Rich gets this PDF from Paylocity every day and wanted it to auto-populate his hours instead of
+   re-typing them, then he "just updates the jobs" -- no Paylocity API access exists here (nothing
+   configured for this environment), so this is upload-based: he drops in the same PDF he already
+   gets, it's parsed client-side, and the resulting entries save through the exact same TIME_WRITE_URL
+   path a manual add uses. Parser validated against Rich's real report (Playwright + the actual pdf.js
+   build below, in a scratch test) -- every employee's parsed hours matched that employee's own
+   printed "Totals" line exactly, and the grand total matched the report's own Report Summary. */
+var PDFJS_URLS=['https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js','https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'];
+var PDFJS_WORKER_URLS=['https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js','https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'];
+function loadPdfJs(cb){ if(window.pdfjsLib) return cb();
+  var i=0; (function tryNext(){ if(i>=PDFJS_URLS.length){ cb(new Error('pdfjs')); return; } var u=i; var s=document.createElement('script'); s.async=true; s.src=PDFJS_URLS[i++];
+    s.onload=function(){ if(window.pdfjsLib){ window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER_URLS[u]; cb(); } else tryNext(); };
+    s.onerror=tryNext; document.head.appendChild(s); })(); }
+var _PY_DATE_RE=/^\d{1,2}\/\d{1,2}\/\d{4}$/, _PY_DAY_RE=/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/, _PY_TIME_RE=/^\d{1,2}:\d{2}(AM|PM)$/i, _PY_NUM_RE=/^\d+\.\d{2}$/, _PY_CAPS_RE=/^[A-Z][A-Z.'\-]*,?$/;
+/* Walk the flattened, in-order text-token stream from every page and reconstruct {emp,date,action,cc2,hours,note}
+   rows. Row shape is fixed: "<date> <Mon..Sun> <action words...> [start] [stop] <cc1> <cc2> <cc3> <8 decimal cols>",
+   optionally followed by a free-text "Employee In Note: ..." line. A date token is only treated as a real row when
+   immediately followed by a day abbreviation -- that alone rejects every repeated page masthead/footer line (the
+   "8/9/2026 - 8/22/2026" range and "As of: 8/20/2026 4:07:42 AM" both fail that check). */
+function parsePaylocityTokens(toks){
+  var rows=[], curEmp=null, i=0;
+  while(i<toks.length){
+    var t=toks[i];
+    if(t==='Employee' && toks[i+1]==='Number'){
+      i+=2; if(toks[i]==='Name') i++;
+      // A page break can land right here, interleaving the repeated page masthead ("Page 7 of 21
+      // Mobility Resource Associates Inc ... Employee Time Cards by Cost Center with Notes") between
+      // this header and the real "<number> <NAME>" pair -- scan past it instead of assuming adjacency.
+      var k=i, guard=0;
+      while(k<toks.length && guard<40){
+        if(/^\d{2,6}$/.test(toks[k]) && _PY_CAPS_RE.test(toks[k+1]||'')) break;
+        if((toks[k]==='Employee'&&toks[k+1]==='Number') || (_PY_DATE_RE.test(toks[k])&&_PY_DAY_RE.test(toks[k+1]))){ k=-1; break; }
+        k++; guard++;
+      }
+      if(k>=0 && k<toks.length){
+        var num=toks[k]; k++; var nameParts=[];
+        while(k<toks.length && _PY_CAPS_RE.test(toks[k]) && toks[k]!=='Total' && toks[k]!=='Code'){ nameParts.push(toks[k]); k++; }
+        curEmp={ num:num, name:nameParts.join(' ').replace(/,$/,'').trim() }; i=k;
+      }
+      continue;
+    }
+    if(_PY_DATE_RE.test(t) && _PY_DAY_RE.test(toks[i+1])){
+      var j=i+2; var actionWords=[];
+      while(j<toks.length && !_PY_TIME_RE.test(toks[j])){ actionWords.push(toks[j]); j++; }
+      if(_PY_TIME_RE.test(toks[j])) j++;                 // Start (unused)
+      if(_PY_TIME_RE.test(toks[j])) j++;                 // Stop (unused)
+      var cc1=toks[j++], cc2=toks[j++]; j++;             // cc1 unused, cc3 unused
+      var nums=[]; while(nums.length<8 && _PY_NUM_RE.test(toks[j])){ nums.push(parseFloat(toks[j])); j++; }
+      var note='';
+      if(toks[j]==='Employee' && toks[j+1]==='In' && toks[j+2]==='Note:'){
+        var k2=j+3, words=[];
+        while(k2<toks.length && !(_PY_DATE_RE.test(toks[k2])&&_PY_DAY_RE.test(toks[k2+1])) && toks[k2]!=='Totals' && !(toks[k2]==='Employee'&&toks[k2+1]==='Number')){ words.push(toks[k2]); k2++; }
+        note=words.join(' '); j=k2;
+      }
+      rows.push({ emp:curEmp, dateRaw:t, action:actionWords.join(' '), cc2:cc2, hours:(nums.length?nums[0]:0), note:note });
+      i=j; continue;
+    }
+    i++;
+  }
+  return rows;
+}
+function _pyISO(mdY){ var m=mdY.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if(!m) return ''; return m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); }
+function _pyEmpName(num){ for(var n in EMPIDS){ if(String(EMPIDS[n])===String(num)) return n; } return null; }
+// Resolve a Paylocity CC2 job number (e.g. "J1563", "1217", "Unknown") to a real "<code> · <name>"
+// string matching the same job-list format the manual entry form uses -- only when it's a REAL,
+// currently-known job; otherwise '' so the job stays blank for Rich to assign by hand.
+function _pyJobFromCC2(cc2){
+  if(!cc2 || /^unknown$/i.test(cc2)) return '';
+  var code=String(cc2).replace(/^j/i,'').trim(); if(!code) return '';
+  var bj=boardJobs().find(function(b){ return String(b.jobNum||'').replace(/^j/i,'').trim()===code; });
+  if(bj) return code+' · '+bj.name;
+  if(JCNAMES[code]) return code+' · '+JCNAMES[code];
+  return '';
+}
+var PY_PENDING=[];   // rows accepted into the current import preview, awaiting confirm
+function openPaylocityImport(){ if(!ensurePinLike()) return; $('paylocityFile').value=''; $('paylocityFile').click(); }
+// isMgr() already gates the whole Hours card this button lives in -- no separate PIN prompt needed.
+function ensurePinLike(){ return isMgr(); }
+function onPaylocityFile(file){
+  if(!file) return;
+  var msg=$('paylocitySummary'); msg.textContent='Reading '+file.name+'…';
+  $('paylocityModal').classList.add('on');
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    loadPdfJs(function(err){
+      if(err){ msg.textContent='Could not load the PDF reader (no network to the CDN?) -- try again in a minute.'; return; }
+      pdfjsLib.getDocument({data:new Uint8Array(ev.target.result)}).promise.then(function(doc){
+        var pageNums=[]; for(var p=1;p<=doc.numPages;p++) pageNums.push(p);
+        var allToks=[];
+        return pageNums.reduce(function(chain,p){
+          return chain.then(function(){ return doc.getPage(p).then(function(pg){ return pg.getTextContent(); }).then(function(content){
+            content.items.forEach(function(it){ var s=(it.str||'').trim(); if(s) allToks.push(s); }); }); });
+        }, Promise.resolve()).then(function(){
+          var flat=allToks.join(' ').split(/\s+/).filter(Boolean);
+          buildPaylocityPreview(parsePaylocityTokens(flat));
+        });
+      }).catch(function(e){ msg.textContent='Could not read that PDF ('+(e&&e.message||'unknown error')+'). Is it the right file?'; });
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+function buildPaylocityPreview(rows){
+  var existing={};   // dedupe fingerprint of everything already on record, so re-importing the same day is a no-op
+  (activeEntries()||[]).forEach(function(e){ var eid=e.empId||EMPIDS[e.who]||e.who||''; existing[eid+'|'+e.dateISO+'|'+e.hours+'|'+(e.job||'')]=1; });
+  var accepted=[], unmatchedNames={}, zeroSkipped=0, dupSkipped=0;
+  rows.forEach(function(r){
+    if(!(r.hours>0)){ zeroSkipped++; return; }        // MCI/MCO punch-correction placeholders are always 0.00
+    if(!r.emp){ return; }
+    var who=_pyEmpName(r.emp.num);
+    if(!who){ unmatchedNames[r.emp.num+' '+r.emp.name]=1; return; }   // not on your Time Tracking roster -- skipped, not auto-added
+    var dateISO=_pyISO(r.dateRaw); if(!dateISO) return;
+    var k=r.action.toLowerCase().trim();
+    var job = LEAVEMAP[k] ? LEAVEMAP[k] : _pyJobFromCC2(r.cc2);
+    var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
+    var empId=EMPIDS[who]||'';
+    var fp=empId+'|'+dateISO+'|'+r.hours+'|'+job;
+    if(existing[fp]){ dupSkipped++; return; }
+    existing[fp]=1;   // guard against the SAME pdf row appearing twice inside this one import too
+    accepted.push({ who:who, dateISO:dateISO, job:job, jobNum:jn, hours:r.hours, task:'', notes:r.note||'', action:r.action });
+  });
+  PY_PENDING=accepted;
+  var unmatchedList=Object.keys(unmatchedNames).map(function(k){ return k.replace(/^\d+\s/,''); });
+  var bits=[accepted.length+' row'+(accepted.length===1?'':'s')+' ready to import'];
+  if(dupSkipped) bits.push(dupSkipped+' already on record (skipped)');
+  if(zeroSkipped) bits.push(zeroSkipped+' zero-hour punch correction'+(zeroSkipped===1?'':'s')+' (skipped)');
+  if(unmatchedList.length) bits.push(unmatchedList.length+' not on your Time Tracking roster, skipped: '+unmatchedList.join(', '));
+  $('paylocitySummary').innerHTML=bits.map(function(b){return esc(b);}).join(' · ');
+  $('paylocityRows').innerHTML = accepted.length ? accepted.map(function(e){
+    return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job||'— pick a job —')+'</td><td class="r">'+e.hours+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import from this file.</td></tr>';
+  $('paylocityConfirmBtn').disabled = !accepted.length;
+}
+function fmtShortDate(iso){ var p=String(iso||'').split('-'); return p.length===3?(+p[1])+'/'+(+p[2]):iso; }
+function closePaylocityModal(){ $('paylocityModal').classList.remove('on'); PY_PENDING=[]; }
+function confirmPaylocityImport(){
+  if(!PY_PENDING.length) return;
+  var btn=$('paylocityConfirmBtn'); btn.disabled=true; btn.textContent='Importing…';
+  var queue=PY_PENDING.slice(), done=0, total=queue.length;
+  (function step(){
+    if(!queue.length){
+      var m=$('paylocityMsg'); m.textContent='✓ Imported '+total+' entr'+(total===1?'y':'ies'); m.classList.remove('hide');
+      btn.textContent='Import'; btn.disabled=false; PY_PENDING=[];
+      renderTracking(); renderMyDay();
+      setTimeout(function(){ closePaylocityModal(); m.classList.add('hide'); }, 1400);
+      return;
+    }
+    var r=queue.shift();
+    var e={ id:uid(), who:r.who, dateISO:r.dateISO, job:r.job, jobNum:r.jobNum, hours:r.hours, task:r.task, notes:r.notes, ts:new Date().toISOString() };
+    ENTS.push(e); lset(LS.ents, ENTS);
+    if(SHARED) SHARED.push(Object.assign({}, e, { empId:(EMPIDS[e.who]||''), payType:fPayType(e), shared:true }));
+    if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'addTime',empId:(EMPIDS[e.who]||''),code:fCode(e),payType:fPayType(e)}, e))}); }catch(_){}}
+    done++; btn.textContent='Importing… '+done+'/'+total;
+    setTimeout(step, 220);   // stagger writes -- don't hammer the shared write flow with a burst of N POSTs at once
+  })();
 }
 /* Remove one entry from every array + the shared list, and fire the real SharePoint delete.
    Shared by delEntry() (single, confirm-gated) and submitAutoSplit()'s regenerate path (bulk, one
@@ -1496,6 +1672,11 @@ function boot(){
   $('myDayRows').addEventListener('click',function(e){ var d=e.target.closest('[data-del]'); if(d){ delEntry(d.getAttribute('data-del')); return; } var ed=e.target.closest('[data-edit]'); if(ed) openEditEntry(ed.getAttribute('data-edit')); });
   $('editSaveBtn').onclick=saveEditEntry; $('editCancelBtn').onclick=closeEditModal; $('editClose').onclick=closeEditModal;
   $('editModal').addEventListener('click',function(e){ if(e.target===$('editModal')) closeEditModal(); });
+  { var pb=$('paylocityBtn'); if(pb) pb.onclick=openPaylocityImport; }
+  $('paylocityFile').addEventListener('change',function(e){ onPaylocityFile(e.target.files[0]); });
+  $('paylocityCancelBtn').onclick=closePaylocityModal; $('paylocityClose').onclick=closePaylocityModal;
+  $('paylocityConfirmBtn').onclick=confirmPaylocityImport;
+  $('paylocityModal').addEventListener('click',function(e){ if(e.target===$('paylocityModal')) closePaylocityModal(); });
   // manage list edit/delete delegation
   $('mgrCard').addEventListener('click',function(e){
     var t=e.target; var i;
