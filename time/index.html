@@ -50,6 +50,10 @@
   .filtrow select,.filtrow input{background:var(--input);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:14px}
   .totals{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
   @media(max-width:700px){.totals{grid-template-columns:1fr}}
+  .fintiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:4px}
+  .fintile{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .fintile .fn{font-size:20px;font-weight:800;color:var(--brand);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .fintile .fl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
   .tot h3{margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
   .totrow{display:flex;justify-content:space-between;padding:6px 2px;border-bottom:1px solid var(--line)}
   .totrow b{font-variant-numeric:tabular-nums}
@@ -184,6 +188,25 @@
     <div style="overflow:auto;margin-top:14px;max-height:440px">
       <table class="t"><thead><tr><th>Date</th><th>Employee</th><th>Job</th><th class="r">Hrs</th><th>Task / notes</th><th class="noprint"></th></tr></thead>
       <tbody id="entRows"></tbody></table>
+    </div>
+  </div>
+
+  <!-- FINANCE (Rich + Kyle Maynard only -- $ figures, nobody else sees these) -->
+  <div class="card hide noprint" id="financeCard">
+    <h2 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <span>💰 Finance</span>
+      <span class="muted" style="font-size:11px;font-weight:400">Visible only to you &amp; Kyle Maynard</span>
+    </h2>
+    <div class="muted" style="font-size:11.5px;margin:0 0 10px">Same date range as Tracked hours above &mdash; pick <b>Custom range</b> for a 2-week payroll period (it defaults to the last 14 days).</div>
+    <div class="fintiles" id="finTiles"></div>
+    <div id="finRatesMsg" style="margin:10px 0"></div>
+    <div style="overflow:auto;margin-top:6px;max-height:300px">
+      <table class="t"><thead><tr><th>Employee</th><th class="r">Hours</th><th class="r">$</th></tr></thead>
+      <tbody id="finEmpRows"></tbody></table>
+    </div>
+    <div class="submitrow" style="margin-top:14px">
+      <button class="tbtn primary sm" id="finReportBtn2">📊 Run labor hours report</button>
+      <button class="tbtn sm" id="finCostBtn2">💰 Detailed cost report (pay rates + OT)</button>
     </div>
   </div>
 
@@ -634,10 +657,16 @@ function ssoRole(){ if(!SSO.active()||SSO.failed) return null; var em=SSO.email(
 var PINOK=(sessionStorage.getItem('mra_time_mgr')==='1');  /* interim manager code fallback (works before the app-reg redirect URIs are added) */
 function isMgr(){ if(PINOK) return true; if(!SSO.active()) return true; if(!SSO.ready||SSO.failed) return false; if(!SSO.user) return false; return HOURS_ROLES.indexOf(ssoRole())>=0; }
 function activeEntries(){ return (isMgr() && SHARED && SHARED.length) ? SHARED : ENTS; }
+// Finance dashboard ($ figures): Rich + Kyle Maynard ONLY -- deliberately no PIN fallback and no
+// off-host bypass (same strict pattern as the pre-existing Rich-only costBtn check below), since a
+// shared code or a dev-preview default would break the "only us two" promise this is built around.
+var FINANCE_EMAILS=['rmiller@gomra.com','kmaynard@gomra.com'];
+function isFinanceUser(){ return !!(SSO.active() && SSO.ready && !SSO.failed && SSO.user && FINANCE_EMAILS.indexOf(SSO.email())>=0); }
 function applyMgr(){ var on=isMgr(); var unlocked=(SSO.user||PINOK); var hc=$('hoursCard'), hl=$('hoursLocked'); if(hc) hc.classList.toggle('hide',!on); if(hl) hl.classList.toggle('hide',on);
   var b=$('mgrLoginBtn'); if(b) b.textContent = (unlocked? '🔓 Sign out' : '🔒 Sign in');
   var lm=$('lockMsg'); if(lm) lm.textContent = (SSO.user && !on) ? ('Signed in as '+SSO.email()+' — this account doesn\u2019t have access to hours/reports.') : '';
   var cb=$('costBtn'); if(cb) cb.classList.toggle('hide', !(SSO.active()&&SSO.user&&SSO.email()==='rmiller@gomra.com'));   // pay rates -- Rich only, not the general manager roles
+  var fc=$('financeCard'); if(fc) fc.classList.toggle('hide', !isFinanceUser());
   if(on) loadShared(function(){ renderTracking(); });   // always pull the latest shared list (was cached once -> stale after new entries)
   renderTracking();
 }
@@ -742,6 +771,7 @@ function renderTracking(){
     var tn=[e.task,e.notes].filter(Boolean).join(' — ');
     return '<tr><td>'+esc(isoToMDY(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job)+(e.auto?' <span class="muted" title="Auto-split (foreman)" style="font-size:10px">🧮</span>':'')+'</td><td class="r">'+e.hours+'</td><td>'+esc(tn)+'</td><td class="noprint"><button class="rowedit" data-edit="'+e.id+'" title="Edit hours / job">✎</button> <button class="rowdel" data-del="'+e.id+'" title="Delete">×</button></td></tr>';
   }).join(''):'<tr><td colspan="6" class="muted" style="padding:14px">No time entries yet.</td></tr>';
+  renderFinanceCard();
 }
 // ✅ 2026-08: the deleteTime branch in "MRA Time Write" is built + verified -- this really does remove
 // the SharePoint row, not just this device's view.
@@ -1204,6 +1234,84 @@ function _rateMatch(rates, fullName){
   if(!hit) hit=rates.find(function(r){ return r.name && String(r.name).trim().toLowerCase()===last; });
   return hit||null;
 }
+// ---- Finance dashboard summary math: same per-employee-per-week 40hr OT split as the printable
+// Cost report above (rate * reg hours + rate*1.5 * OT hours; leave/holiday hours never carry OT),
+// kept as its own small function rather than refactoring buildCostReportInto's tested logic --
+// duplication here is one screen's worth of totals, not a second source of truth for payroll.
+function _financeCostCalc(rows, rates){
+  var rateOf={};
+  rows.forEach(function(e){ var who=e.who||'—'; if(!(who in rateOf)){ var r=_rateMatch(rates,who); rateOf[who]=r?r.rate:null; } });
+  var byEmp={};
+  function emp(who){ return byEmp[who]||(byEmp[who]={rate:rateOf[who],h:0,c:0}); }
+  var byEmpWeek={};
+  rows.forEach(function(e){
+    if(fPayType(e)!=='Work' || !e.dateISO) return;
+    var who=e.who||'—', wk=ymd(startOfWeek(new Date(e.dateISO+'T00:00:00')));
+    if(!byEmpWeek[who]) byEmpWeek[who]={};
+    (byEmpWeek[who][wk]=byEmpWeek[who][wk]||[]).push(e);
+  });
+  Object.keys(byEmpWeek).forEach(function(who){
+    var E=emp(who), rate=E.rate;
+    Object.keys(byEmpWeek[who]).forEach(function(wk){
+      var list=byEmpWeek[who][wk].slice().sort(function(a,b){ return (a.dateISO||'').localeCompare(b.dateISO||'')||String(a.ts||'').localeCompare(String(b.ts||'')); });
+      var running=0;
+      list.forEach(function(e){
+        var h=e.hours||0, regH=Math.max(0,Math.min(h,40-running)), otH=h-regH;
+        running+=h; E.h+=h;
+        if(rate!=null) E.c += regH*rate + otH*rate*1.5;
+      });
+    });
+  });
+  rows.forEach(function(e){
+    var pt=fPayType(e); if(pt==='Work'||!e.dateISO) return;
+    var who=e.who||'—', h=e.hours||0, E=emp(who);
+    E.h+=h; if(E.rate!=null) E.c+=h*E.rate;
+  });
+  return byEmp;
+}
+function _finMoney(n){ return '$'+(Math.round((n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _finTile(n,l){ return '<div class="fintile"><div class="fn">'+n+'</div><div class="fl">'+esc(l)+'</div></div>'; }
+function financeSetupRates(){
+  var u=prompt('Paste the rates-flow URL (one-time -- saved on this device only, never in any file):');
+  if(!u) return; localStorage.setItem(RATES_URL_KEY,u.trim()); renderFinanceCard();
+}
+function financeResetRates(){ localStorage.removeItem(RATES_URL_KEY); renderFinanceCard(); }
+function renderFinanceCard(){
+  var card=$('financeCard'); if(!card || card.classList.contains('hide')) return;
+  var rows=filtered();
+  var hours=0, jobSet={}, empSet={};
+  rows.forEach(function(e){ hours+=e.hours||0; if(e.job) jobSet[e.job]=1; empSet[e.who||'—']=1; });
+  var empCount=Object.keys(empSet).length, jobCount=Object.keys(jobSet).length;
+  function tiles(costHtml){ $('finTiles').innerHTML=_finTile(hours.toFixed(1),'Hours')+costHtml+_finTile(empCount,'Employees')+_finTile(jobCount,'Jobs charged'); }
+  if(!rows.length){
+    tiles(_finTile('$0.00','$ Cost')); $('finRatesMsg').innerHTML=''; $('finEmpRows').innerHTML='<tr><td colspan="3" class="muted">No hours in this range.</td></tr>'; return;
+  }
+  var ratesUrl=localStorage.getItem(RATES_URL_KEY);
+  if(!ratesUrl){
+    tiles(_finTile('—','$ Cost'));
+    $('finRatesMsg').innerHTML='<button class="tbtn sm" onclick="financeSetupRates()">🔑 Set up pay rates</button> <span class="muted" style="font-size:11.5px">One-time, saved on this device only — same rates the Cost report uses.</span>';
+    $('finEmpRows').innerHTML='';
+    return;
+  }
+  tiles(_finTile('…','$ Cost (loading)'));
+  $('finRatesMsg').innerHTML='';
+  fetch(ratesUrl,{method:'POST',headers:{'Content-Type':'application/json'}})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(rates){
+      rates=(rates||[]).filter(function(r){ return r&&r.name; });
+      var byEmp=_financeCostCalc(rows, rates);
+      var totC=0; Object.keys(byEmp).forEach(function(w){ totC+=byEmp[w].c; });
+      tiles(_finTile(_finMoney(totC),'$ Cost'));
+      var names=Object.keys(byEmp).sort(function(a,b){ return byEmp[b].c-byEmp[a].c || a.localeCompare(b); });
+      $('finEmpRows').innerHTML=names.map(function(w){ var E=byEmp[w];
+        return '<tr><td>'+esc(w)+(E.rate==null?' <span class="muted" style="font-size:10.5px">(no rate on file)</span>':'')+'</td><td class="r">'+E.h.toFixed(2)+'</td><td class="r">'+(E.rate==null?'<span class="muted">—</span>':esc(_finMoney(E.c)))+'</td></tr>'; }).join('');
+    })
+    .catch(function(err){
+      tiles(_finTile('—','$ Cost'));
+      $('finRatesMsg').innerHTML='<span style="color:var(--err);font-size:12px">Could not load pay rates ('+esc(err.message)+').</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button> <button class="tbtn sm" onclick="financeResetRates()">Re-enter URL</button>';
+      $('finEmpRows').innerHTML='';
+    });
+}
 function openCostReport(){
   var rows=filtered();
   if(!rows.length){ alert('No time entries in this range to report.'); return; }
@@ -1656,6 +1764,8 @@ function boot(){
   $('sampleBtn').onclick=seedRealWeek; $('clearBtn').onclick=clearAll;
   $('finBtn').onclick=buildFinanceReport;
   $('costBtn').onclick=openCostReport;
+  $('finReportBtn2').onclick=buildFinanceReport;
+  $('finCostBtn2').onclick=openCostReport;
   { var rb=$('refreshBtn'); if(rb) rb.onclick=function(){ rb.textContent='⏳ …'; loadShared(function(){ rb.textContent='🔄 Refresh'; renderTracking(); }); }; }
   $('helpBtn').onclick=function(){ $('helpModal').classList.add('on'); };
   var _hc=function(){ $('helpModal').classList.remove('on'); }; $('helpClose').onclick=_hc; $('helpGot').onclick=_hc;
