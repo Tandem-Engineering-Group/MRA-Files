@@ -1,0 +1,214 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cut Optimizer Pro - MRA</title>
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='4' y='4' width='56' height='56' rx='10' fill='%23161c26'/><rect x='12' y='12' width='40' height='40' rx='4' fill='none' stroke='%23DF4826' stroke-width='3'/><line x1='12' y1='32' x2='52' y2='32' stroke='%23DF4826' stroke-width='3' stroke-dasharray='4,4'/></svg>">
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0b0e13; --panel:#161c26; --panel2:#1d2632; --line:#2a3543;
+  --txt:#e8edf3; --muted:#8b9bb0; --faint:#5d6b7e;
+  --green:#22c55e; --blue:#3b82f6; --grey:#64748b; --red:#ef4444;
+  --amber:#f59e0b; --violet:#a78bfa; --teal:#2dd4bf;
+  --brand:#DF4826;
+  --radius:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased;font-size:14px;line-height:1.5}
+body{padding:16px 22px 34px}
+.wrap{max-width:1500px;margin:auto}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* ===== HEADER (MRA standard, matches Starlink/Time/Catalogue) ===== */
+.app-header{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding-bottom:13px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100;background:var(--bg)}
+.app-header h1{font-size:25px;font-weight:800;letter-spacing:.5px;line-height:1;display:flex;align-items:center;gap:12px}
+.app-header h1 .brand-accent{color:var(--brand)}
+.app-header h1 .icon-blade{display:inline-block;width:34px;height:34px;background:var(--panel);border:1px solid var(--line);border-radius:8px;position:relative}
+.app-header h1 .icon-blade::after{content:'';position:absolute;left:6px;right:6px;top:16px;height:2px;background:repeating-linear-gradient(90deg,var(--brand) 0 4px,transparent 4px 8px)}
+.app-header .subtitle{font-size:12px;color:var(--muted);margin-top:3px;font-weight:400;letter-spacing:0;display:block}
+.app-header .brand-block{display:flex;flex-direction:column}
+.header-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}
+.hdr-btn{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:8px 16px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.4px;font-family:inherit;transition:all .2s}
+.hdr-btn:hover{background:var(--panel2);color:var(--txt);border-color:var(--blue)}
+.version-badge{background:var(--brand);border:1px solid var(--brand);color:#fff;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:800;letter-spacing:.5px;cursor:pointer;transition:all .2s}
+.version-badge:hover{filter:brightness(1.1)}
+.filebtn{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 16px;background:var(--panel);color:var(--muted);font-weight:700;font-size:12px;letter-spacing:.4px;cursor:pointer;transition:all .2s}
+.filebtn:hover{background:var(--panel2);color:var(--txt);border-color:var(--blue)}
+
+.container{max-width:1500px;margin:0 auto;padding:16px 0}
+
+/* ===== TOOLBAR / TABS ===== */
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0}
+.toolbar .right{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{display:inline-block;border:1px solid var(--line);border-radius:10px;padding:9px 15px;background:var(--panel);color:var(--txt);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;letter-spacing:.2px;transition:all .15s}
+button:hover{border-color:var(--blue);background:var(--panel2)}
+.active,.optimised{background:var(--brand)!important;border-color:var(--brand)!important;color:#fff!important}
+.optimised{background:var(--green)!important;border-color:var(--green)!important}
+.muted{background:var(--panel2);color:var(--muted)}
+.dirty{background:var(--brand)!important;border-color:var(--brand)!important;color:#fff!important}
+.del{background:transparent!important;border:1px solid var(--red)!important;color:var(--red)!important;padding:5px 9px;border-radius:7px}
+.del:hover{background:rgba(239,68,68,.12)!important}
+.hint,.status{color:var(--muted)}
+.status.ok{color:#86efac;font-weight:700}
+.status.error{color:#fca5a5;font-weight:700}
+
+/* ===== CARDS / GRID ===== */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:14px 0}
+.card h2{font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.hidden{display:none!important}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.right{margin-left:0}}
+
+/* ===== TABLES ===== */
+.scroll{overflow:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;color:var(--txt)}
+th{background:var(--panel2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+input,select{width:100%;padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--txt);font-family:inherit;font-size:13px}
+input:focus,select:focus{outline:none;border-color:var(--blue)}
+input.invalid{border:1px solid var(--red);background:rgba(239,68,68,.1)}
+select option{background:var(--panel2);color:var(--txt)}
+
+/* ===== SETTINGS / METRICS ===== */
+.settings{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:10px}
+.metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.metric{background:var(--panel2);border:1px solid var(--line);padding:10px;border-radius:10px;color:var(--muted);font-size:11px}
+.metric b{display:block;font-size:20px;color:var(--txt)}
+@media(max-width:900px){.settings,.metrics{grid-template-columns:1fr 1fr}}
+
+/* ===== ALERTS ===== */
+.alert{padding:11px 14px;border-radius:10px;margin:10px 0;font-size:13px}
+.bad{background:rgba(239,68,68,.1);color:#fca5a5;border:1px solid rgba(239,68,68,.35)}
+
+/* ===== FABRICATION PLAN OUTPUT ===== */
+.summary,.detail{font-size:11px;margin:7px 0}
+.summary th,.summary td,.detail th,.detail td{border:1px solid var(--line);padding:4px 6px}
+.sheet-page{border:1px solid var(--line);border-radius:12px;padding:12px;margin:12px 0;background:var(--panel)}
+.sheet-head{display:flex;justify-content:space-between;font-weight:700;color:var(--txt);margin-bottom:6px}
+/* The nesting diagram itself stays on a light/print-like surface -- it represents a physical
+   sheet of material, and the part-color palette (colours[] in the script) was tuned for a white
+   background so labels stay legible; keeping it light also matches how a print preview reads
+   inside an otherwise dark app. */
+.sheet-map{position:relative;border:4px solid var(--navy,#17324d);background:#fff;margin:8px auto;max-width:100%}
+.part-box{position:absolute;border:2px solid #293b4d;outline:1px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-weight:700;color:#14202b;overflow:hidden;padding:3px;font-size:11px}
+.linear{height:58px;border:3px solid var(--brand);display:flex;background:#fff;border-radius:4px}
+.linear>div{display:flex;align-items:center;justify-content:center;text-align:center;border-right:2px solid #293b4d;background:#d9dde1;font-weight:700;color:#14202b;font-size:11px}
+
+/* ===== MODAL (changelog) ===== */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:1000;padding:30px}
+.modal-backdrop.visible{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:16px;max-width:680px;width:100%;max-height:86vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.modal-header{background:var(--panel);border-bottom:1px solid var(--line);color:var(--txt);padding:18px 26px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}
+.modal-header h2{font-size:18px;font-weight:800}
+.modal-close{background:transparent;border:none;color:var(--muted);font-size:26px;cursor:pointer;width:32px;height:32px;border-radius:50%}
+.modal-close:hover{color:var(--txt)}
+.modal-body{padding:20px 26px}
+.modal-body h3{color:var(--blue);font-size:14px;margin-top:18px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line);font-weight:700}
+.modal-body h3:first-child{margin-top:0}
+.modal-body p,.modal-body li{font-size:13px;color:var(--txt);margin-bottom:6px;line-height:1.55}
+.modal-body ul{padding-left:20px}
+.modal-body b{color:var(--txt)}
+
+.app-footer{margin-top:18px;padding:14px 0;font-size:11px;color:var(--faint);display:flex;justify-content:center;border-top:1px solid var(--line)}
+</style></head><body><div class="wrap">
+<header class="app-header">
+  <h1><span class="icon-blade"></span><span class="brand-block"><span><span class="brand-accent">CUT</span> OPTIMIZER PRO</span><span class="subtitle">Shop-ready linear &amp; 2D sheet cutting plans — MRA Mobile Experiential</span></span></h1>
+  <div class="header-right">
+    <button class="hdr-btn" onclick="template()">📐 Excel Template</button>
+    <label class="filebtn">📥 Import Excel<input id="importFile" type="file" accept=".xlsx,.xls" hidden></label>
+    <span class="version-badge" onclick="openModal('#modal-changelog')" title="View changelog">v6.9</span>
+  </div>
+</header>
+<div class="container">
+<div class="toolbar"><button id="sheetTab" class="active" onclick="setMode('sheet')">2D Sheet Cuts</button><button id="linearTab" class="muted" onclick="setMode('linear')">Linear Cuts</button></div>
+<div id="status" class="status">No Excel file imported.</div>
+<section id="sheetInputs"><div class="grid"><div class="card"><h2>1. Sheet inventory</h2><div class="scroll"><table id="sheets"><thead><tr><th>Material ID/Profile</th><th>Length</th><th>Width</th><th>Qty</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table></div><div class="toolbar"><button onclick="addSheet()">+ Sheet</button></div></div><div class="card"><h2>2. Rectangular parts</h2><div class="scroll"><table id="parts"><thead><tr><th>Material ID/Profile</th><th>Length</th><th>Width</th><th>Qty</th><th>Part</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table></div><div class="toolbar"><button onclick="addPart()">+ Part</button></div></div></div></section>
+<section id="linearInputs" class="hidden"><div class="grid"><div class="card"><h2>1. Linear material inventory</h2><table id="stocks"><thead><tr><th>Material ID/Profile</th><th>Length</th><th>Qty</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table><div class="toolbar"><button onclick="addStock()">+ Material</button></div></div><div class="card"><h2>2. Required linear cuts</h2><table id="cuts"><thead><tr><th>Material ID/Profile</th><th>Length</th><th>Qty</th><th>Part</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table><div class="toolbar"><button onclick="addCut()">+ Cut</button></div></div></div></section>
+<section class="card"><h2>3. Settings</h2><div class="settings"><label>Kerf<input id="kerf" type="number" value="0.125" min="0.001"></label><label>Units<select id="units"><option>in</option><option>mm</option></select></label><label>Reusable drop<input id="minDrop" type="number" value="12" min="0"></label><label>Project<input id="project" value="Sheet Cut Plan"></label><label>Page size<select id="pageSize"><option value="letter">Letter</option><option value="tabloid" selected>11 × 17</option><option value="archd">Arch D</option></select></label><label>Placement priority<select id="priority"><option value="factory">Factory Edges First</option><option value="density">Maximum Density</option></select></label></div></section>
+<section class="card"><div class="toolbar"><button id="optBtn" class="dirty" onclick="optimise()">OPTIMISE</button><h2 style="margin:0 0 0 5px">4. Fabrication plan</h2><div class="right"><button onclick="exportXlsx()">Export XLSX</button><button onclick="exportPdf()">Export PDF</button></div></div><div id="output"></div></section>
+</div>
+<div class="app-footer">Cut Optimizer Pro — part of the MRA Shop Floor Dashboard</div>
+</div>
+
+<div id="modal-changelog" class="modal-backdrop" onclick="if(event.target===this)closeModal('#modal-changelog')">
+  <div class="modal" role="dialog" aria-labelledby="cl-title">
+    <div class="modal-header"><h2 id="cl-title">📋 Changelog</h2><button class="modal-close" onclick="closeModal('#modal-changelog')" aria-label="Close">&times;</button></div>
+    <div class="modal-body">
+      <h3>v6.9 — August 2026</h3>
+      <ul>
+        <li>Added to the MRA Dashboard (☰ Menu → ✂️ Cut Optimizer) and restyled to match the MRA dark theme (same design system as Time Tracking, the Product Catalogue, and the Starlink Pricing Calculator).</li>
+        <li><b>Fixed a real bug in 2D Excel import</b>: importing a 2D Sheet Cut workbook (the "Sheets" + "Parts" tabs from the Excel Template button) always failed with "Workbook does not contain Linear Materials and Linear Cuts worksheets" — the import code only ever recognized the Linear workbook format and had no path at all for the 2D format, even though the 2D template/export/optimizer all worked fine. Import now detects which kind of workbook was uploaded (2D: "Sheets"+"Parts", or Linear: "Linear Materials"+"Linear Cuts") and loads the right tables + settings + mode either way.</li>
+      </ul>
+      <h3>v6.8 — brought over from the original build</h3>
+      <ul>
+        <li>2D rectangular sheet-cutting optimizer (factory-edge or maximum-density placement) and linear/1D cut optimizer, Excel import/export (XLSX with a colored cut diagram per sheet/piece), and a printable PDF fabrication plan.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';let mode='sheet',plan=null;const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],N=v=>Number(v),F=v=>Number(v).toFixed(3).replace(/\.000$/,''),E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const colours=['B7D7F0','F5C7A9','C5E3C5','D9C2E9','F5E6A6','BFCDEB','E8B8CF','CFE3B3'];
+function ymd(){let d=new Date();return d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')}function dirty(){$('#optBtn').className='dirty'}function clean(){$('#optBtn').className='optimised'}function setMode(m){mode=m;$('#sheetInputs').classList.toggle('hidden',m!=='sheet');$('#linearInputs').classList.toggle('hidden',m!=='linear');$('#sheetTab').className=m==='sheet'?'active':'muted';$('#linearTab').className=m==='linear'?'active':'muted';$('#priority').disabled=m==='linear';plan=null;$('#output').innerHTML='';dirty()}
+function openModal(id){$(id).classList.add('visible');document.body.style.overflow='hidden'}function closeModal(id){$(id).classList.remove('visible');document.body.style.overflow=''}
+function clampNonNegative(e){let x=e.target;if(x.matches('input[type=number]')&&x.value!==''&&N(x.value)<0)x.value=x.min&&N(x.min)>0?x.min:0}document.addEventListener('input',clampNonNegative);document.addEventListener('keydown',e=>{if(e.target.matches('input[type=number]')&&(e.key==='-'||e.key==='Subtract'))e.preventDefault()});
+function ids(t){return[...new Set($$(t+' .mat').map(x=>x.value.trim()).filter(Boolean))]}function opts(a,v){return a.map(x=>`<option ${x===v?'selected':''}>${E(x)}</option>`).join('')}function refresh(){let s=ids('#sheets'),l=ids('#stocks');$$('#parts .mat').forEach(x=>{let v=x.value;x.innerHTML=opts(s,v)});$$('#cuts .mat').forEach(x=>{let v=x.value;x.innerHTML=opts(l,v)})}function removeRow(b){b.closest('tr').remove();refresh();dirty()}function next(prefix,t){return prefix+'-'+String.fromCharCode(65+ids(t).length)}
+function addSheet(x){x=x||{m:next('SHEET','#sheets'),l:96,w:48,q:1,n:''};$('#sheets tbody').insertAdjacentHTML('beforeend',`<tr><td><input class="mat" value="${E(x.m)}"></td><td><input class="len" type="number" min="0" value="${x.l}"></td><td><input class="wid" type="number" min="0" value="${x.w}"></td><td><input class="qty" type="number" min="0" value="${x.q}"></td><td><input class="notes" value="${E(x.n||'')}"></td><td><button class="del" onclick="removeRow(this)">×</button></td></tr>`);refresh();dirty()}function addPart(x={m:'SHEET-A',l:'',w:'',q:'',p:'',n:''}){$('#parts tbody').insertAdjacentHTML('beforeend',`<tr><td><select class="mat">${opts(ids('#sheets'),x.m)}</select></td><td><input class="len" type="number" min="0" value="${x.l}" placeholder="77"></td><td><input class="wid" type="number" min="0" value="${x.w}" placeholder="28"></td><td><input class="qty" type="number" min="0" value="${x.q}" placeholder="2"></td><td><input class="part" value="${E(x.p)}" placeholder="Part A"></td><td><input class="notes" value="${E(x.n||'')}"></td><td><button class="del" onclick="removeRow(this)">×</button></td></tr>`);dirty()}function addStock(x){x=x||{m:next('STOCK','#stocks'),l:144,q:1,n:''};$('#stocks tbody').insertAdjacentHTML('beforeend',`<tr><td><input class="mat" value="${x.m}"></td><td><input class="len" type="number" min="0" value="${x.l}"></td><td><input class="qty" type="number" min="0" value="${x.q}"></td><td><input class="notes" value="${x.n}"></td><td><button class="del" onclick="removeRow(this)">×</button></td></tr>`);refresh()}function addCut(x={m:'STOCK-A',l:'',q:'',p:'',n:''}){$('#cuts tbody').insertAdjacentHTML('beforeend',`<tr><td><select class="mat">${opts(ids('#stocks'),x.m)}</select></td><td><input class="len" type="number" min="0" value="${x.l}"></td><td><input class="qty" type="number" min="0" value="${x.q}"></td><td><input class="part" value="${x.p}"></td><td><input class="notes" value="${x.n}"></td><td><button class="del" onclick="removeRow(this)">×</button></td></tr>`)}
+function rows(t,f){return $$(t+' tbody tr').map(r=>Object.fromEntries(f.map(k=>[k,r.querySelector('.'+k)?.value||''])))}function sheetRows(){return rows('#sheets',['mat','len','wid','qty','notes']).map(x=>({...x,len:N(x.len),wid:N(x.wid),qty:Math.floor(N(x.qty))})).filter(x=>x.len>0&&x.wid>0&&x.qty>0)}function partRows(){return rows('#parts',['mat','len','wid','qty','part','notes']).map(x=>({...x,len:N(x.len),wid:N(x.wid),qty:Math.floor(N(x.qty))})).filter(x=>x.len>0&&x.wid>0&&x.qty>0)}
+function validate(){let ok=N($('#kerf').value)>0,sel=mode==='sheet'?'#parts .len,#parts .wid,#parts .qty':'#cuts .len,#cuts .qty';$$(sel).forEach(x=>{let v=N(x.value)>0;x.classList.toggle('invalid',!v);ok=ok&&v});return ok}function collide(r,a,k){return a.some(p=>!(r.x+r.l+k<=p.x||p.x+p.l+k<=r.x||r.y+r.w+k<=p.y||p.y+p.w+k<=r.y))}function spots(s,a,l,w,k){let xs=new Set([0,Math.max(0,s.len-l)]),ys=new Set([0,Math.max(0,s.wid-w)]);a.forEach(p=>{xs.add(p.x+p.l+k);xs.add(Math.max(0,p.x-l-k));ys.add(p.y+p.w+k);ys.add(Math.max(0,p.y-w-k))});let o=[];xs.forEach(x=>ys.forEach(y=>{let r={x,y,l,w};if(x+l<=s.len+1e-9&&y+w<=s.wid+1e-9&&!collide(r,a,k))o.push(r)}));return o}function score(r,s,pri){let t=r.y<1e-9,b=Math.abs(r.y+r.w-s.wid)<1e-9,l=r.x<1e-9,rr=Math.abs(r.x+r.l-s.len)<1e-9;return pri==='factory'?((t?1:0)+(b?1:0))*1e12+((l?1:0)+(rr?1:0))*1e10-r.y*1e5-r.x:-((r.x+r.l)*(r.y+r.w))}function pack(s,o,k,pri){let a=[],un=[];for(const p of o){let best=null;for(const d of[{l:p.len,w:p.wid},{l:p.wid,w:p.len}])for(const r of spots(s,a,d.l,d.w,k)){let z=score(r,s,pri);if(!best||z>best.z)best={...r,z}}best?a.push({...best,p:p.part,i:p.i,total:p.total,key:p.key}):un.push(p)}return{...s,a,un,area:a.reduce((q,p)=>q+p.l*p.w,0)}}function dropCells(s,a){let xs=[0,s.len],ys=[0,s.wid];a.forEach(p=>{xs.push(p.x,p.x+p.l);ys.push(p.y,p.y+p.w)});xs=[...new Set(xs)].sort((a,b)=>a-b);ys=[...new Set(ys)].sort((a,b)=>a-b);let d=[];for(let i=0;i<xs.length-1;i++)for(let j=0;j<ys.length-1;j++){let x=xs[i],y=ys[j],l=xs[i+1]-x,w=ys[j+1]-y,cx=x+l/2,cy=y+w/2;if(!a.some(p=>cx>=p.x&&cx<=p.x+p.l&&cy>=p.y&&cy<=p.y+p.w))d.push({x,y,l,w})}return d}
+function optimise(){if(!validate()){plan=null;$('#output').innerHTML='<div class="alert bad"><b>Cannot optimise:</b> Part dimensions, quantities and kerf must be greater than zero.</div>';dirty();return}mode==='sheet'?optSheet():optLinear()}function optSheet(){let inputs=partRows(),req=[];inputs.forEach((p,n)=>{for(let i=0;i<p.qty;i++)req.push({...p,part:p.part||`Part ${n+1}`,i:i+1,total:p.qty,key:p.part||`Part ${n+1}`,area:p.len*p.wid})});let stock=[];sheetRows().forEach(s=>{for(let i=0;i<s.qty;i++)stock.push(s)});let rem=[...req],used=[],k=N($('#kerf').value),pri=$('#priority').value;for(const s of stock){if(!rem.length)break;let os=[[...rem].sort((a,b)=>b.area-a.area),[...rem].sort((a,b)=>b.len-a.len),[...rem].sort((a,b)=>b.wid-a.wid)],best=null;for(const o of os){let c=pack(s,o,k,pri),z=c.un.length*1e15+(s.len*s.wid-c.area);if(pri==='factory')z-=c.a.reduce((q,p)=>q+score(p,s,pri),0);if(!best||z<best.z)best={...c,z}}if(best.a.length){best.drops=dropCells(best,best.a);used.push(best);let set=new Set(best.a.map(p=>p.key+'|'+p.i));rem=rem.filter(p=>!set.has(p.key+'|'+p.i))}}let sa=used.reduce((q,s)=>q+s.len*s.wid,0),pa=used.reduce((q,s)=>q+s.area,0);plan={type:'sheet',project:$('#project').value,u:$('#units').value,k,min:N($('#minDrop').value),page:$('#pageSize').value,pri,sheets:used,un:rem,util:sa?pa/sa*100:0,inputs:{sheets:sheetRows(),parts:inputs}};renderSheet();clean()}function optLinear(){let ss=rows('#stocks',['mat','len','qty','notes']).map(x=>({...x,len:N(x.len),qty:N(x.qty)})),cs=rows('#cuts',['mat','len','qty','part','notes']).map(x=>({...x,len:N(x.len),qty:N(x.qty)})),pieces=[];ss.forEach(s=>{for(let i=0;i<s.qty;i++)pieces.push({...s,c:[],used:0})});let req=[];cs.forEach((c,n)=>{for(let i=0;i<c.qty;i++)req.push({...c,part:c.part||`Cut ${n+1}`,instance:i+1,total:c.qty,key:c.part||`Cut ${n+1}`})});req.sort((a,b)=>b.len-a.len);let un=[],k=N($('#kerf').value);req.forEach(c=>{let p=pieces.filter(x=>x.mat===c.mat&&x.len-x.used>=c.len+k).sort((a,b)=>(a.len-a.used)-(b.len-b.used))[0];p?(p.c.push(c),p.used+=c.len+k):un.push(c)});plan={type:'linear',project:$('#project').value,u:$('#units').value,k,page:$('#pageSize').value,pieces:pieces.filter(x=>x.c.length),un,inputs:{stocks:ss,cuts:cs}};renderLinear();clean()}
+function partColour(k){let ks=[...new Set(plan.inputs.parts.map(x=>x.part))],i=ks.indexOf(k);return colours[(i<0?0:i)%colours.length]}function unSummary(){let m={};plan.un.forEach(x=>m[x.part]=(m[x.part]||0)+1);return Object.entries(m).map(([p,q])=>`${q} x ${E(p)}`).join(', ')}function metrics(a){return`<div class="metrics">${a.map(x=>`<div class="metric"><b>${x[1]}</b>${x[0]}</div>`).join('')}</div>`}
+function renderSheet(){let p=plan,html=metrics([['Sheets',p.sheets.length],['Parts',p.sheets.reduce((q,s)=>q+s.a.length,0)],['Utilisation',F(p.util)+'%'],['Unfulfilled',p.un.length],['Priority',p.pri==='factory'?'Factory edges':'Maximum density'],['Kerf',F(p.k)+' '+p.u]])+(p.un.length?`<div class="alert bad"><b>Unfulfilled:</b> ${unSummary()}</div>`:'')+`<table class="summary"><thead><tr><th>Part</th><th>Qty required</th><th>Size each</th><th>Qty placed</th><th>Reusable drops</th></tr></thead><tbody>${p.inputs.parts.map(x=>`<tr><td>${E(x.part)}</td><td>${x.qty}</td><td>${F(x.len)}${p.u} x ${F(x.wid)}${p.u}</td><td>${p.sheets.reduce((q,s)=>q+s.a.filter(y=>y.key===x.part).length,0)}</td><td>${p.sheets.flatMap(s=>s.drops).filter(d=>d.l>=p.min&&d.w>=p.min).map(d=>F(d.l)+' x '+F(d.w)+' '+p.u).join('; ')||'None'}</td></tr>`).join('')}</tbody></table>`;p.sheets.forEach((s,n)=>{let w=Math.min(1000,Math.max(420,s.len*5)),h=w*s.wid/s.len;html+=`<article class="sheet-page"><div class="sheet-head"><span>Sheet ${n+1}: ${E(s.mat)} | ${F(s.len)} x ${F(s.wid)} ${p.u}</span><span>Utilization: ${F(s.area/(s.len*s.wid)*100)}%</span></div><div class="sheet-map" style="width:${w}px;height:${h}px">${s.a.map(x=>`<div class="part-box" style="left:${x.x/s.len*100}%;top:${x.y/s.wid*100}%;width:${x.l/s.len*100}%;height:${x.w/s.wid*100}%;background:#${partColour(x.key)}"><div>${E(x.p)} - ${x.i} of ${x.total}</div><div>${F(x.l)}${p.u} x ${F(x.w)}${p.u}</div></div>`).join('')}</div><table class="detail"><thead><tr><th>Part / drop</th><th>Quantity</th><th>Size</th></tr></thead><tbody>${s.a.map(x=>`<tr><td>${E(x.p)} - ${x.i} of ${x.total}</td><td>1</td><td>${F(x.l)}${p.u} x ${F(x.w)}${p.u}</td></tr>`).join('')}${s.drops.map((d,j)=>`<tr><td>Drop ${j+1}</td><td>1</td><td>${F(d.l)} x ${F(d.w)} ${p.u}</td></tr>`).join('')}</tbody></table></article>`});$('#output').innerHTML=html}function renderLinear(){let p=plan,html=metrics([['Pieces',p.pieces.length],['Unfulfilled',p.un.length],['Kerf',F(p.k)+' '+p.u],['','',''],['','',''],['','','']]);p.pieces.forEach((x,n)=>{let d=x.len-x.used;html+=`<div class="sheet-page"><b>Piece ${n+1}: ${E(x.mat)} | ${F(x.len)} ${p.u}</b><div class="linear">${x.c.map(c=>`<div style="width:${c.len/x.len*100}%">${E(c.part)}<br>${F(c.len)}</div>`).join('')}<div style="width:${d/x.len*100}%;background:#fff">DROP</div></div></div>`});$('#output').innerHTML=html}
+function exportPdf(){if(!plan)return alert('Generate a plan first');let{jsPDF}=window.jspdf,format=$('#pageSize').value==='archd'?[1728,2592]:$('#pageSize').value==='tabloid'?'tabloid':'letter',s=plan.type==='sheet'?plan.sheets[0]:null,o=!s||s.len>=s.wid?'landscape':'portrait',doc=new jsPDF({orientation:o,unit:'pt',format});if(plan.type==='linear'){let total=plan.pieces.length,allDrop=plan.pieces.map(p=>({length:Math.max(0,p.len-p.used),material:p.mat}));plan.pieces.forEach((p,n)=>{if(n)doc.addPage(format,o);let W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),m=28,summaryY=50,top=112,barH=Math.min(110,H*.23),usable=W-2*m,drop=Math.max(0,p.len-p.used),pos=0;doc.setFontSize(13);doc.setFont(undefined,'bold');doc.text(plan.project,m,20);doc.setFontSize(8);doc.setFont(undefined,'normal');doc.text('Linear Fabrication Cut Plan',m,32);doc.text(`Units: ${plan.u} | Kerf: ${F(plan.k)} ${plan.u}`,W-m,20,{align:'right'});doc.setDrawColor(23,50,77);doc.line(m,38,W-m,38);doc.setFont(undefined,'bold');doc.text('Part',m,summaryY);doc.text('Qty required',m+W*.18,summaryY);doc.text('Length each',m+W*.34,summaryY);doc.text('Qty placed',m+W*.51,summaryY);doc.text('Reusable drops',m+W*.64,summaryY);doc.setFont(undefined,'normal');let sy=summaryY+10;plan.inputs.cuts.forEach(c=>{let name=c.part||'Cut',placed=plan.pieces.reduce((a,x)=>a+x.c.filter(q=>q.key===name).length,0),reusable=allDrop.filter(d=>d.length>=N($('#minDrop').value)).map(d=>`${F(d.length)} ${plan.u}`).join('; ')||'None';doc.text(name,m,sy);doc.text(String(c.qty),m+W*.18,sy);doc.text(`${F(c.len)} ${plan.u}`,m+W*.34,sy);doc.text(String(placed),m+W*.51,sy);doc.text(reusable,m+W*.64,sy,{maxWidth:W*.32});sy+=9});doc.setFont(undefined,'bold');doc.text(`Piece ${n+1}: ${p.mat} | ${F(p.len)} ${plan.u}`,m,top-7);doc.text(`Utilization: ${F((p.len-drop)/p.len*100)}%`,W-m,top-7,{align:'right'});doc.setLineWidth(3);doc.rect(m,top,usable,barH);p.c.forEach((c,i)=>{let cw=usable*c.len/p.len,x=m+pos,rgb=colours[plan.inputs.cuts.findIndex(q=>(q.part||'Cut')===c.key)%colours.length].match(/\w\w/g).map(z=>parseInt(z,16));doc.setFillColor(...rgb);doc.setDrawColor(41,59,77);doc.setLineWidth(1);doc.rect(x,top,cw,barH,'FD');doc.setTextColor(0);doc.setFontSize(9);doc.text(`${c.part} - ${c.instance} of ${c.total}`,x+cw/2,top+barH/2-2,{align:'center',maxWidth:cw-5});doc.text(`${F(c.len)} ${plan.u}`,x+cw/2,top+barH/2+9,{align:'center',maxWidth:cw-5});pos+=cw+Math.max(1,usable*plan.k/p.len)});let dw=Math.max(0,usable-pos);doc.setFillColor(255,255,255);doc.rect(m+pos,top,dw,barH,'FD');if(dw>15)doc.text(`DROP ${F(drop)} ${plan.u}`,m+pos+dw/2,top+barH/2,{align:'center',maxWidth:dw-4});let ty=top+barH+12;doc.setFont(undefined,'bold');doc.setFontSize(7);doc.text('Part / drop',m,ty);doc.text('Quantity',m+W*.44,ty);doc.text('Length',m+W*.68,ty);doc.setFont(undefined,'normal');ty+=8;p.c.forEach(c=>{doc.text(`${c.part} - ${c.instance} of ${c.total}`,m,ty);doc.text('1',m+W*.44,ty);doc.text(`${F(c.len)} ${plan.u}`,m+W*.68,ty);ty+=8});doc.text('Drop',m,ty);doc.text('1',m+W*.44,ty);doc.text(`${F(drop)} ${plan.u}`,m+W*.68,ty);doc.setDrawColor(23,50,77);doc.line(m,H-22,W-m,H-22);doc.text(plan.project,m,H-11);doc.text(`Page ${n+1} of ${total} | Printed ${ymd()}`,W-m,H-11,{align:'right'})});doc.save(plan.project.replace(/[^a-z0-9]/gi,'_')+'_Linear_Cut_Plan.pdf');return}plan.sheets.forEach((s,n)=>{if(n)doc.addPage(format,o);let W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),m=28,top=110,scale=Math.min((W-2*m)/s.len,(H-top-145)/s.wid),mw=s.len*scale,mh=s.wid*scale,ox=(W-mw)/2;doc.setFontSize(13);doc.setFont(undefined,'bold');doc.text(plan.project,m,20);doc.setFontSize(8);doc.setFont(undefined,'normal');doc.text('Fabrication Cut Plan',m,32);doc.setFont(undefined,'bold');doc.text('Part',m,50);doc.text('Qty',m+W*.18,50);doc.text('Size each',m+W*.28,50);doc.text('Reusable drops',m+W*.58,50);doc.setFont(undefined,'normal');let y=60;plan.inputs.parts.forEach(p=>{let rs=plan.sheets.flatMap(x=>x.drops).filter(d=>d.l>=plan.min&&d.w>=plan.min).map(d=>`${F(d.l)} x ${F(d.w)} ${plan.u}`).join('; ')||'None';doc.text(p.part,m,y);doc.text(String(p.qty),m+W*.18,y);doc.text(`${F(p.len)}${plan.u} x ${F(p.wid)}${plan.u}`,m+W*.28,y);doc.text(rs,m+W*.58,y,{maxWidth:W*.35});y+=9});doc.setFont(undefined,'bold');doc.text(`Sheet ${n+1}: ${s.mat} | ${F(s.len)} x ${F(s.wid)} ${plan.u}`,m,top-7);doc.text(`Utilization: ${F(s.area/(s.len*s.wid)*100)}%`,W-m,top-7,{align:'right'});doc.setLineWidth(3);doc.rect(ox,top,mw,mh);s.a.forEach(p=>{let x=ox+p.x*scale,py=top+p.y*scale,w=p.l*scale,h=p.w*scale,rgb=partColour(p.key).match(/\w\w/g).map(z=>parseInt(z,16));doc.setFillColor(...rgb);doc.setDrawColor(41,59,77);doc.setLineWidth(1);doc.rect(x,py,w,h,'FD');doc.setTextColor(0);doc.setFontSize(9);doc.text(`${p.p} - ${p.i} of ${p.total}`,x+w/2,py+h/2-2,{align:'center',maxWidth:w-5});doc.text(`${F(p.l)}${plan.u} x ${F(p.w)}${plan.u}`,x+w/2,py+h/2+9,{align:'center',maxWidth:w-5})});let ty=top+mh+9;doc.setFontSize(7);s.a.forEach(p=>{doc.text(`${p.p} - ${p.i} of ${p.total} | 1 | ${F(p.l)}${plan.u} x ${F(p.w)}${plan.u}`,m,ty);ty+=8});s.drops.forEach((d,j)=>{doc.text(`Drop ${j+1} | 1 | ${F(d.l)} x ${F(d.w)} ${plan.u}`,m,ty);ty+=8});doc.text(`${plan.project} | Page ${n+1} of ${plan.sheets.length} | Printed ${ymd()}`,W-m,H-12,{align:'right'})});doc.save(plan.project.replace(/[^a-z0-9]/gi,'_')+'_Cut_Plan.pdf')}
+function style(ws,r,c,v,fill,b){let a=XLSX.utils.encode_cell({r,c});ws[a]={t:'s',v:String(v||''),s:{alignment:{horizontal:'center',vertical:'center',wrapText:true},font:{name:'Arial',sz:8},fill:{patternType:'solid',fgColor:{rgb:fill||'FFFFFF'}},border:b||{}}}}function diagram(s,n){let ws={},R=Math.ceil(s.wid),C=Math.ceil(s.len),edge={style:'medium',color:{rgb:'17324D'}},thin={style:'thin',color:{rgb:'666666'}};for(let r=0;r<R;r++)for(let c=0;c<C;c++){let p=s.a.find(x=>c>=Math.floor(x.x)&&c<Math.ceil(x.x+x.l)&&r>=Math.floor(x.y)&&r<Math.ceil(x.y+x.w)),b={};if(r===0)b.top=edge;if(r===R-1)b.bottom=edge;if(c===0)b.left=edge;if(c===C-1)b.right=edge;style(ws,r+2,c,'',p?partColour(p.key):'FFFFFF',b)}s.a.forEach(p=>{let r1=Math.floor(p.y)+2,c1=Math.floor(p.x),r2=Math.max(r1,Math.ceil(p.y+p.w)+1),c2=Math.max(c1,Math.ceil(p.x+p.l)-1);ws['!merges']=(ws['!merges']||[]);ws['!merges'].push({s:{r:r1,c:c1},e:{r:r2,c:c2}});style(ws,r1,c1,`${p.p} - ${p.i} of ${p.total}\n${F(p.l)}${plan.u} x ${F(p.w)}${plan.u}`,partColour(p.key),{top:thin,bottom:thin,left:thin,right:thin})});style(ws,0,0,`Sheet ${n+1}: ${s.mat}`,'FFFFFF');ws['!merges']=(ws['!merges']||[]);ws['!merges'].unshift({s:{r:0,c:0},e:{r:0,c:C-1}});ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+1,c:C-1}});ws['!cols']=Array(C).fill({wch:2.1});return ws}
+function exportXlsx(){if(!plan)return alert('Generate a plan first');let wb=XLSX.utils.book_new();if(plan.type==='sheet'){XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Setting','Value'],['Project',plan.project],['Units',plan.u],['Kerf',plan.k],['Reusable Drop',plan.min],['Page Size',plan.page],['Placement Priority',plan.pri]]),'Settings');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Material ID','Sheet Length','Sheet Width','Quantity','Notes'],...plan.inputs.sheets.map(x=>[x.mat,x.len,x.wid,x.qty,x.notes])]),'Sheets');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Material ID','Part Length','Part Width','Quantity','Part Label','Notes'],...plan.inputs.parts.map(x=>[x.mat,x.len,x.wid,x.qty,x.part,x.notes])]),'Parts');plan.sheets.forEach((s,n)=>XLSX.utils.book_append_sheet(wb,diagram(s,n),`Fabrication Plan ${n+1}`))}else{XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Setting','Value'],['Project',plan.project],['Units',plan.u],['Kerf',plan.k],['Reusable Drop',N($('#minDrop').value)],['Page Size',$('#pageSize').value]]),'Settings');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Material ID','Stock Length','Quantity','Notes'],...plan.inputs.stocks.map(x=>[x.mat,x.len,x.qty,x.notes])]),'Linear Materials');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Material ID','Cut Length','Quantity','Part Label','Notes'],...plan.inputs.cuts.map(x=>[x.mat,x.len,x.qty,x.part,x.notes])]),'Linear Cuts');plan.pieces.forEach((p,n)=>{let ws={},C=Math.ceil(p.len),pos=0,edge={style:'medium',color:{rgb:'17324D'}},thin={style:'thin',color:{rgb:'666666'}};for(let c=0;c<C;c++)style(ws,2,c,'','FFFFFF',{top:edge,bottom:edge,...(c===0?{left:edge}:{}),...(c===C-1?{right:edge}:{})});p.c.forEach(c=>{let c1=Math.floor(pos),c2=Math.max(c1,Math.ceil(pos+c.len)-1),ci=plan.inputs.cuts.findIndex(q=>(q.part||'Cut')===c.key),fill=colours[(ci<0?0:ci)%colours.length];ws['!merges']=ws['!merges']||[];ws['!merges'].push({s:{r:2,c:c1},e:{r:2,c:c2}});style(ws,2,c1,`${c.part} - ${c.instance} of ${c.total}\n${F(c.len)} ${plan.u}`,fill,{top:thin,bottom:thin,left:thin,right:thin});pos+=c.len+plan.k});style(ws,0,0,`Piece ${n+1}: ${p.mat} | ${F(p.len)} ${plan.u}`,'FFFFFF');ws['!merges']=ws['!merges']||[];ws['!merges'].unshift({s:{r:0,c:0},e:{r:2,c:C-1}});ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:2,c:C-1}});ws['!cols']=Array(C).fill({wch:2.1});ws['!rows']=[{hpt:18},{hpt:4},{hpt:38}];XLSX.utils.book_append_sheet(wb,ws,`Linear Plan ${n+1}`)})}XLSX.writeFile(wb,plan.project.replace(/[^a-z0-9]/gi,'_')+(plan.type==='linear'?'_Linear_Cut_Plan.xlsx':'_Cut_Plan.xlsx'))}
+function template(){if(mode==='sheet'){let wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Setting','Value'],['Project','Sheet Cut Plan'],['Units','in'],['Kerf',0.125],['Reusable Drop',12],['Page Size','tabloid'],['Placement Priority','factory']]),'Settings');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Material ID','Sheet Length','Sheet Width','Quantity','Notes'],['SHEET-A',96,48,1,'']]),'Sheets');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Material ID','Part Length','Part Width','Quantity','Part Label','Notes'],['SHEET-A',77,28,2,'Part A','']]),'Parts');XLSX.writeFile(wb,'2D_Cut_Template.xlsx');return}let wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Setting','Value'],['Project','Linear Cut Plan'],['Units','in'],['Kerf',0.125],['Reusable Drop',12],['Page Size','tabloid']]),'Settings');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Material ID','Stock Length','Quantity','Notes'],['STOCK-A',144,1,'']]),'Linear Materials');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Material ID','Cut Length','Quantity','Part Label','Notes'],['STOCK-A',51,2,'Rail','']]),'Linear Cuts');XLSX.writeFile(wb,'Linear_Cut_Template.xlsx')}
+
+/* ---- Excel import (rev 6.9 fix) ----
+   The original build only ever recognized the LINEAR workbook shape ("Linear Materials" +
+   "Linear Cuts" sheets) -- there was no code path at all for the 2D workbook shape ("Sheets" +
+   "Parts", exactly what the "Excel Template" button produces in 2D mode and what exportXlsx()
+   writes back out). Importing a 2D file always hit the same hard-coded error ("Workbook does
+   not contain Linear Materials and Linear Cuts worksheets"), regardless of the file's actual
+   contents, because nothing ever looked for the 2D sheet names. Now both shapes are detected by
+   worksheet name and routed to the matching table set + mode. */
+function normalizeRow(o){let n={};Object.keys(o).forEach(k=>n[k.toLowerCase().replace(/[^a-z0-9]/g,'')]=o[k]);return n}
+function loadSettingsRows(wb,sn){if(!sn)return null;let rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''}),m={};rows.slice(1).forEach(x=>m[String(x[0]).toLowerCase()]=x[1]);return m}
+function applyCommonSettings(m){if(!m)return;if(m.project!==undefined)$('#project').value=m.project;if(m.units!==undefined)$('#units').value=m.units;if(m.kerf!==undefined)$('#kerf').value=m.kerf;if(m['reusable drop']!==undefined)$('#minDrop').value=m['reusable drop'];if(m['page size']!==undefined)$('#pageSize').value=m['page size']}
+$('#importFile').addEventListener('change',e=>{
+  let f=e.target.files[0],st=$('#status');if(!f)return;st.textContent='Importing '+f.name+'...';
+  let r=new FileReader();
+  r.onload=z=>{
+    try{
+      let wb=XLSX.read(z.target.result,{type:'array'}),
+        lm=wb.SheetNames.find(x=>x.toLowerCase()==='linear materials'),
+        lc=wb.SheetNames.find(x=>x.toLowerCase()==='linear cuts'),
+        sh=wb.SheetNames.find(x=>x.toLowerCase()==='sheets'),
+        pt=wb.SheetNames.find(x=>x.toLowerCase()==='parts'),
+        sn=wb.SheetNames.find(x=>x.toLowerCase()==='settings'),
+        isSheet=sh&&pt, isLinear=lm&&lc;
+      if(!isSheet&&!isLinear)throw Error('Workbook does not contain a recognized set of worksheets (need "Sheets"+"Parts" for a 2D plan, or "Linear Materials"+"Linear Cuts" for a linear plan).');
+      let m=loadSettingsRows(wb,sn);
+      if(isSheet){
+        setMode('sheet');
+        let sheetsData=XLSX.utils.sheet_to_json(wb.Sheets[sh],{defval:''}).map(normalizeRow),
+            partsData=XLSX.utils.sheet_to_json(wb.Sheets[pt],{defval:''}).map(normalizeRow);
+        $('#sheets tbody').innerHTML='';$('#parts tbody').innerHTML='';
+        sheetsData.forEach(x=>addSheet({m:x.materialid,l:x.sheetlength,w:x.sheetwidth,q:x.quantity,n:x.notes}));
+        partsData.forEach(x=>addPart({m:x.materialid,l:x.partlength,w:x.partwidth,q:x.quantity,p:x.partlabel,n:x.notes}));
+        applyCommonSettings(m);if(m&&m['placement priority']!==undefined)$('#priority').value=m['placement priority'];
+        refresh();st.className='status ok';st.textContent=`Imported ${f.name}: ${sheetsData.length} sheet row(s), ${partsData.length} part row(s), settings ${sn?'loaded':'not present'}.`;
+      }else{
+        setMode('linear');
+        let mats=XLSX.utils.sheet_to_json(wb.Sheets[lm],{defval:''}).map(normalizeRow),
+            cuts=XLSX.utils.sheet_to_json(wb.Sheets[lc],{defval:''}).map(normalizeRow);
+        $('#stocks tbody').innerHTML='';$('#cuts tbody').innerHTML='';
+        mats.forEach(x=>addStock({m:x.materialid,l:x.stocklength,q:x.quantity,n:x.notes}));
+        cuts.forEach(x=>addCut({m:x.materialid,l:x.cutlength,q:x.quantity,p:x.partlabel,n:x.notes}));
+        applyCommonSettings(m);
+        refresh();st.className='status ok';st.textContent=`Imported ${f.name}: ${mats.length} linear material row(s), ${cuts.length} linear cut row(s), settings ${sn?'loaded':'not present'}.`;
+      }
+      dirty();e.target.value='';
+    }catch(err){st.className='status error';st.textContent='Import failed: '+err.message}
+  };
+  r.readAsArrayBuffer(f);
+});
+function updateProject(){if(!plan)return;plan.project=$('#project').value;plan.type==='sheet'?renderSheet():renderLinear()}['kerf','units','minDrop'].forEach(id=>$('#'+id).addEventListener('change',dirty));$('#pageSize').addEventListener('change',()=>{if(plan)plan.page=$('#pageSize').value});$('#priority').addEventListener('change',()=>{dirty();if(plan)optimise()});$('#project').addEventListener('input',updateProject);['parts','cuts','sheets','stocks'].forEach(id=>{$('#'+id).addEventListener('input',dirty);$('#'+id).addEventListener('change',dirty)});addSheet({m:'SHEET-A',l:96,w:48,q:1,n:''});addPart();addStock({m:'STOCK-A',l:144,q:1,n:''});addCut();
+</script></body></html>
