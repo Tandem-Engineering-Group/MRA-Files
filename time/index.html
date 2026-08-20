@@ -667,8 +667,25 @@ function applyMgr(){ var on=isMgr(); var unlocked=(SSO.user||PINOK); var hc=$('h
   var lm=$('lockMsg'); if(lm) lm.textContent = (SSO.user && !on) ? ('Signed in as '+SSO.email()+' — this account doesn\u2019t have access to hours/reports.') : '';
   var cb=$('costBtn'); if(cb) cb.classList.toggle('hide', !(SSO.active()&&SSO.user&&SSO.email()==='rmiller@gomra.com'));   // pay rates -- Rich only, not the general manager roles
   var fc=$('financeCard'); if(fc) fc.classList.toggle('hide', !isFinanceUser());
-  if(on) loadShared(function(){ renderTracking(); });   // always pull the latest shared list (was cached once -> stale after new entries)
+  if(on) loadShared(function(){ renderTracking(); _maybeAutoOpenReport(); });   // always pull the latest shared list (was cached once -> stale after new entries)
   renderTracking();
+}
+// Deep-link from the main dashboard's FINANCE tab (?autoReport=cost&range=custom&from=YYYY-MM-DD&to=YYYY-MM-DD):
+// sets this page's own date filter to match, then pops the SAME trusted Cost report Rich's finance
+// person co-built -- reusing the real function instead of a second implementation, so the numbers
+// and the layout are never at risk of drifting from the report he actually relies on. Fires once,
+// only after loadShared() has really landed (isMgr()+SHARED both real by then).
+var _AUTO_REPORT_DONE=false;
+function _maybeAutoOpenReport(){
+  if(_AUTO_REPORT_DONE) return;
+  var qp; try{ qp=new URLSearchParams(location.search); }catch(e){ return; }
+  var mode=qp.get('autoReport'); if(!mode) return;
+  _AUTO_REPORT_DONE=true;
+  var range=qp.get('range');
+  if(range){ var rf=$('fRange'); if(rf) rf.value=range; }
+  if(range==='custom'){ var f=$('fFrom'), t=$('fTo'); if(f) f.value=qp.get('from')||''; if(t) t.value=qp.get('to')||''; updateCustomRangeUI(); }
+  renderTracking();
+  if(mode==='cost') openCostReport();
 }
 function pinUnlock(){ var p=prompt('Manager code:'); if(p==null) return; if(p==='1974'){ PINOK=true; sessionStorage.setItem('mra_time_mgr','1'); applyMgr(); var hc=$('hoursCard'); if(hc) hc.scrollIntoView({behavior:'smooth',block:'start'}); } else alert('Wrong code.'); }
 function mgrLogout(){ PINOK=false; sessionStorage.removeItem('mra_time_mgr'); SHARED=null; if(SSO.user){ SSO.signOut(); return; } applyMgr(); }
