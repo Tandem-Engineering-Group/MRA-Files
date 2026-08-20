@@ -1805,6 +1805,7 @@
       <div class="tab" data-view="projects" onclick="setView('projects')">PROJECTS</div>
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
       <div class="tab" data-view="assets" onclick="setView('assets')">ASSETS</div>
+      <div class="tab" data-view="finance" onclick="setView('finance')" title="Hours + cost reporting — visible only to Rich &amp; Kyle Maynard">FINANCE</div>
     </div>
     <button class="helpbtn" onclick="openSearch()" style="margin-left:auto" title="Search everything — jobs (open &amp; completed), projects, units, equipment, people">🔍</button>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
@@ -2457,6 +2458,16 @@
         <div class="eqgrid" id="eqGrid"></div>
       </div>
     </div>
+  </div>
+
+  <!-- ===================== FINANCE VIEW (Rich + Kyle Maynard only) =====================
+       Embeds the Time Tracking app's own Finance dashboard (hours/$ tiles, per-employee cost
+       breakdown, report buttons) rather than re-implementing that math a second time here —
+       same iframe-embed pattern already used elsewhere in this project (Command Center embeds
+       this very dashboard the same way). Lazy-loaded: src is only set the first time this tab
+       is actually opened, so signing in as anyone else never even fetches it. -->
+  <div id="financeView" class="hidden">
+    <iframe id="financeFrame" title="Finance" style="width:100%;height:calc(100vh - 150px);border:0;display:block;background:#0c1420"></iframe>
   </div>
 
   <!-- ===================== HISTORY VIEW ===================== -->
@@ -3707,6 +3718,10 @@ const GENERAL_HELP = `
     </ul>
     <p><i>The MY WORK tab currently shows for the group that uses it — the PMs, design team and shop crew (Megan, Al, Luciana, Brandon, Mark, Sarah, Sal, Jeff, Josh, Doug &amp; Stephanie), plus Rich. Ask Rich to add anyone else.</i></p></div>
 
+  <div class="hsec"><h4>②ᶠ 💰 FINANCE — hours &amp; cost reporting</h4>
+    <p>A <span class="k">FINANCE</span> tab sits in the main tab bar, limited to <b>Rich &amp; Kyle Maynard only</b> — it's hidden entirely for everyone else, and doesn't unlock with the shared manager PIN (it needs a real Microsoft sign-in as one of those two accounts).</p>
+    <p>It shows hours + $ tiles for whatever date range is picked, a per-employee cost breakdown, and buttons to run the labor-hours report or the detailed pay-rate/overtime cost report — the same reporting already built into <b>Time Tracking</b>, just reachable as its own tab here instead of a separate page. First time you open it, it'll ask once for the pay-rates source (saved on that device only, never in this file).</p></div>
+
   <div class="hsec"><h4>②ʳ ⏩ Pushing &amp; sliding due dates</h4>
     <p>When a task slips, you can push it out and <b>the old date stays visible, struck through</b>, next to the new one (<span class="k"><s>7/14</s> → 7/24</span>) — on the task everywhere, so everyone can see it moved.</p>
     <ul>
@@ -3940,6 +3955,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.54", date:"2026-08-20", title:"💰 New FINANCE tab — Rich &amp; Kyle Maynard only", items:[
+    "A new <b>FINANCE</b> tab in the main tab bar (alongside Floor/Projects/Fleetio/etc.) shows live hours + $ reporting from Time Tracking — a per-employee cost breakdown for whatever date range is selected, plus one-click buttons to run the labor-hours report or the detailed pay-rate/OT cost report. It embeds the Finance dashboard already built into Time Tracking rather than duplicating that math a second time.",
+    "Strictly limited to <b>rmiller@gomra.com</b> and <b>kmaynard@gomra.com</b> — the tab is hidden from everyone else, including other admins, and isn't tied to any existing role tier. Requires actually signing in with Microsoft (the shared manager PIN does not unlock it, by design)." ] },
   { rev:"37.53", date:"2026-08-20", title:"✂️ Cut Optimizer added to the ☰ Menu — plus a real bug fix", items:[
     "Rich brought over his standalone <b>Cut Optimizer Pro</b> (2D rectangular sheet-cutting + linear/1D cut layout planner, Excel import/export, printable PDF fabrication plan) — now live at <b>☰ Menu → ✂️ Cut Optimizer</b>, restyled to the same dark theme as Time Tracking, the Product Catalogue and the Starlink Pricing Calculator.",
     "<b>Fixed the bug Rich flagged</b> (\"the loading of a 2D excel does not work, but everything else is good\"): importing a 2D Sheet Cut workbook always failed with \"Workbook does not contain Linear Materials and Linear Cuts worksheets\" — the import code had a path for the Linear workbook shape only and none at all for the 2D shape, even though the 2D template/export/optimizer all worked correctly on their own. Import now detects which kind of workbook was uploaded (2D: \"Sheets\"+\"Parts\", or Linear: \"Linear Materials\"+\"Linear Cuts\") and loads the right tables, settings and mode either way." ] },
@@ -6477,6 +6495,14 @@ function mwTabAllowed(){
   const em=SSO.email(); if(MYWORK_EMAILS.indexOf(em)>=0) return true;
   const nk=_nmKey(SSO.name()); return MYWORK_NAMES.indexOf(nk)>=0;
 }
+// FINANCE tab (Rich + Kyle Maynard ONLY — $ figures). Deliberately STRICT, unlike mwTabAllowed
+// above: no fail-open off-host bypass, and not tied to isSuperAdmin, since "only us two" is an
+// explicit secrecy requirement here, not just a routing convenience like My Work's allowlist.
+const FINANCE_EMAILS = ['rmiller@gomra.com','kmaynard@gomra.com'];
+function financeTabAllowed(){
+  if(typeof SSO==='undefined' || !SSO.active() || !SSO.ready || SSO.failed || !SSO.user) return false;
+  return FINANCE_EMAILS.indexOf(SSO.email())>=0;
+}
 const SSO = (function(){
   const TENANT='1dc2dfee-5d93-4f0c-aa97-2344b72fe6b0';
   const CLIENT='fad6a2aa-2dab-4c46-ad3a-29e7040036ae';
@@ -6541,7 +6567,7 @@ function ssoCaps(){ const r=ssoRole(); return r?ROLE_CAPS[r]:null; }
 // real, reported bug: refreshing on a tab kept bouncing back to Floor for people who were fully
 // entitled to be there, purely because of MSAL's timing.
 function _softForceFloor(){ try{ setView('floor', {persist:false, updateUrl:false}); }catch(e){} }
-function _viewAllowed(caps, v){ if(v==='mywork') return mwTabAllowed(); return !caps || caps.tabs.indexOf(v)>=0; }
+function _viewAllowed(caps, v){ if(v==='mywork') return mwTabAllowed(); if(v==='finance') return financeTabAllowed(); return !caps || caps.tabs.indexOf(v)>=0; }
 // Apply tab + menu visibility for the current role (no-op when not gating).
 function applyRoleUI(){
   const caps=ssoCaps();
@@ -6552,6 +6578,8 @@ function applyRoleUI(){
   // MY WORK tab: limited to the MYWORK allowlist (Rich 2026-07-17), independent of role.
   { const mw=document.querySelector('.tab[data-view="mywork"]'); if(mw) mw.style.display = mwTabAllowed() ? '' : 'none'; }
   if(typeof VIEW!=='undefined' && VIEW==='mywork' && !mwTabAllowed()){ _softForceFloor(); }
+  { const fn=document.querySelector('.tab[data-view="finance"]'); if(fn) fn.style.display = financeTabAllowed() ? '' : 'none'; }
+  if(typeof VIEW!=='undefined' && VIEW==='finance' && !financeTabAllowed()){ _softForceFloor(); }
   const hide=caps?caps.hide:[];
   document.querySelectorAll('[data-perm]').forEach(el=>{
     el.style.display = (hide.indexOf(el.getAttribute('data-perm'))>=0) ? 'none' : '';
@@ -18146,9 +18174,15 @@ function setView(v,opts){
   opts=opts||{};
   if(v==='fleet'||v==='equipment') v='assets';   // FLEET + EQUIPMENT merged into the ASSETS tab
   // 🔐 role gate: a locked tab either prompts sign-in (nobody signed in) or falls back to floor.
+  // FINANCE isn't part of the role/caps system at all (it's 2 specific people, not a role tier),
+  // so it's gated separately via financeTabAllowed() rather than caps.tabs.
   if(typeof ssoEnforcing==='function' && ssoEnforcing() && v!=='history'){
-    const caps=ssoCaps();
-    if(caps && caps.tabs.indexOf(v)<0){ if(!SSO.user){ SSO.signIn(); return; } v='floor'; }
+    if(v==='finance'){
+      if(!financeTabAllowed()){ if(!SSO.user){ SSO.signIn(); return; } v='floor'; }
+    } else {
+      const caps=ssoCaps();
+      if(caps && caps.tabs.indexOf(v)<0){ if(!SSO.user){ SSO.signIn(); return; } v='floor'; }
+    }
   }
   // 'history' has no tab of its own — it opens via ☰ Actions ▸ 🔎 Search closed / history (or the 🔍 modal's footer link)
   VIEW=v;
@@ -18168,9 +18202,11 @@ function setView(v,opts){
   document.getElementById('fleetioView').classList.toggle('hidden',v!=='fleetio');
   document.getElementById('assetsView').classList.toggle('hidden',v!=='assets');
   { const _mw=document.getElementById('myworkView'); if(_mw) _mw.classList.toggle('hidden',v!=='mywork'); }
+  { const _fn=document.getElementById('financeView'); if(_fn) _fn.classList.toggle('hidden',v!=='finance'); }
   document.getElementById('historyView').classList.toggle('hidden',v!=='history');
   if(v==='history') renderHistory();
   if(v==='mywork') renderMyWork();
+  if(v==='finance'){ const fr=document.getElementById('financeFrame'); if(fr && !fr.src) fr.src='time/index.html'; }
   if(v==='assets') setAssetLens(ASSET_LENS);   // show the right lens + render it
   if(_MINI_BY_VIEW[v]) setTimeout(()=>refreshMiniMap(v), 40);   // mount/refresh the unit map once the tab is visible
   if(typeof closeDrops==='function') closeDrops();              // close any open menu when switching tabs
