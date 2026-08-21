@@ -258,6 +258,11 @@
     <button class="helpx" id="paylocityClose" aria-label="Close">✕</button>
     <h2 style="font-size:19px">📥 Import Paylocity time cards</h2>
     <p class="lead" id="paylocityLead">Drop in the "Employee Time Cards by Cost Center with Notes" PDF you get from Paylocity — this pulls in each person's hours. The job is filled in automatically only when Paylocity already has one tagged; otherwise it's left blank for you to assign.</p>
+    <div style="font-size:13px;margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span>Only import dates from</span><input type="date" id="paylocityFrom">
+      <span>to</span><input type="date" id="paylocityTo">
+      <span class="muted" style="font-size:11.5px">(defaults to just the newest day in this file — widen it only if you're deliberately backfilling older dates)</span>
+    </div>
     <div id="paylocitySummary" style="font-size:13px;margin-bottom:10px"></div>
     <div style="overflow:auto;max-height:360px;border:1px solid var(--line);border-radius:10px" id="paylocityPreviewWrap">
       <table class="t"><thead><tr><th>Date</th><th>Employee</th><th>Pay type / Job</th><th class="r">Hrs</th><th>Note</th></tr></thead>
@@ -484,6 +489,7 @@ function _pyJobFromCC2(cc2){
   return '';
 }
 var PY_PENDING=[];   // rows accepted into the current import preview, awaiting confirm
+var PY_ALL_ROWS=[], PY_ZERO_SKIPPED=0, PY_UNMATCHED={};   // roster-matched rows from the CURRENT file, pre date-filter/pre dedup -- kept so widening/narrowing the date range re-filters without re-parsing the PDF
 function openPaylocityImport(){ if(!ensurePinLike()) return; $('paylocityFile').value=''; $('paylocityFile').click(); }
 // isMgr() already gates the whole Hours card this button lives in -- no separate PIN prompt needed.
 function ensurePinLike(){ return isMgr(); }
@@ -511,9 +517,7 @@ function onPaylocityFile(file){
   reader.readAsArrayBuffer(file);
 }
 function buildPaylocityPreview(rows){
-  var existing={};   // dedupe fingerprint of everything already on record, so re-importing the same day is a no-op
-  (activeEntries()||[]).forEach(function(e){ var eid=e.empId||EMPIDS[e.who]||e.who||''; existing[eid+'|'+e.dateISO+'|'+e.hours+'|'+(e.job||'')]=1; });
-  var accepted=[], unmatchedNames={}, zeroSkipped=0, dupSkipped=0;
+  var matched=[], unmatchedNames={}, zeroSkipped=0;
   rows.forEach(function(r){
     if(!(r.hours>0)){ zeroSkipped++; return; }        // MCI/MCO punch-correction placeholders are always 0.00
     if(!r.emp){ return; }
@@ -523,26 +527,51 @@ function buildPaylocityPreview(rows){
     var k=r.action.toLowerCase().trim();
     var job = LEAVEMAP[k] ? LEAVEMAP[k] : _pyJobFromCC2(r.cc2);
     var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
-    var empId=EMPIDS[who]||'';
-    var fp=empId+'|'+dateISO+'|'+r.hours+'|'+job;
+    matched.push({ who:who, dateISO:dateISO, job:job, jobNum:jn, hours:r.hours, task:'', notes:r.note||'', action:r.action });
+  });
+  PY_ALL_ROWS=matched; PY_ZERO_SKIPPED=zeroSkipped; PY_UNMATCHED=unmatchedNames;
+  // Default the date range to just the NEWEST day in this file -- Rich pulls this PDF daily and mainly
+  // cares about the latest day each time; widening the range is an explicit, visible choice, not the
+  // default (2026-08-21: he flagged that it was loading every date in the whole pay period every time).
+  var dates=matched.map(function(r){return r.dateISO;}).filter(Boolean).sort();
+  var maxD=dates.length?dates[dates.length-1]:'';
+  $('paylocityFrom').value=maxD; $('paylocityTo').value=maxD;
+  applyPaylocityFilter();
+}
+function applyPaylocityFilter(){
+  var from=$('paylocityFrom').value||'0000-00-00', to=$('paylocityTo').value||'9999-99-99';
+  var inRange=PY_ALL_ROWS.filter(function(r){ return r.dateISO>=from && r.dateISO<=to; });
+  var outOfRange=PY_ALL_ROWS.length-inRange.length;
+  // Dedupe fingerprint of everything already on record: person + date + hours -- deliberately NOT the
+  // job. A row can import with its job blank (Paylocity didn't tag one) and get assigned a real job by
+  // hand afterward; matching on job too meant every one of those already-assigned rows failed to be
+  // recognized as "already on record" on the next import and got offered again as a fresh duplicate --
+  // the exact bug Rich caught (2026-08-21: "we've already assigned jobs to all the old data").
+  var existing={};
+  (activeEntries()||[]).forEach(function(e){ var eid=e.empId||EMPIDS[e.who]||e.who||''; existing[eid+'|'+e.dateISO+'|'+e.hours]=1; });
+  var accepted=[], dupSkipped=0;
+  inRange.forEach(function(r){
+    var empId=EMPIDS[r.who]||'';
+    var fp=empId+'|'+r.dateISO+'|'+r.hours;
     if(existing[fp]){ dupSkipped++; return; }
     existing[fp]=1;   // guard against the SAME pdf row appearing twice inside this one import too
-    accepted.push({ who:who, dateISO:dateISO, job:job, jobNum:jn, hours:r.hours, task:'', notes:r.note||'', action:r.action });
+    accepted.push(r);
   });
   PY_PENDING=accepted;
-  var unmatchedList=Object.keys(unmatchedNames).map(function(k){ return k.replace(/^\d+\s/,''); });
+  var unmatchedList=Object.keys(PY_UNMATCHED||{}).map(function(k){ return k.replace(/^\d+\s/,''); });
   var bits=[accepted.length+' row'+(accepted.length===1?'':'s')+' ready to import'];
   if(dupSkipped) bits.push(dupSkipped+' already on record (skipped)');
-  if(zeroSkipped) bits.push(zeroSkipped+' zero-hour punch correction'+(zeroSkipped===1?'':'s')+' (skipped)');
+  if(outOfRange) bits.push(outOfRange+' outside the selected date range');
+  if(PY_ZERO_SKIPPED) bits.push(PY_ZERO_SKIPPED+' zero-hour punch correction'+(PY_ZERO_SKIPPED===1?'':'s')+' (skipped)');
   if(unmatchedList.length) bits.push(unmatchedList.length+' not on your Time Tracking roster, skipped: '+unmatchedList.join(', '));
   $('paylocitySummary').innerHTML=bits.map(function(b){return esc(b);}).join(' · ');
   $('paylocityRows').innerHTML = accepted.length ? accepted.map(function(e){
     return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job||'— pick a job —')+'</td><td class="r">'+e.hours+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
-  }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import from this file.</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import for this date range.</td></tr>';
   $('paylocityConfirmBtn').disabled = !accepted.length;
 }
 function fmtShortDate(iso){ var p=String(iso||'').split('-'); return p.length===3?(+p[1])+'/'+(+p[2]):iso; }
-function closePaylocityModal(){ $('paylocityModal').classList.remove('on'); PY_PENDING=[]; }
+function closePaylocityModal(){ $('paylocityModal').classList.remove('on'); PY_PENDING=[]; PY_ALL_ROWS=[]; PY_ZERO_SKIPPED=0; PY_UNMATCHED={}; }
 function confirmPaylocityImport(){
   if(!PY_PENDING.length) return;
   var btn=$('paylocityConfirmBtn'); btn.disabled=true; btn.textContent='Importing…';
@@ -1871,6 +1900,7 @@ function boot(){
   $('paylocityFile').addEventListener('change',function(e){ onPaylocityFile(e.target.files[0]); });
   $('paylocityCancelBtn').onclick=closePaylocityModal; $('paylocityClose').onclick=closePaylocityModal;
   $('paylocityConfirmBtn').onclick=confirmPaylocityImport;
+  $('paylocityFrom').addEventListener('change',applyPaylocityFilter); $('paylocityTo').addEventListener('change',applyPaylocityFilter);
   $('paylocityModal').addEventListener('click',function(e){ if(e.target===$('paylocityModal')) closePaylocityModal(); });
   // manage list edit/delete delegation
   $('mgrCard').addEventListener('click',function(e){
