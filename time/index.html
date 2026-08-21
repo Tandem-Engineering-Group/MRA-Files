@@ -264,6 +264,13 @@
       <span class="muted" style="font-size:11.5px">(defaults to just the newest day in this file — widen it only if you're deliberately backfilling older dates)</span>
     </div>
     <div id="paylocitySummary" style="font-size:13px;margin-bottom:10px"></div>
+    <div id="paylocityChangedWrap" class="hide" style="margin-bottom:10px">
+      <div style="font-size:12.5px;font-weight:700;color:#c1401f;margin-bottom:4px">⚠ Different hours than what's already on file — review before updating</div>
+      <div style="overflow:auto;max-height:200px;border:1px solid var(--line);border-radius:10px">
+        <table class="t"><thead><tr><th></th><th>Date</th><th>Employee</th><th class="r">On file</th><th class="r">Paylocity now says</th></tr></thead>
+        <tbody id="paylocityChangedRows"></tbody></table>
+      </div>
+    </div>
     <div style="overflow:auto;max-height:360px;border:1px solid var(--line);border-radius:10px" id="paylocityPreviewWrap">
       <table class="t"><thead><tr><th>Date</th><th>Employee</th><th>Pay type / Job</th><th class="r">Hrs</th><th>Note</th></tr></thead>
       <tbody id="paylocityRows"></tbody></table>
@@ -538,29 +545,48 @@ function buildPaylocityPreview(rows){
   $('paylocityFrom').value=maxD; $('paylocityTo').value=maxD;
   applyPaylocityFilter();
 }
+var PY_CHANGED=[];   // rows matching an existing person+date but with DIFFERENT hours -- held for explicit review, never auto-applied
 function applyPaylocityFilter(){
   var from=$('paylocityFrom').value||'0000-00-00', to=$('paylocityTo').value||'9999-99-99';
   var inRange=PY_ALL_ROWS.filter(function(r){ return r.dateISO>=from && r.dateISO<=to; });
   var outOfRange=PY_ALL_ROWS.length-inRange.length;
-  // Dedupe fingerprint of everything already on record: person + date + hours -- deliberately NOT the
-  // job. A row can import with its job blank (Paylocity didn't tag one) and get assigned a real job by
-  // hand afterward; matching on job too meant every one of those already-assigned rows failed to be
-  // recognized as "already on record" on the next import and got offered again as a fresh duplicate --
-  // the exact bug Rich caught (2026-08-21: "we've already assigned jobs to all the old data").
-  var existing={};
-  (activeEntries()||[]).forEach(function(e){ var eid=e.empId||EMPIDS[e.who]||e.who||''; existing[eid+'|'+e.dateISO+'|'+e.hours]=1; });
-  var accepted=[], dupSkipped=0;
+  // byPersonDate: every existing entry grouped by person+date (regardless of hours), so a row whose
+  // hours DIFFER from what's on file can be told apart from a row that's genuinely new -- both look
+  // the same under a plain hours-match check, but they need very different handling (Rich, 2026-08-21:
+  // "if something has changed... do you want to update these hours, because they're different").
+  var byPersonDate={};
+  (activeEntries()||[]).forEach(function(e){ var eid=e.empId||EMPIDS[e.who]||e.who||''; var k=eid+'|'+e.dateISO;
+    (byPersonDate[k]=byPersonDate[k]||[]).push(e); });
+  // Dedupe fingerprint of an EXACT match: person + date + hours -- deliberately NOT the job. A row can
+  // import with its job blank (Paylocity didn't tag one) and get assigned a real job by hand afterward;
+  // matching on job too meant every one of those already-assigned rows failed to be recognized as
+  // "already on record" on the next import and got offered again as a fresh duplicate -- the exact bug
+  // Rich caught (2026-08-21: "we've already assigned jobs to all the old data").
+  var exactSeen={};
+  var accepted=[], changed=[], dupSkipped=0;
   inRange.forEach(function(r){
     var empId=EMPIDS[r.who]||'';
-    var fp=empId+'|'+r.dateISO+'|'+r.hours;
-    if(existing[fp]){ dupSkipped++; return; }
-    existing[fp]=1;   // guard against the SAME pdf row appearing twice inside this one import too
+    var pdKey=empId+'|'+r.dateISO;
+    var fp=pdKey+'|'+r.hours;
+    if(exactSeen[fp]){ dupSkipped++; return; }   // same pdf row appearing twice inside this one import
+    var existingForDay=byPersonDate[pdKey]||[];
+    var exactMatch=existingForDay.some(function(e){ return e.hours===r.hours; });
+    if(exactMatch){ exactSeen[fp]=1; dupSkipped++; return; }
+    if(existingForDay.length){
+      // Something's already on file for this person+date, just with different hours -- could be a
+      // genuine Paylocity correction, or a second distinct entry that happens to share the date. Never
+      // silently import OR silently drop it; surface it for Rich to decide, same as opening the row.
+      changed.push(Object.assign({}, r, { oldEntries:existingForDay }));
+      return;
+    }
+    exactSeen[fp]=1;
     accepted.push(r);
   });
-  PY_PENDING=accepted;
+  PY_PENDING=accepted; PY_CHANGED=changed;
   var unmatchedList=Object.keys(PY_UNMATCHED||{}).map(function(k){ return k.replace(/^\d+\s/,''); });
   var bits=[accepted.length+' row'+(accepted.length===1?'':'s')+' ready to import'];
   if(dupSkipped) bits.push(dupSkipped+' already on record (skipped)');
+  if(changed.length) bits.push(changed.length+' with a different hour count than what\'s on file (see below)');
   if(outOfRange) bits.push(outOfRange+' outside the selected date range');
   if(PY_ZERO_SKIPPED) bits.push(PY_ZERO_SKIPPED+' zero-hour punch correction'+(PY_ZERO_SKIPPED===1?'':'s')+' (skipped)');
   if(unmatchedList.length) bits.push(unmatchedList.length+' not on your Time Tracking roster, skipped: '+unmatchedList.join(', '));
@@ -568,29 +594,58 @@ function applyPaylocityFilter(){
   $('paylocityRows').innerHTML = accepted.length ? accepted.map(function(e){
     return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job||'— pick a job —')+'</td><td class="r">'+e.hours+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
   }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import for this date range.</td></tr>';
-  $('paylocityConfirmBtn').disabled = !accepted.length;
+  var chWrap=$('paylocityChangedWrap');
+  if(changed.length){
+    chWrap.classList.remove('hide');
+    $('paylocityChangedRows').innerHTML = changed.map(function(r,i){
+      var single=r.oldEntries.length===1;
+      var oldTxt=r.oldEntries.map(function(e){return e.hours;}).join(', ');
+      var chk=single ? '<input type="checkbox" class="pyChangeChk" data-idx="'+i+'">' : '<span class="muted" title="More than one existing entry this day -- edit by hand instead">multiple</span>';
+      return '<tr><td>'+chk+'</td><td>'+esc(fmtShortDate(r.dateISO))+'</td><td>'+esc(r.who)+'</td><td class="r">'+esc(oldTxt)+'</td><td class="r">'+r.hours+'</td></tr>';
+    }).join('');
+  } else { chWrap.classList.add('hide'); $('paylocityChangedRows').innerHTML=''; }
+  $('paylocityConfirmBtn').disabled = !accepted.length && !changed.length;
 }
 function fmtShortDate(iso){ var p=String(iso||'').split('-'); return p.length===3?(+p[1])+'/'+(+p[2]):iso; }
-function closePaylocityModal(){ $('paylocityModal').classList.remove('on'); PY_PENDING=[]; PY_ALL_ROWS=[]; PY_ZERO_SKIPPED=0; PY_UNMATCHED={}; }
+function closePaylocityModal(){ $('paylocityModal').classList.remove('on'); PY_PENDING=[]; PY_CHANGED=[]; PY_ALL_ROWS=[]; PY_ZERO_SKIPPED=0; PY_UNMATCHED={}; }
 function confirmPaylocityImport(){
-  if(!PY_PENDING.length) return;
+  // Only rows Rich explicitly checked get their hours updated -- unchecked "changed" rows are left
+  // alone entirely (neither imported nor touched), same as if they were never shown.
+  var checkedUpdates=[];
+  document.querySelectorAll('.pyChangeChk:checked').forEach(function(cb){
+    var idx=+cb.dataset.idx; var r=PY_CHANGED[idx];
+    if(r && r.oldEntries.length===1) checkedUpdates.push({ oldEntry:r.oldEntries[0], newHours:r.hours });
+  });
+  if(!PY_PENDING.length && !checkedUpdates.length) return;
   var btn=$('paylocityConfirmBtn'); btn.disabled=true; btn.textContent='Importing…';
-  var queue=PY_PENDING.slice(), done=0, total=queue.length;
+  var addQueue=PY_PENDING.slice(), updQueue=checkedUpdates.slice(), done=0, total=addQueue.length+updQueue.length;
   (function step(){
-    if(!queue.length){
-      var m=$('paylocityMsg'); m.textContent='✓ Imported '+total+' entr'+(total===1?'y':'ies'); m.classList.remove('hide');
-      btn.textContent='Import'; btn.disabled=false; PY_PENDING=[];
-      renderTracking(); renderMyDay();
-      setTimeout(function(){ closePaylocityModal(); m.classList.add('hide'); }, 1400);
+    if(addQueue.length){
+      var r=addQueue.shift();
+      var e={ id:uid(), who:r.who, dateISO:r.dateISO, job:r.job, jobNum:r.jobNum, hours:r.hours, task:r.task, notes:r.notes, ts:new Date().toISOString() };
+      ENTS.push(e); lset(LS.ents, ENTS);
+      if(SHARED) SHARED.push(Object.assign({}, e, { empId:(EMPIDS[e.who]||''), payType:fPayType(e), shared:true }));
+      if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'addTime',empId:(EMPIDS[e.who]||''),code:fCode(e),payType:fPayType(e)}, e))}); }catch(_){}}
+      done++; btn.textContent='Importing… '+done+'/'+total;
+      setTimeout(step, 220);   // stagger writes -- don't hammer the shared write flow with a burst of N POSTs at once
       return;
     }
-    var r=queue.shift();
-    var e={ id:uid(), who:r.who, dateISO:r.dateISO, job:r.job, jobNum:r.jobNum, hours:r.hours, task:r.task, notes:r.notes, ts:new Date().toISOString() };
-    ENTS.push(e); lset(LS.ents, ENTS);
-    if(SHARED) SHARED.push(Object.assign({}, e, { empId:(EMPIDS[e.who]||''), payType:fPayType(e), shared:true }));
-    if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'addTime',empId:(EMPIDS[e.who]||''),code:fCode(e),payType:fPayType(e)}, e))}); }catch(_){}}
-    done++; btn.textContent='Importing… '+done+'/'+total;
-    setTimeout(step, 220);   // stagger writes -- don't hammer the shared write flow with a burst of N POSTs at once
+    if(updQueue.length){
+      // Apply an hours correction to the EXISTING entry (same editTime mechanism as the manual edit
+      // form) -- only hours changes, job/task/notes stay exactly as Rich already set them.
+      var u=updQueue.shift(), old=u.oldEntry;
+      var updated=Object.assign({}, old, { hours:u.newHours, auto:false });
+      var li=ENTS.findIndex(function(e){return e.id===old.id;}); if(li>=0){ ENTS[li]=Object.assign({}, ENTS[li], updated); lset(LS.ents,ENTS); }
+      if(SHARED){ var si=SHARED.findIndex(function(e){return e.id===old.id;}); if(si>=0) SHARED[si]=Object.assign({}, SHARED[si], updated); }
+      if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({ action:'editTime', id:old.id, empId:(EMPIDS[old.who]||''), code:fCode(updated), payType:fPayType(updated), who:old.who, dateISO:old.dateISO, job:old.job, jobNum:old.jobNum, hours:u.newHours, task:old.task||'', notes:old.notes||'' })}); }catch(_){} }
+      done++; btn.textContent='Importing… '+done+'/'+total;
+      setTimeout(step, 220);
+      return;
+    }
+    var m=$('paylocityMsg'); m.textContent='✓ Imported '+total+' entr'+(total===1?'y':'ies'); m.classList.remove('hide');
+    btn.textContent='Import'; btn.disabled=false; PY_PENDING=[]; PY_CHANGED=[];
+    renderTracking(); renderMyDay();
+    setTimeout(function(){ closePaylocityModal(); m.classList.add('hide'); }, 1400);
   })();
 }
 /* Remove one entry from every array + the shared list, and fire the real SharePoint delete.
