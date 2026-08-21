@@ -640,7 +640,12 @@ function applyPaylocityFilter(){
     var jobHtml = e.job
       ? esc(e.job)
       : '<select class="pyJobPick" data-idx="'+i+'" style="width:100%;min-width:160px">'+_pyJobOptionsHtml('')+'</select>';
-    return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+jobHtml+'</td><td class="r">'+hoursHtml+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
+    // Editable note (Rich, 2026-08-21: "I want the ability to write the note, like tap plates,
+    // cleaning, pedestal... as I'm importing") -- prefilled with whatever Paylocity's own "Employee
+    // In Note:" gave (often blank), freely editable before Import; updates PY_PENDING[i].notes live,
+    // same field the Weekly Time Summary report already prints under each day's hours.
+    var noteHtml='<input type="text" class="pyNoteEdit" data-idx="'+i+'" value="'+esc(e.notes||'')+'" placeholder="task / note" style="width:100%;min-width:140px">';
+    return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+jobHtml+'</td><td class="r">'+hoursHtml+'</td><td style="max-width:220px">'+noteHtml+'</td></tr>';
   }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import for this date range.</td></tr>';
   var chWrap=$('paylocityChangedWrap');
   if(changed.length){
@@ -1299,7 +1304,11 @@ function buildFinanceReport(){
       // "maybe 2 rows" -- so a person working several jobs in a week doesn't stretch their whole row.
       var railLines=jobOrder.map(function(k){ return '<span style="white-space:nowrap">'+esc(k)+' · '+f(byJob[k])+'</span>'; }).join('');
       var badge=E.calledIn?(' <span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:'+BRAND+';padding:1px 4px">Called in</span>'):'';
-      return '<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:5px 0;border-bottom:1px solid '+HAIR+';break-inside:avoid">'
+      // BORD (not the near-invisible HAIR) between employees -- Rich, 2026-08-21: "can we separate
+      // the employees with a fine muted line" -- the existing hairline was too faint to register as
+      // a real divider; BORD is the same "fine muted" weight already used for other section borders
+      // in this report, just one step more visible than HAIR.
+      return '<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:5px 0;border-bottom:1px solid '+BORD+';break-inside:avoid">'
         +'<div style="padding-right:6px">'
           +'<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:14.5px;font-weight:700;letter-spacing:-.015em">'+esc(who)+'</span>'+badge+'</div>'
           +'<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin-top:1px">ID '+esc(E.id||'—')+'</div>'
@@ -2051,6 +2060,13 @@ function boot(){
     var t=e.target; if(!t.classList || !t.classList.contains('pyJobPick')) return;
     var idx=+t.getAttribute('data-idx'); var r=PY_PENDING[idx]; if(!r) return;
     var v=t.value.trim(); r.job=v; var m=v.match(/^\s*(J?\d{3,6})\b/i); r.jobNum=m?m[1]:'';
+  });
+  // Editable note field on each row (Rich, 2026-08-21: "I want the ability to write the note...
+  // as I'm importing") -- updates live as he types, same PY_PENDING entry the job picker updates.
+  $('paylocityRows').addEventListener('input',function(e){
+    var t=e.target; if(!t.classList || !t.classList.contains('pyNoteEdit')) return;
+    var idx=+t.getAttribute('data-idx'); var r=PY_PENDING[idx]; if(!r) return;
+    r.notes=t.value;
   });
   $('paylocityModal').addEventListener('click',function(e){ if(e.target===$('paylocityModal')) closePaylocityModal(); });
   // manage list edit/delete delegation
