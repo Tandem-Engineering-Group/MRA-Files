@@ -741,7 +741,11 @@ var SSO=(function(){
       try{ pca=new msal.PublicClientApplication({ auth:{ clientId:CLIENT, authority:'https://login.microsoftonline.com/'+TENANT, redirectUri:location.origin+location.pathname }, cache:{ cacheLocation:'localStorage' } });
         pca.handleRedirectPromise().then(function(resp){ if(resp&&resp.account) pca.setActiveAccount(resp.account); var a=pca.getActiveAccount()||(pca.getAllAccounts()[0]||null); if(a){ if(domainOK(a.username)) user=a; else { finish(false); pca.logoutRedirect({account:a}); return; } } finish(false); }).catch(function(){ finish(false); });
       }catch(e){ finish(true); } }); }
-  function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; } try{ pca.loginRedirect({ scopes:['openid','profile','email'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
+  // 'User.Read' added 2026-08-21 -- acquireTokenSilent (SSO.token(), used for the pay-rates identity
+  // check) can only succeed for a scope the account already consented to; a sign-in that never asked
+  // for it can't silently upgrade to it later. Existing signed-in sessions need to sign out and back
+  // in once to pick this up.
+  function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; } try{ pca.loginRedirect({ scopes:['openid','profile','email','User.Read'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
   function signOut(){ if(!pca) return; var a=pca.getActiveAccount(); user=null; try{ pca.logoutRedirect(a?{account:a}:{}); }catch(e){ try{ applyMgr(); }catch(_){} } }
   // A real Microsoft-verified access token (Graph User.Read -- the default, already-consented scope
   // every signed-in app gets) for whoever's signed in right now -- proves identity to a server-side
@@ -1469,11 +1473,13 @@ function renderFinanceCard(){
   tiles(_finTile('…','$ Cost (loading)'));
   $('finRatesMsg').innerHTML='';
   _finGetRates(function(rates, err, secure){
-    if(err){
+    // An EMPTY array is a real "couldn't verify/no rates" result, not "everyone's rate is $0" --
+    // treat it the same as an error instead of silently computing real zeros for real people.
+    if(err || !rates || !rates.length){
       tiles(_finTile('—','$ Cost'));
       $('finRatesMsg').innerHTML = secure
-        ? '<span style="color:var(--err);font-size:12px">Could not verify your access ('+esc(err.message)+'). Make sure you’re signed in as you or Kyle, then</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button>'
-        : '<span style="color:var(--err);font-size:12px">Could not load pay rates ('+esc(err.message)+').</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button> <button class="tbtn sm" onclick="financeResetRates()">Re-enter URL</button>';
+        ? '<span style="color:var(--err);font-size:12px">Could not verify your access'+(err?(' ('+esc(err.message)+')'):'')+'. Make sure you’re signed in as you or Kyle, then</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button>'
+        : '<span style="color:var(--err);font-size:12px">Could not load pay rates'+(err?(' ('+esc(err.message)+')'):'')+'.</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button> <button class="tbtn sm" onclick="financeResetRates()">Re-enter URL</button>';
       $('finEmpRows').innerHTML='';
       return;
     }

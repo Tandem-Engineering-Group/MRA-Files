@@ -6791,8 +6791,12 @@ function renderFinance(force){
     // know why you would want to select just one or the other... show both all the time"). $ drives
     // bar heights/sort order when pay rates are loaded (haveCost); hours ride along as a constant
     // second line everywhere -- never hidden, never requiring a click to reveal.
-    function finish(rates){
-      const haveCost=!!rates;
+    function finish(rates, secure){
+      // An EMPTY array is a real "no rates" result (e.g. the pay-rates flow couldn't verify who's
+      // asking) -- NOT "everyone's rate is $0". Treating [] as haveCost=true was showing a misleading
+      // "$0 for everyone" instead of falling back to the honest hours-only view (Rich, 2026-08-21:
+      // "the finance side... completely wiped out" -- it wasn't wiped, this was showing fake zeros).
+      const haveCost=!!(rates && rates.length);
       const calcAll=_finCostCalc(rows, rates||[]);
       const grand=_finGrand(calcAll.byEmp);
       document.getElementById('finTrendTitle').textContent = haveCost ? 'Cost by week' : 'Hours by week';
@@ -6801,7 +6805,9 @@ function renderFinance(force){
         ? _finTile2('proj',financeMoney(grand.c),grand.h.toFixed(1)+'h','Total')+_finTile2('sched',financeMoney(grand.regC),grand.regH.toFixed(1)+'h','Regular')+_finTile2('over',financeMoney(grand.otC),grand.otH.toFixed(1)+'h','Overtime')
         : _finTile2('proj',grand.h.toFixed(1)+'h','','Total hours')+_finTile2('sched',grand.regH.toFixed(1)+'h','','Regular hours')+_finTile2('over',grand.otH.toFixed(1)+'h','','Overtime hours');
       document.getElementById('finTiles').innerHTML = tiles + _finTile('active',empCount,'Employees')+_finTile('pipe',jobCount,'Jobs charged');
-      document.getElementById('finRatesMsg').innerHTML = haveCost ? '' : '<button class="expandbtn" onclick="financeSetupRates()">🔑 Set up pay rates</button> to see $ alongside hours everywhere on this tab — one-time, saved on this device only.';
+      document.getElementById('finRatesMsg').innerHTML = haveCost ? '' : (secure
+        ? '<span style="color:var(--red)">Could not verify your access for pay rates.</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
+        : '<button class="expandbtn" onclick="financeSetupRates()">🔑 Set up pay rates</button> to see $ alongside hours everywhere on this tab — one-time, saved on this device only.');
 
       // trend (weekly) chart -- a single bar isn't a trend, it just restates the tile above it, and
       // stretched across the full card width it reads as broken/empty rather than "on purpose"; show
@@ -6849,15 +6855,15 @@ function renderFinance(force){
       FIN_LAST = { range, haveCost, rates: rates||[], rows, weekKeys, byWeek, calcAll, grand, empCount, jobCount };
     }
 
-    if(!_finRatesConfigured()){ finish(null); return; }
-    if(!rows.length){ finish([]); return; }   // rates ARE configured, just nothing in this range to rate
+    if(!_finRatesConfigured()){ finish(null, !!FIN_RATES_URL_DEFAULT); return; }
+    if(!rows.length){ finish([], !!FIN_RATES_URL_DEFAULT); return; }   // rates ARE configured, just nothing in this range to rate
     _finGetRates((rates, err, secure)=>{
       if(err){
         document.getElementById('finRatesMsg').innerHTML = secure
           ? '<span style="color:var(--red)">Could not verify your access ('+esc(err.message)+'). Make sure you’re signed in as you or Kyle, then</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
           : '<span style="color:var(--red)">Could not load pay rates ('+esc(err.message)+').</span> <button class="expandbtn" onclick="renderFinance()">Retry</button> <button class="expandbtn" onclick="financeResetRates()">Re-enter URL</button>';
       }
-      finish(rates);
+      finish(rates, secure);
     });
   }, force);
 }
@@ -6917,7 +6923,7 @@ function renderProjectCost(){
   const weekTruncated=weekKeys.length>12; if(weekTruncated) weekKeys=weekKeys.slice(-12);
 
   function finish(rates){
-    const haveCost=!!rates;
+    const haveCost=!!(rates && rates.length);   // an empty array means "not verified", not "$0 for everyone"
     _pcRenderGrid(_finCostCalc(gridRows, rates||[]).byJob, haveCost);
     if(!proj){ body.innerHTML='<div class="fin-empty">Pick a project above to see its total cost and trend.</div>'; return; }
 
@@ -7100,7 +7106,13 @@ const SSO = (function(){
     });
   }
   function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; }
-    try{ pca.loginRedirect({ scopes:['openid','profile','email'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
+    // 'User.Read' added 2026-08-21 -- acquireTokenSilent (SSO.token(), used for the pay-rates identity
+    // check) can only succeed for a scope the account already consented to; a sign-in that never asked
+    // for it can't silently upgrade to it later (MSAL just fails quietly), which is why the pay-rates
+    // flow saw NO token at all from a real, valid sign-in and correctly-but-confusingly treated it the
+    // same as an invalid one. Existing signed-in sessions need to sign out and back in once to pick
+    // this up -- it only takes effect on a fresh interactive sign-in.
+    try{ pca.loginRedirect({ scopes:['openid','profile','email','User.Read'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
   function signOut(){ if(!pca){ return; } const a=pca.getActiveAccount(); user=null;
     try{ pca.logoutRedirect(a?{account:a}:{}); }catch(e){ try{ applyRoleUI(); }catch(_){} } }
   // A real Microsoft-verified access token (Graph User.Read -- the default, already-consented scope
