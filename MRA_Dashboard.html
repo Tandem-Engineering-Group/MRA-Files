@@ -113,8 +113,9 @@
   .fin-toggle button{border:0; background:transparent; color:var(--muted); padding:5px 12px; font-size:12px; font-weight:700; cursor:pointer}
   .fin-toggle button.on{background:var(--brand); color:#fff}
   /* Column (bar) chart — weeks along the baseline, one series at a time (Hours | $ toggle), never dual-axis */
-  .fin-colchart{display:flex; align-items:flex-end; gap:6px; height:180px; padding-top:20px; border-bottom:1px solid var(--line); position:relative}
-  .fin-col{flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative}
+  .fin-colchart{display:flex; align-items:flex-end; justify-content:flex-start; gap:14px; height:180px; padding-top:20px; border-bottom:1px solid var(--line); position:relative}
+  .fin-col{flex:0 0 auto; width:52px; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative}
+  .fin-nochart{color:var(--muted); font-size:12.5px; padding:16px 2px; text-align:center; border:1px dashed var(--line); border-radius:10px}
   .fin-col .bar{width:100%; max-width:26px; border-radius:4px 4px 0 0; background:var(--blue); position:relative; transition:height .25s ease}
   .fin-col .val{font-size:10.5px; color:var(--txt); font-weight:700; margin-bottom:3px; white-space:nowrap}
   .fin-col .lbl{font-size:10px; color:var(--muted); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
@@ -6756,16 +6757,19 @@ function renderFinance(force){
         ? '<button class="expandbtn" onclick="financeSetupRates()">🔑 Set up pay rates</button> One-time, saved on this device only — same rates the Detailed Cost report uses.'
         : '';
 
-      // trend (weekly) chart
+      // trend (weekly) chart -- a single bar isn't a trend, it just restates the tile above it, and
+      // stretched across the full card width it reads as broken/empty rather than "on purpose"; show
+      // a plain note instead and let the tiles carry the number.
       const trendEl=document.getElementById('finTrendChart');
       if(!weekKeys.length){ trendEl.innerHTML='<div class="fin-empty">No hours in this range.</div>'; }
+      else if(weekKeys.length<2){ trendEl.innerHTML='<div class="fin-nochart">Pick a range spanning 2+ weeks (Last 2 weeks, This month, All time) to see a week-by-week trend.</div>'; }
       else{
         const showCost=wantCost && haveCost;
         const vals=weekKeys.map(wk=>{ const wg=_finGrand(_finCostCalc(byWeek[wk].rows, rates||[]).byEmp); return showCost?wg.c:wg.h; });
         const max=Math.max.apply(null, vals.concat([0.0001]));
         const note=(wantCost && !haveCost) ? '<div class="fin-empty" style="padding:0 0 8px;text-align:left">Set up pay rates (below) to see this chart in $ — showing hours for now.</div>' : '';
         trendEl.innerHTML = note + (weekTruncated?'<div class="fin-empty" style="padding:0 0 8px;text-align:left">Showing the most recent 12 weeks.</div>':'')
-          + '<div style="display:flex;gap:6px;align-items:flex-end;height:180px">' + weekKeys.map((wk,i)=>{
+          + '<div class="fin-colchart" style="border-bottom:none;padding-top:0">' + weekKeys.map((wk,i)=>{
             const v=vals[i], h=Math.max(3,Math.round(v/max*150));
             const lbl=_finWeekLabel(byWeek[wk].d);
             const valTxt = showCost ? financeMoney(v) : (Math.round(v*10)/10)+'h';
@@ -6857,12 +6861,13 @@ function renderProjectCost(){
     const showCost=wantCost && haveCost;
     let trendHtml;
     if(!weekKeys.length){ trendHtml='<div class="fin-empty">No hours logged to this project in this range.</div>'; }
+    else if(weekKeys.length<2){ trendHtml='<div class="fin-nochart" style="margin-top:12px">Pick a longer range (Last 2 weeks, This month, All time) to see a week-by-week trend for this project.</div>'; }
     else{
       const vals=weekKeys.map(wk=>{ const wg=_finGrand(_finCostCalc(byWeek[wk].rows, rates||[]).byEmp); return showCost?wg.c:wg.h; });
       const max=Math.max.apply(null, vals.concat([0.0001]));
       const note=(wantCost && !haveCost) ? '<div class="fin-empty" style="padding:0 0 8px;text-align:left">Set up pay rates (💵 Dollars mode above) to see this in $ — showing hours for now.</div>' : '';
       trendHtml = note + (weekTruncated?'<div class="fin-empty" style="padding:0 0 8px;text-align:left">Showing the most recent 12 weeks.</div>':'')
-        + '<div style="display:flex;gap:6px;align-items:flex-end;height:160px;margin-top:12px">' + weekKeys.map((wk,i)=>{
+        + '<div class="fin-colchart" style="height:160px;border-bottom:none;margin-top:12px">' + weekKeys.map((wk,i)=>{
           const v=vals[i], h=Math.max(3,Math.round(v/max*130));
           const lbl=_finWeekLabel(byWeek[wk].d), valTxt = showCost ? financeMoney(v) : (Math.round(v*10)/10)+'h';
           return '<div class="fin-col" title="'+escA(lbl+' — '+valTxt)+'"><span class="val">'+valTxt+'</span><span class="bar" style="height:'+h+'px;background:'+(showCost?'var(--brand)':'var(--blue)')+'"></span><span class="lbl">'+esc(lbl)+'</span></div>';
