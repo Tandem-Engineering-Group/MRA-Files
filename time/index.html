@@ -649,7 +649,15 @@ var SSO=(function(){
       }catch(e){ finish(true); } }); }
   function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; } try{ pca.loginRedirect({ scopes:['openid','profile','email'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
   function signOut(){ if(!pca) return; var a=pca.getActiveAccount(); user=null; try{ pca.logoutRedirect(a?{account:a}:{}); }catch(e){ try{ applyMgr(); }catch(_){} } }
-  return { init:init, signIn:signIn, signOut:signOut, active:active, email:function(){ return user?String(user.username||'').toLowerCase():''; }, name:function(){ return user?(user.name||user.username||''):''; }, get user(){ return user; }, get ready(){ return ready; }, get failed(){ return failed; } };
+  // A real Microsoft-verified access token (Graph User.Read -- the default, already-consented scope
+  // every signed-in app gets) for whoever's signed in right now -- proves identity to a server-side
+  // check instead of trusting anything the client claims. Acquired silently off the existing session;
+  // resolves null if not signed in or silent acquisition fails.
+  function token(){
+    if(!pca || !user) return Promise.resolve(null);
+    return pca.acquireTokenSilent({ scopes:['User.Read'], account:user }).then(function(r){ return r.accessToken; }).catch(function(){ return null; });
+  }
+  return { init:init, signIn:signIn, signOut:signOut, active:active, token:token, email:function(){ return user?String(user.username||'').toLowerCase():''; }, name:function(){ return user?(user.name||user.username||''):''; }, get user(){ return user; }, get ready(){ return ready; }, get failed(){ return failed; } };
 })();
 function ssoEnforcing(){ return SSO.active() && SSO.ready && !SSO.failed; }
 function ssoRole(){ if(!SSO.active()||SSO.failed) return null; var em=SSO.email(); if(ROLE_BY_EMAIL[em]) return ROLE_BY_EMAIL[em]; var nk=_nmKey(SSO.name()); if(ROLE_BY_NAME[nk]) return ROLE_BY_NAME[nk]; return SSO.user?'staff':null; }
@@ -1258,6 +1266,32 @@ function buildFinanceReport(){
    loading placeholder so Safari/iPad never treats the later async-filled content as a blocked
    popup; the real report is written in once the rates come back. ---- */
 var RATES_URL_KEY='mra_time_ratesurl';
+// Rich, once the pay-rates flow has the Microsoft-identity check added (see chat instructions) and
+// you've given Claude its trigger URL, it goes here -- safe to hardcode since the flow itself refuses
+// to answer anyone who isn't signed in as you or Kyle, no matter who has this URL. Until then this
+// stays blank and every device keeps using the old "paste the URL once, saved on this device only"
+// fallback below, unchanged. Same constant/behavior as MRA_Dashboard.html's Finance tab.
+var RATES_URL_DEFAULT = '';
+function _finRatesConfigured(){ return !!(RATES_URL_DEFAULT || localStorage.getItem(RATES_URL_KEY)); }
+// Single source for "go get the rates". Resolves the URL (the hardcoded RATES_URL_DEFAULT once set
+// up, else the per-device localStorage one) and, only for the hardcoded URL, attaches a live
+// Microsoft access token -- that's what makes it safe to hardcode: the flow checks the signed-in
+// identity, not secrecy of the address. cb(rates|null, err|null, secure).
+function _finGetRates(cb){
+  var secure = !!RATES_URL_DEFAULT;
+  var url = RATES_URL_DEFAULT || localStorage.getItem(RATES_URL_KEY);
+  if(!url){ cb(null, null, secure); return; }
+  function go(tok){
+    var headers={'Content-Type':'application/json'};
+    if(tok) headers['Authorization']='Bearer '+tok;
+    fetch(url,{method:'POST',headers:headers})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(rates){ cb((rates||[]).filter(function(r){ return r&&r.name; }), null, secure); })
+      .catch(function(err){ cb(null, err, secure); });
+  }
+  if(secure && typeof SSO!=='undefined' && SSO.token) SSO.token().then(go);
+  else go(null);
+}
 // A renamed roster entry (e.g. "Sal Jr" -> "Sal Sanchez JR." after someone edited the roster on
 // their own device) must still match the rates list under whichever name it has there. Confirmed
 // live 2026-08-20: time.json has BOTH "Sal Jr" (older rows) and "Sal Sanchez JR." (rows logged
@@ -1328,8 +1362,7 @@ function renderFinanceCard(){
   if(!rows.length){
     tiles(_finTile('$0.00','$ Cost')); $('finRatesMsg').innerHTML=''; $('finEmpRows').innerHTML='<tr><td colspan="3" class="muted">No hours in this range.</td></tr>'; return;
   }
-  var ratesUrl=localStorage.getItem(RATES_URL_KEY);
-  if(!ratesUrl){
+  if(!_finRatesConfigured()){
     tiles(_finTile('—','$ Cost'));
     $('finRatesMsg').innerHTML='<button class="tbtn sm" onclick="financeSetupRates()">🔑 Set up pay rates</button> <span class="muted" style="font-size:11.5px">One-time, saved on this device only — same rates the Cost report uses.</span>';
     $('finEmpRows').innerHTML='';
@@ -1337,22 +1370,22 @@ function renderFinanceCard(){
   }
   tiles(_finTile('…','$ Cost (loading)'));
   $('finRatesMsg').innerHTML='';
-  fetch(ratesUrl,{method:'POST',headers:{'Content-Type':'application/json'}})
-    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(rates){
-      rates=(rates||[]).filter(function(r){ return r&&r.name; });
-      var byEmp=_financeCostCalc(rows, rates);
-      var totC=0; Object.keys(byEmp).forEach(function(w){ totC+=byEmp[w].c; });
-      tiles(_finTile(_finMoney(totC),'$ Cost'));
-      var names=Object.keys(byEmp).sort(function(a,b){ return byEmp[b].c-byEmp[a].c || a.localeCompare(b); });
-      $('finEmpRows').innerHTML=names.map(function(w){ var E=byEmp[w];
-        return '<tr><td>'+esc(w)+(E.rate==null?' <span class="muted" style="font-size:10.5px">(no rate on file)</span>':'')+'</td><td class="r">'+E.h.toFixed(2)+'</td><td class="r">'+(E.rate==null?'<span class="muted">—</span>':esc(_finMoney(E.c)))+'</td></tr>'; }).join('');
-    })
-    .catch(function(err){
+  _finGetRates(function(rates, err, secure){
+    if(err){
       tiles(_finTile('—','$ Cost'));
-      $('finRatesMsg').innerHTML='<span style="color:var(--err);font-size:12px">Could not load pay rates ('+esc(err.message)+').</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button> <button class="tbtn sm" onclick="financeResetRates()">Re-enter URL</button>';
+      $('finRatesMsg').innerHTML = secure
+        ? '<span style="color:var(--err);font-size:12px">Could not verify your access ('+esc(err.message)+'). Make sure you’re signed in as you or Kyle, then</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button>'
+        : '<span style="color:var(--err);font-size:12px">Could not load pay rates ('+esc(err.message)+').</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button> <button class="tbtn sm" onclick="financeResetRates()">Re-enter URL</button>';
       $('finEmpRows').innerHTML='';
-    });
+      return;
+    }
+    var byEmp=_financeCostCalc(rows, rates);
+    var totC=0; Object.keys(byEmp).forEach(function(w){ totC+=byEmp[w].c; });
+    tiles(_finTile(_finMoney(totC),'$ Cost'));
+    var names=Object.keys(byEmp).sort(function(a,b){ return byEmp[b].c-byEmp[a].c || a.localeCompare(b); });
+    $('finEmpRows').innerHTML=names.map(function(w){ var E=byEmp[w];
+      return '<tr><td>'+esc(w)+(E.rate==null?' <span class="muted" style="font-size:10.5px">(no rate on file)</span>':'')+'</td><td class="r">'+E.h.toFixed(2)+'</td><td class="r">'+(E.rate==null?'<span class="muted">—</span>':esc(_finMoney(E.c)))+'</td></tr>'; }).join('');
+  });
 }
 function openCostReport(){
   var rows=filtered();
@@ -1362,13 +1395,12 @@ function openCostReport(){
   // window.open() is a known-bad pattern on iOS Safari (the new tab can open, the prompt gets
   // silently suppressed, and it returns falsy right away, so the tab we just opened gets closed
   // again a split second later: a "blink" and nothing else, every time on a device that hasn't
-  // saved the URL yet). Asking first, with no popup open yet, avoids that entirely.
-  var ratesUrl=localStorage.getItem(RATES_URL_KEY);
-  if(!ratesUrl){
-    ratesUrl=prompt('Paste the rates-flow URL (one-time -- this is saved on this device only, never in any file):');
-    if(!ratesUrl){ return; }
-    ratesUrl=ratesUrl.trim();
-    localStorage.setItem(RATES_URL_KEY, ratesUrl);
+  // saved the URL yet). Asking first, with no popup open yet, avoids that entirely. Not needed at
+  // all once RATES_URL_DEFAULT is set -- there's no prompt to fire in that mode.
+  if(!_finRatesConfigured()){
+    var typedUrl=prompt('Paste the rates-flow URL (one-time -- this is saved on this device only, never in any file):');
+    if(!typedUrl){ return; }
+    localStorage.setItem(RATES_URL_KEY, typedUrl.trim());
   }
 
   var win=window.open('','_blank');
@@ -1376,20 +1408,19 @@ function openCostReport(){
   win.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Labor Cost Summary</title></head>'
     +'<body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#666;text-align:center">Loading pay rates…</body></html>');
 
-  fetch(ratesUrl, {method:'POST', headers:{'Content-Type':'application/json'}})
-    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(rates){
-      rates=(rates||[]).filter(function(r){ return r&&r.name; });
-      if(!rates.length) throw new Error('The rates flow returned no rows.');
-      buildCostReportInto(win, rows, rates);
-    })
-    .catch(function(err){
-      // A bad/stale URL is the most likely failure -- offer to re-enter it rather than dead-end.
-      if(confirm('Could not load pay rates ('+err.message+').\n\nWant to re-enter the rates-flow URL?')){
+  _finGetRates(function(rates, err, secure){
+    if(err || !rates || !rates.length){
+      var msg = err ? err.message : 'The rates flow returned no rows.';
+      // A bad/stale URL is the most likely failure in the legacy (non-secure) mode -- offer to
+      // re-enter it rather than dead-end. Nothing to re-enter once on the hardcoded secure URL.
+      if(!secure && confirm('Could not load pay rates ('+msg+').\n\nWant to re-enter the rates-flow URL?')){
         localStorage.removeItem(RATES_URL_KEY);
       }
-      win.document.open(); win.document.write('<!doctype html><body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#b00">Could not load pay rates: '+esc(err.message)+'. Close this tab and try Cost report again.</body>'); win.document.close();
-    });
+      win.document.open(); win.document.write('<!doctype html><body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#b00">Could not load pay rates: '+esc(msg)+'. Close this tab and try Cost report again.</body>'); win.document.close();
+      return;
+    }
+    buildCostReportInto(win, rows, rates);
+  });
 }
 function buildCostReportInto(win, rows, rates){
   var dates=rows.map(function(e){return e.dateISO;}).filter(Boolean).sort();

@@ -3814,7 +3814,7 @@ const GENERAL_HELP = `
   <div class="hsec"><h4>②ᶠ 💰 FINANCE — hours &amp; cost reporting</h4>
     <p>A <span class="k">FINANCE</span> tab sits in the main tab bar, limited to <b>Rich &amp; Kyle Maynard only</b> — it's hidden entirely for everyone else, and doesn't unlock with the shared manager PIN (it needs a real Microsoft sign-in as one of those two accounts).</p>
     <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. No mode toggle — <b>every tile, chart, and list always shows $ and hours together</b>. Pick a date range, then read: Total/Regular/Overtime tiles, employees, jobs charged, a weekly bar chart, and ranked <b>By job</b> / <b>By person</b> lists.</p>
-    <p>Regular/Overtime hours show up even before pay rates are set up (they show alone until then). First time pay rates are configured, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report.</p>
+    <p>Regular/Overtime hours show up even before pay rates are set up (they show alone until then). First time pay rates are configured, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report. This one-time-per-device step is deliberate, not a bug — the underlying file goes to every device including the anonymous shop-floor screens, so the rates address can't safely be baked in unless the rates flow itself checks who's actually signed in; that server-side check is in progress (see the rev 37.62 changelog note) and will remove this step entirely once it's switched on.</p>
     <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart, on Time Tracking) — not a new report, the same trusted one, just one click from here instead of switching pages and re-picking dates. <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p>
     <p>At the bottom, <span class="k">Cost by project</span> shows every project as its own tile (name, $, hours) — tap one (or use the dropdown) to deep-dive into it: total $, Regular/Overtime split, and a week-by-week trend, on its own timeframe independent of the date range up top. Leave/pay-type entries (Called In, All Purpose Leave, Holiday, etc.) are never shown here or in By job — they're not real projects, they just ride the same job-name field — but they still count in By person and the top tiles since they're real cost.</p></div>
 
@@ -4051,6 +4051,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.62", date:"2026-08-21", title:"🔐 Pay rates: laid the groundwork for a real cross-device fix (no more per-device paste)", items:[
+    "Today, the pay-rates flow URL is entered once per device and saved only in that browser — by design, since the FINANCE tab's \"only Rich &amp; Kyle\" restriction is a UI hide, not a real lock: every device that loads this dashboard (including the anonymous shop-floor screens) downloads the same file, so baking a plain URL into it would let anyone technically pull individual pay rates directly.",
+    "Added the actual fix, ready to switch on: the dashboard can now send your real, Microsoft-verified sign-in as proof of identity alongside the rates request (a live access token, acquired silently off your existing sign-in — nothing new to click). Once the pay-rates flow itself is updated to check that identity (steps given separately) and its URL is handed over, the per-device \"Set up pay rates\" step goes away for good — Finance works on any device the moment you're signed in.",
+    "Nothing changes yet for daily use — this ships the plumbing only; the per-device prompt still works exactly as before until the flow-side change is made." ] },
   { rev:"37.61", date:"2026-08-21", title:"💰 FINANCE: dropped the pointless \"Called In\" tile + Cost by project now fully isolated from the top range", items:[
     "<b>\"Called In\" is gone from By job and Cost by project.</b> It's always $0/0h by design (nobody gets paid to call in) and isn't a real project — it just rode the same job-name field. Worse, the raw time data has two different spellings of it (\"Called In\" vs \"Called in\"), so it was showing up as two separate useless tiles. Leave/pay-type entries (Called In, All Purpose Leave, Holiday, etc.) still count toward each person's total cost in By person and the tiles up top — only the fake \"project\" grouping is gone.",
     "<b>Cost by project's own range picker now actually does something.</b> The project tile grid and the deep-dive detail below it used to silently follow the FINANCE tab's top-level date range — its own selector did nothing. Both now run entirely off their own range picker, completely independent of the one up top." ] },
@@ -6629,6 +6633,12 @@ function financeTabAllowed(){
    mra_time_ratesurl device key, same per-employee-per-week 40hr split) so the numbers here
    always agree with the detailed report if someone opens both. */
 const FIN_RATES_KEY='mra_time_ratesurl';
+// Rich, once the pay-rates flow has the Microsoft-identity check added (see chat instructions) and
+// you've given Claude its trigger URL, it goes here -- safe to hardcode since the flow itself refuses
+// to answer anyone who isn't signed in as you or Kyle, no matter who has this URL (the flow enforces
+// that, not secrecy of the address). Until then this stays blank and every device keeps using the
+// old "paste the URL once, saved on this device only" fallback below, unchanged.
+const FIN_RATES_URL_DEFAULT = '';
 let FIN_ENTRIES=null, FIN_LOADING=false, FIN_LAST=null;
 const FIN_RANGE_LABELS={tw:'This week', lw:'Last week', '2w':'Last 2 weeks', m:'This month', all:'All time'};
 function _finMapEntries(arr){
@@ -6724,6 +6734,27 @@ function financeSetupRates(){
   if(!u) return; localStorage.setItem(FIN_RATES_KEY,u.trim()); renderFinance();
 }
 function financeResetRates(){ localStorage.removeItem(FIN_RATES_KEY); renderFinance(); }
+function _finRatesConfigured(){ return !!(FIN_RATES_URL_DEFAULT || localStorage.getItem(FIN_RATES_KEY)); }
+// Single source for "go get the rates", used by renderFinance() + renderProjectCost(). Resolves the
+// URL (the hardcoded FIN_RATES_URL_DEFAULT once Rich sets it up, else the old per-device localStorage
+// one) and, only for the hardcoded URL, attaches a live Microsoft access token -- that's what makes it
+// safe to hardcode: the flow checks the signed-in identity, not secrecy of the address. cb(rates|null,
+// err|null, secure) -- secure tells the caller which URL was in play, for building the right message.
+function _finGetRates(cb){
+  const secure = !!FIN_RATES_URL_DEFAULT;
+  const url = FIN_RATES_URL_DEFAULT || localStorage.getItem(FIN_RATES_KEY);
+  if(!url){ cb(null, null, secure); return; }
+  const go=(tok)=>{
+    const headers={'Content-Type':'application/json'};
+    if(tok) headers['Authorization']='Bearer '+tok;
+    fetch(url,{method:'POST',headers:headers})
+      .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
+      .then(rates=>cb((rates||[]).filter(r=>r&&r.name), null, secure))
+      .catch(err=>cb(null, err, secure));
+  };
+  if(secure && typeof SSO!=='undefined' && SSO.token) SSO.token().then(go);
+  else go(null);
+}
 function _finTile(cls,n,l){ return '<div class="kpi '+cls+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 function _finTile2(cls,primary,secondary,l){ return '<div class="kpi '+cls+'"><div class="n">'+primary+'</div>'+(secondary?('<div class="ksub">'+esc(secondary)+'</div>'):'')+'<div class="l">'+esc(l)+'</div></div>'; }
 function _finBarRow(name, val, max, fmt){
@@ -6814,16 +6845,16 @@ function renderFinance(force){
       FIN_LAST = { range, haveCost, rates: rates||[], rows, weekKeys, byWeek, calcAll, grand, empCount, jobCount };
     }
 
-    const ratesUrl=localStorage.getItem(FIN_RATES_KEY);
-    if(!ratesUrl){ finish(null); return; }
+    if(!_finRatesConfigured()){ finish(null); return; }
     if(!rows.length){ finish([]); return; }   // rates ARE configured, just nothing in this range to rate
-    fetch(ratesUrl,{method:'POST',headers:{'Content-Type':'application/json'}})
-      .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
-      .then(rates=>{ finish((rates||[]).filter(r=>r&&r.name)); })
-      .catch(err=>{
-        document.getElementById('finRatesMsg').innerHTML='<span style="color:var(--red)">Could not load pay rates ('+esc(err.message)+').</span> <button class="expandbtn" onclick="renderFinance()">Retry</button> <button class="expandbtn" onclick="financeResetRates()">Re-enter URL</button>';
-        finish(null);
-      });
+    _finGetRates((rates, err, secure)=>{
+      if(err){
+        document.getElementById('finRatesMsg').innerHTML = secure
+          ? '<span style="color:var(--red)">Could not verify your access ('+esc(err.message)+'). Make sure you’re signed in as you or Kyle, then</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
+          : '<span style="color:var(--red)">Could not load pay rates ('+esc(err.message)+').</span> <button class="expandbtn" onclick="renderFinance()">Retry</button> <button class="expandbtn" onclick="financeResetRates()">Re-enter URL</button>';
+      }
+      finish(rates);
+    });
   }, force);
 }
 
@@ -6913,13 +6944,9 @@ function renderProjectCost(){
       +trendHtml;
   }
 
-  const ratesUrl=localStorage.getItem(FIN_RATES_KEY);
-  if(!ratesUrl){ finish(null); return; }
+  if(!_finRatesConfigured()){ finish(null); return; }
   if(!gridRows.length){ finish([]); return; }
-  fetch(ratesUrl,{method:'POST',headers:{'Content-Type':'application/json'}})
-    .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
-    .then(rates=>{ finish((rates||[]).filter(r=>r&&r.name)); })
-    .catch(()=>{ finish(null); });
+  _finGetRates(rates=>{ finish(rates); });
 }
 
 /* ---------- FINANCE printable reports ---------- design tokens match the existing Time Tracking
@@ -7072,7 +7099,16 @@ const SSO = (function(){
     try{ pca.loginRedirect({ scopes:['openid','profile','email'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
   function signOut(){ if(!pca){ return; } const a=pca.getActiveAccount(); user=null;
     try{ pca.logoutRedirect(a?{account:a}:{}); }catch(e){ try{ applyRoleUI(); }catch(_){} } }
-  return { init, signIn, signOut, active,
+  // A real Microsoft-verified access token (Graph User.Read -- the default, already-consented scope
+  // every signed-in app gets) for whoever's actually signed in right now. Used to prove identity to a
+  // server-side check (e.g. the pay-rates flow) instead of trusting anything the client claims --
+  // acquired silently off the existing session, no extra prompt. Resolves null if not signed in or
+  // silent acquisition fails (caller falls back to whatever it did before this existed).
+  function token(){
+    if(!pca || !user) return Promise.resolve(null);
+    return pca.acquireTokenSilent({ scopes:['User.Read'], account:user }).then(r=>r.accessToken).catch(()=>null);
+  }
+  return { init, signIn, signOut, active, token,
     email:()=>user?String(user.username||'').toLowerCase():'',
     name:()=>user?(user.name||user.username||''):'',
     get user(){return user;}, get ready(){return ready;}, get failed(){return failed;} };
