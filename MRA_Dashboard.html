@@ -116,6 +116,13 @@
   .fin-colchart{display:flex; align-items:flex-end; justify-content:flex-start; gap:14px; height:180px; padding-top:20px; border-bottom:1px solid var(--line); position:relative}
   .fin-col{flex:0 0 auto; width:52px; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative}
   .fin-nochart{color:var(--muted); font-size:12.5px; padding:16px 2px; text-align:center; border:1px dashed var(--line); border-radius:10px}
+  .pc-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin-bottom:16px}
+  .pc-tile{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; text-align:left; cursor:pointer; transition:border-color .12s ease, transform .08s ease; font:inherit; color:inherit}
+  .pc-tile:hover{border-color:var(--brand); transform:translateY(-1px)}
+  .pc-tile.on{border-color:var(--brand); box-shadow:0 0 0 1px var(--brand)}
+  .pc-tile .pc-nm{font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px}
+  .pc-tile .pc-v{font-size:18px; font-weight:800; font-variant-numeric:tabular-nums}
+  .pc-tile .pc-sub{font-size:10.5px; color:var(--faint); margin-top:2px}
   .fin-col .bar{width:100%; max-width:26px; border-radius:4px 4px 0 0; background:var(--blue); position:relative; transition:height .25s ease}
   .fin-col .val{font-size:10.5px; color:var(--txt); font-weight:700; margin-bottom:3px; white-space:nowrap}
   .fin-col .lbl{font-size:10px; color:var(--muted); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
@@ -2550,6 +2557,8 @@
             </select>
           </div>
         </div>
+        <div class="muted" style="font-size:11.5px;margin:0 0 10px">Every project this range — tap a tile to deep-dive into it below.</div>
+        <div id="pcGrid" class="pc-grid"></div>
         <div id="pcBody">
           <div class="fin-empty">Pick a project above to see its total cost and trend.</div>
         </div>
@@ -3810,7 +3819,7 @@ const GENERAL_HELP = `
     <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. Defaults to <b>💵 Dollars</b>; the one <b>💵 Dollars / ⏱ Hours</b> toggle up top switches the tiles, the weekly chart, and both ranked lists together. Pick a date range, then read: Total/Regular/Overtime tiles, employees, jobs charged, a weekly bar chart, and ranked <b>By job</b> / <b>By person</b> lists (each shows $ and hours together).</p>
     <p>Regular/Overtime hours show up even before pay rates are set up. First time you switch to $, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report.</p>
     <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart, on Time Tracking) — not a new report, the same trusted one, just one click from here instead of switching pages and re-picking dates. <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p>
-    <p>At the bottom, <span class="k">Cost by project</span> is a standalone lookup — pick any project ever worked (independent of the date range up top) and a timeframe, and see its total $, Regular/Overtime split, and a week-by-week trend, all on its own.</p></div>
+    <p>At the bottom, <span class="k">Cost by project</span> shows every project as its own tile (name, $, hours) — tap one (or use the dropdown) to deep-dive into it: total $, Regular/Overtime split, and a week-by-week trend, on its own timeframe independent of the date range up top.</p></div>
 
   <div class="hsec"><h4>②ʳ ⏩ Pushing &amp; sliding due dates</h4>
     <p>When a task slips, you can push it out and <b>the old date stays visible, struck through</b>, next to the new one (<span class="k"><s>7/14</s> → 7/24</span>) — on the task everywhere, so everyone can see it moved.</p>
@@ -4045,6 +4054,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.59", date:"2026-08-20", title:"📊 Cost by project is now a clickable tile grid", items:[
+    "Every project this range now shows as its own tile (name, $, hours) — tap any tile to deep-dive into it below (stat tiles + week-by-week trend), same as picking it from the dropdown. No cap — the By-job list still shows just the top 8, but every project is a tile here." ] },
   { rev:"37.58", date:"2026-08-20", title:"📊 New \"Cost by project\" lookup on FINANCE + a real Hours-default bug fixed", items:[
     "<b>Cost by project</b>: a new section at the bottom of the FINANCE tab — pick any project ever worked (from a full history, not just the current date range) and a timeframe (this week / last week / last 2 weeks / this month / all time), and see its total $ (or hours), Regular/Overtime split, and a week-by-week trend chart. Follows the same 💵 Dollars / ⏱ Hours toggle as the rest of the tab.",
     "Fixed: the Labor Cost Summary's own \"Job Totals Over Time\" chart was defaulting to Hours even though the rest of that report is all about dollars — it now opens showing $ by default, matching everywhere else." ] },
@@ -6800,6 +6811,7 @@ function renderFinance(force){
       }
       rankedList(calcAll.byJob, 'finByJob');
       rankedList(calcAll.byEmp, 'finByPerson');
+      _pcRenderGrid(calcAll.byJob, showCostLists);
 
       // stash everything the print reports need, so they don't re-fetch rates a second time
       FIN_LAST = { range, wantCost, haveCost, rates: rates||[], rows, weekKeys, byWeek, calcAll, grand, empCount, jobCount };
@@ -6829,6 +6841,31 @@ function _pcPopulateProjects(){
   const names=[...new Set(FIN_ENTRIES.map(e=>e.job).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   sel.innerHTML='<option value="">Pick a project…</option>'+names.map(n=>'<option value="'+escA(n)+'">'+esc(n)+'</option>').join('');
   if(cur && names.indexOf(cur)>=0) sel.value=cur;
+}
+// One tile per project (Rich's ask: "tiles for all the projects... total hours, total cost... click
+// on the tile and open up in deep dive") -- every project this range, not capped like the By-job list,
+// since this IS the picker (a click here drives the detail section right below it).
+function _pcRenderGrid(byJob, showCostLists){
+  const gridEl=document.getElementById('pcGrid'); if(!gridEl) return;
+  const names=Object.keys(byJob).sort((a,b)=>{
+    const av=showCostLists?(byJob[a].regC+byJob[a].otC):(byJob[a].regH+byJob[a].otH);
+    const bv=showCostLists?(byJob[b].regC+byJob[b].otC):(byJob[b].regH+byJob[b].otH);
+    return bv-av;
+  });
+  const curSel=(document.getElementById('pcProject')||{}).value||'';
+  gridEl.innerHTML = names.length ? names.map(n=>{
+    const x=byJob[n], h=x.regH+x.otH, c=x.regC+x.otC;
+    const v = showCostLists ? financeMoney(c) : (Math.round(h*10)/10)+'h';
+    const sub = showCostLists ? (Math.round(h*10)/10)+'h' : '';
+    return '<button type="button" class="pc-tile'+(n===curSel?' on':'')+'" onclick="pcSelectProject(\''+escJsAttr(n)+'\')" title="'+escA(n)+'"><div class="pc-nm">'+esc(n)+'</div><div class="pc-v">'+v+'</div>'+(sub?('<div class="pc-sub">'+sub+'</div>'):'')+'</button>';
+  }).join('') : '<div class="fin-empty">No hours in this range.</div>';
+}
+function pcSelectProject(name){
+  const sel=document.getElementById('pcProject'); if(!sel) return;
+  sel.value=name;
+  document.querySelectorAll('.pc-tile').forEach(t=>t.classList.toggle('on', t.title===name));
+  renderProjectCost();
+  const body=document.getElementById('pcBody'); if(body) body.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 function renderProjectCost(){
   const body=document.getElementById('pcBody'); if(!body) return;
