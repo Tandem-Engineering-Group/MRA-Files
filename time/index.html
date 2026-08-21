@@ -741,19 +741,16 @@ var SSO=(function(){
       try{ pca=new msal.PublicClientApplication({ auth:{ clientId:CLIENT, authority:'https://login.microsoftonline.com/'+TENANT, redirectUri:location.origin+location.pathname }, cache:{ cacheLocation:'localStorage' } });
         pca.handleRedirectPromise().then(function(resp){ if(resp&&resp.account) pca.setActiveAccount(resp.account); var a=pca.getActiveAccount()||(pca.getAllAccounts()[0]||null); if(a){ if(domainOK(a.username)) user=a; else { finish(false); pca.logoutRedirect({account:a}); return; } } finish(false); }).catch(function(){ finish(false); });
       }catch(e){ finish(true); } }); }
-  // 'User.Read' added 2026-08-21 -- acquireTokenSilent (SSO.token(), used for the pay-rates identity
-  // check) can only succeed for a scope the account already consented to; a sign-in that never asked
-  // for it can't silently upgrade to it later. Existing signed-in sessions need to sign out and back
-  // in once to pick this up.
-  function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; } try{ pca.loginRedirect({ scopes:['openid','profile','email','User.Read'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
+  function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; } try{ pca.loginRedirect({ scopes:['openid','profile','email'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
   function signOut(){ if(!pca) return; var a=pca.getActiveAccount(); user=null; try{ pca.logoutRedirect(a?{account:a}:{}); }catch(e){ try{ applyMgr(); }catch(_){} } }
-  // A real Microsoft-verified access token (Graph User.Read -- the default, already-consented scope
-  // every signed-in app gets) for whoever's signed in right now -- proves identity to a server-side
-  // check instead of trusting anything the client claims. Acquired silently off the existing session;
-  // resolves null if not signed in or silent acquisition fails.
+  // The ID token from the ALREADY-consented sign-in scopes (openid/profile/email) -- a real,
+  // Microsoft-issued JWT identifying whoever's signed in. Deliberately NOT a Graph access token:
+  // that needs a NEW permission grant this tenant requires a real Entra admin to approve
+  // (2026-08-21, hit a "Need admin approval" wall Rich can't clear right now) -- requesting the SAME
+  // scopes already granted at login just refreshes the cached ID token, no new consent needed.
   function token(){
     if(!pca || !user) return Promise.resolve(null);
-    return pca.acquireTokenSilent({ scopes:['User.Read'], account:user }).then(function(r){ return r.accessToken; }).catch(function(){ return null; });
+    return pca.acquireTokenSilent({ scopes:['openid','profile','email'], account:user }).then(function(r){ return r.idToken; }).catch(function(){ return null; });
   }
   return { init:init, signIn:signIn, signOut:signOut, active:active, token:token, email:function(){ return user?String(user.username||'').toLowerCase():''; }, name:function(){ return user?(user.name||user.username||''):''; }, get user(){ return user; }, get ready(){ return ready; }, get failed(){ return failed; } };
 })();

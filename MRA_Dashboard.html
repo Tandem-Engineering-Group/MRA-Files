@@ -7106,23 +7106,19 @@ const SSO = (function(){
     });
   }
   function signIn(){ if(!pca){ if(active()) alert('Sign-in is still loading — one moment, then try again.'); return; }
-    // 'User.Read' added 2026-08-21 -- acquireTokenSilent (SSO.token(), used for the pay-rates identity
-    // check) can only succeed for a scope the account already consented to; a sign-in that never asked
-    // for it can't silently upgrade to it later (MSAL just fails quietly), which is why the pay-rates
-    // flow saw NO token at all from a real, valid sign-in and correctly-but-confusingly treated it the
-    // same as an invalid one. Existing signed-in sessions need to sign out and back in once to pick
-    // this up -- it only takes effect on a fresh interactive sign-in.
-    try{ pca.loginRedirect({ scopes:['openid','profile','email','User.Read'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
+    try{ pca.loginRedirect({ scopes:['openid','profile','email'] }); }catch(e){ alert('Could not start sign-in: '+(e&&e.message||e)); } }
   function signOut(){ if(!pca){ return; } const a=pca.getActiveAccount(); user=null;
     try{ pca.logoutRedirect(a?{account:a}:{}); }catch(e){ try{ applyRoleUI(); }catch(_){} } }
-  // A real Microsoft-verified access token (Graph User.Read -- the default, already-consented scope
-  // every signed-in app gets) for whoever's actually signed in right now. Used to prove identity to a
-  // server-side check (e.g. the pay-rates flow) instead of trusting anything the client claims --
-  // acquired silently off the existing session, no extra prompt. Resolves null if not signed in or
+  // The ID token from the ALREADY-consented sign-in scopes (openid/profile/email) -- a real,
+  // Microsoft-issued JWT identifying whoever's signed in, used to prove identity to the pay-rates
+  // flow. Deliberately NOT a Graph access token: that needs a NEW permission grant this tenant
+  // requires a real Entra admin to approve (2026-08-21, hit a "Need admin approval" wall Rich can't
+  // clear right now) -- requesting the SAME scopes already granted at login just refreshes the
+  // cached ID token, no new consent needed. Acquired silently; resolves null if not signed in or
   // silent acquisition fails (caller falls back to whatever it did before this existed).
   function token(){
     if(!pca || !user) return Promise.resolve(null);
-    return pca.acquireTokenSilent({ scopes:['User.Read'], account:user }).then(r=>r.accessToken).catch(()=>null);
+    return pca.acquireTokenSilent({ scopes:['openid','profile','email'], account:user }).then(r=>r.idToken).catch(()=>null);
   }
   return { init, signIn, signOut, active, token,
     email:()=>user?String(user.username||'').toLowerCase():'',
