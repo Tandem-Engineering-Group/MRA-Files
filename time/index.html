@@ -532,9 +532,16 @@ function buildPaylocityPreview(rows){
     if(!who){ unmatchedNames[r.emp.num+' '+r.emp.name]=1; return; }   // not on your Time Tracking roster -- skipped, not auto-added
     var dateISO=_pyISO(r.dateRaw); if(!dateISO) return;
     var k=r.action.toLowerCase().trim();
-    var job = LEAVEMAP[k] ? LEAVEMAP[k] : _pyJobFromCC2(r.cc2);
+    var isLeave=!!LEAVEMAP[k];
+    var job = isLeave ? LEAVEMAP[k] : _pyJobFromCC2(r.cc2);
     var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
-    matched.push({ who:who, dateISO:dateISO, job:job, jobNum:jn, hours:r.hours, task:'', notes:r.note||'', action:r.action });
+    // Paylocity's reported hours are gross clock time, lunch included (Rich confirmed 2026-08-21) --
+    // over 8 worked hours means a lunch was taken, so net it out. Never applied to leave-type rows
+    // (APL/Holiday/etc. aren't clocked time to begin with). Shown, never hidden -- see the "−.5 lunch"
+    // note in the preview table below.
+    var rawHours=r.hours, lunchDeducted=(!isLeave && rawHours>8);
+    var hours=lunchDeducted ? Math.round((rawHours-0.5)*100)/100 : rawHours;
+    matched.push({ who:who, dateISO:dateISO, job:job, jobNum:jn, hours:hours, rawHours:rawHours, lunchDeducted:lunchDeducted, task:'', notes:r.note||'', action:r.action });
   });
   PY_ALL_ROWS=matched; PY_ZERO_SKIPPED=zeroSkipped; PY_UNMATCHED=unmatchedNames;
   // Default the date range to just the NEWEST day in this file -- Rich pulls this PDF daily and mainly
@@ -592,7 +599,10 @@ function applyPaylocityFilter(){
   if(unmatchedList.length) bits.push(unmatchedList.length+' not on your Time Tracking roster, skipped: '+unmatchedList.join(', '));
   $('paylocitySummary').innerHTML=bits.map(function(b){return esc(b);}).join(' · ');
   $('paylocityRows').innerHTML = accepted.length ? accepted.map(function(e){
-    return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job||'— pick a job —')+'</td><td class="r">'+e.hours+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
+    var hoursHtml = e.lunchDeducted
+      ? e.hours+'<span class="muted" style="font-size:10px;display:block">(−.5 lunch, Paylocity said '+e.rawHours+')</span>'
+      : e.hours;
+    return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job||'— pick a job —')+'</td><td class="r">'+hoursHtml+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
   }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import for this date range.</td></tr>';
   var chWrap=$('paylocityChangedWrap');
   if(changed.length){
