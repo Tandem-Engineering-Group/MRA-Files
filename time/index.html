@@ -271,6 +271,13 @@
         <tbody id="paylocityChangedRows"></tbody></table>
       </div>
     </div>
+    <div id="paylocityPunchWrap" class="hide" style="margin-bottom:10px">
+      <div style="font-size:12.5px;font-weight:700;color:#c1401f;margin-bottom:4px">⚠ Incomplete punches — forgot to clock in or out. Enter the real hours if you know them.</div>
+      <div style="overflow:auto;max-height:200px;border:1px solid var(--line);border-radius:10px">
+        <table class="t"><thead><tr><th>Date</th><th>Employee</th><th>What happened</th><th>Hrs</th><th>Job</th></tr></thead>
+        <tbody id="paylocityPunchRows"></tbody></table>
+      </div>
+    </div>
     <div style="overflow:auto;max-height:360px;border:1px solid var(--line);border-radius:10px" id="paylocityPreviewWrap">
       <table class="t"><thead><tr><th>Date</th><th>Employee</th><th>Pay type / Job</th><th class="r">Hrs</th><th>Note</th></tr></thead>
       <tbody id="paylocityRows"></tbody></table>
@@ -463,10 +470,13 @@ function parsePaylocityTokens(toks){
       continue;
     }
     if(_PY_DATE_RE.test(t) && _PY_DAY_RE.test(toks[i+1])){
+      // A leading Code column (MCI/MCO -- Missed Clock In/Out) sits immediately before the date on
+      // an incomplete-punch row; a normal complete row has nothing there. Peek back one token.
+      var code=(/^MC[IO]$/.test(toks[i-1]||''))?toks[i-1]:'';
       var j=i+2; var actionWords=[];
       while(j<toks.length && !_PY_TIME_RE.test(toks[j])){ actionWords.push(toks[j]); j++; }
-      if(_PY_TIME_RE.test(toks[j])) j++;                 // Start (unused)
-      if(_PY_TIME_RE.test(toks[j])) j++;                 // Stop (unused)
+      var start=''; if(_PY_TIME_RE.test(toks[j])){ start=toks[j]; j++; }
+      var stop='';  if(_PY_TIME_RE.test(toks[j])){ stop=toks[j]; j++; }
       var cc1=toks[j++], cc2=toks[j++]; j++;             // cc1 unused, cc3 unused
       var nums=[]; while(nums.length<8 && _PY_NUM_RE.test(toks[j])){ nums.push(parseFloat(toks[j])); j++; }
       var note='';
@@ -475,7 +485,7 @@ function parsePaylocityTokens(toks){
         while(k2<toks.length && !(_PY_DATE_RE.test(toks[k2])&&_PY_DAY_RE.test(toks[k2+1])) && toks[k2]!=='Totals' && !(toks[k2]==='Employee'&&toks[k2+1]==='Number')){ words.push(toks[k2]); k2++; }
         note=words.join(' '); j=k2;
       }
-      rows.push({ emp:curEmp, dateRaw:t, action:actionWords.join(' '), cc2:cc2, hours:(nums.length?nums[0]:0), note:note });
+      rows.push({ emp:curEmp, dateRaw:t, action:actionWords.join(' '), cc2:cc2, hours:(nums.length?nums[0]:0), note:note, code:code, start:start, stop:stop });
       i=j; continue;
     }
     i++;
@@ -496,7 +506,8 @@ function _pyJobFromCC2(cc2){
   return '';
 }
 var PY_PENDING=[];   // rows accepted into the current import preview, awaiting confirm
-var PY_ALL_ROWS=[], PY_ZERO_SKIPPED=0, PY_UNMATCHED={};   // roster-matched rows from the CURRENT file, pre date-filter/pre dedup -- kept so widening/narrowing the date range re-filters without re-parsing the PDF
+var PY_ALL_ROWS=[], PY_ZERO_SKIPPED=0, PY_UNMATCHED={}, PY_PUNCH_ISSUES=[];   // roster-matched rows from the CURRENT file, pre date-filter/pre dedup -- kept so widening/narrowing the date range re-filters without re-parsing the PDF
+var PY_MANUAL=[];   // punch-issue rows Rich has manually filled in (hours + job), pending import
 function openPaylocityImport(){ if(!ensurePinLike()) return; $('paylocityFile').value=''; $('paylocityFile').click(); }
 // isMgr() already gates the whole Hours card this button lives in -- no separate PIN prompt needed.
 function ensurePinLike(){ return isMgr(); }
@@ -524,9 +535,25 @@ function onPaylocityFile(file){
   reader.readAsArrayBuffer(file);
 }
 function buildPaylocityPreview(rows){
-  var matched=[], unmatchedNames={}, zeroSkipped=0;
+  var matched=[], unmatchedNames={}, zeroSkipped=0, punchIssues=[];
   rows.forEach(function(r){
-    if(!(r.hours>0)){ zeroSkipped++; return; }        // MCI/MCO punch-correction placeholders are always 0.00
+    if(!(r.hours>0)){
+      // A 0.00 row is either a genuine MCI/MCO punch-correction placeholder (someone forgot to
+      // clock in or out -- Rich, 2026-08-21: "I need to be shown that" instead of it silently
+      // vanishing into a bare count) or, rarely, some other zero-hour placeholder unrelated to a
+      // punch. Only the former gets surfaced -- flag it if there's a real signal (an MCI/MCO code,
+      // or exactly one of start/stop present) AND the employee is actually on the roster.
+      var who0=r.emp?_pyEmpName(r.emp.num):null;
+      var hasSignal = !!r.code || (!!r.start)!==(!!r.stop);
+      var dateISO0=_pyISO(r.dateRaw);
+      if(who0 && dateISO0 && hasSignal){
+        var desc = r.start && !r.stop ? ('Punched in at '+r.start+', never punched out')
+          : (!r.start && r.stop ? ('Punched out at '+r.stop+', never punched in')
+          : ('Incomplete punch ('+(r.code||'no times recorded')+')'));
+        punchIssues.push({ who:who0, dateISO:dateISO0, desc:desc, action:r.action });
+      } else { zeroSkipped++; }
+      return;
+    }
     if(!r.emp){ return; }
     var who=_pyEmpName(r.emp.num);
     if(!who){ unmatchedNames[r.emp.num+' '+r.emp.name]=1; return; }   // not on your Time Tracking roster -- skipped, not auto-added
@@ -543,7 +570,7 @@ function buildPaylocityPreview(rows){
     var hours=lunchDeducted ? Math.round((rawHours-0.5)*100)/100 : rawHours;
     matched.push({ who:who, dateISO:dateISO, job:job, jobNum:jn, hours:hours, rawHours:rawHours, lunchDeducted:lunchDeducted, task:'', notes:r.note||'', action:r.action });
   });
-  PY_ALL_ROWS=matched; PY_ZERO_SKIPPED=zeroSkipped; PY_UNMATCHED=unmatchedNames;
+  PY_ALL_ROWS=matched; PY_ZERO_SKIPPED=zeroSkipped; PY_UNMATCHED=unmatchedNames; PY_PUNCH_ISSUES=punchIssues;
   // Default the date range to just the NEWEST day in this file -- Rich pulls this PDF daily and mainly
   // cares about the latest day each time; widening the range is an explicit, visible choice, not the
   // default (2026-08-21: he flagged that it was loading every date in the whole pay period every time).
@@ -617,10 +644,24 @@ function applyPaylocityFilter(){
       return '<tr><td>'+chk+'</td><td>'+esc(fmtShortDate(r.dateISO))+'</td><td>'+esc(r.who)+'</td><td class="r">'+esc(oldTxt)+'</td><td class="r">'+r.hours+'</td></tr>';
     }).join('');
   } else { chWrap.classList.add('hide'); $('paylocityChangedRows').innerHTML=''; }
-  $('paylocityConfirmBtn').disabled = !accepted.length && !changed.length;
+  // Incomplete punches (forgot to clock in/out) -- flagged, never silently dropped or guessed at.
+  // Rich enters the real hours + picks the job himself; nothing here imports unless he fills it in.
+  var punchInRange=(PY_PUNCH_ISSUES||[]).filter(function(p){ return p.dateISO>=from && p.dateISO<=to; });
+  PY_PUNCH_INRANGE=punchInRange;
+  var pWrap=$('paylocityPunchWrap');
+  if(punchInRange.length){
+    pWrap.classList.remove('hide');
+    $('paylocityPunchRows').innerHTML=punchInRange.map(function(p,i){
+      return '<tr><td>'+esc(fmtShortDate(p.dateISO))+'</td><td>'+esc(p.who)+'</td><td>'+esc(p.desc)+'</td>'
+        +'<td><input type="number" step="0.01" min="0" class="pyPunchHours" data-idx="'+i+'" placeholder="hrs" style="width:64px"></td>'
+        +'<td><input list="jobList" class="pyPunchJob" data-idx="'+i+'" placeholder="pick a job" autocomplete="off" style="width:100%;min-width:140px"></td></tr>';
+    }).join('');
+  } else { pWrap.classList.add('hide'); $('paylocityPunchRows').innerHTML=''; }
+  $('paylocityConfirmBtn').disabled = !accepted.length && !changed.length && !punchInRange.length;
 }
+var PY_PUNCH_INRANGE=[];
 function fmtShortDate(iso){ var p=String(iso||'').split('-'); return p.length===3?(+p[1])+'/'+(+p[2]):iso; }
-function closePaylocityModal(){ $('paylocityModal').classList.remove('on'); PY_PENDING=[]; PY_CHANGED=[]; PY_ALL_ROWS=[]; PY_ZERO_SKIPPED=0; PY_UNMATCHED={}; }
+function closePaylocityModal(){ $('paylocityModal').classList.remove('on'); PY_PENDING=[]; PY_CHANGED=[]; PY_ALL_ROWS=[]; PY_ZERO_SKIPPED=0; PY_UNMATCHED={}; PY_PUNCH_ISSUES=[]; PY_PUNCH_INRANGE=[]; }
 function confirmPaylocityImport(){
   // Only rows Rich explicitly checked get their hours updated -- unchecked "changed" rows are left
   // alone entirely (neither imported nor touched), same as if they were never shown.
@@ -629,9 +670,20 @@ function confirmPaylocityImport(){
     var idx=+cb.dataset.idx; var r=PY_CHANGED[idx];
     if(r && r.oldEntries.length===1) checkedUpdates.push({ oldEntry:r.oldEntries[0], newHours:r.hours });
   });
-  if(!PY_PENDING.length && !checkedUpdates.length) return;
+  // Incomplete-punch rows -- only ones Rich filled in BOTH hours and a job get imported; anything
+  // left blank is left alone entirely (still flagged next time until he handles it).
+  var manualEntries=[];
+  document.querySelectorAll('.pyPunchHours').forEach(function(hInp){
+    var idx=+hInp.dataset.idx; var p=PY_PUNCH_INRANGE[idx]; if(!p) return;
+    var hrs=parseFloat(hInp.value); if(!(hrs>0)) return;
+    var jInp=document.querySelector('.pyPunchJob[data-idx="'+idx+'"]'); var job=jInp?jInp.value.trim():'';
+    if(!job) return;
+    var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
+    manualEntries.push({ who:p.who, dateISO:p.dateISO, job:job, jobNum:jn, hours:hrs, task:'', notes:'Manual entry for incomplete punch ('+p.desc+')' });
+  });
+  if(!PY_PENDING.length && !checkedUpdates.length && !manualEntries.length) return;
   var btn=$('paylocityConfirmBtn'); btn.disabled=true; btn.textContent='Importing…';
-  var addQueue=PY_PENDING.slice(), updQueue=checkedUpdates.slice(), done=0, total=addQueue.length+updQueue.length;
+  var addQueue=PY_PENDING.concat(manualEntries), updQueue=checkedUpdates.slice(), done=0, total=addQueue.length+updQueue.length;
   (function step(){
     if(addQueue.length){
       var r=addQueue.shift();
@@ -656,7 +708,7 @@ function confirmPaylocityImport(){
       return;
     }
     var m=$('paylocityMsg'); m.textContent='✓ Imported '+total+' entr'+(total===1?'y':'ies'); m.classList.remove('hide');
-    btn.textContent='Import'; btn.disabled=false; PY_PENDING=[]; PY_CHANGED=[];
+    btn.textContent='Import'; btn.disabled=false; PY_PENDING=[]; PY_CHANGED=[]; PY_PUNCH_ISSUES=[]; PY_PUNCH_INRANGE=[];
     renderTracking(); renderMyDay();
     setTimeout(function(){ closePaylocityModal(); m.classList.add('hide'); }, 1400);
   })();
