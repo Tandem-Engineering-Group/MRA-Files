@@ -2511,13 +2511,16 @@
       <div class="fin-head">
         <h2 style="margin:0">💰 Finance</h2>
         <div class="fin-controls">
-          <select id="finRange" onchange="renderFinance()">
+          <select id="finRange" onchange="updateFinCustomRangeUI();renderFinance()">
             <option value="tw">This week</option>
             <option value="lw">Last week</option>
             <option value="2w" selected>Last 2 weeks</option>
             <option value="m">This month</option>
             <option value="all">All time</option>
+            <option value="custom">Custom range&hellip;</option>
           </select>
+          <input type="date" id="finFrom" class="hidden" title="From date" onchange="renderFinance()">
+          <input type="date" id="finTo" class="hidden" title="To date" onchange="renderFinance()">
           <button class="expandbtn" onclick="renderFinance(true)" title="Pull the latest shared hours">🔄 Refresh</button>
           <button class="expandbtn" onclick="openDetailedCostReport()" title="The full Labor Cost Summary (employee × job matrix, OT @ 1.5x, rates, Job Totals Over Time) for the selected range">🖨 Labor Cost Summary</button>
           <button class="expandbtn" onclick="printOvertimeReport()" title="Printable breakdown of every overtime week — who, when, how much">🖨 Overtime detail</button>
@@ -3813,7 +3816,7 @@ const GENERAL_HELP = `
 
   <div class="hsec"><h4>②ᶠ 💰 FINANCE — hours &amp; cost reporting</h4>
     <p>A <span class="k">FINANCE</span> tab sits in the main tab bar, limited to <b>Rich &amp; Kyle Maynard only</b> — it's hidden entirely for everyone else, and doesn't unlock with the shared manager PIN (it needs a real Microsoft sign-in as one of those two accounts).</p>
-    <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. No mode toggle — <b>every tile, chart, and list always shows $ and hours together</b>. Pick a date range, then read: Total/Regular/Overtime tiles, employees, jobs charged, a weekly bar chart, and ranked <b>By job</b> / <b>By person</b> lists.</p>
+    <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. No mode toggle — <b>every tile, chart, and list always shows $ and hours together</b>. Pick a date range (This week / Last week / Last 2 weeks / This month / All time, or <span class="k">Custom range…</span> for your own From/To dates — either side can be left blank for open-ended), then read: Total/Regular/Overtime tiles, employees, jobs charged, a weekly bar chart, and ranked <b>By job</b> / <b>By person</b> lists.</p>
     <p>Regular/Overtime hours show up even before pay rates are set up (they show alone until then). First time pay rates are configured, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report. This one-time-per-device step is deliberate, not a bug — the underlying file goes to every device including the anonymous shop-floor screens, so the rates address can't safely be baked in unless the rates flow itself checks who's actually signed in; that server-side check is in progress (see the rev 37.62 changelog note) and will remove this step entirely once it's switched on.</p>
     <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart) — not a new report, the same trusted one, opened directly right here (no more switching to Time Tracking first). <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p>
     <p>At the bottom, <span class="k">Cost by project</span> shows every project as its own tile (name, $, hours) — tap one (or use the dropdown) to deep-dive into it: total $, Regular/Overtime split, and a week-by-week trend, on its own timeframe independent of the date range up top. Leave/pay-type entries (Called In, All Purpose Leave, Holiday, etc.) are never shown here or in By job — they're not real projects, they just ride the same job-name field — but they still count in By person and the top tiles since they're real cost.</p></div>
@@ -4051,6 +4054,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.64", date:"2026-08-21", title:"📅 FINANCE: added a Custom range option, matching Time Tracking", items:[
+    "The FINANCE tab's range dropdown now has a \"Custom range…\" option — pick it and two date pickers appear (From / To, either side can be left blank for open-ended). Every part of the tab (the stat tiles, the weekly chart, By job/By person, 🖨 Labor Cost Summary, and 🖨 Overtime detail) runs off whatever dates you pick, exactly like the existing presets. Same mechanism already used on the Time Tracking page's own Custom range." ] },
   { rev:"37.63", date:"2026-08-21", title:"🖨 Labor Cost Summary now opens directly from the Finance tab — no more blocked popup", items:[
     "The button used to deep-link to Time Tracking and pop the report open there once that page finished signing in and loading — but by the time it actually tried to open the tab, too much time had passed since your click for the browser to allow it, so it got silently blocked (\"Allow pop-ups, then tap Cost report again\"). It now opens the report directly from the Finance tab itself, in the same tick as your click, so there's nothing left for a popup blocker to catch.",
     "This is the exact same trusted Labor Cost Summary Rich's finance person co-built — verified byte-for-byte identical output against the original, not a rebuilt copy that could quietly drift over time." ] },
@@ -6663,7 +6668,37 @@ function _finInRange(dateISO, range){
   if(range==='lw'){ const s=_finStartOfWeek(now), ls=new Date(s); ls.setDate(ls.getDate()-7); return d>=ls && d<s; }
   if(range==='2w'){ const s=_finStartOfWeek(now), ls=new Date(s); ls.setDate(ls.getDate()-14); return d>=ls; }
   if(range==='m') return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  if(range==='custom'){
+    // Same from/to pattern as Time Tracking's own Custom range (dateISO is YYYY-MM-DD, so a plain
+    // string compare is chronological order too) -- blank side = open-ended, Rich, 2026-08-21.
+    const fromV=(document.getElementById('finFrom')||{}).value, toV=(document.getElementById('finTo')||{}).value;
+    if(fromV && dateISO<fromV) return false;
+    if(toV && dateISO>toV) return false;
+    return true;
+  }
   return true;
+}
+function updateFinCustomRangeUI(){
+  const isCustom=(document.getElementById('finRange')||{}).value==='custom';
+  const from=document.getElementById('finFrom'), to=document.getElementById('finTo');
+  if(!from||!to) return;
+  from.classList.toggle('hidden',!isCustom); to.classList.toggle('hidden',!isCustom);
+  if(isCustom && !from.value && !to.value){
+    // Default to a sane starting window (last 14 days) instead of an empty picker -- open-ended
+    // is still one click away by clearing a side.
+    const now=new Date(), f=new Date(now); f.setDate(f.getDate()-13);
+    to.value=_finYmd(now); from.value=_finYmd(f);
+  }
+}
+function _finRangeLabel(range){
+  if(range==='custom'){
+    const fromV=(document.getElementById('finFrom')||{}).value, toV=(document.getElementById('finTo')||{}).value;
+    if(fromV && toV) return _finIsoToMDY(fromV)+' – '+_finIsoToMDY(toV);
+    if(fromV) return 'Since '+_finIsoToMDY(fromV);
+    if(toV) return 'Through '+_finIsoToMDY(toV);
+    return 'Custom range';
+  }
+  return FIN_RANGE_LABELS[range]||range;
 }
 // Same fix as time/index.html's _rateMatch (see its comment) -- handles a renamed roster entry
 // (e.g. "Sal Jr" -> "Sal Sanchez JR.") still matching the rates list: exact full name -> rates
@@ -6772,6 +6807,7 @@ function _finBarRow(name, val, max, fmt){
 }
 function renderFinance(force){
   const view=document.getElementById('financeView'); if(!view || view.classList.contains('hidden')) return;
+  updateFinCustomRangeUI();
   if(FIN_LOADING) return; FIN_LOADING=true;
   loadFinanceEntries(entries=>{
     FIN_LOADING=false;
@@ -7473,7 +7509,7 @@ function printOvertimeReport(){
   if(!FIN_LAST || !FIN_LAST.rows){ alert('Nothing to print yet — the page is still loading. Try again in a moment.'); return; }
   const T=_FIN_PRINT_TOK, F=FIN_LAST, haveCost=F.haveCost;
   const now=new Date(), stamp=(now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear();
-  const rangeLbl=FIN_RANGE_LABELS[F.range]||F.range;
+  const rangeLbl=_finRangeLabel(F.range);
   const otRows=_finOvertimeRows(F.rows, F.rates);
   const totOTH=otRows.reduce((a,r)=>a+r.otH,0), totOTC=otRows.reduce((a,r)=>a+(r.otC||0),0);
   const byPerson={};
