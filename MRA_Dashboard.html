@@ -6746,7 +6746,11 @@ function _finGetRates(cb){
   if(!url){ cb(null, null, secure); return; }
   const go=(tok)=>{
     const headers={'Content-Type':'application/json'};
-    if(tok) headers['Authorization']='Bearer '+tok;
+    // NOT 'Authorization' -- Power Platform's own gateway intercepts and validates that exact header
+    // name itself (rejects it before the flow even runs, regardless of what it's a valid token FOR),
+    // confirmed by testing directly against the real flow. A differently-named header passes through
+    // untouched for the flow's own logic to read and forward to Graph internally.
+    if(tok) headers['X-Rates-Token']='Bearer '+tok;
     fetch(url,{method:'POST',headers:headers})
       .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
       .then(rates=>cb((rates||[]).filter(r=>r&&r.name), null, secure))
