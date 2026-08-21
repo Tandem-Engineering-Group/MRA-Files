@@ -401,6 +401,14 @@ function jobListItems(){
   return out;
 }
 function fillJobs(){ var dl=$('jobList'); dl.innerHTML=jobListItems().map(function(o){ return '<option value="'+esc(o.val)+'">'; }).join(''); }
+// Real <select> options for the Paylocity import's job pickers -- same job list as everywhere else,
+// but a plain select (not a type-ahead datalist input) so it's always reliably re-openable/re-pickable
+// on every browser, no typing-quirk risk.
+function _pyJobOptionsHtml(selectedVal){
+  return '<option value="">— pick a job —</option>'+jobListItems().map(function(o){
+    return '<option value="'+esc(o.val)+'"'+(o.val===selectedVal?' selected':'')+'>'+esc(o.val)+'</option>';
+  }).join('');
+}
 function fillHchips(){ var box=$('hchips'); box.innerHTML=[0.5,1,2,4,6,8,10].map(function(h){return '<button type="button" class="hchip" data-h="'+h+'">'+h+'</button>';}).join(''); }
 
 /* ---------- submit ---------- */
@@ -631,7 +639,7 @@ function applyPaylocityFilter(){
       : e.hours;
     var jobHtml = e.job
       ? esc(e.job)
-      : '<input list="jobList" class="pyJobPick" data-idx="'+i+'" placeholder="— pick a job —" autocomplete="off" style="width:100%;min-width:160px">';
+      : '<select class="pyJobPick" data-idx="'+i+'" style="width:100%;min-width:160px">'+_pyJobOptionsHtml('')+'</select>';
     return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+jobHtml+'</td><td class="r">'+hoursHtml+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
   }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import for this date range.</td></tr>';
   var chWrap=$('paylocityChangedWrap');
@@ -654,7 +662,7 @@ function applyPaylocityFilter(){
     $('paylocityPunchRows').innerHTML=punchInRange.map(function(p,i){
       return '<tr><td>'+esc(fmtShortDate(p.dateISO))+'</td><td>'+esc(p.who)+'</td><td>'+esc(p.desc)+'</td>'
         +'<td><input type="number" step="0.01" min="0" class="pyPunchHours" data-idx="'+i+'" placeholder="hrs" style="width:64px"></td>'
-        +'<td><input list="jobList" class="pyPunchJob" data-idx="'+i+'" placeholder="pick a job" autocomplete="off" style="width:100%;min-width:140px"></td></tr>';
+        +'<td><select class="pyPunchJob" data-idx="'+i+'" style="width:100%;min-width:140px">'+_pyJobOptionsHtml('')+'</select></td></tr>';
     }).join('');
   } else { pWrap.classList.add('hide'); $('paylocityPunchRows').innerHTML=''; }
   $('paylocityConfirmBtn').disabled = !accepted.length && !changed.length && !punchInRange.length;
@@ -2024,11 +2032,14 @@ function boot(){
   $('paylocityCancelBtn').onclick=closePaylocityModal; $('paylocityClose').onclick=closePaylocityModal;
   $('paylocityConfirmBtn').onclick=confirmPaylocityImport;
   $('paylocityFrom').addEventListener('change',applyPaylocityFilter); $('paylocityTo').addEventListener('change',applyPaylocityFilter);
-  // Job pickers on blank-job rows in the Paylocity preview (Rich, 2026-08-21: "it won't let me...
+  // Job picker on blank-job rows in the Paylocity preview (Rich, 2026-08-21: "it won't let me...
   // select anything to assign the job... am I supposed to be able to pick this here?") -- yes, and
-  // now you can: typing/picking a job here updates that row's own PY_PENDING entry directly, so it
-  // imports with the real job already assigned instead of needing a separate edit afterward.
-  $('paylocityRows').addEventListener('input',function(e){
+  // now you can: picking a job here updates that row's own PY_PENDING entry directly, so it imports
+  // with the real job already assigned instead of needing a separate edit afterward. A real <select>,
+  // not a type-ahead text field -- the datalist version Rich tried (2026-08-21: "it doesn't let you
+  // type anything... doesn't let you change it") had a real cross-browser input/datalist quirk; a
+  // plain select is always re-openable and re-selectable, no typing involved at all.
+  $('paylocityRows').addEventListener('change',function(e){
     var t=e.target; if(!t.classList || !t.classList.contains('pyJobPick')) return;
     var idx=+t.getAttribute('data-idx'); var r=PY_PENDING[idx]; if(!r) return;
     var v=t.value.trim(); r.job=v; var m=v.match(/^\s*(J?\d{3,6})\b/i); r.jobNum=m?m[1]:'';
