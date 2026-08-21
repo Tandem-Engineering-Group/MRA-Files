@@ -2535,6 +2535,24 @@
           <div id="finByPerson" class="fin-barlist"></div>
         </div>
       </div>
+      <div class="fin-card" style="margin-top:16px">
+        <div class="fin-card-head">
+          <h3 style="margin:0">Cost by project</h3>
+          <div class="fin-controls">
+            <select id="pcProject" onchange="renderProjectCost()"><option value="">Pick a project…</option></select>
+            <select id="pcRange" onchange="renderProjectCost()">
+              <option value="all" selected>All time (project total)</option>
+              <option value="tw">This week</option>
+              <option value="lw">Last week</option>
+              <option value="2w">Last 2 weeks</option>
+              <option value="m">This month</option>
+            </select>
+          </div>
+        </div>
+        <div id="pcBody">
+          <div class="fin-empty">Pick a project above to see its total cost and trend.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -3790,7 +3808,8 @@ const GENERAL_HELP = `
     <p>A <span class="k">FINANCE</span> tab sits in the main tab bar, limited to <b>Rich &amp; Kyle Maynard only</b> — it's hidden entirely for everyone else, and doesn't unlock with the shared manager PIN (it needs a real Microsoft sign-in as one of those two accounts).</p>
     <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. Defaults to <b>💵 Dollars</b>; the one <b>💵 Dollars / ⏱ Hours</b> toggle up top switches the tiles, the weekly chart, and both ranked lists together. Pick a date range, then read: Total/Regular/Overtime tiles, employees, jobs charged, a weekly bar chart, and ranked <b>By job</b> / <b>By person</b> lists (each shows $ and hours together).</p>
     <p>Regular/Overtime hours show up even before pay rates are set up. First time you switch to $, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report.</p>
-    <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart, on Time Tracking) — not a new report, the same trusted one, just one click from here instead of switching pages and re-picking dates. <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p></div>
+    <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart, on Time Tracking) — not a new report, the same trusted one, just one click from here instead of switching pages and re-picking dates. <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p>
+    <p>At the bottom, <span class="k">Cost by project</span> is a standalone lookup — pick any project ever worked (independent of the date range up top) and a timeframe, and see its total $, Regular/Overtime split, and a week-by-week trend, all on its own.</p></div>
 
   <div class="hsec"><h4>②ʳ ⏩ Pushing &amp; sliding due dates</h4>
     <p>When a task slips, you can push it out and <b>the old date stays visible, struck through</b>, next to the new one (<span class="k"><s>7/14</s> → 7/24</span>) — on the task everywhere, so everyone can see it moved.</p>
@@ -4025,6 +4044,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.58", date:"2026-08-20", title:"📊 New \"Cost by project\" lookup on FINANCE + a real Hours-default bug fixed", items:[
+    "<b>Cost by project</b>: a new section at the bottom of the FINANCE tab — pick any project ever worked (from a full history, not just the current date range) and a timeframe (this week / last week / last 2 weeks / this month / all time), and see its total $ (or hours), Regular/Overtime split, and a week-by-week trend chart. Follows the same 💵 Dollars / ⏱ Hours toggle as the rest of the tab.",
+    "Fixed: the Labor Cost Summary's own \"Job Totals Over Time\" chart was defaulting to Hours even though the rest of that report is all about dollars — it now opens showing $ by default, matching everywhere else." ] },
   { rev:"37.57", date:"2026-08-20", title:"🖨 FINANCE tab now opens the REAL Labor Cost Summary (not a new one)", items:[
     "Rich's finance person co-built the existing <b>Labor Cost Summary</b> on Time Tracking (employee × job matrix, OT @ 1.5× rows, rates, Job Totals Over Time chart) — the rev 37.56 print button below built a different, simpler report instead of reusing that one. <b>🖨 Labor Cost Summary</b> now deep-links to the real, original report: converts whatever date range is picked on the FINANCE tab into exact from/to dates, opens Time Tracking, and it auto-pops the SAME trusted report already in use — same function, same numbers, no second version to drift out of sync.",
     "🖨 Overtime detail is unaffected — it's a genuinely new report (nothing like it existed before), so it stays as its own thing." ] },
@@ -6684,7 +6706,7 @@ function financeSetupRates(){
 function financeResetRates(){ localStorage.removeItem(FIN_RATES_KEY); renderFinance(); }
 function finSetMetric(m){ FIN_METRIC=m;
   document.querySelectorAll('#finMetricToggle button').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
-  renderFinance(); }
+  renderFinance(); renderProjectCost(); }
 function _finTile(cls,n,l){ return '<div class="kpi '+cls+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 function _finBarRow(name, val, max, fmt){
   const pct = max>0 ? Math.max(2,Math.round(val/max*100)) : 0;
@@ -6697,6 +6719,7 @@ function renderFinance(force){
   if(FIN_LOADING) return; FIN_LOADING=true;
   loadFinanceEntries(entries=>{
     FIN_LOADING=false;
+    _pcPopulateProjects(); renderProjectCost();
     const range=(document.getElementById('finRange')||{}).value||'2w';
     const wantCost=(FIN_METRIC==='c');
     const rows=entries.filter(e=>_finInRange(e.dateISO, range));
@@ -6790,6 +6813,74 @@ function renderFinance(force){
         finish(null);
       });
   }, force);
+}
+
+// ---- Cost by project (Rich's ask 2026-08-20): pick ANY project ever worked, pick a timeframe,
+// see its total cost -- independent of whatever range the rest of the FINANCE tab is showing, since
+// "total cost for a project" usually means its whole history, not just the current 2-week window.
+// Follows the same global Dollars/Hours toggle as everywhere else on this tab for consistency.
+function _pcPopulateProjects(){
+  const sel=document.getElementById('pcProject'); if(!sel || !FIN_ENTRIES) return;
+  const cur=sel.value;
+  const names=[...new Set(FIN_ENTRIES.map(e=>e.job).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML='<option value="">Pick a project…</option>'+names.map(n=>'<option value="'+escA(n)+'">'+esc(n)+'</option>').join('');
+  if(cur && names.indexOf(cur)>=0) sel.value=cur;
+}
+function renderProjectCost(){
+  const body=document.getElementById('pcBody'); if(!body) return;
+  const proj=(document.getElementById('pcProject')||{}).value||'';
+  if(!proj){ body.innerHTML='<div class="fin-empty">Pick a project above to see its total cost and trend.</div>'; return; }
+  if(!FIN_ENTRIES){ body.innerHTML='<div class="fin-empty">Still loading…</div>'; return; }
+  const range=(document.getElementById('pcRange')||{}).value||'all';
+  const wantCost=(FIN_METRIC==='c');
+  const rows=FIN_ENTRIES.filter(e=>e.job===proj && _finInRange(e.dateISO, range));
+
+  const byWeek={};
+  rows.forEach(e=>{ if(!e.dateISO) return; const wkD=_finStartOfWeek(new Date(e.dateISO+'T00:00:00')), wk=+wkD;
+    if(!byWeek[wk]) byWeek[wk]={d:wkD, rows:[]}; byWeek[wk].rows.push(e); });
+  let weekKeys=Object.keys(byWeek).map(Number).sort((a,b)=>a-b);
+  const weekTruncated=weekKeys.length>12; if(weekTruncated) weekKeys=weekKeys.slice(-12);
+
+  function finish(rates){
+    const haveCost=!!rates;
+    const calc=_finCostCalc(rows, rates||[]);
+    const grand=_finGrand(calc.byEmp);
+    const empCount=new Set(rows.map(e=>e.who||'—')).size;
+    let tiles;
+    if(wantCost){
+      tiles = haveCost
+        ? _finTile('proj',financeMoney(grand.c),'Total $')+_finTile('sched',financeMoney(grand.regC),'Regular $')+_finTile('over',financeMoney(grand.otC),'Overtime $')+_finTile('active',empCount,'Employees')
+        : _finTile('proj','—','Total $')+_finTile('sched','—','Regular $')+_finTile('over','—','Overtime $')+_finTile('active',empCount,'Employees');
+    } else {
+      tiles = _finTile('proj',grand.h.toFixed(1),'Total hours')+_finTile('sched',grand.regH.toFixed(1),'Regular hours')+_finTile('over',grand.otH.toFixed(1),'Overtime hours')+_finTile('active',empCount,'Employees');
+    }
+    const showCost=wantCost && haveCost;
+    let trendHtml;
+    if(!weekKeys.length){ trendHtml='<div class="fin-empty">No hours logged to this project in this range.</div>'; }
+    else{
+      const vals=weekKeys.map(wk=>{ const wg=_finGrand(_finCostCalc(byWeek[wk].rows, rates||[]).byEmp); return showCost?wg.c:wg.h; });
+      const max=Math.max.apply(null, vals.concat([0.0001]));
+      const note=(wantCost && !haveCost) ? '<div class="fin-empty" style="padding:0 0 8px;text-align:left">Set up pay rates (💵 Dollars mode above) to see this in $ — showing hours for now.</div>' : '';
+      trendHtml = note + (weekTruncated?'<div class="fin-empty" style="padding:0 0 8px;text-align:left">Showing the most recent 12 weeks.</div>':'')
+        + '<div style="display:flex;gap:6px;align-items:flex-end;height:160px;margin-top:12px">' + weekKeys.map((wk,i)=>{
+          const v=vals[i], h=Math.max(3,Math.round(v/max*130));
+          const lbl=_finWeekLabel(byWeek[wk].d), valTxt = showCost ? financeMoney(v) : (Math.round(v*10)/10)+'h';
+          return '<div class="fin-col" title="'+escA(lbl+' — '+valTxt)+'"><span class="val">'+valTxt+'</span><span class="bar" style="height:'+h+'px;background:'+(showCost?'var(--brand)':'var(--blue)')+'"></span><span class="lbl">'+esc(lbl)+'</span></div>';
+        }).join('') + '</div>';
+    }
+    body.innerHTML='<div class="kpis" style="grid-template-columns:repeat(4,1fr)">'+tiles+'</div>'
+      +(wantCost && !haveCost && rows.length ? '<button class="expandbtn" style="margin-top:10px" onclick="financeSetupRates()">🔑 Set up pay rates</button>' : '')
+      +trendHtml;
+  }
+
+  if(!wantCost){ finish([]); return; }
+  const ratesUrl=localStorage.getItem(FIN_RATES_KEY);
+  if(!ratesUrl){ finish(null); return; }
+  if(!rows.length){ finish([]); return; }
+  fetch(ratesUrl,{method:'POST',headers:{'Content-Type':'application/json'}})
+    .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
+    .then(rates=>{ finish((rates||[]).filter(r=>r&&r.name)); })
+    .catch(()=>{ finish(null); });
 }
 
 /* ---------- FINANCE printable reports ---------- design tokens match the existing Time Tracking
