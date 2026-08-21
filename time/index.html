@@ -501,7 +501,26 @@ function parsePaylocityTokens(toks){
   return rows;
 }
 function _pyISO(mdY){ var m=mdY.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if(!m) return ''; return m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); }
-function _pyEmpName(num){ for(var n in EMPIDS){ if(String(EMPIDS[n])===String(num)) return n; } return null; }
+// Real incident, 2026-08: a Manage-screen rename (Sal Jr -> "Sal Sanchez JR.") only ever changes THAT
+// one device's own local EMPIDS -- every Paylocity import run from that device afterward kept writing
+// the renamed spelling for the same numeric ID, while other devices kept using "Sal Jr", permanently
+// splitting one person into two names across 26 real entries (fixed by hand; see CLAUDE.md). To stop
+// this recurring: before trusting THIS device's own local name for an ID, check what name the shared,
+// cross-device synced entries (time.json, loaded into SHARED once signed in as manager -- the only way
+// to reach this import) have ACTUALLY been using for that ID, by majority vote. A device-local rename
+// can never again silently fork a name split across imports as long as most existing entries still
+// agree -- it only takes effect once it's genuinely the common case, not the newest write.
+function _pySharedRosterName(num){
+  if(!SHARED || !SHARED.length) return null;
+  var counts={}, best=null, bestN=0;
+  SHARED.forEach(function(e){ if(e.who && String(e.empId)===String(num)) counts[e.who]=(counts[e.who]||0)+1; });
+  for(var n in counts){ if(counts[n]>bestN){ best=n; bestN=counts[n]; } }
+  return best;
+}
+function _pyEmpName(num){
+  var shared=_pySharedRosterName(num); if(shared) return shared;
+  for(var n in EMPIDS){ if(String(EMPIDS[n])===String(num)) return n; } return null;
+}
 // Resolve a Paylocity CC2 job number (e.g. "J1563", "1217", "Unknown") to a real "<code> · <name>"
 // string matching the same job-list format the manual entry form uses -- only when it's a REAL,
 // currently-known job; otherwise '' so the job stays blank for Rich to assign by hand.
