@@ -598,11 +598,14 @@ function applyPaylocityFilter(){
   if(PY_ZERO_SKIPPED) bits.push(PY_ZERO_SKIPPED+' zero-hour punch correction'+(PY_ZERO_SKIPPED===1?'':'s')+' (skipped)');
   if(unmatchedList.length) bits.push(unmatchedList.length+' not on your Time Tracking roster, skipped: '+unmatchedList.join(', '));
   $('paylocitySummary').innerHTML=bits.map(function(b){return esc(b);}).join(' · ');
-  $('paylocityRows').innerHTML = accepted.length ? accepted.map(function(e){
+  $('paylocityRows').innerHTML = accepted.length ? accepted.map(function(e,i){
     var hoursHtml = e.lunchDeducted
       ? e.hours+'<span class="muted" style="font-size:10px;display:block">(−.5 lunch, Paylocity said '+e.rawHours+')</span>'
       : e.hours;
-    return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+esc(e.job||'— pick a job —')+'</td><td class="r">'+hoursHtml+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
+    var jobHtml = e.job
+      ? esc(e.job)
+      : '<input list="jobList" class="pyJobPick" data-idx="'+i+'" placeholder="— pick a job —" autocomplete="off" style="width:100%;min-width:160px">';
+    return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+jobHtml+'</td><td class="r">'+hoursHtml+'</td><td style="max-width:220px">'+esc(e.notes||'')+'</td></tr>';
   }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import for this date range.</td></tr>';
   var chWrap=$('paylocityChangedWrap');
   if(changed.length){
@@ -1969,6 +1972,15 @@ function boot(){
   $('paylocityCancelBtn').onclick=closePaylocityModal; $('paylocityClose').onclick=closePaylocityModal;
   $('paylocityConfirmBtn').onclick=confirmPaylocityImport;
   $('paylocityFrom').addEventListener('change',applyPaylocityFilter); $('paylocityTo').addEventListener('change',applyPaylocityFilter);
+  // Job pickers on blank-job rows in the Paylocity preview (Rich, 2026-08-21: "it won't let me...
+  // select anything to assign the job... am I supposed to be able to pick this here?") -- yes, and
+  // now you can: typing/picking a job here updates that row's own PY_PENDING entry directly, so it
+  // imports with the real job already assigned instead of needing a separate edit afterward.
+  $('paylocityRows').addEventListener('input',function(e){
+    var t=e.target; if(!t.classList || !t.classList.contains('pyJobPick')) return;
+    var idx=+t.getAttribute('data-idx'); var r=PY_PENDING[idx]; if(!r) return;
+    var v=t.value.trim(); r.job=v; var m=v.match(/^\s*(J?\d{3,6})\b/i); r.jobNum=m?m[1]:'';
+  });
   $('paylocityModal').addEventListener('click',function(e){ if(e.target===$('paylocityModal')) closePaylocityModal(); });
   // manage list edit/delete delegation
   $('mgrCard').addEventListener('click',function(e){
