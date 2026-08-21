@@ -3816,7 +3816,7 @@ const GENERAL_HELP = `
     <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. No mode toggle — <b>every tile, chart, and list always shows $ and hours together</b>. Pick a date range, then read: Total/Regular/Overtime tiles, employees, jobs charged, a weekly bar chart, and ranked <b>By job</b> / <b>By person</b> lists.</p>
     <p>Regular/Overtime hours show up even before pay rates are set up (they show alone until then). First time pay rates are configured, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report.</p>
     <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart, on Time Tracking) — not a new report, the same trusted one, just one click from here instead of switching pages and re-picking dates. <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p>
-    <p>At the bottom, <span class="k">Cost by project</span> shows every project as its own tile (name, $, hours) — tap one (or use the dropdown) to deep-dive into it: total $, Regular/Overtime split, and a week-by-week trend, on its own timeframe independent of the date range up top.</p></div>
+    <p>At the bottom, <span class="k">Cost by project</span> shows every project as its own tile (name, $, hours) — tap one (or use the dropdown) to deep-dive into it: total $, Regular/Overtime split, and a week-by-week trend, on its own timeframe independent of the date range up top. Leave/pay-type entries (Called In, All Purpose Leave, Holiday, etc.) are never shown here or in By job — they're not real projects, they just ride the same job-name field — but they still count in By person and the top tiles since they're real cost.</p></div>
 
   <div class="hsec"><h4>②ʳ ⏩ Pushing &amp; sliding due dates</h4>
     <p>When a task slips, you can push it out and <b>the old date stays visible, struck through</b>, next to the new one (<span class="k"><s>7/14</s> → 7/24</span>) — on the task everywhere, so everyone can see it moved.</p>
@@ -4051,6 +4051,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.61", date:"2026-08-21", title:"💰 FINANCE: dropped the pointless \"Called In\" tile + Cost by project now fully isolated from the top range", items:[
+    "<b>\"Called In\" is gone from By job and Cost by project.</b> It's always $0/0h by design (nobody gets paid to call in) and isn't a real project — it just rode the same job-name field. Worse, the raw time data has two different spellings of it (\"Called In\" vs \"Called in\"), so it was showing up as two separate useless tiles. Leave/pay-type entries (Called In, All Purpose Leave, Holiday, etc.) still count toward each person's total cost in By person and the tiles up top — only the fake \"project\" grouping is gone.",
+    "<b>Cost by project's own range picker now actually does something.</b> The project tile grid and the deep-dive detail below it used to silently follow the FINANCE tab's top-level date range — its own selector did nothing. Both now run entirely off their own range picker, completely independent of the one up top." ] },
   { rev:"37.60", date:"2026-08-20", title:"💵⏱ FINANCE drops the Dollars/Hours toggle — always shows both", items:[
     "Removed the 💵 Dollars / ⏱ Hours toggle. Every tile, chart, and list on the FINANCE tab now shows $ and hours together, always — the stat tiles, the weekly bar chart, By job, By person, and Cost by project all carry both numbers with no clicking required. $ drives bar height/sort order when pay rates are set up (that's the more decision-relevant number on a finance page); hours ride along as a constant second line." ] },
   { rev:"37.59", date:"2026-08-20", title:"📊 Cost by project is now a clickable tile grid", items:[
@@ -6699,9 +6702,15 @@ function _finCostCalc(rows, rates){
       });
     });
   });
-  rows.forEach(e=>{ if(e.payType==='Work'||!e.dateISO) return; const who=e.who||'—', h=e.hours||0, E=emp(who), J=job(e.job||'(no job)');
-    E.regH+=h; J.regH+=h;
-    if(E.rate!=null){ const c=h*E.rate; E.regC+=c; J.regC+=c; }
+  // Leave/pay-type entries (All Purpose Leave, Called In, Holiday, etc.) count toward the employee's
+  // total pay but are NOT a real project -- they ride the same "job" text field by this app's data
+  // model (e.g. "Called In" is always 0 hours, logged this way on purpose), so lumping them into
+  // byJob made them show up as pointless always-$0 project tiles (worse: "Called In" vs "Called in"
+  // is a real casing inconsistency in the raw data, so it showed up as TWO separate $0 tiles).
+  // Excluded from byJob entirely; still counted in byEmp since it's real cost.
+  rows.forEach(e=>{ if(e.payType==='Work'||!e.dateISO) return; const who=e.who||'—', h=e.hours||0, E=emp(who);
+    E.regH+=h;
+    if(E.rate!=null){ E.regC+=h*E.rate; }
   });
   return {byEmp, byJob};
 }
@@ -6800,7 +6809,6 @@ function renderFinance(force){
       }
       rankedList(calcAll.byJob, 'finByJob');
       rankedList(calcAll.byEmp, 'finByPerson');
-      _pcRenderGrid(calcAll.byJob, haveCost);
 
       // stash everything the print reports need, so they don't re-fetch rates a second time
       FIN_LAST = { range, haveCost, rates: rates||[], rows, weekKeys, byWeek, calcAll, grand, empCount, jobCount };
@@ -6826,7 +6834,7 @@ function renderFinance(force){
 function _pcPopulateProjects(){
   const sel=document.getElementById('pcProject'); if(!sel || !FIN_ENTRIES) return;
   const cur=sel.value;
-  const names=[...new Set(FIN_ENTRIES.map(e=>e.job).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const names=[...new Set(FIN_ENTRIES.filter(e=>e.payType==='Work').map(e=>e.job).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   sel.innerHTML='<option value="">Pick a project…</option>'+names.map(n=>'<option value="'+escA(n)+'">'+esc(n)+'</option>').join('');
   if(cur && names.indexOf(cur)>=0) sel.value=cur;
 }
@@ -6857,23 +6865,30 @@ function pcSelectProject(name){
 }
 function renderProjectCost(){
   const body=document.getElementById('pcBody'); if(!body) return;
-  const proj=(document.getElementById('pcProject')||{}).value||'';
-  if(!proj){ body.innerHTML='<div class="fin-empty">Pick a project above to see its total cost and trend.</div>'; return; }
   if(!FIN_ENTRIES){ body.innerHTML='<div class="fin-empty">Still loading…</div>'; return; }
+  // This whole card -- the tile grid AND the detail below -- runs off its OWN range picker, fully
+  // isolated from the top-level FINANCE date range (Rich, 2026-08-20: "this bottom section...
+  // appears to be controlled by the top selector... can we isolate them"). Real project work only
+  // (payType==='Work') -- leave/pay-type entries (Called In, All Purpose Leave, etc.) aren't projects.
   const range=(document.getElementById('pcRange')||{}).value||'all';
-  const rows=FIN_ENTRIES.filter(e=>e.job===proj && _finInRange(e.dateISO, range));
+  const proj=(document.getElementById('pcProject')||{}).value||'';
+  const gridRows=FIN_ENTRIES.filter(e=>e.payType==='Work' && _finInRange(e.dateISO, range));
+  const detailRows=proj ? gridRows.filter(e=>e.job===proj) : [];
 
   const byWeek={};
-  rows.forEach(e=>{ if(!e.dateISO) return; const wkD=_finStartOfWeek(new Date(e.dateISO+'T00:00:00')), wk=+wkD;
+  detailRows.forEach(e=>{ if(!e.dateISO) return; const wkD=_finStartOfWeek(new Date(e.dateISO+'T00:00:00')), wk=+wkD;
     if(!byWeek[wk]) byWeek[wk]={d:wkD, rows:[]}; byWeek[wk].rows.push(e); });
   let weekKeys=Object.keys(byWeek).map(Number).sort((a,b)=>a-b);
   const weekTruncated=weekKeys.length>12; if(weekTruncated) weekKeys=weekKeys.slice(-12);
 
   function finish(rates){
     const haveCost=!!rates;
-    const calc=_finCostCalc(rows, rates||[]);
+    _pcRenderGrid(_finCostCalc(gridRows, rates||[]).byJob, haveCost);
+    if(!proj){ body.innerHTML='<div class="fin-empty">Pick a project above to see its total cost and trend.</div>'; return; }
+
+    const calc=_finCostCalc(detailRows, rates||[]);
     const grand=_finGrand(calc.byEmp);
-    const empCount=new Set(rows.map(e=>e.who||'—')).size;
+    const empCount=new Set(detailRows.map(e=>e.who||'—')).size;
     const tiles = haveCost
       ? _finTile2('proj',financeMoney(grand.c),grand.h.toFixed(1)+'h','Total')+_finTile2('sched',financeMoney(grand.regC),grand.regH.toFixed(1)+'h','Regular')+_finTile2('over',financeMoney(grand.otC),grand.otH.toFixed(1)+'h','Overtime')+_finTile('active',empCount,'Employees')
       : _finTile2('proj',grand.h.toFixed(1)+'h','','Total hours')+_finTile2('sched',grand.regH.toFixed(1)+'h','','Regular hours')+_finTile2('over',grand.otH.toFixed(1)+'h','','Overtime hours')+_finTile('active',empCount,'Employees');
@@ -6894,13 +6909,13 @@ function renderProjectCost(){
         }).join('') + '</div>';
     }
     body.innerHTML='<div class="kpis" style="grid-template-columns:repeat(4,1fr)">'+tiles+'</div>'
-      +(!haveCost && rows.length ? '<button class="expandbtn" style="margin-top:10px" onclick="financeSetupRates()">🔑 Set up pay rates</button>' : '')
+      +(!haveCost && detailRows.length ? '<button class="expandbtn" style="margin-top:10px" onclick="financeSetupRates()">🔑 Set up pay rates</button>' : '')
       +trendHtml;
   }
 
   const ratesUrl=localStorage.getItem(FIN_RATES_KEY);
   if(!ratesUrl){ finish(null); return; }
-  if(!rows.length){ finish([]); return; }
+  if(!gridRows.length){ finish([]); return; }
   fetch(ratesUrl,{method:'POST',headers:{'Content-Type':'application/json'}})
     .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
     .then(rates=>{ finish((rates||[]).filter(r=>r&&r.name)); })
