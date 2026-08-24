@@ -1484,7 +1484,7 @@ function buildFinanceReport(){
     // job-totals mini-list now travels WITH it (see wkTotalsByWeek above) so the break lands before
     // the whole week's content, not partway through it.
     var pageBreak = (!singleWeek && wi>0) ? 'break-before:page;page-break-before:always' : '';
-    return '<div style="'+pageBreak+'">'+totalsForWeek+cap+head+empRows+foot+'</div>';
+    return '<div class="wkblk" style="'+pageBreak+'">'+totalsForWeek+cap+head+empRows+foot+'</div>';
   }).join('');
   var noDateHtml = noDateOrder.length ? ('<h2 style="margin:14px 0 4px;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">No date on entry</h2>'
     +'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="border-bottom:1px solid '+INK+'">'
@@ -1567,6 +1567,10 @@ function buildFinanceReport(){
     // browser (incl. every Safari version) actually applies; it just needs the wrapper's height set
     // explicitly afterward since transform (unlike zoom) doesn't affect layout flow -- same pattern
     // already used successfully for MRA_Dashboard.html's own wide print reports (printProjects, etc).
+    // Reset every week block's own local scale before measuring anything -- otherwise a re-run
+    // (switching orientation, toggling the fit checkbox) measures an already-shrunk block and never
+    // recovers if the new page height would actually fit it at full size.
+    +'Array.prototype.forEach.call(document.querySelectorAll(".wkblk"),function(el){el.style.transform="none";el.style.height="auto";});'
     +'s.style.transform="none"; s.style.width="max-content"; wrap.style.height="";'
     // Width MUST always fit the page -- there is no such thing as a print page continuing a
     // table's missing columns onto a second sheet, so a wide table that isn't shrunk enough gets
@@ -1580,8 +1584,30 @@ function buildFinanceReport(){
     // as many pages as it needs (2, 3, ...) via the browser\'s own pagination -- which already
     // repeats the table header on every page (see the thead/tfoot CSS above), so a multi-page
     // printout is a correct, readable result, not a failure.
-    +'var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth,ch=s.scrollHeight;'
-    +'var sc=Math.min(1,uW/cw); if(fit) sc=Math.min(sc,uH/ch);'
+    +'var uW=w-2*mpx,uH=h-2*mpx,cw=s.scrollWidth;'
+    +'var sc=Math.min(1,uW/cw);'
+    // Each week's own block (its job-totals + its whole employee grid) already starts on a fresh
+    // page (page-break-before), but a week with a lot of employees can still be TALLER than one
+    // page on its own -- the browser then has to bump a whole row that "almost" fit to the next
+    // page, leaving the rest of the first page blank (Rich, 2026-08-24, screenshot: a huge blank
+    // gap after Jacob Rohn's row before John Tindle's row starts on page 2). Rather than rely on
+    // that row-by-row break-avoidance (which can leave arbitrarily large gaps), measure each week
+    // block's real height and, if it's taller than one full page, scale JUST that block down to
+    // fit -- same transform mechanism as the sheet-wide fit above, just applied locally so weeks
+    // that already fit are left at full, readable size. Skipped when "Shrink to fit 1 page" is on,
+    // since then the whole multi-week report is already being forced onto a single page anyway.
+    +'if(!fit){'
+      +'var pageH=uH/sc;'
+      +'Array.prototype.forEach.call(document.querySelectorAll(".wkblk"),function(el){'
+        +'var natH=el.scrollHeight;'
+        +'if(natH>pageH){'
+          +'var wsc=pageH/natH;'
+          +'el.style.transformOrigin="top left"; el.style.transform="scale("+wsc+")"; el.style.height=(natH*wsc)+"px";'
+        +'}'
+      +'});'
+    +'}'
+    +'var ch=s.scrollHeight;'
+    +'if(fit) sc=Math.min(sc,uH/ch);'
     +'s.style.transformOrigin="top left"; s.style.transform="scale("+sc+")"; wrap.style.height=(ch*sc)+"px";'
     +'}'
     // Direct call, not window.onload -- confirmed via headless testing that onload can silently
