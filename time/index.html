@@ -1067,8 +1067,25 @@ function filtered(){
   return activeEntries().filter(function(e){ return inRange(e.dateISO,r) && (!p||e.who===p) && (!j||e.job===j); })
     .sort(function(a,b){ return String(b.dateISO).localeCompare(String(a.dateISO))||String(b.ts).localeCompare(String(a.ts)); });
 }
+// Whether the CURRENT range should get the Time Trends charts instead of the day-by-day weekly grid.
+// This week/Last week/Last 2 weeks always grid; This month/All time always trend (too many weeks to
+// grid readably). Custom range is decided by its ACTUAL span, not just "it's custom" (Rich, 2026-08-24:
+// picked an ~2-week custom range and expected "the normal hour report... like the last one for two
+// weeks" but got Time Trends instead -- a 2-week custom span is exactly as gridable as the built-in
+// Last 2 weeks preset; only a genuinely long or open-ended custom range needs the trends treatment).
+function _finUsesTrends(){
+  var r=$('fRange').value;
+  if(r==='m'||r==='all') return true;
+  if(r==='custom'){
+    var fromV=$('fFrom').value, toV=$('fTo').value;
+    if(!fromV || !toV) return true;   // open-ended -- could span months, safer to trend
+    var days=Math.round((new Date(toV+'T00:00:00')-new Date(fromV+'T00:00:00'))/86400000);
+    return days>15;   // matches Last 2 weeks (14 days) staying gridded
+  }
+  return false;
+}
 function updateFinBtnLabel(){
-  var r=$('fRange').value, trend=(r==='m'||r==='all'||r==='custom'), b=$('finBtn'); if(!b) return;
+  var trend=_finUsesTrends(), b=$('finBtn'); if(!b) return;
   b.innerHTML=trend?'📈 Time trends':'📊 Hours report';
   b.title=trend?'Charts + trends over time (hours by week/month/job/person) — no day-by-day grid':'Weekly hours summary (job codes + employee IDs) in your payroll format';
 }
@@ -1083,7 +1100,7 @@ function updateCustomRangeUI(){
   }
 }
 function renderTracking(){
-  fillPersonFilter(); fillJobFilter(); updateFinBtnLabel(); updateCustomRangeUI();
+  fillPersonFilter(); fillJobFilter(); updateCustomRangeUI(); updateFinBtnLabel();
   var rows=filtered(); var tot=0, byJob={}, byPer={};
   rows.forEach(function(e){ tot+=e.hours; byJob[e.job]=(byJob[e.job]||0)+e.hours; byPer[e.who]=(byPer[e.who]||0)+e.hours; });
   $('grandTot').textContent=tot.toFixed(2).replace(/\.00$/,'.0');
@@ -1324,16 +1341,15 @@ function buildFinanceReport(){
   var rng=$('fRange').value;
   var rangeLbl={tw:'This week',lw:'Last week',m:'This month',all:'All time',custom:'Custom range'}[rng]||'';
   if(!rows.length){ alert('No time entries in this range to report.'); return; }
-  // Monthly / All time / Custom range: the day-by-day weekly grid below is built to read as ONE pay
-  // period — stacked across many weeks (or the whole history) it turns into a wall of near-identical
-  // grids with no big-picture read (Rich: "the formatting is screwed... we were looking for trends over
-  // time and charts"). A custom range is exactly the same risk (that's the whole point of Rich's "print
-  // 2 weeks / a month / whatever" ask — it's arbitrary length) so it gets the same trends treatment,
-  // matching what 📈 Time trends already promises on the button label (updateFinBtnLabel already
-  // flagged custom as trend-mode; this just makes the actual report match that promise). See
-  // buildTimeTrendsReport — it derives its own printed date-range label from the real rows, so an
-  // arbitrary custom span always prints correctly regardless of what's in rangeLbl above.
-  if(rng==='m'||rng==='all'||rng==='custom'){ buildTimeTrendsReport(rows,rangeLbl); return; }
+  // Monthly / All time / a genuinely long or open-ended Custom range: the day-by-day weekly grid below
+  // is built to read as ONE pay period — stacked across many weeks it turns into a wall of near-
+  // identical grids with no big-picture read (Rich: "the formatting is screwed... we were looking for
+  // trends over time and charts"). But a SHORT custom range (Rich, 2026-08-24: picked ~2 weeks,
+  // expected "the normal hour report... like the last one for two weeks") is exactly as gridable as
+  // the built-in Last 2 weeks preset -- _finUsesTrends() decides by the ACTUAL span, not just whether
+  // the dropdown says "custom". See buildTimeTrendsReport for the trends path -- it derives its own
+  // printed date-range label from the real rows, so an arbitrary custom span always prints correctly.
+  if(_finUsesTrends()){ buildTimeTrendsReport(rows,rangeLbl); return; }
   var dates=rows.map(function(e){return e.dateISO;}).sort();
   var period=isoToMDY(dates[0])+' – '+isoToMDY(dates[dates.length-1]);
   var DOWF=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
