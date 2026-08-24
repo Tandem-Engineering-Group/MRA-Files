@@ -6778,11 +6778,27 @@ function _finRatesConfigured(){ return !!(FIN_RATES_URL_DEFAULT || localStorage.
 // one) and, only for the hardcoded URL, attaches a live Microsoft access token -- that's what makes it
 // safe to hardcode: the flow checks the signed-in identity, not secrecy of the address. cb(rates|null,
 // err|null, secure) -- secure tells the caller which URL was in play, for building the right message.
+// Pulls a human-readable identity claim straight out of the ID token client-side (no server round
+// trip) so a "could not verify your access" message can say WHO it thinks you are, instead of a bare
+// generic error -- Rich, 2026-08-24: hit this repeatedly while genuinely signed in, and the only way
+// to find out why was digging through the Power Automate run's own Condition inputs. Never trust this
+// for security (it's an unverified decode, same caveat as the flow's own Compose chain) -- purely a
+// display convenience so a mismatch (wrong tenant, unexpected claim, truly not on the allowlist) is
+// visible on screen immediately.
+function _finDecodeIdentity(tok){
+  try{
+    var seg=String(tok||'').split('.')[1]; if(!seg) return null;
+    var b64=seg.replace(/-/g,'+').replace(/_/g,'/'); while(b64.length%4) b64+='=';
+    var json=JSON.parse(decodeURIComponent(atob(b64).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+    return json.preferred_username||json.upn||json.email||json.unique_name||null;
+  }catch(e){ return null; }
+}
 function _finGetRates(cb){
   const secure = !!FIN_RATES_URL_DEFAULT;
   const url = FIN_RATES_URL_DEFAULT || localStorage.getItem(FIN_RATES_KEY);
-  if(!url){ cb(null, null, secure); return; }
+  if(!url){ cb(null, null, secure, null); return; }
   const go=(tok)=>{
+    const identity = tok ? _finDecodeIdentity(tok) : null;
     const headers={'Content-Type':'application/json'};
     // NOT 'Authorization' -- Power Platform's own gateway intercepts and validates that exact header
     // name itself (rejects it before the flow even runs, regardless of what it's a valid token FOR),
@@ -6791,8 +6807,8 @@ function _finGetRates(cb){
     if(tok) headers['X-Rates-Token']='Bearer '+tok;
     fetch(url,{method:'POST',headers:headers})
       .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
-      .then(rates=>cb((rates||[]).filter(r=>r&&r.name), null, secure))
-      .catch(err=>cb(null, err, secure));
+      .then(rates=>cb((rates||[]).filter(r=>r&&r.name), null, secure, identity))
+      .catch(err=>cb(null, err, secure, identity));
   };
   if(secure && typeof SSO!=='undefined' && SSO.token) SSO.token().then(go);
   else go(null);
@@ -6830,7 +6846,7 @@ function renderFinance(force){
     // know why you would want to select just one or the other... show both all the time"). $ drives
     // bar heights/sort order when pay rates are loaded (haveCost); hours ride along as a constant
     // second line everywhere -- never hidden, never requiring a click to reveal.
-    function finish(rates, secure){
+    function finish(rates, secure, identity){
       // An EMPTY array is a real "no rates" result (e.g. the pay-rates flow couldn't verify who's
       // asking) -- NOT "everyone's rate is $0". Treating [] as haveCost=true was showing a misleading
       // "$0 for everyone" instead of falling back to the honest hours-only view (Rich, 2026-08-21:
@@ -6844,8 +6860,14 @@ function renderFinance(force){
         ? _finTile2('proj',financeMoney(grand.c),grand.h.toFixed(1)+'h','Total')+_finTile2('sched',financeMoney(grand.regC),grand.regH.toFixed(1)+'h','Regular')+_finTile2('over',financeMoney(grand.otC),grand.otH.toFixed(1)+'h','Overtime')
         : _finTile2('proj',grand.h.toFixed(1)+'h','','Total hours')+_finTile2('sched',grand.regH.toFixed(1)+'h','','Regular hours')+_finTile2('over',grand.otH.toFixed(1)+'h','','Overtime hours');
       document.getElementById('finTiles').innerHTML = tiles + _finTile('active',empCount,'Employees')+_finTile('pipe',jobCount,'Jobs charged');
+      // Show WHO the app thinks is signed in, not just "could not verify" -- Rich, 2026-08-24: hit
+      // this while genuinely signed in, and the only way to see why was digging into the Power
+      // Automate run's own Condition inputs. identity is an unverified client-side decode of the ID
+      // token (see _finDecodeIdentity) -- fine for display, never used for the actual access check.
+      const idMsg = identity ? ('Signed in as <b>'+esc(identity)+'</b>, which isn’t on the approved pay-rates list.')
+        : 'No sign-in detected — you may need to sign in again.';
       document.getElementById('finRatesMsg').innerHTML = haveCost ? '' : (secure
-        ? '<span style="color:var(--red)">Could not verify your access for pay rates.</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
+        ? '<span style="color:var(--red)">Could not verify your access for pay rates. '+idMsg+'</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
         : '<button class="expandbtn" onclick="financeSetupRates()">🔑 Set up pay rates</button> to see $ alongside hours everywhere on this tab — one-time, saved on this device only.');
 
       // trend (weekly) chart -- a single bar isn't a trend, it just restates the tile above it, and
@@ -6896,13 +6918,14 @@ function renderFinance(force){
 
     if(!_finRatesConfigured()){ finish(null, !!FIN_RATES_URL_DEFAULT); return; }
     if(!rows.length){ finish([], !!FIN_RATES_URL_DEFAULT); return; }   // rates ARE configured, just nothing in this range to rate
-    _finGetRates((rates, err, secure)=>{
+    _finGetRates((rates, err, secure, identity)=>{
       if(err){
+        const idMsg = identity ? (' Signed in as <b>'+esc(identity)+'</b>.') : '';
         document.getElementById('finRatesMsg').innerHTML = secure
-          ? '<span style="color:var(--red)">Could not verify your access ('+esc(err.message)+'). Make sure you’re signed in as you or Kyle, then</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
+          ? '<span style="color:var(--red)">Could not verify your access ('+esc(err.message)+').'+idMsg+' Make sure you’re signed in as you or Kyle, then</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
           : '<span style="color:var(--red)">Could not load pay rates ('+esc(err.message)+').</span> <button class="expandbtn" onclick="renderFinance()">Retry</button> <button class="expandbtn" onclick="financeResetRates()">Re-enter URL</button>';
       }
-      finish(rates, secure);
+      finish(rates, secure, identity);
     });
   }, force);
 }
@@ -7472,10 +7495,13 @@ function openDetailedCostReport(){
       win.document.open(); win.document.write('<!doctype html><body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#666">No time entries in this range to report.</body>'); win.document.close();
       return;
     }
-    _finGetRates((rates, err, secure)=>{
+    _finGetRates((rates, err, secure, identity)=>{
       if(err || !rates || !rates.length){
-        const msg = err ? err.message : (secure ? 'Could not verify your access — make sure you’re signed in as you or Kyle.' : 'The rates flow returned no rows.');
-        win.document.open(); win.document.write('<!doctype html><body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#b00">Could not load pay rates: '+esc(msg)+'. Close this tab and try Labor Cost Summary again.</body>'); win.document.close();
+        let msg;
+        if(err) msg = err.message;
+        else if(secure) msg = identity ? ('Could not verify your access. Signed in as '+identity+', which isn\'t on the approved list.') : 'Could not verify your access. No sign-in detected — you may need to sign in again.';
+        else msg = 'The rates flow returned no rows.';
+        win.document.open(); win.document.write('<!doctype html><body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#b00">Could not load pay rates: '+esc(msg)+' Close this tab and try Labor Cost Summary again.</body>'); win.document.close();
         return;
       }
       buildCostReportInto(win, rows, rates);
