@@ -953,11 +953,19 @@ var SSO=(function(){
   // that needs a NEW permission grant this tenant requires a real Entra admin to approve
   // (2026-08-21, hit a "Need admin approval" wall Rich can't clear right now) -- requesting the SAME
   // scopes already granted at login just refreshes the cached ID token, no new consent needed.
+  // Rich, 2026-08-24: "it worked last week and now it's not" -- silently swallowing whatever
+  // acquireTokenSilent actually failed with (session expired, needs re-consent, third-party cookies
+  // blocking the silent iframe renewal, etc.) meant every failure looked identical from the outside
+  // ("no sign-in detected") even when genuinely signed in. lastTokenError now holds MSAL's own error
+  // name/message so a caller can show the REAL reason instead of a generic message.
+  var lastTokenError=null;
   function token(){
-    if(!pca || !user) return Promise.resolve(null);
-    return pca.acquireTokenSilent({ scopes:['openid','profile','email'], account:user }).then(function(r){ return r.idToken; }).catch(function(){ return null; });
+    lastTokenError=null;
+    if(!pca || !user){ lastTokenError='No active MSAL account in this browser session.'; return Promise.resolve(null); }
+    return pca.acquireTokenSilent({ scopes:['openid','profile','email'], account:user }).then(function(r){ return r.idToken; })
+      .catch(function(e){ lastTokenError=(e&&(e.errorCode||e.name))+': '+(e&&e.message||e); return null; });
   }
-  return { init:init, signIn:signIn, signOut:signOut, active:active, token:token, email:function(){ return user?String(user.username||'').toLowerCase():''; }, name:function(){ return user?(user.name||user.username||''):''; }, get user(){ return user; }, get ready(){ return ready; }, get failed(){ return failed; } };
+  return { init:init, signIn:signIn, signOut:signOut, active:active, token:token, email:function(){ return user?String(user.username||'').toLowerCase():''; }, name:function(){ return user?(user.name||user.username||''):''; }, get user(){ return user; }, get ready(){ return ready; }, get failed(){ return failed; }, get lastTokenError(){ return lastTokenError; } };
 })();
 function ssoEnforcing(){ return SSO.active() && SSO.ready && !SSO.failed; }
 function ssoRole(){ if(!SSO.active()||SSO.failed) return null; var em=SSO.email(); if(ROLE_BY_EMAIL[em]) return ROLE_BY_EMAIL[em]; var nk=_nmKey(SSO.name()); if(ROLE_BY_NAME[nk]) return ROLE_BY_NAME[nk]; return SSO.user?'staff':null; }
@@ -1639,11 +1647,30 @@ function _finRatesConfigured(){ return !!(RATES_URL_DEFAULT || localStorage.getI
 // up, else the per-device localStorage one) and, only for the hardcoded URL, attaches a live
 // Microsoft access token -- that's what makes it safe to hardcode: the flow checks the signed-in
 // identity, not secrecy of the address. cb(rates|null, err|null, secure).
+// Pulls a human-readable identity claim straight out of the ID token client-side (no server round
+// trip) so a rates-access failure message can say WHO it thinks you are, instead of a bare generic
+// error -- Rich, 2026-08-24: hit this repeatedly while genuinely signed in, and the only way to find
+// out why was digging through the Power Automate run's own Condition inputs. Never trust this for
+// security (it's an unverified decode, same caveat as the flow's own Compose chain) -- purely a
+// display convenience so a mismatch (wrong tenant, unexpected claim, truly not on the allowlist) is
+// visible on screen immediately. Same helper as MRA_Dashboard.html's Finance tab.
+function _finDecodeIdentity(tok){
+  try{
+    var seg=String(tok||'').split('.')[1]; if(!seg) return null;
+    var b64=seg.replace(/-/g,'+').replace(/_/g,'/'); while(b64.length%4) b64+='=';
+    var json=JSON.parse(decodeURIComponent(atob(b64).split('').map(function(c){return '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2);}).join('')));
+    return json.preferred_username||json.upn||json.email||json.unique_name||null;
+  }catch(e){ return null; }
+}
 function _finGetRates(cb){
   var secure = !!RATES_URL_DEFAULT;
   var url = RATES_URL_DEFAULT || localStorage.getItem(RATES_URL_KEY);
-  if(!url){ cb(null, null, secure); return; }
+  if(!url){ cb(null, null, secure, null, null); return; }
   function go(tok){
+    var identity = tok ? _finDecodeIdentity(tok) : null;
+    // If SSO couldn't get a token at all, grab the REAL reason (session expired, needs re-consent,
+    // etc.) instead of leaving the caller to show a generic "not signed in" -- see SSO.lastTokenError.
+    var tokenErr = (!tok && typeof SSO!=='undefined' && secure) ? (SSO.lastTokenError||null) : null;
     var headers={'Content-Type':'application/json'};
     // NOT 'Authorization' -- Power Platform's own gateway intercepts and validates that exact header
     // name itself (rejects it before the flow even runs, regardless of what it's a valid token FOR),
@@ -1652,8 +1679,8 @@ function _finGetRates(cb){
     if(tok) headers['X-Rates-Token']='Bearer '+tok;
     fetch(url,{method:'POST',headers:headers})
       .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(rates){ cb((rates||[]).filter(function(r){ return r&&r.name; }), null, secure); })
-      .catch(function(err){ cb(null, err, secure); });
+      .then(function(rates){ cb((rates||[]).filter(function(r){ return r&&r.name; }), null, secure, identity, tokenErr); })
+      .catch(function(err){ cb(null, err, secure, identity, tokenErr); });
   }
   if(secure && typeof SSO!=='undefined' && SSO.token) SSO.token().then(go);
   else go(null);
@@ -1736,13 +1763,14 @@ function renderFinanceCard(){
   }
   tiles(_finTile('…','$ Cost (loading)'));
   $('finRatesMsg').innerHTML='';
-  _finGetRates(function(rates, err, secure){
+  _finGetRates(function(rates, err, secure, identity, tokenErr){
     // An EMPTY array is a real "couldn't verify/no rates" result, not "everyone's rate is $0" --
     // treat it the same as an error instead of silently computing real zeros for real people.
     if(err || !rates || !rates.length){
       tiles(_finTile('—','$ Cost'));
+      var idMsg = identity ? (' Signed in as '+esc(identity)+', which isn\'t on the approved list.') : (tokenErr ? (' Your sign-in couldn\'t be renewed ('+esc(tokenErr)+') — sign out, then sign in again.') : '');
       $('finRatesMsg').innerHTML = secure
-        ? '<span style="color:var(--err);font-size:12px">Could not verify your access'+(err?(' ('+esc(err.message)+')'):'')+'. Make sure you’re signed in as you or Kyle, then</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button>'
+        ? '<span style="color:var(--err);font-size:12px">Could not verify your access'+(err?(' ('+esc(err.message)+')'):'')+'.'+idMsg+' Make sure you’re signed in as you or Kyle, then</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button>'
         : '<span style="color:var(--err);font-size:12px">Could not load pay rates'+(err?(' ('+esc(err.message)+')'):'')+'.</span> <button class="tbtn sm" onclick="renderFinanceCard()">Retry</button> <button class="tbtn sm" onclick="financeResetRates()">Re-enter URL</button>';
       $('finEmpRows').innerHTML='';
       return;
@@ -1776,9 +1804,16 @@ function openCostReport(){
   win.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRA Labor Cost Summary</title></head>'
     +'<body style="font-family:Segoe UI,Arial,sans-serif;padding:60px;color:#666;text-align:center">Loading pay rates…</body></html>');
 
-  _finGetRates(function(rates, err, secure){
+  _finGetRates(function(rates, err, secure, identity, tokenErr){
     if(err || !rates || !rates.length){
-      var msg = err ? err.message : 'The rates flow returned no rows.';
+      var msg;
+      // Secure mode (this hardcoded flow) never returns [] because "no rows exist" -- an empty
+      // result there means the identity check rejected you. The legacy (non-secure, manual-URL)
+      // mode has no identity check at all, so an empty result really can just mean no rows.
+      if(err) msg = err.message;
+      else if(secure) msg = identity ? ('Could not verify your access. Signed in as '+identity+', which isn\'t on the approved list.')
+        : (tokenErr ? ('Could not verify your access. Your sign-in couldn\'t be renewed ('+tokenErr+') — sign out, then sign in again.') : 'Could not verify your access. No sign-in detected — you may need to sign in again.');
+      else msg = 'The rates flow returned no rows.';
       // A bad/stale URL is the most likely failure in the legacy (non-secure) mode -- offer to
       // re-enter it rather than dead-end. Nothing to re-enter once on the hardcoded secure URL.
       if(!secure && confirm('Could not load pay rates ('+msg+').\n\nWant to re-enter the rates-flow URL?')){
