@@ -7626,7 +7626,22 @@ const SSO = (function(){
     lastTokenError=null;
     if(!pca || !user){ lastTokenError='No active MSAL account in this browser session.'; return Promise.resolve(null); }
     return pca.acquireTokenSilent({ scopes:['openid','profile','email'], account:user }).then(r=>r.idToken)
-      .catch(e=>{ lastTokenError=(e&&(e.errorCode||e.name))+': '+(e&&e.message||e); return null; });
+      .catch(e=>{
+        const code=(e&&(e.errorCode||e.name))||'';
+        lastTokenError=code+': '+(e&&e.message||e);
+        // Rich, 2026-08-24: hit AADSTS160021 (interaction_required) -- the cached MSAL account still
+        // looks valid on this device, but the real session on Microsoft's side is gone, so silent
+        // renewal can never succeed no matter how many times it's retried. Signing all the way out
+        // and back in fixed it manually; MSAL's own documented recovery for this exact error class is
+        // a real interactive re-auth. A popup (not a full-page redirect) keeps the Finance tab in
+        // place instead of losing the user's spot -- if the popup itself fails (blocked, cancelled),
+        // this falls through to the same honest error message as before, no worse than today.
+        if(/interaction_required|login_required|consent_required/i.test(code)){
+          return pca.acquireTokenPopup({ scopes:['openid','profile','email'] }).then(r=>{ lastTokenError=null; return r.idToken; })
+            .catch(e2=>{ lastTokenError='Re-auth popup failed: '+((e2&&(e2.errorCode||e2.name))||'')+': '+(e2&&e2.message||e2); return null; });
+        }
+        return null;
+      });
   }
   return { init, signIn, signOut, active, token,
     email:()=>user?String(user.username||'').toLowerCase():'',
