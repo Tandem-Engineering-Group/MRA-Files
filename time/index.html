@@ -1397,9 +1397,15 @@ function buildFinanceReport(){
       +'<span style="font-size:13.5px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums">'+f(tot)+'</span></div>';
   }).join('');
   // Job totals PER WEEK, everyone combined — finance's ask: see what each job got charged that
-  // week without adding it up by hand. Only shown when the range covers 2+ weeks.
+  // week without adding it up by hand. Only built when the range covers 2+ weeks. Kept per-week
+  // (not joined into one flat string) so each week's totals can travel with that SAME week's
+  // employee-and-day grid below (see weekBlocks) -- Rich, 2026-08-24: printing 2+ weeks put every
+  // week's totals together on one page, then every week's grid together starting on the NEXT page,
+  // so the two halves of "week 2" ended up on different pages than each other. Now each week's
+  // totals + grid travel and page-break together as one unit.
   var wkCodeKeys=Object.keys(byWeekCode).sort();
-  var byWeekHtml = wkCodeKeys.length>1 ? wkCodeKeys.map(function(wk){
+  var wkTotalsByWeek={};
+  if(wkCodeKeys.length>1) wkCodeKeys.forEach(function(wk){
     var codes=byWeekCode[wk];
     var ck=Object.keys(codes).sort(function(a,b){ return codes[b].h-codes[a].h||a.localeCompare(b); });
     var wMax=ck.reduce(function(m,c){return Math.max(m,codes[c].h);},0)||1, wkTot=ck.reduce(function(x,c){ return x+codes[c].h; },0);
@@ -1410,8 +1416,8 @@ function buildFinanceReport(){
         +'<span style="display:block;height:7px;background:'+HAIR+'"><span style="display:block;height:7px;width:'+w+'%;background:'+BRAND+'"></span></span>'
         +'<span style="font-size:14px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums">'+f(codes[c].h)+'</span></div>';
     }).join('');
-    return '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin:12px 0 4px">Week of '+esc(isoToMDY(wk))+' <span style="font-weight:400;text-transform:none;letter-spacing:0">· '+f(wkTot)+' hrs</span></div>'+rowsHtml;
-  }).join('') : '';
+    wkTotalsByWeek[wk]='<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin:12px 0 4px">Week of '+esc(isoToMDY(wk))+' <span style="font-weight:400;text-transform:none;letter-spacing:0">· '+f(wkTot)+' hrs</span></div>'+rowsHtml;
+  });
   // Hours by employee and day — one grid block per week. Sat/Sun columns only appear on a week
   // where someone actually logged hours that day (Rich: "we don't typically use Sat or Sun — just
   // don't show them at all unless hours are there") — every other week stays Mon–Fri.
@@ -1467,12 +1473,18 @@ function buildFinanceReport(){
     var foot='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;align-items:baseline;margin-top:7px;padding-top:6px;border-top:3px solid '+INK+'">'
       +'<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+';font-weight:600">Day total<span style="display:block;font-size:20px;letter-spacing:-.02em;color:'+INK+';margin-top:3px;font-variant-numeric:tabular-nums">'+f(wkGrand)+'</span></div>'
       +footCells+'</div>';
-    var cap = singleWeek ? '' : '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin:14px 0 4px">Week of '+esc(isoToMDY(wk))+'</div>';
+    var totalsForWeek = wkTotalsByWeek[wk]||'';
+    // The per-week job-totals block (above) already carries its own "Week of X" caption, so skip
+    // this grid's own redundant one when that's present -- otherwise (an all-leave week with no
+    // job-coded totals to show) keep this as the only "Week of" label for the week.
+    var cap = (singleWeek || totalsForWeek) ? '' : '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin:14px 0 4px">Week of '+esc(isoToMDY(wk))+'</div>';
     // Rich, 2026-08-24: a multi-week print (Last 2 weeks etc.) let one week's employee grid start
     // low on a page and split mid-list onto the next -- force every week AFTER the first to start on
-    // its own fresh page instead, so each week's grid always gets a full page to lay out in.
+    // its own fresh page instead, so each week's grid always gets a full page to lay out in. Its own
+    // job-totals mini-list now travels WITH it (see wkTotalsByWeek above) so the break lands before
+    // the whole week's content, not partway through it.
     var pageBreak = (!singleWeek && wi>0) ? 'break-before:page;page-break-before:always' : '';
-    return '<div style="'+pageBreak+'">'+cap+head+empRows+foot+'</div>';
+    return '<div style="'+pageBreak+'">'+totalsForWeek+cap+head+empRows+foot+'</div>';
   }).join('');
   var noDateHtml = noDateOrder.length ? ('<h2 style="margin:14px 0 4px;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">No date on entry</h2>'
     +'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="border-bottom:1px solid '+INK+'">'
@@ -1509,7 +1521,6 @@ function buildFinanceReport(){
       +'<h2 style="margin:18px 0 8px;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Job code totals by employee</h2>'
       +(codeHtml?('<div style="border-top:1px solid '+INK+';margin-bottom:18px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:repeat('+codeRows+',auto);grid-auto-flow:column;column-gap:24px">'+codeHtml+'</div>')
         :('<div style="border-top:1px solid '+INK+';margin-bottom:18px"><div style="font-size:13px;color:'+MUT+';padding:8px 0">No job-coded work in this range.</div></div>'))
-      +byWeekHtml
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">'
         +'<h2 style="margin:0;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">Hours by employee and day</h2>'
         +'<span style="font-size:10.5px;color:'+MUT+'">Job code · hours</span>'
