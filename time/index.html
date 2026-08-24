@@ -44,6 +44,25 @@
   table.t td.r,table.t th.r{text-align:right}
   table.t tr:hover td{background:var(--card2)}
   tr.daysub td{background:var(--card2);border-bottom:2px solid var(--line)}
+  /* Card layout for the Paylocity import rows (2026-08-24) -- replaced a <table> layout here because
+     a row that can grow to N job splits doesn't fit fixed table columns: the split widget's own width
+     stopped matching its header's width (Rich: "kinda funky, not right", a stray horizontal scrollbar
+     cutting off the delete button). A card per row sidesteps the whole column-width problem. */
+  .pyCard{border-bottom:1px solid var(--line);padding:8px 4px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:flex-start}
+  .pyCard:hover{background:var(--card2)}
+  .pyCardId{min-width:150px;font-size:13px}
+  .pyCardId b{font-weight:700}
+  .pyCardSub{font-size:11px;color:var(--muted);margin-top:1px}
+  .pyCardBody{flex:1;min-width:260px}
+  .pyCardNote{margin-top:5px}
+  .pyCardNote input{width:100%;min-width:160px}
+  .pySplitRow{display:flex;gap:5px;align-items:center;margin-bottom:3px;flex-wrap:wrap}
+  .pySplitRow .pyPunchHours{width:60px}
+  .pySplitRow .pyPunchJob{flex:1;min-width:150px;max-width:280px}
+  .pySplitDel{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px}
+  .pySplitAdd{padding:3px 8px;font-size:11.5px;margin-top:2px}
+  .pySplitTotal{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .pySplitTotal.mismatch{color:var(--err)}
   .rowdel{color:var(--err);cursor:pointer;font-weight:800;border:0;background:none;font-size:15px}
   .rowedit{color:var(--muted);cursor:pointer;border:0;background:none;font-size:14px}
   .filtrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
@@ -273,14 +292,10 @@
     </div>
     <div id="paylocityPunchWrap" class="hide" style="margin-bottom:10px">
       <div style="font-size:12.5px;font-weight:700;color:#c1401f;margin-bottom:4px">⚠ Incomplete punches — forgot to clock in or out. Enter the real hours if you know them.</div>
-      <div style="overflow:auto;max-height:200px;border:1px solid var(--line);border-radius:10px">
-        <table class="t"><thead><tr><th>Date</th><th>Employee</th><th>What happened</th><th>Hrs</th><th>Job</th></tr></thead>
-        <tbody id="paylocityPunchRows"></tbody></table>
-      </div>
+      <div style="overflow:auto;max-height:260px;border:1px solid var(--line);border-radius:10px;padding:4px 6px" id="paylocityPunchRows"></div>
     </div>
-    <div style="overflow:auto;max-height:360px;border:1px solid var(--line);border-radius:10px" id="paylocityPreviewWrap">
-      <table class="t"><thead><tr><th>Date</th><th>Employee</th><th>Pay type / Job</th><th class="r">Hrs</th><th>Note</th></tr></thead>
-      <tbody id="paylocityRows"></tbody></table>
+    <div style="overflow:auto;max-height:400px;border:1px solid var(--line);border-radius:10px;padding:4px 6px" id="paylocityPreviewWrap">
+      <div id="paylocityRows"></div>
     </div>
     <div class="submitrow">
       <button class="tbtn primary" id="paylocityConfirmBtn">Import</button>
@@ -652,20 +667,25 @@ function applyPaylocityFilter(){
   if(PY_ZERO_SKIPPED) bits.push(PY_ZERO_SKIPPED+' zero-hour punch correction'+(PY_ZERO_SKIPPED===1?'':'s')+' (skipped)');
   if(unmatchedList.length) bits.push(unmatchedList.length+' not on your Time Tracking roster, skipped: '+unmatchedList.join(', '));
   $('paylocitySummary').innerHTML=bits.map(function(b){return esc(b);}).join(' · ');
+  // Each accepted row can be split across several jobs too (Rich, 2026-08-24: "I need to be able to
+  // do it everywhere" -- not just the incomplete-punch section). Starts with one job row pre-filled
+  // with Paylocity's own known net-of-lunch total + matched job (identical to the old single-job
+  // behavior when never split); "+ Split" divides that same fixed total across more jobs.
   $('paylocityRows').innerHTML = accepted.length ? accepted.map(function(e,i){
-    var hoursHtml = e.lunchDeducted
-      ? e.hours+'<span class="muted" style="font-size:10px;display:block">(−.5 lunch, Paylocity said '+e.rawHours+')</span>'
-      : e.hours;
-    var jobHtml = e.job
-      ? esc(e.job)
-      : '<select class="pyJobPick" data-idx="'+i+'" style="width:100%;min-width:160px">'+_pyJobOptionsHtml('')+'</select>';
+    var refHtml = e.lunchDeducted
+      ? 'Paylocity: '+e.hours+'h <span class="muted">(−.5 lunch, said '+e.rawHours+'h)</span>'
+      : 'Paylocity: '+e.hours+'h';
     // Editable note (Rich, 2026-08-21: "I want the ability to write the note, like tap plates,
     // cleaning, pedestal... as I'm importing") -- prefilled with whatever Paylocity's own "Employee
     // In Note:" gave (often blank), freely editable before Import; updates PY_PENDING[i].notes live,
     // same field the Weekly Time Summary report already prints under each day's hours.
-    var noteHtml='<input type="text" class="pyNoteEdit" data-idx="'+i+'" value="'+esc(e.notes||'')+'" placeholder="task / note" style="width:100%;min-width:140px">';
-    return '<tr><td>'+esc(fmtShortDate(e.dateISO))+'</td><td>'+esc(e.who)+'</td><td>'+jobHtml+'</td><td class="r">'+hoursHtml+'</td><td style="max-width:220px">'+noteHtml+'</td></tr>';
-  }).join('') : '<tr><td colspan="5" class="muted" style="font-style:italic">Nothing new to import for this date range.</td></tr>';
+    var noteHtml='<input type="text" class="pyNoteEdit" data-idx="'+i+'" value="'+esc(e.notes||'')+'" placeholder="task / note">';
+    return '<div class="pyCard">'
+      +'<div class="pyCardId"><b>'+esc(fmtShortDate(e.dateISO))+'</b> · '+esc(e.who)+'<div class="pyCardSub">'+refHtml+'</div></div>'
+      +'<div class="pyCardBody">'+_pySplitBoxHtml('acc',i,e.hours,e.job)+'<div class="pyCardNote">'+noteHtml+'</div></div>'
+      +'</div>';
+  }).join('') : '<div class="muted" style="font-style:italic;padding:8px 4px">Nothing new to import for this date range.</div>';
+  accepted.forEach(function(e,i){ _pyUpdateSplitTotal('acc',i); });
   var chWrap=$('paylocityChangedWrap');
   if(changed.length){
     chWrap.classList.remove('hide');
@@ -689,39 +709,58 @@ function applyPaylocityFilter(){
   if(punchInRange.length){
     pWrap.classList.remove('hide');
     $('paylocityPunchRows').innerHTML=punchInRange.map(function(p,i){
-      return '<tr><td>'+esc(fmtShortDate(p.dateISO))+'</td><td>'+esc(p.who)+'</td><td>'+esc(p.desc)+'</td>'
-        +'<td colspan="2">'+_pySplitBoxHtml(i)+'</td></tr>';
+      return '<div class="pyCard">'
+        +'<div class="pyCardId"><b>'+esc(fmtShortDate(p.dateISO))+'</b> · '+esc(p.who)+'<div class="pyCardSub">'+esc(p.desc)+'</div></div>'
+        +'<div class="pyCardBody">'+_pySplitBoxHtml('punch',i,'','')+'</div>'
+        +'</div>';
     }).join('');
-    punchInRange.forEach(function(p,i){ _pyUpdateSplitTotal(i); });
+    punchInRange.forEach(function(p,i){ _pyUpdateSplitTotal('punch',i); });
   } else { pWrap.classList.add('hide'); $('paylocityPunchRows').innerHTML=''; }
   $('paylocityConfirmBtn').disabled = !accepted.length && !changed.length && !punchInRange.length;
 }
-function _pySplitRowHtml(idx){
-  return '<div class="pySplitRow" style="display:flex;gap:5px;align-items:center;margin-bottom:3px">'
-    +'<input type="number" step="0.01" min="0" class="pyPunchHours" data-idx="'+idx+'" placeholder="hrs" style="width:56px">'
-    +'<select class="pyPunchJob" data-idx="'+idx+'" style="flex:1;min-width:130px">'+_pyJobOptionsHtml('')+'</select>'
-    +'<button type="button" class="pySplitDel" data-idx="'+idx+'" title="Remove this split" style="border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:13px">✕</button>'
+// kind='punch' (an incomplete-punch row, no known total -- Rich types the raw hours he believes were
+// worked, split rule applies -.5hr lunch to the SUM if it's over 8) or kind='acc' (an already-matched
+// Paylocity row with a KNOWN net-of-lunch total -- splitting just divides that fixed number across
+// jobs; lunch is never re-applied since it already happened once for the whole day).
+function _pySplitRowHtml(kind, idx, presetHours, presetJob){
+  return '<div class="pySplitRow">'
+    +'<input type="number" step="0.01" min="0" class="pyPunchHours" data-kind="'+kind+'" data-idx="'+idx+'"'+(presetHours?(' value="'+esc(String(presetHours))+'"'):'')+' placeholder="hrs">'
+    +'<select class="pyPunchJob" data-kind="'+kind+'" data-idx="'+idx+'">'+_pyJobOptionsHtml(presetJob||'')+'</select>'
+    +'<button type="button" class="pySplitDel" data-kind="'+kind+'" data-idx="'+idx+'" title="Remove this split">✕</button>'
     +'</div>';
 }
-function _pySplitBoxHtml(idx){
-  return '<div class="pySplitBox" data-idx="'+idx+'">'+_pySplitRowHtml(idx)
-    +'</div><button type="button" class="tbtn pySplitAdd" data-idx="'+idx+'" style="padding:3px 8px;font-size:11.5px;margin-top:2px">+ Split to another job</button>'
-    +'<div class="pySplitTotal muted" data-idx="'+idx+'" style="font-size:10.5px;margin-top:2px"></div>';
+function _pySplitBoxHtml(kind, idx, presetHours, presetJob){
+  var refAttr = kind==='acc' ? (' data-ref="'+esc(String(presetHours||0))+'"') : '';
+  return '<div class="pySplitBox" data-kind="'+kind+'" data-idx="'+idx+'">'+_pySplitRowHtml(kind, idx, presetHours, presetJob)
+    +'</div><button type="button" class="tbtn pySplitAdd" data-kind="'+kind+'" data-idx="'+idx+'">+ Split to another job</button>'
+    +'<div class="pySplitTotal" data-kind="'+kind+'" data-idx="'+idx+'"'+refAttr+'></div>';
 }
-// Every split row for this punch-issue, in DOM order, whether filled in or not.
-function _pySplitInputs(idx){
-  var box=document.querySelector('.pySplitBox[data-idx="'+idx+'"]'); if(!box) return [];
+function _pySplitBox(kind, idx){ return document.querySelector('.pySplitBox[data-kind="'+kind+'"][data-idx="'+idx+'"]'); }
+// Every split row for this row, in DOM order, whether filled in or not.
+function _pySplitInputs(kind, idx){
+  var box=_pySplitBox(kind, idx); if(!box) return [];
   return Array.prototype.slice.call(box.querySelectorAll('.pySplitRow'));
 }
-function _pyUpdateSplitTotal(idx){
-  var el=document.querySelector('.pySplitTotal[data-idx="'+idx+'"]'); if(!el) return;
-  var raw=0;
-  _pySplitInputs(idx).forEach(function(row){
-    var h=parseFloat(row.querySelector('.pyPunchHours').value); if(h>0) raw+=h;
+function _pyUpdateSplitTotal(kind, idx){
+  var el=document.querySelector('.pySplitTotal[data-kind="'+kind+'"][data-idx="'+idx+'"]'); if(!el) return;
+  var sum=0;
+  _pySplitInputs(kind, idx).forEach(function(row){
+    var h=parseFloat(row.querySelector('.pyPunchHours').value); if(h>0) sum+=h;
   });
-  if(!(raw>0)){ el.textContent=''; return; }
-  var lunch=raw>8; var net=lunch?Math.round((raw-0.5)*100)/100:raw;
-  el.textContent = 'Total '+raw.toFixed(2)+'h'+(lunch?(' → '+net.toFixed(2)+'h after −.5 lunch'):'');
+  if(kind==='punch'){
+    if(!(sum>0)){ el.textContent=''; el.classList.remove('mismatch'); return; }
+    var lunch=sum>8, net=lunch?Math.round((sum-0.5)*100)/100:sum;
+    el.textContent = 'Total '+sum.toFixed(2)+'h'+(lunch?(' → '+net.toFixed(2)+'h after −.5 lunch'):'');
+    el.classList.remove('mismatch');
+  } else {
+    // 'acc' -- compare the splits' sum against the row's KNOWN Paylocity total. Purely informational,
+    // never blocks Import -- Rich may deliberately want the split to total something else.
+    var ref=parseFloat(el.getAttribute('data-ref'))||0;
+    if(!(sum>0)){ el.textContent=''; el.classList.remove('mismatch'); return; }
+    var close=Math.abs(sum-ref)<0.005;
+    el.textContent = close ? ('Total '+sum.toFixed(2)+'h ✓') : ('Total '+sum.toFixed(2)+'h — Paylocity says '+ref.toFixed(2)+'h');
+    el.classList.toggle('mismatch', !close);
+  }
 }
 var PY_PUNCH_INRANGE=[];
 function fmtShortDate(iso){ var p=String(iso||'').split('-'); return p.length===3?(+p[1])+'/'+(+p[2]):iso; }
@@ -744,7 +783,7 @@ function confirmPaylocityImport(){
   var manualEntries=[];
   PY_PUNCH_INRANGE.forEach(function(p,idx){
     var splits=[];
-    _pySplitInputs(idx).forEach(function(row){
+    _pySplitInputs('punch',idx).forEach(function(row){
       var hrs=parseFloat(row.querySelector('.pyPunchHours').value); if(!(hrs>0)) return;
       var job=row.querySelector('.pyPunchJob').value.trim(); if(!job) return;
       var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
@@ -772,9 +811,28 @@ function confirmPaylocityImport(){
       manualEntries.push({ who:p.who, dateISO:p.dateISO, job:s.job, jobNum:s.jobNum, hours:s.net, task:'', notes:'Incomplete punch, entered manually' });
     });
   });
-  if(!PY_PENDING.length && !checkedUpdates.length && !manualEntries.length) return;
+  // Accepted (matched) rows -- each can ALSO be split across several jobs (Rich, 2026-08-24: "I need
+  // to be able to do it everywhere", after asking for it on incomplete punches alone first). No new
+  // lunch math here: the row's total is already net-of-lunch (computed once from Paylocity's actual
+  // punch times in buildPaylocityPreview) -- splitting just divides that fixed number across jobs,
+  // defaulting to one split with the full amount on the already-matched job (identical result to the
+  // old single-job behavior when never split). A row blanked out entirely is skipped, same as before.
+  var acceptedEntries=[];
+  PY_PENDING.forEach(function(r,idx){
+    var splits=[];
+    _pySplitInputs('acc',idx).forEach(function(row){
+      var hrs=parseFloat(row.querySelector('.pyPunchHours').value); if(!(hrs>0)) return;
+      var job=row.querySelector('.pyPunchJob').value.trim(); if(!job) return;
+      var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
+      splits.push({ job:job, jobNum:jn, hours:Math.round(hrs*100)/100 });
+    });
+    splits.forEach(function(s){
+      acceptedEntries.push({ who:r.who, dateISO:r.dateISO, job:s.job, jobNum:s.jobNum, hours:s.hours, task:r.task, notes:r.notes });
+    });
+  });
+  if(!acceptedEntries.length && !checkedUpdates.length && !manualEntries.length) return;
   var btn=$('paylocityConfirmBtn'); btn.disabled=true; btn.textContent='Importing…';
-  var addQueue=PY_PENDING.concat(manualEntries), updQueue=checkedUpdates.slice(), done=0, total=addQueue.length+updQueue.length;
+  var addQueue=acceptedEntries.concat(manualEntries), updQueue=checkedUpdates.slice(), done=0, total=addQueue.length+updQueue.length;
   (function step(){
     if(addQueue.length){
       var r=addQueue.shift();
@@ -2119,47 +2177,42 @@ function boot(){
   $('paylocityCancelBtn').onclick=closePaylocityModal; $('paylocityClose').onclick=closePaylocityModal;
   $('paylocityConfirmBtn').onclick=confirmPaylocityImport;
   $('paylocityFrom').addEventListener('change',applyPaylocityFilter); $('paylocityTo').addEventListener('change',applyPaylocityFilter);
-  // Job picker on blank-job rows in the Paylocity preview (Rich, 2026-08-21: "it won't let me...
-  // select anything to assign the job... am I supposed to be able to pick this here?") -- yes, and
-  // now you can: picking a job here updates that row's own PY_PENDING entry directly, so it imports
-  // with the real job already assigned instead of needing a separate edit afterward. A real <select>,
-  // not a type-ahead text field -- the datalist version Rich tried (2026-08-21: "it doesn't let you
-  // type anything... doesn't let you change it") had a real cross-browser input/datalist quirk; a
-  // plain select is always re-openable and re-selectable, no typing involved at all.
-  $('paylocityRows').addEventListener('change',function(e){
-    var t=e.target; if(!t.classList || !t.classList.contains('pyJobPick')) return;
-    var idx=+t.getAttribute('data-idx'); var r=PY_PENDING[idx]; if(!r) return;
-    var v=t.value.trim(); r.job=v; var m=v.match(/^\s*(J?\d{3,6})\b/i); r.jobNum=m?m[1]:'';
-  });
-  // Editable note field on each row (Rich, 2026-08-21: "I want the ability to write the note...
-  // as I'm importing") -- updates live as he types, same PY_PENDING entry the job picker updates.
+  // Editable note field on each accepted row (Rich, 2026-08-21: "I want the ability to write the
+  // note... as I'm importing") -- updates live as he types, same PY_PENDING entry the split hours/job
+  // rows below feed at Import time.
   $('paylocityRows').addEventListener('input',function(e){
     var t=e.target; if(!t.classList || !t.classList.contains('pyNoteEdit')) return;
     var idx=+t.getAttribute('data-idx'); var r=PY_PENDING[idx]; if(!r) return;
     r.notes=t.value;
   });
-  // Incomplete-punch splits (Rich, 2026-08-21: "5 hrs to AWS, 3 to Oakland, 2 to Trumpf for a total
-  // of 10") -- one punch-issue can have several job rows; +Split adds another, ✕ removes one (never
-  // below the last row -- clears it instead so the punch stays visible until handled or ignored).
-  $('paylocityPunchRows').addEventListener('input',function(e){
+  // Split-to-multiple-jobs, shared by BOTH the accepted rows (kind='acc') and the incomplete-punch
+  // rows (kind='punch') -- Rich, 2026-08-24: "I need to be able to do it everywhere", after asking
+  // for splitting on incomplete punches alone first. +Split adds another job row, ✕ removes one
+  // (never below the last row -- clears it instead so the row stays visible until handled).
+  function _pySplitHandler(e){
     var t=e.target; if(!t.classList || !t.classList.contains('pyPunchHours')) return;
-    _pyUpdateSplitTotal(+t.getAttribute('data-idx'));
-  });
-  $('paylocityPunchRows').addEventListener('click',function(e){
+    _pyUpdateSplitTotal(t.getAttribute('data-kind'), +t.getAttribute('data-idx'));
+  }
+  function _pySplitClickHandler(e){
     var addBtn=e.target.closest && e.target.closest('.pySplitAdd');
     if(addBtn){
-      var idx=+addBtn.getAttribute('data-idx'); var box=document.querySelector('.pySplitBox[data-idx="'+idx+'"]');
-      if(box){ box.insertAdjacentHTML('beforeend', _pySplitRowHtml(idx)); }
+      var kind=addBtn.getAttribute('data-kind'), idx=+addBtn.getAttribute('data-idx');
+      var box=_pySplitBox(kind, idx);
+      if(box){ box.insertAdjacentHTML('beforeend', _pySplitRowHtml(kind, idx)); }
       return;
     }
     var delBtn=e.target.closest && e.target.closest('.pySplitDel');
     if(delBtn){
-      var idx2=+delBtn.getAttribute('data-idx'); var row=delBtn.closest('.pySplitRow');
-      var rows=_pySplitInputs(idx2);
+      var kind2=delBtn.getAttribute('data-kind'), idx2=+delBtn.getAttribute('data-idx');
+      var row=delBtn.closest('.pySplitRow'); var rows=_pySplitInputs(kind2, idx2);
       if(rows.length>1){ row.remove(); } else { row.querySelector('.pyPunchHours').value=''; row.querySelector('.pyPunchJob').value=''; }
-      _pyUpdateSplitTotal(idx2);
+      _pyUpdateSplitTotal(kind2, idx2);
     }
-  });
+  }
+  $('paylocityRows').addEventListener('input', _pySplitHandler);
+  $('paylocityRows').addEventListener('click', _pySplitClickHandler);
+  $('paylocityPunchRows').addEventListener('input', _pySplitHandler);
+  $('paylocityPunchRows').addEventListener('click', _pySplitClickHandler);
   $('paylocityModal').addEventListener('click',function(e){ if(e.target===$('paylocityModal')) closePaylocityModal(); });
   // manage list edit/delete delegation
   $('mgrCard').addEventListener('click',function(e){
