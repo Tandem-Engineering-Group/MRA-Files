@@ -1417,7 +1417,7 @@ function buildFinanceReport(){
   // don't show them at all unless hours are there") — every other week stays Mon–Fri.
   weekOrder.sort();
   var singleWeek=weekOrder.length<=1;   // drops the "Week of…" caption when there's only one
-  var weekBlocks=weekOrder.map(function(wk){
+  var weekBlocks=weekOrder.map(function(wk,wi){
     var wkStartD=new Date(wk+'T00:00:00'), wa=weekend[wk]||{};
     var dayIdx=[0,1,2,3,4]; if(wa[5]) dayIdx.push(5); if(wa[6]) dayIdx.push(6);
     var dayDates=dayIdx.map(function(i){ return ymd(new Date(wkStartD.getTime()+i*86400000)); });
@@ -1468,7 +1468,11 @@ function buildFinanceReport(){
       +'<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:'+MUT+';font-weight:600">Day total<span style="display:block;font-size:20px;letter-spacing:-.02em;color:'+INK+';margin-top:3px;font-variant-numeric:tabular-nums">'+f(wkGrand)+'</span></div>'
       +footCells+'</div>';
     var cap = singleWeek ? '' : '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:'+MUT+';margin:14px 0 4px">Week of '+esc(isoToMDY(wk))+'</div>';
-    return cap+head+empRows+foot;
+    // Rich, 2026-08-24: a multi-week print (Last 2 weeks etc.) let one week's employee grid start
+    // low on a page and split mid-list onto the next -- force every week AFTER the first to start on
+    // its own fresh page instead, so each week's grid always gets a full page to lay out in.
+    var pageBreak = (!singleWeek && wi>0) ? 'break-before:page;page-break-before:always' : '';
+    return '<div style="'+pageBreak+'">'+cap+head+empRows+foot+'</div>';
   }).join('');
   var noDateHtml = noDateOrder.length ? ('<h2 style="margin:14px 0 4px;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase">No date on entry</h2>'
     +'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="border-bottom:1px solid '+INK+'">'
