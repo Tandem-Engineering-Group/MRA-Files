@@ -85,6 +85,7 @@ input[type=color].on{box-shadow:0 0 0 2px var(--orange)}
       <button id="spinBtn">↻ Auto-spin</button>
       <button id="resetBtn">↺ Reset View</button>
       <button id="awningBtn" title="Toggle the whole van between open-for-business (awning deployed, side door open) and closed-for-transport">🏕 Van: Open</button>
+      <button id="debugBtn" title="Copy diagnostic info to report a rendering problem">🐛 Copy debug info</button>
     </div>
     <div id="hint">drag = orbit · wheel/pinch = zoom · right-drag = pan</div>
   </div>
@@ -2662,6 +2663,46 @@ function size(){ const el=document.getElementById('view3d');
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect=el.clientWidth/el.clientHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize',size); size();
 let spin=false; document.getElementById('spinBtn').onclick=e=>{ spin=!spin; e.target.classList.toggle('on',spin); };
+// Diagnostic dump (added 2026-08-26) -- Rich's actual device shows the awning toggle rendering
+// wrong (Van: Closed label, but the open canopy/hardware still visible) and every code-level test
+// run against this exact file reproduces CORRECTLY closed instead -- meaning whatever's wrong is
+// something about his specific device/browser this can't see from here. Rather than keep guessing,
+// this button dumps the ACTUAL live values (which scanParts keys are visible right now, the real
+// state object, and basic device/GPU info) so a real report can compare what his device's JS thinks
+// is true against what's actually drawn on his screen, instead of re-guessing blind.
+document.getElementById('debugBtn').onclick=()=>{
+  let gl=null, glInfo='n/a';
+  try{
+    gl=renderer.getContext();
+    const dbg=gl.getExtension('WEBGL_debug_renderer_info');
+    glInfo=dbg?(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)+' / '+gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)):'(no debug info ext)';
+  }catch(e){ glInfo='error: '+e.message; }
+  const awningKeys=['rearawning','sideawning','rearawningclosed','psawningclosed','rearawninghw',
+    'rearawningmounthw','sideawninghw','slidedoorpanel_open','slidedoorpanel_closed'];
+  const segKeys=['segdsfwd50','segdsfwd68','segdsrear50','segdsrear68','segdsrun50','segdsrun68','segframing','segpassenger','segfrontwall'];
+  const visOf=keys=>keys.map(k=>{ const o=scanParts[k]; return k+'='+(o?o.visible:'NOT LOADED'); }).join('\n  ');
+  const lines=[
+    '=== InfoWheel Builder debug dump ===',
+    'when: '+new Date().toISOString(),
+    'url: '+location.href,
+    'userAgent: '+navigator.userAgent,
+    'devicePixelRatio: '+devicePixelRatio,
+    'viewport: '+innerWidth+'x'+innerHeight,
+    'GPU: '+glInfo,
+    'scanLoaded: '+scanLoaded+'  scanLoading: '+scanLoading,
+    'hint text right now: '+document.getElementById('hint').textContent,
+    'awningBtn label: '+document.getElementById('awningBtn').textContent,
+    'state.awning: '+state.awning,
+    'awning parts:\n  '+visOf(awningKeys),
+    'seg parts:\n  '+visOf(segKeys),
+    'total scanParts loaded: '+Object.keys(scanParts).length+' / '+SCAN_PARTS.length+' expected',
+  ];
+  const text=lines.join('\n');
+  const done=()=>{ const b=document.getElementById('debugBtn'); const orig=b.textContent; b.textContent='✓ Copied — paste it to Claude'; setTimeout(()=>b.textContent=orig,2500); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(()=>prompt('Copy this text:',text));
+  } else { prompt('Copy this text:',text); }
+};
 window._cam=camera; window._ctl=controls; window._scanParts=scanParts; window._THREE=THREE; window._state=state; window._scene=scene; window._renderer=renderer;   // test hook
 (function loop(){ requestAnimationFrame(loop); if(spin) van.rotation.y+=.004; controls.update(); renderer.render(scene,camera); })();
 })();
