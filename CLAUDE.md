@@ -447,8 +447,36 @@ Rich is done being told to re-apply the same fix — check this section before s
 multiple times over its history (v2 → "Copy of - Copy of - MRA Lists to JSON v3" → now v4) — every
 mention of "v2"/"v3" below in this section is HISTORICAL, describing whichever copy was live at the
 time. Don't assume the name in an old note is still current — ask Rich or check Power Automate directly
-if it matters which exact flow you're pointing at. The 10-min parallel-branch watchdog (Delay→Terminate)
-was handed to Rich 2026-08-26 for him to add to the current v4 flow — not yet confirmed done.
+if it matters which exact flow you're pointing at.
+
+**✅ 10-MINUTE SELF-TERMINATE WATCHDOG BUILT + CONFIRMED LIVE 2026-08-26, on "MRA Lists to JSON v4".**
+Rich was (rightly) frustrated that every fix so far had only put timeouts on individual actions
+(`Create blob (V2)`/`Create file`, PT2M + retries — see the 2026-08-04/2026-08-06 entries below) and
+those had ALREADY been caught, on camera, not firing — a run sat hung 39+ minutes past its own PT2M
+setting with zero error. He'd been told a flow-level "kill it after N minutes no matter what" is a
+standard, easy thing to build and wanted to know why that hadn't been done. It's a real, standard
+pattern (a parallel watchdog branch off the trigger, ending in Terminate) — built same session:
+- A **parallel branch** off the **Recurrence** trigger (added via the "+" under Recurrence → "Add a
+  parallel branch", NOT "Add an action" — that's the option that creates a second column racing the
+  main chain instead of extending it) contains just two actions: **Delay** (Count=10, Unit=Minute) →
+  **Terminate** (Status=**Failed** — chosen over "Cancelled" specifically because Rich had already been
+  confused once by an unexplained "Canceled" run status; "Failed" reads unambiguously; Code="auto
+  cancel", Message="Auto-terminated: flow exceeded 10 minutes — likely hung step (recurring stall
+  issue)"). Confirmed via Rich's own screenshots: parallel branch correctly sits alongside the WHOLE
+  main chain (Mark run started → Get Jobs → ... → Create file), not partway down it, so it races the
+  entire run, not just one step — matters since the hang has rotated between different steps recurrence
+  to recurrence (Create blob one time, Create file another). Delay confirmed Count=10/Minute via
+  screenshot of its own Parameters tab.
+- **What this fixes vs. doesn't:** stops a stuck run from sitting for hours occupying the flow's
+  "Degree of Parallelism = 1" slot and blocking every later trigger behind it (the mechanism that turned
+  single hangs into multi-hour outages before, e.g. the 2026-08-06 21st-recurrence queue-jam). Does
+  **not** fix WHY a step hangs in the first place (still the open, unconfirmed stuck-blob-lease theory —
+  the ask to Rich's partner to check the `pipeline` container for a lease is still standing, untried).
+  A run should now self-clear within ~10 min and the next 2-min recurrence picks up clean; the GitHub
+  `pipeline-watchdog.yml` banner (fires past 20 min stale) should mostly stop firing once this is live.
+- Not yet proven over a real stretch of time (same caveat as every fix in this section) — if the board
+  goes stale again, check whether it self-recovered within ~10-15 min (watchdog working, root cause
+  still there) vs. sat stale for real (watchdog itself failed somehow) before re-diagnosing from scratch.
 
 **✅ WATCHDOG BUILT 2026-08-06 (`.github/workflows/pipeline-watchdog.yml`, on both branches — it uses
 `schedule:`, which only reads from the DEFAULT branch, same rule as `export.yml`).** Checks the live
