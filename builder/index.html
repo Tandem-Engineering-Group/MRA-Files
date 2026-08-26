@@ -2646,7 +2646,17 @@ document.getElementById('awningBtn').onclick=()=>{
 // the scan mesh once it loads.
 applyWrap();
 extG.visible=false; intG.visible=false;
-ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); applyDecal(); applyInterior(); applyCabinets(); applyAwning(); applyFloor(); });
+// Real bug found 2026-08-26 (Rich: SEG panels "supposed to cover the wall" showed nothing, and the
+// bare mounting frame stayed visible with every panel unchecked): applySegPanels() was missing from
+// this initial-load callback entirely -- only the checkbox onchange handler ever called it. Every SEG
+// position mesh defaults to visible=true the instant it's added to the scene (see the mesh-creation
+// code above -- .visible is never set at creation), so on a fresh page load, BEFORE the user ever
+// touches a checkbox, segdsfwd50 AND segdsfwd68 were both showing at once (same for segdsrear/segdsrun),
+// segdsrun50/68 showed despite defaulting unchecked, and segframing (the mounting ladder) was ALWAYS
+// on regardless of whether any panel was actually selected. The very first checkbox click would finally
+// call applySegPanels() and fix it -- reading as "nothing happens until I toggle it, and even then it's
+// not on the wall where it should be."
+ensureScanLoaded(()=>{ scanG.visible=true; frameScan(); applyDecal(); applyInterior(); applyCabinets(); applySegPanels(); applyAwning(); applyFloor(); });
 
 function size(){ const el=document.getElementById('view3d');
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect=el.clientWidth/el.clientHeight; camera.updateProjectionMatrix(); }
