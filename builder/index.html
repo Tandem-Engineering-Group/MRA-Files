@@ -2652,11 +2652,16 @@ function _addSlideDoorInfill(){
   const surfX=(psBox.min.x+psBox.max.x)/2;
   const w=frBox.max.z-frBox.min.z, h=frBox.max.y-frBox.min.y;
   const cy=(frBox.min.y+frBox.max.y)/2, cz=(frBox.min.z+frBox.max.z)/2;
-  const geo=new THREE.PlaneGeometry(w,h);
+  // BoxGeometry with real depth along X (the surface-normal direction here), not a zero-thickness
+  // PlaneGeometry -- a watertight raycast sweep of the rear panel (same shape of fix, done right
+  // after this one) found a paper-thin plane can produce unreliable hits for rays traveling close to
+  // parallel to its surface, a raycasting edge case more than a real visual gap, but a real panel
+  // should have actual thickness like everything else in this scene regardless.
+  const depth=.04;
+  const geo=new THREE.BoxGeometry(depth,h,w); // X=thin depth, Y=height, Z=width -- no rotation needed
   const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6,
     side:THREE.DoubleSide, emissive:new THREE.Color(state.wrap), emissiveIntensity:.18});
   const mesh=new THREE.Mesh(geo, mat);
-  mesh.rotation.y=Math.PI/2;
   // mesh.position is LOCAL to whatever it's added to, but surfX/cy/cz above were measured in WORLD
   // space (Box3().setFromObject() always returns world-space) -- scanG carries its own transform
   // (the tire-grounding offset applied just above), so the raw world values can't be assigned
@@ -2681,14 +2686,25 @@ function _addRearInfill(){
   const w=scanParts['walls'], sh=scanParts['shell'];
   if(!w||!sh) return;
   const wBox=new THREE.Box3().setFromObject(w), shBox=new THREE.Box3().setFromObject(sh);
-  const cx=(wBox.min.x+wBox.max.x)/2, cy=(wBox.min.y+wBox.max.y)/2;
-  const width=wBox.max.x-wBox.min.x, height=wBox.max.y-wBox.min.y;
+  // Real bug found running a full watertight raycast sweep (2026-08-26, after Rich asked "what's it
+  // going to take"): sizing this to 'walls' Y-range left the BOTTOM ~0.27 units of the rear opening
+  // completely uncovered -- rays aimed at that height passed clean through into interior furniture
+  // (benchpsrear/dscabrear), not a wall-height/wheel-well exception. 'walls' apparently doesn't reach
+  // all the way down to the floor; the shell's own bottom does. Bottom edge now follows the shell,
+  // not walls -- matches the real exterior opening instead of just the interior wall finish's extent.
+  const cx=(wBox.min.x+wBox.max.x)/2, cy=(shBox.min.y+wBox.max.y)/2;
+  const width=wBox.max.x-wBox.min.x, height=wBox.max.y-shBox.min.y;
   const surfZ=shBox.min.z; // shell's own rear-most point -- the real exterior surface
-  const geo=new THREE.PlaneGeometry(width,height); // default normal is +Z, no rotation needed for a rear-facing panel
+  // BoxGeometry with a small real depth, not a zero-thickness PlaneGeometry -- the same watertight
+  // sweep also flagged the whole rear-corner column as unhittable on a ray traveling parallel to a
+  // paper-thin plane (a raycasting edge case, not necessarily a real visual gap, but a real panel
+  // should have actual depth like every other part in this scene anyway).
+  const depth=.04;
+  const geo=new THREE.BoxGeometry(width,height,depth);
   const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6,
     side:THREE.DoubleSide, emissive:new THREE.Color(state.wrap), emissiveIntensity:.18});
   const mesh=new THREE.Mesh(geo, mat);
-  const local=scanG.worldToLocal(new THREE.Vector3(cx,cy,surfZ));
+  const local=scanG.worldToLocal(new THREE.Vector3(cx,cy,surfZ+depth/2));
   mesh.position.copy(local);
   mesh.castShadow=true; mesh.receiveShadow=true;
   scanG.add(mesh);
