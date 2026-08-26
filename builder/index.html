@@ -2042,15 +2042,29 @@ const SCAN_PARTS=[
   {key:'ipelements',   file:'CAB - IP Elements.obj',                   tint:false, color:0x24262a, rough:.5,  metal:.15},
   {key:'seats',        file:'CAB - Seats.obj',                        tint:false, color:0x2a2724, rough:.7,  metal:0},
   // -- INTERIOR --
-  {key:'framing',      file:'INTERIOR - Framing+Structure.obj',       tint:false, color:0x8a8f96, rough:.7,  metal:.05},
-  {key:'walls',        file:'INTERIOR - Walls+Space.obj',             tint:false, color:0xf1ede6, rough:.75, metal:0},
+  // FOUND + FIXED 2026-08-26, same day as the segframing-hide/rear-door fixes above -- Rich: "all the
+  // walls don't have those SEG framing things that you just took out. It's all part of the new CAD...
+  // I have literally told you this five times." He was right, and this was a real miss, not a
+  // misunderstanding: the same ~11 AM export that had the real closed rear door (see 'reardoorclosed'
+  // above) also had a genuinely CLEAN wall panel -- "InfoWheels_Exterior_Walls.obj" -- with no framing
+  // lattice modeled into it at all, because Brandon's current build design doesn't have one anymore.
+  // Rendered it standalone before trusting it (same discipline as the rear door): solid, flat, no
+  // grid, no bars, at any angle -- confirmed against the OLD 'framing'/'segframing' parts side by side
+  // in the same scene. The old 'framing' (raw structural studs) and 'segframing' (SEG-panel mounting
+  // ladder) parts were never actually WRONG about what they showed -- they really did carry a framing
+  // lattice -- they were just stale geometry from BEFORE this design change, and hiding them
+  // (documented right below / in applySegPanels()) was patching a symptom instead of using the current
+  // CAD. Both are removed outright now, not just hidden -- the new 'walls' file replaces what they used
+  // to (badly) cover for. A companion "Int_Framing.obj" file also exists in this export (real, but only
+  // small corner mounting brackets, nothing like the old full-wall lattice) -- left OUT deliberately to
+  // match Rich's own reference photos, which show a fully bare wall with no visible hardware at all.
+  {key:'walls',        file:'INTERIOR - Walls Clean.obj',             tint:false, color:0xf1ede6, rough:.75, metal:0},
   // Genuinely new (rev 7.5) -- real wheel-well/arch geometry from today's upload that was never wired
   // into SCAN_PARTS at all in the first pass (Rich caught this directly: "do you see these OBJ files").
   {key:'wheelwells',   file:'INTERIOR - Wheel Wells.obj',             tint:false, color:0xd9d5cc, rough:.8,  metal:0},
   // Genuinely new (rev 7.6) -- real floor slab geometry, also never wired in before. Plain color
   // by default; a real pattern texture applies once a Flooring option is picked (applyFloor()).
   {key:'floor',        file:'INTERIOR - Floor.obj',                   tint:false, color:0xe8e4da, rough:.85, metal:0},
-  {key:'segframing',   file:'INTERIOR - SEG Framing.obj',             tint:false, color:0x53565c, rough:.4,  metal:.6},
   {key:'ceillights',   file:'INTERIOR - Ceiling Lights.obj',          tint:false, color:0xfff8ec, rough:.5,  metal:0},
   {key:'tvframe',      file:'INTERIOR - TV Frame.obj',                tint:false, color:0x101114, rough:.4,  metal:.15},
   // -- FURNITURE --
@@ -2203,12 +2217,13 @@ function ensureScanLoaded(cb){
       // side:DoubleSide is defensive (harmless either way) -- the real cause of the old "checkerboard
       // hole" look was the source export never sharing vertices between adjacent faces (fixed by
       // welding coincident vertices per part, see builder/parts/*.obj), not backface culling.
-      // Interior parts (walls/framing/segframing) sit almost exactly coincident with the shell's
-      // door-cutout return flange -- confirmed with flat unlit debug-colored materials that the
-      // WRONG one (walls) was winning the depth test at that boundary, not the shell. polygonOffset
-      // didn't budge it in testing (likely a software-renderer quirk); a real geometric pull-in
-      // (scaled toward their own center) reliably lets the shell win instead.
-      if(['walls','framing','segframing'].indexOf(p.key)>=0){
+      // 'walls' sits almost exactly coincident with the shell's door-cutout return flange --
+      // confirmed with flat unlit debug-colored materials that the WRONG one (walls) was winning the
+      // depth test at that boundary, not the shell. polygonOffset didn't budge it in testing (likely a
+      // software-renderer quirk); a real geometric pull-in (scaled toward their own center) reliably
+      // lets the shell win instead. ('framing'/'segframing' used to need this same treatment -- both
+      // retired 2026-08-26, see the 'walls' SCAN_PARTS entry above.)
+      if(['walls'].indexOf(p.key)>=0){
         geo.computeBoundingBox();
         const c=new THREE.Vector3(); geo.boundingBox.getCenter(c);
         geo.translate(-c.x,-c.y,-c.z); geo.scale(.9,.9,.9); geo.translate(c.x,c.y,c.z);
@@ -2375,13 +2390,6 @@ function ensureScanLoaded(cb){
     scanG.position.y-=box.min.y;
     _addLowCabFrontStubs();
     _addSlideDoorInfill();
-    // Raw structural wall framing (studs/ladder, file "INTERIOR - Framing+Structure.obj") was never
-    // wired into any apply* toggle, so it defaulted to always-visible behind the finished 'walls'
-    // surface -- normally hidden by z-fighting/occlusion, but visible as loose grey bars through any
-    // open view (Rich: "the bars are still on the wall which is not on the new cad" -- his reference
-    // CAD/photos never show raw framing, only the finished wall). It's structural-only, never meant
-    // to be customer-facing in any state; hide it outright, same as the roof-rail precedent.
-    if(scanParts['framing']) scanParts['framing'].visible=false;
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
@@ -2569,15 +2577,9 @@ function applySegPanels(){
   const runH=state.cabinets.dsfwd;
   if(scanParts['segdsrun50']) scanParts['segdsrun50'].visible = runOn && runH==='high';
   if(scanParts['segdsrun68']) scanParts['segdsrun68'].visible = runOn && runH==='low';
-  // 'segframing' (the SEG-panel mounting structure/ladder) was previously tied to "is any SEG panel
-  // showing" (rev 7.x fix), but real reference photos Rich sent from Brandon of the actual build --
-  // walls verified clean, no visible mounting hardware, in every state -- confirmed even THAT was
-  // wrong: the SEG panel graphics don't fully cover this frame from every camera angle (looking in
-  // at an angle through the open door shows the grid past the panel's edge), so it was still visibly
-  // showing as "bars on the wall" regardless of the anySeg condition. A real finished installation
-  // has this bracket structure fully concealed inside the wall assembly, never exposed at any angle
-  // -- hide it outright, unconditionally, same as the plain structural 'framing' part above.
-  if(scanParts['segframing']) scanParts['segframing'].visible = false;
+  // 'segframing' (the old SEG-panel mounting ladder) is gone entirely now, not just hidden -- see the
+  // 'walls' SCAN_PARTS entry above for why: it was stale pre-redesign geometry, replaced by a genuinely
+  // clean wall file from the current CAD, not worked around.
 }
 // Old bench-vs-psrear-cabinet exclusion hack retired (rev 7.4) -- bench is now one of the 4 choices
 // in the SAME per-position <select> as the cabinets (see CAB_POS), so "both selected at once" is no
@@ -2782,7 +2784,7 @@ document.getElementById('debugBtn').onclick=()=>{
   }catch(e){ glInfo='error: '+e.message; }
   const awningKeys=['rearawning','sideawning','rearawningclosed','psawningclosed','rearawninghw',
     'rearawningmounthw','sideawninghw','slidedoorpanel_open','slidedoorpanel_closed'];
-  const segKeys=['segdsfwd50','segdsfwd68','segdsrear50','segdsrear68','segdsrun50','segdsrun68','segframing','segpassenger','segfrontwall'];
+  const segKeys=['segdsfwd50','segdsfwd68','segdsrear50','segdsrear68','segdsrun50','segdsrun68','segpassenger','segfrontwall'];
   const visOf=keys=>keys.map(k=>{ const o=scanParts[k]; return k+'='+(o?o.visible:'NOT LOADED'); }).join('\n  ');
   const lines=[
     '=== InfoWheel Builder debug dump ===',
