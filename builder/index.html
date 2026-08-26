@@ -2704,6 +2704,25 @@ document.getElementById('debugBtn').onclick=()=>{
   } else { prompt('Copy this text:',text); }
 };
 window._cam=camera; window._ctl=controls; window._scanParts=scanParts; window._THREE=THREE; window._state=state; window._scene=scene; window._renderer=renderer;   // test hook
+// Real bug found 2026-08-26 -- a debug dump pulled directly off Rich's own iPhone (Chrome/CriOS, which
+// is Safari's WebKit engine under the hood -- iOS mandates that for every browser) proved every single
+// piece of JS state was already correct (state.awning:'closed', every awning/SEG part's .visible exactly
+// right, all 73 parts loaded) while the actual screen still showed the OLD open-awning frame. That's not
+// a logic bug -- the JS scene graph was right and the canvas just never got told to repaint. Two known,
+// standard causes for that specific "state right, pixels stale" gap on mobile WebKit, both fixed here:
+// (1) WITHOUT `event.preventDefault()` on 'webglcontextlost', a browser that silently drops/restores the
+// GPU context under memory pressure (73 separate MeshPhysicalMaterial meshes -- clearcoat, transmission,
+// emissive -- is a lot of GPU memory for a phone) can never actually recover the context, so every
+// subsequent render() call draws nothing new -- the canvas is stuck on its last real frame forever, no
+// matter how correct .visible flags are afterward. (2) iOS can also pause requestAnimationFrame under
+// its own power/visibility heuristics without the page ever knowing -- 'visibilitychange'/'pageshow'
+// give it an explicit kick back to life. Neither of these can be reproduced in a headless desktop test
+// (there's no real GPU memory pressure and no OS-level throttling to hit), which is exactly why every
+// prior automated repro of this came back "correct" -- it wasn't wrong code, it was an environment this
+// testing approach structurally can't see.
+renderer.domElement.addEventListener('webglcontextlost', e=>{ e.preventDefault(); console.warn('WebGL context lost -- will re-render on restore'); }, false);
+renderer.domElement.addEventListener('webglcontextrestored', ()=>{ console.warn('WebGL context restored -- forcing a fresh render'); renderer.render(scene,camera); }, false);
+['visibilitychange','pageshow','focus'].forEach(ev=>addEventListener(ev, ()=>{ if(!document.hidden) renderer.render(scene,camera); }, false));
 (function loop(){ requestAnimationFrame(loop); if(spin) van.rotation.y+=.004; controls.update(); renderer.render(scene,camera); })();
 })();
 </script>
