@@ -2696,12 +2696,19 @@ document.getElementById('debugBtn').onclick=()=>{
     'awning parts:\n  '+visOf(awningKeys),
     'seg parts:\n  '+visOf(segKeys),
     'total scanParts loaded: '+Object.keys(scanParts).length+' / '+SCAN_PARTS.length+' expected',
+    // Real check added 2026-08-26 -- scanParts[key] only ever holds the LATEST mesh loaded under
+    // that key. If ensureScanLoaded() somehow ran more than once (e.g. a stray re-init), an EARLIER,
+    // now-orphaned duplicate set of meshes could still be sitting in the actual scene graph (scanG),
+    // permanently visible, invisible to every check above since those only ever look at the latest
+    // reference. This count catches that directly: if it's not 1:1, there are ghost meshes rendering
+    // that no toggle can ever reach.
+    'scene graph mesh count (scanG.children): '+scanG.children.length+'  (should equal scanParts count above)',
   ];
   const text=lines.join('\n');
-  const done=()=>{ const b=document.getElementById('debugBtn'); const orig=b.textContent; b.textContent='✓ Copied — paste it to Claude'; setTimeout(()=>b.textContent=orig,2500); };
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(done).catch(()=>prompt('Copy this text:',text));
-  } else { prompt('Copy this text:',text); }
+  // Always show it on-screen (screenshottable, works every time) instead of relying only on
+  // clipboard -- the copy-to-clipboard path silently didn't make it through twice in a row.
+  try{ navigator.clipboard&&navigator.clipboard.writeText(text); }catch(e){}
+  prompt('Debug info (also tried to copy it) -- screenshot this box, then paste/send it:', text);
 };
 window._cam=camera; window._ctl=controls; window._scanParts=scanParts; window._THREE=THREE; window._state=state; window._scene=scene; window._renderer=renderer;   // test hook
 // Real bug found 2026-08-26 -- a debug dump pulled directly off Rich's own iPhone (Chrome/CriOS, which
