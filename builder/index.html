@@ -1892,7 +1892,6 @@ function applyWrap(){ M.wrap.color.set(state.wrap);
   // why), so the loop above skips it; re-tint it here explicitly or it'd stay stuck at whatever color
   // was active on page load while the rest of the body follows wrap color changes.
   if(scanParts['slidedoorinfill']){ const m=scanParts['slidedoorinfill'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
-  if(scanParts['rearinfill']){ const m=scanParts['rearinfill'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -1992,12 +1991,31 @@ const SCAN_PARTS=[
   // ~25k each, 114-116MB -> ~2.3MB each). NOT added to the special UV/decal-mapping branch below that
   // 'rearawning'/'sideawning' get — a rolled-up canopy has no visible flat face for a graphic to
   // read on, so these just take a plain wrap-tinted finish like the fabric itself.
-  // ⚠ Known limit, not fixed by this: this export still has no closed-pose geometry for the REAR
-  // CARGO DOORS themselves (only the awning canopy) — that's the actual reason the old Open/Closed
-  // toggle got pulled in rev 6.4 ("the rear cargo doors... still showed straight through into the
-  // cargo hold"). This fixes the canopy-fold half of that problem with real geometry instead of a
-  // procedural fold; the open-door sightline issue needs Brandon to export the doors closed too.
+  // This canopy fix is real geometry, not a procedural fold, but 'rearawningclosed' itself sits in a
+  // genuinely broken exported position (floating ~2 units outside the van — see the hide in
+  // applyAwning() below) and was never a real cargo-door panel to begin with.
   {key:'rearawningclosed', file:'EXTERIOR - Rear Awning Closed.obj',      tint:true, color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
+  // FOUND 2026-08-26 (Rich, after this whole thread's synthetic-patch back-and-forth): "I already gave
+  // you the OBJ file... why would I have to upload it again" — he was right. A genuinely fresh, more
+  // complete export from Brandon had been sitting in the private staging blob since ~11 AM that same
+  // day (uploaded via the same upload3d.html mechanism, just never pulled into this file), including
+  // "InfoWheels_Exterior_Rear_Awning_Closed.obj" — a REAL, correctly-positioned closed rear cargo door
+  // panel (950,840 triangles raw), not another floating placeholder. Confirmed by rendering the raw
+  // file standalone before trusting it: full width, reaches the roofline, real door-seam/handle-mount
+  // detail, and a real bottom molding/trim strip — exactly what was missing, correctly shaped and
+  // positioned this time (world bbox sits flush at the shell's own rear opening, unlike rearawningclosed/
+  // rearhw above). Decimated for the web the same way every other large export here has been (open3d
+  // quadric decimation) — first two attempts (28k, then 60k target) came out with a hole punched clean
+  // through the main door face; root cause was open3d's OBJ reader silently DROPPING every quad face
+  // ("Skipping non-triangle primitive geometry of type: 8") before decimation ever ran — 212,444 of this
+  // file's faces are quads, not triangles. Fan-triangulated every quad in a raw text pass first (same
+  // logic parseObj() already uses for n-gons), confirmed the triangle count then matched exactly
+  // (950,840), THEN decimated the fully-triangulated mesh to 40,000 triangles — solid face, no hole,
+  // verified against the full-resolution render before shipping. This retires the synthetic
+  // _addRearInfill() flat-panel patch built earlier the same day — that was a reasonable stand-in when
+  // no real geometry was known to exist, but a real door panel is the actual fix, not a second one
+  // stacked alongside it.
+  {key:'reardoorclosed', file:'EXTERIOR - Rear Cargo Door Closed.obj',    tint:true, color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
   {key:'psawningclosed',   file:'EXTERIOR - Passenger Side Awning Closed.obj', tint:true, color:0xe04826, rough:.32, metal:.15, clearcoat:.6},
   {key:'solarpanels',  file:'EXTERIOR - Roof Solar Panels.obj',       tint:false, color:0x11151c, rough:.25, metal:.3},
   {key:'extstep',      file:'EXTERIOR - Step.obj',                    tint:false, color:0x2b2e33, rough:.5,  metal:.4},
@@ -2357,7 +2375,6 @@ function ensureScanLoaded(cb){
     scanG.position.y-=box.min.y;
     _addLowCabFrontStubs();
     _addSlideDoorInfill();
-    _addRearInfill();
     // Raw structural wall framing (studs/ladder, file "INTERIOR - Framing+Structure.obj") was never
     // wired into any apply* toggle, so it defaulted to always-visible behind the finished 'walls'
     // surface -- normally hidden by z-fighting/occlusion, but visible as loose grey bars through any
@@ -2673,48 +2690,6 @@ function _addSlideDoorInfill(){
   scanG.add(mesh);
   scanParts['slidedoorinfill']=mesh;
 }
-// Same missing-exterior-panel bug as the side door, found on the rear the same day (Rich: "back
-// door not there" -- hiding the floating, mispositioned 'rearawningclosed'/'rearhw' correctly killed
-// the visual artifact those caused, but neither one was ever a real rear cover to begin with, so
-// closed state was left with a genuine hole where the rear opening is). No separate "rear door" part
-// exists anywhere in the export (checked every rear/door-named SCAN_PARTS key) -- the rear awning
-// system is the only rear closure that was ever exported, and it doesn't reach the actual opening.
-// Sized the same way as the side infill: from real geometry, not guessed. 'walls' stops ~0.38 units
-// short of the shell's own rear-most point (walls rear Z=-2.242 vs shell's actual rear Z=-2.622) --
-// that gap IS the uncovered opening, and walls' own width/height define what it needs to span.
-function _addRearInfill(){
-  const w=scanParts['walls'], sh=scanParts['shell'];
-  if(!w||!sh) return;
-  const wBox=new THREE.Box3().setFromObject(w), shBox=new THREE.Box3().setFromObject(sh);
-  // Real bug found running a full watertight raycast sweep (2026-08-26, after Rich asked "what's it
-  // going to take"): sizing this to 'walls' Y-range left the BOTTOM ~0.27 units of the rear opening
-  // completely uncovered -- rays aimed at that height passed clean through into interior furniture
-  // (benchpsrear/dscabrear), not a wall-height/wheel-well exception. 'walls' apparently doesn't reach
-  // all the way down to the floor; the shell's own bottom does. Bottom edge now follows the shell,
-  // not walls -- matches the real exterior opening instead of just the interior wall finish's extent.
-  // SAME BUG, missed on the TOP edge (found 2026-08-26 from Rich's own screenshot circling a real gap
-  // right under the roofline): this still used 'walls' max Y (2.689) for the top too, and 'walls'
-  // doesn't reach the roof either -- the shell's actual roof height is 2.908, a 0.22-unit hole. Top
-  // edge now follows the shell's own max Y, same reasoning as the bottom fix, applied to both edges
-  // instead of just one.
-  const cx=(wBox.min.x+wBox.max.x)/2, cy=(shBox.min.y+shBox.max.y)/2;
-  const width=wBox.max.x-wBox.min.x, height=shBox.max.y-shBox.min.y;
-  const surfZ=shBox.min.z; // shell's own rear-most point -- the real exterior surface
-  // BoxGeometry with a small real depth, not a zero-thickness PlaneGeometry -- the same watertight
-  // sweep also flagged the whole rear-corner column as unhittable on a ray traveling parallel to a
-  // paper-thin plane (a raycasting edge case, not necessarily a real visual gap, but a real panel
-  // should have actual depth like every other part in this scene anyway).
-  const depth=.04;
-  const geo=new THREE.BoxGeometry(width,height,depth);
-  const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6,
-    side:THREE.DoubleSide, emissive:new THREE.Color(state.wrap), emissiveIntensity:.18});
-  const mesh=new THREE.Mesh(geo, mat);
-  const local=scanG.worldToLocal(new THREE.Vector3(cx,cy,surfZ+depth/2));
-  mesh.position.copy(local);
-  mesh.castShadow=true; mesh.receiveShadow=true;
-  scanG.add(mesh);
-  scanParts['rearinfill']=mesh;
-}
 document.querySelectorAll('[data-cabpos]').forEach(sel=>{
   const pos=sel.dataset.cabpos;
   sel.value=state.cabinets[pos]||'high';   // reflect any state loaded from a shared link
@@ -2727,8 +2702,9 @@ document.querySelectorAll('[data-cabpos]').forEach(sel=>{
 });
 
 // Awning open/closed (rev 6.9) -- real closed-position geometry this time, not a procedural fold.
-// See the SCAN_PARTS entries above for the honest caveat: this covers the canopy only, not the rear
-// cargo doors (no closed-pose door geometry exists in this export).
+// 2026-08-26: the rear CARGO DOOR closed pose is now real geometry too ('reardoorclosed' -- see the
+// SCAN_PARTS entry above), not just the canopy -- the old "no closed-pose door geometry exists in this
+// export" caveat no longer applies.
 function applyAwning(){
   const open=state.awning!=='closed';
   if(scanParts['rearawning']) scanParts['rearawning'].visible=open;
@@ -2755,11 +2731,12 @@ function applyAwning(){
   ['rearawninghw','rearawningmounthw','sideawninghw'].forEach(k=>{ if(scanParts[k]) scanParts[k].visible=open; });
   if(scanParts['slidedoorpanel_open']) scanParts['slidedoorpanel_open'].visible=open;
   if(scanParts['slidedoorpanel_closed']) scanParts['slidedoorpanel_closed'].visible=!open;
-  // the synthetic infill panels covering the real gaps in the export (see _addSlideDoorInfill /
-  // _addRearInfill) -- same closed-only visibility as the other closed-state cover parts they sit
-  // alongside.
+  // the synthetic side-door infill panel covering a real gap in the export (see _addSlideDoorInfill)
+  // -- same closed-only visibility as the other closed-state cover parts it sits alongside. No rear
+  // equivalent needed anymore -- 'reardoorclosed' (real geometry, added above) replaced the synthetic
+  // _addRearInfill() patch outright rather than sitting alongside it.
   if(scanParts['slidedoorinfill']) scanParts['slidedoorinfill'].visible=!open;
-  if(scanParts['rearinfill']) scanParts['rearinfill'].visible=!open;
+  if(scanParts['reardoorclosed']) scanParts['reardoorclosed'].visible=!open;
   const btn=document.getElementById('awningBtn');
   if(btn) btn.textContent=open?'🏕 Van: Open':'🏕 Van: Closed';
 }
