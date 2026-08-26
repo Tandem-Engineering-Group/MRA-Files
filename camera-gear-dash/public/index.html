@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stop·Down — Live Gear Desk</title>
+<style>
+  :root{
+    --ground:#15181c; --panel:#1b2026; --panel-2:#222a31;
+    --line:#2d353d; --line-soft:#252d34;
+    --ink:#ece9e3; --ink-dim:#97a0a8; --ink-faint:#69727a;
+    --gold:#f2b441; --gold-soft:rgba(242,180,65,.13); --gold-line:rgba(242,180,65,.4);
+    --good:#3fb9a6; --good-soft:rgba(63,185,166,.15); --high:#e8705a; --high-soft:rgba(232,112,90,.15);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:"Helvetica Neue",Helvetica,"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:radial-gradient(1100px 500px at 85% -12%,rgba(242,180,65,.05),transparent 60%),var(--ground);
+    color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px}
+  a{color:inherit}
+
+  header.top{border-bottom:1px solid var(--line);background:rgba(21,24,28,.85);backdrop-filter:blur(8px);position:sticky;top:0;z-index:50}
+  .top-row{display:flex;align-items:center;gap:16px;padding:14px 0;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+  .iris{width:34px;height:34px;filter:drop-shadow(0 0 6px rgba(242,180,65,.25))}
+  .wordmark b{font-family:var(--mono);font-weight:700;font-size:18px;letter-spacing:.22em;display:block}
+  .wordmark span{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
+  .conn{font-family:var(--mono);font-size:10px;letter-spacing:.08em;padding:5px 10px;border-radius:20px;border:1px solid var(--line);color:var(--ink-dim)}
+  .conn.ok{color:var(--good);border-color:rgba(63,185,166,.4)} .conn.bad{color:var(--high);border-color:rgba(232,112,90,.4)}
+  nav.tabs{display:flex;gap:4px;margin-top:2px}
+  .tab{appearance:none;border:0;background:none;cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);padding:11px 15px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab:hover{color:var(--ink)} .tab.on{color:var(--gold);border-bottom-color:var(--gold)}
+  .tab .ct{color:var(--ink-faint);margin-left:6px} .tab.on .ct{color:var(--gold)}
+
+  main{padding:24px 0 80px}
+  .view{display:none} .view.on{display:block;animation:f .2s ease}
+  @keyframes f{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:11px}
+  .pad{padding:18px}
+  .stack{display:flex;flex-direction:column;gap:16px}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin:0 0 4px}
+  h2.sec{font-size:19px;margin:0 0 2px} .sub{color:var(--ink-dim);font-size:13px;margin:0}
+
+  button.btn,a.btn{appearance:none;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);padding:8px 13px;border-radius:8px}
+  button.btn:hover,a.btn:hover{border-color:var(--ink-faint)}
+  .btn.gold{background:var(--gold);color:#1a1205;border-color:var(--gold);font-weight:600}
+  .btn.gold:hover{background:#f6c25f} .btn.ghost{background:none} .btn.sm{padding:5px 9px;font-size:11px}
+  .btn.danger:hover{border-color:var(--high);color:var(--high)}
+  input,select{font-family:var(--sans);font-size:14px;color:var(--ink);background:var(--ground);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%}
+  input:focus,select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+  input.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  label.fld{display:flex;flex-direction:column;gap:6px}
+  label.fld .lab{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .grow{flex:1;min-width:220px}
+  .chk{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);cursor:pointer}
+  .chk input{width:auto}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+  .banner{background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:10px;padding:12px 15px;font-size:13px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .banner input{max-width:220px}
+
+  .meta-line{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin:2px 0 0}
+  .results{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;overflow:hidden;display:flex;flex-direction:column}
+  .card .ph{aspect-ratio:4/3;background:var(--panel-2);overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .card .ph img{width:100%;height:100%;object-fit:cover}
+  .card .ph .noimg{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+  .card .body{padding:12px;display:flex;flex-direction:column;gap:8px;flex:1}
+  .card .ttl{font-size:13px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card .prow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:auto}
+  .card .price{font-family:var(--mono);font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+  .deal{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:5px}
+  .deal.good{color:var(--good);background:var(--good-soft)} .deal.mid{color:var(--ink-dim);background:var(--ground)} .deal.high{color:var(--high);background:var(--high-soft)}
+  .card .tags{display:flex;gap:5px;flex-wrap:wrap}
+  .tag{font-family:var(--mono);font-size:9px;letter-spacing:.03em;padding:2px 6px;border-radius:5px;background:var(--ground);border:1px solid var(--line-soft);color:var(--ink-dim)}
+  .card a.open{margin-top:2px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none;border:1px solid var(--gold-line);border-radius:7px;padding:7px}
+  .card a.open:hover{background:var(--gold-soft)}
+
+  .saved-row,.alert-row{display:flex;gap:12px;align-items:center;padding:11px 13px;background:var(--ground);border:1px solid var(--line-soft);border-radius:9px;flex-wrap:wrap}
+  .saved-row .q,.alert-row .q{font-family:var(--mono);font-size:13px;flex:1;min-width:150px}
+  .saved-row .flt{font-family:var(--mono);font-size:10px;color:var(--ink-faint)}
+  .pill{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--line-soft);color:var(--ink-dim);background:var(--panel-2)}
+  .pill.new{color:var(--good);border-color:rgba(63,185,166,.35);background:var(--good-soft)}
+  .pill.drop{color:var(--gold);border-color:var(--gold-line);background:var(--gold-soft)}
+  .empty{text-align:center;padding:36px 20px;color:var(--ink-faint);font-family:var(--mono);font-size:13px;line-height:1.7}
+  .empty b{color:var(--ink-dim);display:block;margin-bottom:4px}
+  .spin{font-family:var(--mono);font-size:12px;color:var(--ink-dim)}
+  .hint{font-family:var(--mono);font-size:11px;color:var(--ink-faint);line-height:1.6}
+  .hidden{display:none!important}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="top-row">
+      <div class="brand">
+        <svg class="iris" id="iris" viewBox="0 0 100 100" aria-hidden="true"></svg>
+        <div class="wordmark"><b>STOP·DOWN</b><span>Live gear desk</span></div>
+      </div>
+      <span class="conn" id="conn">checking…</span>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab on" data-v="search">Search</button>
+      <button class="tab" data-v="saved">Saved<span class="ct" id="savedCt"></span></button>
+      <button class="tab" data-v="alerts">Alerts<span class="ct" id="alertCt"></span></button>
+      <button class="tab" data-v="settings">Settings</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="banner hidden" id="tokenBanner" style="margin-bottom:18px">
+    <span>🔑 Enter your access word to connect to your backend (the <b>APP_TOKEN</b> you set on the Worker).</span>
+    <input id="tokenInput" placeholder="access word" type="password">
+    <button class="btn gold sm" id="tokenSave">Connect</button>
+  </div>
+
+  <!-- SEARCH -->
+  <section class="view on" id="v-search"><div class="stack">
+    <div class="panel pad">
+      <p class="eyebrow">Live search</p>
+      <h2 class="sec">Real listings, pulled in</h2>
+      <p class="sub">Type your gear — results come straight from eBay (worldwide) and Craigslist into the page below.</p>
+      <div class="row" style="margin-top:14px">
+        <label class="fld grow"><span class="lab">Search</span>
+          <input id="q" placeholder="e.g. Pentax 645D, Mamiya 7 II, Cambo Rodenstock"></label>
+        <label class="fld" style="max-width:120px"><span class="lab">Max $</span>
+          <input id="max" class="mono" type="number" min="0" placeholder="any"></label>
+        <label class="fld grow"><span class="lab">Exclude words</span>
+          <input id="exclude" placeholder="parts broken read as-is"></label>
+        <label class="fld" style="max-width:150px"><span class="lab">Sort</span>
+          <select id="sort" class="mono"><option value="deal">Best deals</option><option value="price">Price ↑</option><option value="newest">Newest</option></select></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label class="chk"><input type="checkbox" id="src-ebay" checked> eBay</label>
+        <label class="chk"><input type="checkbox" id="src-cl" checked> Craigslist (Detroit 100mi)</label>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn" id="saveSearch">★ Save this search</button>
+          <button class="btn gold" id="go">Search</button>
+        </div>
+      </div>
+    </div>
+    <div id="searchMeta" class="meta-line"></div>
+    <div id="searchOut"></div>
+  </div></section>
+
+  <!-- SAVED -->
+  <section class="view" id="v-saved"><div class="stack">
+    <div class="panel pad">
+      <p class="eyebrow">Saved searches</p>
+      <h2 class="sec">Watched daily at ~7am</h2>
+      <p class="sub">Each of these runs automatically every morning. New finds and price drops land in Alerts (and your email).</p>
+    </div>
+    <div id="savedOut"></div>
+  </div></section>
+
+  <!-- ALERTS -->
+  <section class="view" id="v-alerts"><div class="stack">
+    <div class="panel pad">
+      <div class="row" style="align-items:center">
+        <div style="flex:1">
+          <p class="eyebrow">New finds</p>
+          <h2 class="sec">What the morning run turned up</h2>
+          <p class="sub" id="lastRun">—</p>
+        </div>
+        <button class="btn ghost sm danger" id="clearAlerts">Clear</button>
+      </div>
+    </div>
+    <div id="alertsOut"></div>
+  </div></section>
+
+  <!-- SETTINGS -->
+  <section class="view" id="v-settings"><div class="stack">
+    <div class="panel pad">
+      <p class="eyebrow">Alerts</p>
+      <h2 class="sec">Where to send new finds</h2>
+      <div class="row" style="margin-top:14px">
+        <label class="fld grow"><span class="lab">Alert email</span>
+          <input id="set-email" type="email" placeholder="you@example.com"></label>
+        <label class="chk" style="align-self:flex-end;padding-bottom:9px"><input type="checkbox" id="set-emailon"> Email me new finds</label>
+        <button class="btn gold" id="saveSettings" style="align-self:flex-end">Save</button>
+      </div>
+      <p class="hint" style="margin-top:12px">The daily run fires at <b>11:00 UTC</b> (~7am US Eastern in summer). Email needs a Resend key set on the Worker — see the README. Without it, new finds still show in the Alerts tab.</p>
+    </div>
+    <div class="panel pad">
+      <p class="eyebrow">Connection</p>
+      <div class="row" style="margin-top:10px">
+        <label class="fld grow"><span class="lab">Access word (APP_TOKEN)</span>
+          <input id="set-token" type="password" placeholder="the word you set on the Worker"></label>
+        <button class="btn" id="saveToken2" style="align-self:flex-end">Update</button>
+      </div>
+      <p class="hint" style="margin-top:10px">Stored only in this browser. It must match the <b>APP_TOKEN</b> secret on your Cloudflare Worker.</p>
+    </div>
+  </div></section>
+
+</main>
+
+<script>
+"use strict";
+(function(){
+  // aperture mark
+  var svg=document.getElementById('iris'),NS='http://www.w3.org/2000/svg';
+  (function(){var r=document.createElementNS(NS,'circle');r.setAttribute('cx',50);r.setAttribute('cy',50);r.setAttribute('r',43);r.setAttribute('fill','none');r.setAttribute('stroke','#f2b441');r.setAttribute('stroke-width',3);r.setAttribute('opacity',.9);svg.appendChild(r);
+    for(var i=0;i<6;i++){var a1=(i/6)*Math.PI*2-Math.PI/2,a2=((i+1)/6)*Math.PI*2-Math.PI/2,l=document.createElementNS(NS,'line');l.setAttribute('x1',50+19*Math.cos(a1));l.setAttribute('y1',50+19*Math.sin(a1));l.setAttribute('x2',50+43*Math.cos(a2));l.setAttribute('y2',50+43*Math.sin(a2));l.setAttribute('stroke','#f2b441');l.setAttribute('stroke-width',2.4);l.setAttribute('stroke-linecap','round');l.setAttribute('opacity',(0.45+0.55*(i%2)).toFixed(2));svg.appendChild(l);} })();
+
+  var $=function(id){return document.getElementById(id);};
+  var token=localStorage.getItem('cgd_token')||'';
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function money(n){return n==null?'—':'$'+Number(n).toLocaleString('en-US',{maximumFractionDigits:0});}
+  function withTok(u){return u+(u.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(token);}
+
+  function api(path,opts){
+    opts=opts||{};
+    return fetch(withTok(path),opts).then(function(r){
+      if(r.status===401){setConn(false,'bad word');throw new Error('unauthorized');}
+      if(!r.ok)throw new Error('http '+r.status);
+      setConn(true); return r.json();
+    });
+  }
+  function setConn(ok,msg){var c=$('conn');c.className='conn '+(ok?'ok':'bad');c.textContent=ok?'connected':(msg||'not connected');}
+
+  // tabs
+  $('tabs').addEventListener('click',function(e){var t=e.target.closest('.tab');if(!t)return;
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('on',x===t);});
+    document.querySelectorAll('.view').forEach(function(v){v.classList.toggle('on',v.id==='v-'+t.dataset.v);});
+    if(t.dataset.v==='saved')loadSaved(); if(t.dataset.v==='alerts')loadAlerts();
+  });
+
+  // token
+  function needToken(){$('tokenBanner').classList.toggle('hidden',!!token);}
+  $('tokenSave').onclick=function(){token=$('tokenInput').value.trim();localStorage.setItem('cgd_token',token);needToken();ping();};
+  $('saveToken2').onclick=function(){token=$('set-token').value.trim();localStorage.setItem('cgd_token',token);needToken();ping();alert('Saved.');};
+
+  function ping(){api('/api/ping').then(function(){}).catch(function(){});}
+
+  // SEARCH
+  function dealClass(p){return p>=12?'good':(p<=-8?'high':'mid');}
+  function card(it){
+    var d=document.createElement('div');d.className='card';
+    var deal='';
+    if(typeof it.belowPct==='number' && it.median){var p=it.belowPct;deal='<span class="deal '+dealClass(p)+'">'+(p>=0?p+'% below med':Math.abs(p)+'% above')+'</span>';}
+    d.innerHTML=(it.image?'<div class="ph"><img loading="lazy" src="'+esc(it.image)+'" alt=""></div>':'<div class="ph"><span class="noimg">no photo</span></div>')+
+      '<div class="body"><div class="ttl">'+esc(it.title)+'</div>'+
+      '<div class="tags"><span class="tag">'+esc(it.source)+'</span>'+(it.condition?'<span class="tag">'+esc(it.condition)+'</span>':'')+'</div>'+
+      '<div class="prow"><span class="price">'+money(it.price)+'</span>'+deal+'</div>'+
+      '<a class="open" href="'+esc(it.url)+'" target="_blank" rel="noopener">View listing ↗</a></div>';
+    return d;
+  }
+  function collectSearch(){
+    return {q:$('q').value.trim(),max:$('max').value.trim(),exclude:$('exclude').value.trim(),sort:$('sort').value,
+      ebay:$('src-ebay').checked,cl:$('src-cl').checked};
+  }
+  function doSearch(){
+    var s=collectSearch(); if(!s.q)return;
+    var srcs=[]; if(s.ebay)srcs.push('ebay'); if(s.cl)srcs.push('craigslist');
+    $('searchMeta').textContent=''; $('searchOut').innerHTML='<div class="panel pad spin">Searching '+srcs.join(' + ')+'…</div>';
+    var u='/api/search?q='+encodeURIComponent(s.q)+'&sources='+srcs.join(',')+'&sort='+s.sort+(s.max?'&max='+encodeURIComponent(s.max):'')+(s.exclude?'&exclude='+encodeURIComponent(s.exclude):'');
+    api(u).then(function(r){
+      var items=r.items||[];
+      $('searchMeta').textContent=items.length+' results · median '+money(r.median)+(r.notes?' · '+r.notes:'');
+      if(!items.length){$('searchOut').innerHTML='<div class="panel"><div class="empty"><b>Nothing came back</b>Try fewer words, raise the max price, or check the source toggles.</div></div>';return;}
+      var g=document.createElement('div');g.className='results';items.forEach(function(it){g.appendChild(card(it));});
+      $('searchOut').innerHTML='';$('searchOut').appendChild(g);
+    }).catch(function(e){$('searchOut').innerHTML='<div class="panel pad spin">Couldn\'t reach the backend ('+esc(e.message)+'). Check your access word in Settings.</div>';});
+  }
+  $('go').onclick=doSearch;
+  $('q').addEventListener('keydown',function(e){if(e.key==='Enter')doSearch();});
+
+  $('saveSearch').onclick=function(){
+    var s=collectSearch(); if(!s.q){alert('Type a search first.');return;}
+    api('/api/saved',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:s.q,max:s.max,exclude:s.exclude,ebay:s.ebay,cl:s.cl,alert:true})})
+      .then(function(){alert('Saved — it\'ll run every morning.');}).catch(function(e){alert('Save failed: '+e.message);});
+  };
+
+  // SAVED
+  function loadSaved(){
+    $('savedOut').innerHTML='<div class="panel pad spin">Loading…</div>';
+    api('/api/saved').then(function(r){
+      var list=r.items||[]; $('savedCt').textContent=list.length?'('+list.length+')':'';
+      if(!list.length){$('savedOut').innerHTML='<div class="panel"><div class="empty"><b>No saved searches yet</b>Run a search, then hit ★ Save this search.</div></div>';return;}
+      var host=document.createElement('div');host.className='stack';
+      list.forEach(function(s){
+        var flt=[]; if(s.max)flt.push('≤$'+s.max); if(s.exclude)flt.push('−'+s.exclude);
+        var srcs=[]; if(s.ebay!==false)srcs.push('eBay'); if(s.cl!==false)srcs.push('CL');
+        var row=document.createElement('div');row.className='panel saved-row';
+        row.innerHTML='<span class="q">'+esc(s.q)+'</span>'+
+          '<span class="flt">'+esc(flt.join(' · ')||'no filters')+' · '+srcs.join('+')+'</span>'+
+          '<label class="chk"><input type="checkbox" '+(s.alert!==false?'checked':'')+' data-alert> alert</label>'+
+          '<button class="btn sm" data-run>Run</button><button class="btn sm ghost danger" data-del>✕</button>';
+        row.querySelector('[data-alert]').onchange=function(){
+          api('/api/saved',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({},s,{alert:this.checked}))});
+        };
+        row.querySelector('[data-run]').onclick=function(){
+          $('q').value=s.q;$('max').value=s.max||'';$('exclude').value=s.exclude||'';$('src-ebay').checked=s.ebay!==false;$('src-cl').checked=s.cl!==false;
+          document.querySelector('.tab[data-v=search]').click();doSearch();
+        };
+        row.querySelector('[data-del]').onclick=function(){
+          api('/api/saved?id='+encodeURIComponent(s.id),{method:'DELETE'}).then(loadSaved);
+        };
+        host.appendChild(row);
+      });
+      $('savedOut').innerHTML='';$('savedOut').appendChild(host);
+    }).catch(function(e){$('savedOut').innerHTML='<div class="panel pad spin">'+esc(e.message)+'</div>';});
+  }
+
+  // ALERTS
+  function loadAlerts(){
+    $('alertsOut').innerHTML='<div class="panel pad spin">Loading…</div>';
+    api('/api/alerts').then(function(r){
+      var list=r.items||[]; $('alertCt').textContent=list.length?'('+list.length+')':'';
+      $('lastRun').textContent=r.lastRun?('Last run: '+new Date(r.lastRun).toLocaleString()):'Hasn\'t run yet — fires each morning.';
+      if(!list.length){$('alertsOut').innerHTML='<div class="panel"><div class="empty"><b>No new finds yet</b>When the morning run spots something new or a price drop, it shows here.</div></div>';return;}
+      var host=document.createElement('div');host.className='stack';
+      list.forEach(function(a){
+        var row=document.createElement('div');row.className='panel alert-row';
+        var kind=a.kind==='drop'?'<span class="pill drop">▼ drop from '+money(a.was)+'</span>':'<span class="pill new">new</span>';
+        row.innerHTML='<span class="q">'+esc(a.title)+'</span>'+kind+
+          '<span class="pill">'+esc(a.source)+'</span><span class="pill">'+money(a.price)+'</span>'+
+          '<span class="flt">“'+esc(a.q)+'”</span>'+
+          '<a class="btn sm" href="'+esc(a.url)+'" target="_blank" rel="noopener">Open ↗</a>';
+        host.appendChild(row);
+      });
+      $('alertsOut').innerHTML='';$('alertsOut').appendChild(host);
+    }).catch(function(e){$('alertsOut').innerHTML='<div class="panel pad spin">'+esc(e.message)+'</div>';});
+  }
+  $('clearAlerts').onclick=function(){if(confirm('Clear all alerts?'))api('/api/alerts/clear',{method:'POST'}).then(loadAlerts);};
+
+  // SETTINGS
+  function loadSettings(){
+    $('set-token').value=token;
+    api('/api/settings').then(function(s){$('set-email').value=s.email||'';$('set-emailon').checked=!!s.emailOn;}).catch(function(){});
+  }
+  $('saveSettings').onclick=function(){
+    api('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('set-email').value.trim(),emailOn:$('set-emailon').checked})})
+      .then(function(){alert('Saved.');}).catch(function(e){alert('Save failed: '+e.message);});
+  };
+
+  // init
+  needToken();
+  if(token){ping();loadSettings();}
+  else setConn(false,'enter access word');
+})();
+</script>
+</body>
+</html>
