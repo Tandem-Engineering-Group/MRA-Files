@@ -443,6 +443,13 @@ The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
 Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
 
+**⚠️ CURRENT FLOW NAME (2026-08-26): "MRA Lists to JSON v4".** Rich has copied/renamed this flow
+multiple times over its history (v2 → "Copy of - Copy of - MRA Lists to JSON v3" → now v4) — every
+mention of "v2"/"v3" below in this section is HISTORICAL, describing whichever copy was live at the
+time. Don't assume the name in an old note is still current — ask Rich or check Power Automate directly
+if it matters which exact flow you're pointing at. The 10-min parallel-branch watchdog (Delay→Terminate)
+was handed to Rich 2026-08-26 for him to add to the current v4 flow — not yet confirmed done.
+
 **✅ WATCHDOG BUILT 2026-08-06 (`.github/workflows/pipeline-watchdog.yml`, on both branches — it uses
 `schedule:`, which only reads from the DEFAULT branch, same rule as `export.yml`).** Checks the live
 `data.js`'s `listsAsOf` every 10 min; if stale past 20 min, the job **deliberately fails** with a clear
