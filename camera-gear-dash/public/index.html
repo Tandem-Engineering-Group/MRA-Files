@@ -145,6 +145,7 @@
       </div>
     </div>
     <div id="searchMeta" class="meta-line"></div>
+    <div id="launchBar"></div>
     <div id="searchOut"></div>
   </div></section>
 
@@ -250,12 +251,30 @@
       '<a class="open" href="'+esc(it.url)+'" target="_blank" rel="noopener">View listing ↗</a></div>';
     return d;
   }
+  // Dealers that block server pulls — offer one-click "open results" instead.
+  var LAUNCH=[
+    {n:'KEH',u:'https://www.keh.com/shop/catalogsearch/result?q={q}'},
+    {n:'MPB',u:'https://www.mpb.com/en-us/search?q={q}'},
+    {n:'Adorama',u:'https://www.adorama.com/l/?searchinfo={q}'},
+    {n:'B&H',u:'https://www.bhphotovideo.com/c/search?Ntt={q}'},
+    {n:'eBay Worldwide',u:'https://eworldsearch.com/?q={q}&listing=all&delivery=any&market=US'}
+  ];
+  function renderLaunch(q){
+    var host=$('launchBar');
+    if(!q){host.innerHTML='';return;}
+    var links=LAUNCH.map(function(s){
+      return '<a class="btn sm" target="_blank" rel="noopener" href="'+s.u.replace('{q}',encodeURIComponent(q))+'">'+esc(s.n)+' ↗</a>';
+    }).join('');
+    host.innerHTML='<div class="panel pad" style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">'+
+      '<span class="hint" style="margin-right:4px">These block in-page pulls — open their results:</span>'+links+'</div>';
+  }
   function collectSearch(){
     return {q:$('q').value.trim(),max:$('max').value.trim(),exclude:$('exclude').value.trim(),sort:$('sort').value,
       ebay:$('src-ebay').checked,cl:$('src-cl').checked};
   }
   function doSearch(){
     var s=collectSearch(); if(!s.q)return;
+    renderLaunch(s.q);
     var srcs=[]; if(s.ebay)srcs.push('ebay'); if(s.cl)srcs.push('craigslist');
     $('searchMeta').textContent=''; $('searchOut').innerHTML='<div class="panel pad spin">Searching '+srcs.join(' + ')+'…</div>';
     var u='/api/search?q='+encodeURIComponent(s.q)+'&sources='+srcs.join(',')+'&sort='+s.sort+(s.max?'&max='+encodeURIComponent(s.max):'')+(s.exclude?'&exclude='+encodeURIComponent(s.exclude):'');
