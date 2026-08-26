@@ -1892,6 +1892,7 @@ function applyWrap(){ M.wrap.color.set(state.wrap);
   // why), so the loop above skips it; re-tint it here explicitly or it'd stay stuck at whatever color
   // was active on page load while the rest of the body follows wrap color changes.
   if(scanParts['slidedoorinfill']){ const m=scanParts['slidedoorinfill'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
+  if(scanParts['rearinfill']){ const m=scanParts['rearinfill'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -2356,6 +2357,14 @@ function ensureScanLoaded(cb){
     scanG.position.y-=box.min.y;
     _addLowCabFrontStubs();
     _addSlideDoorInfill();
+    _addRearInfill();
+    // Raw structural wall framing (studs/ladder, file "INTERIOR - Framing+Structure.obj") was never
+    // wired into any apply* toggle, so it defaulted to always-visible behind the finished 'walls'
+    // surface -- normally hidden by z-fighting/occlusion, but visible as loose grey bars through any
+    // open view (Rich: "the bars are still on the wall which is not on the new cad" -- his reference
+    // CAD/photos never show raw framing, only the finished wall). It's structural-only, never meant
+    // to be customer-facing in any state; hide it outright, same as the roof-rail precedent.
+    if(scanParts['framing']) scanParts['framing'].visible=false;
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
@@ -2659,6 +2668,32 @@ function _addSlideDoorInfill(){
   scanG.add(mesh);
   scanParts['slidedoorinfill']=mesh;
 }
+// Same missing-exterior-panel bug as the side door, found on the rear the same day (Rich: "back
+// door not there" -- hiding the floating, mispositioned 'rearawningclosed'/'rearhw' correctly killed
+// the visual artifact those caused, but neither one was ever a real rear cover to begin with, so
+// closed state was left with a genuine hole where the rear opening is). No separate "rear door" part
+// exists anywhere in the export (checked every rear/door-named SCAN_PARTS key) -- the rear awning
+// system is the only rear closure that was ever exported, and it doesn't reach the actual opening.
+// Sized the same way as the side infill: from real geometry, not guessed. 'walls' stops ~0.38 units
+// short of the shell's own rear-most point (walls rear Z=-2.242 vs shell's actual rear Z=-2.622) --
+// that gap IS the uncovered opening, and walls' own width/height define what it needs to span.
+function _addRearInfill(){
+  const w=scanParts['walls'], sh=scanParts['shell'];
+  if(!w||!sh) return;
+  const wBox=new THREE.Box3().setFromObject(w), shBox=new THREE.Box3().setFromObject(sh);
+  const cx=(wBox.min.x+wBox.max.x)/2, cy=(wBox.min.y+wBox.max.y)/2;
+  const width=wBox.max.x-wBox.min.x, height=wBox.max.y-wBox.min.y;
+  const surfZ=shBox.min.z; // shell's own rear-most point -- the real exterior surface
+  const geo=new THREE.PlaneGeometry(width,height); // default normal is +Z, no rotation needed for a rear-facing panel
+  const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6,
+    side:THREE.DoubleSide, emissive:new THREE.Color(state.wrap), emissiveIntensity:.18});
+  const mesh=new THREE.Mesh(geo, mat);
+  const local=scanG.worldToLocal(new THREE.Vector3(cx,cy,surfZ));
+  mesh.position.copy(local);
+  mesh.castShadow=true; mesh.receiveShadow=true;
+  scanG.add(mesh);
+  scanParts['rearinfill']=mesh;
+}
 document.querySelectorAll('[data-cabpos]').forEach(sel=>{
   const pos=sel.dataset.cabpos;
   sel.value=state.cabinets[pos]||'high';   // reflect any state loaded from a shared link
@@ -2699,9 +2734,11 @@ function applyAwning(){
   ['rearawninghw','rearawningmounthw','sideawninghw'].forEach(k=>{ if(scanParts[k]) scanParts[k].visible=open; });
   if(scanParts['slidedoorpanel_open']) scanParts['slidedoorpanel_open'].visible=open;
   if(scanParts['slidedoorpanel_closed']) scanParts['slidedoorpanel_closed'].visible=!open;
-  // the synthetic infill panel covering the real gap in the export (see _addSlideDoorInfill) --
-  // same closed-only visibility as the other closed-state cover parts it sits alongside.
+  // the synthetic infill panels covering the real gaps in the export (see _addSlideDoorInfill /
+  // _addRearInfill) -- same closed-only visibility as the other closed-state cover parts they sit
+  // alongside.
   if(scanParts['slidedoorinfill']) scanParts['slidedoorinfill'].visible=!open;
+  if(scanParts['rearinfill']) scanParts['rearinfill'].visible=!open;
   const btn=document.getElementById('awningBtn');
   if(btn) btn.textContent=open?'🏕 Van: Open':'🏕 Van: Closed';
 }
