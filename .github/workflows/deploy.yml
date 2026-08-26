@@ -170,7 +170,13 @@ jobs:
             az storage container create --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --name pipeline --only-show-errors >/dev/null
             # Allow the live site origin to PUT/GET directly against blob storage, so the
             # browser-based upload3d.html page can stream large files straight into the
-            # 'pipeline' container without a server in between.
+            # 'pipeline' container without a server in between. CORS rules are account/service-level
+            # (not per-run) and Azure caps blob service at 5 total -- 'add' is NOT idempotent, so every
+            # past run of this mode piled on another identical rule until the 5-rule cap was hit and
+            # this step started hard-failing before it could even generate a token. 'clear' first so
+            # this always resets to exactly the one rule this workflow needs, every run.
+            az storage cors clear --services b \
+              --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --only-show-errors >/dev/null
             az storage cors add --services b \
               --methods GET HEAD PUT \
               --origins 'https://mrashopdash.z13.web.core.windows.net' \
