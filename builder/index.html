@@ -1888,6 +1888,10 @@ function applyWrap(){ M.wrap.color.set(state.wrap);
   Object.keys(scanParts).forEach(k=>{ const p=SCAN_PARTS.find(x=>x.key===k); if(!p||!p.tint) return;
     const mats=Array.isArray(scanParts[k].material)?scanParts[k].material:[scanParts[k].material];
     mats.forEach(m=>m.color.set(state.wrap)); });   // shell's "other" region (no map, ever) always follows wrap color; a decal region's own applyDecal() call re-asserts white right after, same order dependency as before this region split
+  // slidedoorinfill isn't in SCAN_PARTS (it's synthetic, built in _addSlideDoorInfill -- see there for
+  // why), so the loop above skips it; re-tint it here explicitly or it'd stay stuck at whatever color
+  // was active on page load while the rest of the body follows wrap color changes.
+  if(scanParts['slidedoorinfill']){ const m=scanParts['slidedoorinfill'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -2199,6 +2203,16 @@ function ensureScanLoaded(cb){
       // angle. Pull the whole assembly forward (toward the room) so the screen sits just proud of
       // the real wall surface, like an actual surface-mounted TV.
       if(['tv','tvmount','tvframe'].indexOf(p.key)>=0){ geo.translate(0,0,-.21); }
+      // Same class of bug as the TV mount above, found 2026-08-26 (Rich: "you can see the glass" on
+      // the closed side door -- his actual complaint was a visible gap, not literal glass, but the
+      // mechanism is identical): 'slidedoorpanel_closed' sits recessed ~0.15 units toward the
+      // INTERIOR compared to 'psawningclosed' right next to it on the same passenger-side exterior
+      // surface (psawningclosed X range -0.158..-0.109 vs slidedoorpanel_closed's own -0.031..0.009)
+      // -- confirmed visually: isolating just the exterior door parts and looking at the passenger
+      // side from outside showed a plain blank gap where the panel should be, because the panel sits
+      // behind the shell's own cutout plane instead of flush with it. Pull it out to the exterior
+      // surface, same fix pattern as the TV mount.
+      if(p.key==='slidedoorpanel_closed'){ geo.translate(-.15,0,0); }
       // Brandon's export carries zero real UVs anywhere (material data was blank from the start),
       // so a wrap-graphic decal has nothing to map onto. A single global (Z,Y) planar projection
       // (the first attempt here) reads backwards on whichever side faces -X, because both the
@@ -2341,6 +2355,7 @@ function ensureScanLoaded(cb){
     const box=new THREE.Box3().setFromObject(scanG);
     scanG.position.y-=box.min.y;
     _addLowCabFrontStubs();
+    _addSlideDoorInfill();
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
@@ -2608,6 +2623,42 @@ function _addLowCabFrontStubs(){
     part.add(mesh);
   });
 }
+// Genuinely missing geometry, found 2026-08-26 (Rich: "you can see the glass" on the closed side
+// door). Confirmed by raycasting the exact visible gap: every ray through it hits background, not
+// any scanParts object -- there simply is no exterior-facing skin covering that opening anywhere in
+// Brandon's export. 'INTERIOR - Sliding Door Panel Closed.obj' (slidedoorpanel_closed) is exactly
+// what its filename says -- an interior-facing panel, not the exterior skin -- and 'psawningclosed'
+// only covers a separate, much thinner strip next to it. Neither one, nor any repositioning of them,
+// closes the actual opening. Rather than leave a hole (worse than what was there before) or guess at
+// which real part might secretly be the missing panel (none is -- checked every psawning/slidedoor/
+// window-named key in SCAN_PARTS), build a plain flat cover sized and placed FROM the real geometry
+// around it: 'slidedoorfr' (the door frame, which correctly spans the full combined opening) sets
+// the size and center, 'psawningclosed' sets which X the real exterior surface sits at. Simple,
+// honest, and matches the surrounding body -- not a substitute for Brandon eventually exporting the
+// real exterior panel, just a correct-shaped stand-in until then.
+function _addSlideDoorInfill(){
+  const fr=scanParts['slidedoorfr'], ps=scanParts['psawningclosed'];
+  if(!fr||!ps) return;
+  const frBox=new THREE.Box3().setFromObject(fr), psBox=new THREE.Box3().setFromObject(ps);
+  const surfX=(psBox.min.x+psBox.max.x)/2;
+  const w=frBox.max.z-frBox.min.z, h=frBox.max.y-frBox.min.y;
+  const cy=(frBox.min.y+frBox.max.y)/2, cz=(frBox.min.z+frBox.max.z)/2;
+  const geo=new THREE.PlaneGeometry(w,h);
+  const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6,
+    side:THREE.DoubleSide, emissive:new THREE.Color(state.wrap), emissiveIntensity:.18});
+  const mesh=new THREE.Mesh(geo, mat);
+  mesh.rotation.y=Math.PI/2;
+  // mesh.position is LOCAL to whatever it's added to, but surfX/cy/cz above were measured in WORLD
+  // space (Box3().setFromObject() always returns world-space) -- scanG carries its own transform
+  // (the tire-grounding offset applied just above), so the raw world values can't be assigned
+  // directly or the panel ends up offset by that same amount (caught this exact bug in testing --
+  // first attempt landed the panel floating a meter-plus above the roof).
+  const local=scanG.worldToLocal(new THREE.Vector3(surfX,cy,cz));
+  mesh.position.copy(local);
+  mesh.castShadow=true; mesh.receiveShadow=true;
+  scanG.add(mesh);
+  scanParts['slidedoorinfill']=mesh;
+}
 document.querySelectorAll('[data-cabpos]').forEach(sel=>{
   const pos=sel.dataset.cabpos;
   sel.value=state.cabinets[pos]||'high';   // reflect any state loaded from a shared link
@@ -2648,6 +2699,9 @@ function applyAwning(){
   ['rearawninghw','rearawningmounthw','sideawninghw'].forEach(k=>{ if(scanParts[k]) scanParts[k].visible=open; });
   if(scanParts['slidedoorpanel_open']) scanParts['slidedoorpanel_open'].visible=open;
   if(scanParts['slidedoorpanel_closed']) scanParts['slidedoorpanel_closed'].visible=!open;
+  // the synthetic infill panel covering the real gap in the export (see _addSlideDoorInfill) --
+  // same closed-only visibility as the other closed-state cover parts it sits alongside.
+  if(scanParts['slidedoorinfill']) scanParts['slidedoorinfill'].visible=!open;
   const btn=document.getElementById('awningBtn');
   if(btn) btn.textContent=open?'🏕 Van: Open':'🏕 Van: Closed';
 }
