@@ -1930,7 +1930,18 @@ const SCAN_PARTS=[
   // rear-hardware copy standing in for the real side-awning hardware, never actually re-modeled for
   // that position. So the side awning currently has no hardware/trim piece at all (nothing to
   // color-fix) -- needs Brandon to export the real part before this can be added back.
-  {key:'roofrail',     file:'EXTERIOR - Roof Rail.obj',               tint:false, color:0x53565c, rough:.4,  metal:.7},
+  // "EXTERIOR - Roof Rail.obj" dropped (rev 7.5, Rich: repeatedly flagged a thin bar visibly poking
+  // out past the roofline at both the front and rear -- confirmed real, not a screenshot artifact.
+  // Investigated thoroughly: it is NOT the degenerate-sliver defect it looked like at first (checked
+  // both raw source files, old and new -- 274 real wrap-around slivers existed in the fresh export and
+  // were removed, but the visible protrusion was IDENTICAL before and after removing them, and the
+  // mesh's own bounding box didn't change either). The remaining, non-degenerate geometry is two real
+  // 164.6in rails that DO fit within the shell's own length/width envelope on paper, so the exact
+  // rendering mechanism behind the visible overhang wasn't nailed down with confidence in the time
+  // available. Rather than keep shipping a rail that visibly pokes out, pulled it entirely -- same
+  // call already made for "Side Hardware.obj" above and the awning struts elsewhere in this file: a
+  // clean roofline with no rail reads closer to Rich's reference than a rail with a confirmed visible
+  // defect. Needs a real fix (not a decimation tweak) before this comes back.
   {key:'rims',         file:'EXTERIOR - Rims.obj',                    tint:false, color:0x9aa0a6, rough:.3,  metal:.85},
   {key:'tires',        file:'EXTERIOR - Tires.obj',                   tint:false, color:0x15161a, rough:.9,  metal:0},
   {key:'brakelights',  file:'EXTERIOR - Brake Lights.obj',            tint:false, color:0xb3392c, rough:.25, metal:.05},
@@ -1990,6 +2001,9 @@ const SCAN_PARTS=[
   // -- INTERIOR --
   {key:'framing',      file:'INTERIOR - Framing+Structure.obj',       tint:false, color:0x8a8f96, rough:.7,  metal:.05},
   {key:'walls',        file:'INTERIOR - Walls+Space.obj',             tint:false, color:0xf1ede6, rough:.75, metal:0},
+  // Genuinely new (rev 7.5) -- real wheel-well/arch geometry from today's upload that was never wired
+  // into SCAN_PARTS at all in the first pass (Rich caught this directly: "do you see these OBJ files").
+  {key:'wheelwells',   file:'INTERIOR - Wheel Wells.obj',             tint:false, color:0xd9d5cc, rough:.8,  metal:0},
   {key:'segframing',   file:'INTERIOR - SEG Framing.obj',             tint:false, color:0x53565c, rough:.4,  metal:.6},
   {key:'ceillights',   file:'INTERIOR - Ceiling Lights.obj',          tint:false, color:0xfff8ec, rough:.5,  metal:0},
   {key:'tvframe',      file:'INTERIOR - TV Frame.obj',                tint:false, color:0x101114, rough:.4,  metal:.15},
@@ -2309,7 +2323,7 @@ function frameScan(){
   // A conventional 3/4 vehicle-photography angle: elevation scaled off the object's actual HEIGHT
   // (not its overall max dimension, which is dominated by the van's length) -- using md for the
   // vertical offset put the camera absurdly high, looking almost straight down.
-  camera.position.set(c.x+md*.75, c.y+(scanG.userData.height||md)*.55, c.z+md*.75); controls.target.copy(c);
+  camera.position.set(c.x+md*.95, c.y+(scanG.userData.height||md)*.55, c.z+md*.5); controls.target.copy(c);
   camera.near=md/1000; camera.far=md*10; camera.updateProjectionMatrix();
 }
 function applyAccent(){ M.accent.color.set(state.accent); document.querySelectorAll('[data-accent]').forEach(b=>b.classList.toggle('on',b.dataset.accent===state.accent)); }
@@ -2444,6 +2458,15 @@ function applySegPanels(){
   const runH=state.cabinets.dsfwd;
   if(scanParts['segdsrun50']) scanParts['segdsrun50'].visible = runOn && runH==='high';
   if(scanParts['segdsrun68']) scanParts['segdsrun68'].visible = runOn && runH==='low';
+  // 'segframing' (the SEG-panel mounting structure/ladder) had NO toggle at all before this -- always
+  // on regardless of whether any SEG panel was actually selected (Rich: "supposed to be a bare wall"
+  // when nothing's selected, but the mounting structure showed through anyway). It's one shared part,
+  // not broken out per position, so tie its visibility to "is ANY seg panel currently showing" rather
+  // than a single position -- hidden only when every panel is off, matching a genuinely bare wall.
+  const anySeg = [scanParts['segdsfwd50'],scanParts['segdsfwd68'],scanParts['segdsrear50'],scanParts['segdsrear68'],
+    scanParts['segdsrun50'],scanParts['segdsrun68']].some(p=>p&&p.visible)
+    || state.interior.segfrontwall!==false || state.interior.segpassenger!==false;
+  if(scanParts['segframing']) scanParts['segframing'].visible = anySeg;
 }
 // Old bench-vs-psrear-cabinet exclusion hack retired (rev 7.4) -- bench is now one of the 4 choices
 // in the SAME per-position <select> as the cabinets (see CAB_POS), so "both selected at once" is no
@@ -2560,7 +2583,7 @@ function size(){ const el=document.getElementById('view3d');
   renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect=el.clientWidth/el.clientHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize',size); size();
 let spin=false; document.getElementById('spinBtn').onclick=e=>{ spin=!spin; e.target.classList.toggle('on',spin); };
-window._cam=camera; window._ctl=controls; window._scanParts=scanParts; window._THREE=THREE; window._state=state;   // test hook
+window._cam=camera; window._ctl=controls; window._scanParts=scanParts; window._THREE=THREE; window._state=state; window._scene=scene; window._renderer=renderer;   // test hook
 (function loop(){ requestAnimationFrame(loop); if(spin) van.rotation.y+=.004; controls.update(); renderer.render(scene,camera); })();
 })();
 </script>
