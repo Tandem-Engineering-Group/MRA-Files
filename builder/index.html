@@ -2523,6 +2523,7 @@ function ensureScanLoaded(cb){
     scanG.position.y-=box.min.y;
     _addLowCabFrontStubs();
     _addSlideDoorInfill();
+    _addSlideDoorBottomTrim();
     _addPsRockerSkirt();
     _addPsCabFwdPatch();
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
@@ -2940,6 +2941,40 @@ function _addPsCabFwdPatch(){
   };
   mkPatch(0.0305,0.2009,0.9172,1.3548,'pscabfwdpatch1');
   mkPatch(-0.0669,0.1765,0.5470,0.8163,'pscabfwdpatch2');
+}
+// Third real issue Rich flagged the same night, pointed at directly against his own OBJ reference: a
+// thin trim/molding strip along the SLIDE DOOR'S OWN bottom edge (not the rocker below it -- the door
+// itself). Checked for real geometry the same way roof rail / rocker molding were found earlier
+// tonight (raycast + a full vertex dump of 'fendertrim' -- the same big Trim.obj-derived part that had
+// both of those hiding in it) -- confirmed NOTHING exists in this part at the door's bottom span; every
+// vertex in that z-range sits up at the roof, not down here. Lost access to the original undecimated
+// export this session (the scratchpad it lived in was cleared), so unlike the roof rail/rocker fixes,
+// this one can't be pulled from Brandon's real file tonight. Rather than leave it unaddressed again --
+// this is the third time Rich has had to point at it -- built a real (if synthetic) trim strip sized
+// off the actual door geometry, same technique as psrockerskirt/psrockerlow: a thin box right at the
+// door's own bottom edge with a small outward step so it reads as applied trim, not just flat color.
+// ⚠ Flagging honestly: this is a stand-in shaped from real dimensions, not extracted CAD geometry like
+// the roof rail/rocker molding were -- if Brandon's export ever gets re-fetched, replace this with the
+// real part the same way those were done.
+function _addSlideDoorBottomTrim(){
+  const dfr=scanParts['slidedoorfr'], ps=scanParts['psawningclosed'];
+  if(!dfr||!ps) return;
+  scanG.updateMatrixWorld(true); // don't repeat the stale-matrix bug caught on _addPsCabFwdPatch
+  const dfrBox=new THREE.Box3().setFromObject(dfr);
+  const psBox=new THREE.Box3().setFromObject(ps);
+  const surfX=(psBox.min.x+psBox.max.x)/2;
+  const zMin=dfrBox.min.z, zMax=dfrBox.max.z;
+  const yMin=dfrBox.min.y-.025, yMax=dfrBox.min.y+.045;
+  const w=zMax-zMin, h=yMax-yMin;
+  const cy=(yMin+yMax)/2, cz=(zMin+zMax)/2;
+  const geo=new THREE.BoxGeometry(.045,h,w);
+  const mat=new THREE.MeshPhysicalMaterial({color:0x2b2e33, roughness:.5, metalness:.25, clearcoat:.3, side:THREE.DoubleSide});
+  const mesh=new THREE.Mesh(geo, mat);
+  const local=scanG.worldToLocal(new THREE.Vector3(surfX-.015,cy,cz));
+  mesh.position.copy(local);
+  mesh.castShadow=true; mesh.receiveShadow=true;
+  scanG.add(mesh);
+  scanParts['slidedoorbottomtrim']=mesh;
 }
 function _addPsRockerSkirt(){
   const ps=scanParts['psawningclosed'], sh=scanParts['shell'], cb=scanParts['cabbody'];
