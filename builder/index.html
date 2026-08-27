@@ -2471,7 +2471,21 @@ function ensureScanLoaded(cb){
         geo.computeBoundingBox();
         const bb=geo.boundingBox, pos=geo.getAttribute('position'), n=pos.count;
         const uv=new Float32Array(n*2);
-        const FLOOR_TILE_M=0.3048; // 12in, in meters -- matches each floor photo's real-world coverage
+        // REAL BUG FOUND AGAIN 2026-08-27 (Rich, third time, still huge circles after the anisotropy/
+        // POT-resize fix): confirmed the UV math itself was already correct at 0.3048 -- rendered it
+        // both top-down and at a raking angle matching his exact screenshot, both showed small, dense,
+        // correctly-scaled dots in every local test. The remaining gap is that "correct on paper" isn't
+        // "correct on his real device" -- some real GPU/browser combo is still aliasing a ~7x15-repeat
+        // fine pattern into a false large-scale moire, even with proper mipmaps and max anisotropy now
+        // set. Rather than keep guessing at filtering knobs that can't be verified against his actual
+        // hardware from here, removed the dependency on runtime tiling density entirely: each floor jpg
+        // is now a pre-baked 4x4 supertile (2048x2048, still the same real coin photo, just physically
+        // tiled into a bigger image before ever reaching the GPU) instead of relying on RepeatWrapping
+        // to do that tiling live. Same final on-screen coin size, but ~4x fewer REAL repeats for the
+        // renderer to alias against (~1.8x3.8 now, not ~7x15), and the exact pixel-for-pixel coin
+        // density is baked into the file itself instead of depending on any device's texture sampling
+        // being trustworthy. FLOOR_TILE_M scales up 4x to match (each supertile now covers 4ft, not 1ft).
+        const FLOOR_TILE_M=0.3048*4; // 4ft, in meters -- matches each (now 4x4-supertiled) floor photo's real-world coverage
         for(let vi=0; vi<n; vi++){
           uv[vi*2]=(pos.getX(vi)-bb.min.x)/FLOOR_TILE_M; uv[vi*2+1]=(pos.getZ(vi)-bb.min.z)/FLOOR_TILE_M;
         }
@@ -2499,6 +2513,7 @@ function ensureScanLoaded(cb){
     _addLowCabFrontStubs();
     _addSlideDoorInfill();
     _addPsRockerSkirt();
+    _addPsCabFwdPatch();
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
@@ -2840,6 +2855,47 @@ function _addSlideDoorInfill(){
 //   span (psawningclosed's rear edge to the door's forward edge) -- capped at floor's own bottom so
 //   'floor's sill stays visible above it ("the horizontal piece on top is the floor") instead of being
 //   hidden behind a too-tall panel.
+// Genuine hole found 2026-08-27, same session as the wheel-arch-notch swap on 'pscabfwd' (see that
+// SCAN_PARTS comment above) -- Rich circled it directly: "holes on the side of cabinets." Confirmed
+// with a dense raycast grid across the cabinet's own front face (both the OLD decimated file AND a
+// freshly re-processed undecimated version of the SAME source export -- identical hole either way, so
+// this isn't a decimation artifact, it's how Brandon's file actually is) plus a straight-through ray:
+// the "wheel-arch clearance notch" praised in that earlier commit is a real pass-through opening with
+// NOTHING behind it -- the ray keeps going for another 2+ meters and hits the REAR wall, meaning
+// there's no wheel-hump geometry, no back panel, nothing filling it. It reads fine in a screenshot
+// framed to hide the gap; from Rich's actual angle it's a hole straight through the cabinet to
+// daylight. Found a SECOND, separate hole the same way, lower on the same cabinet face (not just the
+// one notch). Patched both flush with the cabinet's own front face (not just recessed) -- the cabinet
+// has no real wheel-hump asset to legitimately fill a recess with, so a flat, correct-looking front is
+// the honest fix here, not a fake recessed pocket with still nothing behind it.
+function _addPsCabFwdPatch(){
+  const cab=scanParts['pscabfwd'];
+  if(!cab) return;
+  // First attempt landed both patches floating ~1.45 units too high -- exactly the scanG grounding
+  // offset (scanG.position.y -= box.min.y, set right before these _addXxx() calls run). worldToLocal()
+  // reads scanG.matrixWorld directly and does NOT refresh it itself; the sibling _addPsRockerSkirt()
+  // call right before this one happens to force that refresh as a side effect of its OWN Box3().
+  // setFromObject() calls (which walk up and update every ancestor's matrix, scanG included) -- but
+  // that's incidental, not something this function should depend on staying true. Force it explicitly.
+  scanG.updateMatrixWorld(true);
+  const box=new THREE.Box3().setFromObject(cab);
+  const mkPatch=(xMin,xMax,yMin,yMax,key)=>{
+    const w=xMax-xMin, h=yMax-yMin;
+    if(w<=0||h<=0) return;
+    const cx=(xMin+xMax)/2, cy=(yMin+yMax)/2;
+    const depth=.04;
+    const geo=new THREE.BoxGeometry(w,h,depth);
+    const mat=new THREE.MeshPhysicalMaterial({color:0x6b4a34, roughness:.42, metalness:0, clearcoat:.22, clearcoatRoughness:.35, side:THREE.DoubleSide});
+    const mesh=new THREE.Mesh(geo, mat);
+    const local=scanG.worldToLocal(new THREE.Vector3(cx,cy,box.max.z-.01));
+    mesh.position.copy(local);
+    mesh.castShadow=true; mesh.receiveShadow=true;
+    scanG.add(mesh);
+    scanParts[key]=mesh;
+  };
+  mkPatch(0.0305,0.2009,0.9172,1.3548,'pscabfwdpatch1');
+  mkPatch(-0.0669,0.1765,0.5470,0.8163,'pscabfwdpatch2');
+}
 function _addPsRockerSkirt(){
   const ps=scanParts['psawningclosed'], sh=scanParts['shell'], cb=scanParts['cabbody'];
   const dfr=scanParts['slidedoorfr'], fl=scanParts['floor'];
