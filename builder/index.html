@@ -2402,13 +2402,22 @@ function ensureScanLoaded(cb){
         // the awning code's normal-direction branching. UV is in FEET directly (not 0-1) so the
         // texture's own RepeatWrapping just tiles naturally with texture.repeat left at 1 --
         // assumes each floor pattern image represents a real 12in x 12in tile (a reasonable
-        // default for a coin/penny-pattern commercial flooring photo; adjust if Rich confirms a
-        // different real-world repeat size once he sees it rendered).
+        // default for a coin/penny-pattern commercial flooring photo).
+        // REAL BUG FOUND 2026-08-27 (Rich, comparing the live render against a real Lonseal Loncoin
+        // reference photo: the coin pattern was rendering roughly 40x too large): this divided by 12
+        // meaning "12 inches", but by this point `pos` is already in METERS -- parseObj() runs the
+        // inches->meters geo.scale(.0254,...) BEFORE returning, and this UV block runs on that
+        // already-scaled geometry. Dividing METERS by 12 produces a tile ~12m wide instead of ~0.3m
+        // (12in), so the whole floor barely covered a third of one texture repeat -- the entire
+        // photo (which itself already correctly shows a real 12in-square sample, ~12 coins across)
+        // got stretched across almost the whole floor instead of tiling densely across it. Fixed by
+        // dividing by 12 INCHES converted to meters (0.3048), not by the bare number 12.
         geo.computeBoundingBox();
         const bb=geo.boundingBox, pos=geo.getAttribute('position'), n=pos.count;
         const uv=new Float32Array(n*2);
+        const FLOOR_TILE_M=0.3048; // 12in, in meters -- matches each floor photo's real-world coverage
         for(let vi=0; vi<n; vi++){
-          uv[vi*2]=(pos.getX(vi)-bb.min.x)/12; uv[vi*2+1]=(pos.getZ(vi)-bb.min.z)/12;
+          uv[vi*2]=(pos.getX(vi)-bb.min.x)/FLOOR_TILE_M; uv[vi*2+1]=(pos.getZ(vi)-bb.min.z)/FLOOR_TILE_M;
         }
         geo.setAttribute('uv', new THREE.BufferAttribute(uv,2));
       }
