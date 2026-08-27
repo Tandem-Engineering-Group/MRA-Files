@@ -2523,7 +2523,15 @@ function ensureScanLoaded(cb){
     scanG.position.y-=box.min.y;
     _addLowCabFrontStubs();
     _addSlideDoorInfill();
-    _addSlideDoorBottomTrim();
+    // _addSlideDoorBottomTrim() retired same night, same reason as slidedoorinfill just above: it was
+    // a synthetic stand-in built BEFORE the real "Passenger Side Awning Closed" panel existed. Checked
+    // the real mesh directly after Rich pointed at latches in his own CAD reference -- the bottom-left
+    // and bottom-right corners of the real panel carry 245,994 and 259,075 vertices respectively (out
+    // of 785,723 total in the raw export) vs. ~1,000 in the middle -- that's real hardware detail, not
+    // a flat edge, and it survived decimation proportionally intact (confirmed on the shipped file
+    // too: same ~24-28% concentration at each corner). The synthetic strip was sitting right in front
+    // of that real molding/latch geometry, hiding it exactly like slidedoorinfill did to the door face.
+    // Not calling this function at all anymore rather than just hiding its output.
     _addPsRockerSkirt();
     _addPsCabFwdPatch();
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
@@ -2860,7 +2868,20 @@ function _addSlideDoorInfill(){
   const fr=scanParts['slidedoorfr'], ps=scanParts['psawningclosed'];
   if(!fr||!ps) return;
   const frBox=new THREE.Box3().setFromObject(fr), psBox=new THREE.Box3().setFromObject(ps);
-  const surfX=(psBox.min.x+psBox.max.x)/2;
+  // REAL BUG FOUND 2026-08-27, same night 'psawningclosed' went from the old broken/narrow file to
+  // the real full-height panel Rich re-uploaded: this backing panel used to sit at psawningclosed's
+  // own AVERAGE depth (a fine approximation back when 'ps' was basically flat) -- now that it's real
+  // molded CAD geometry with actual relief (creases, a brace pattern, hardware bosses), that average
+  // lands literally IN THE MIDDLE of the real panel's own depth range, so this flat backing pokes out
+  // in front of the real surface wherever it recesses inward, and reads as a stray seam/shape (this is
+  // the "arrow artifact" Rich flagged). Tried just hiding this backing outright first -- that was
+  // WRONG, it uncovered a real hole (the real panel doesn't seal every last corner of the frame opening
+  // on its own; Rich confirmed the actual design: the awning is a separate cover that closes ON TOP OF
+  // an existing door, it was never meant to be the sole watertight layer). Correct fix: keep this as a
+  // backing safety layer, but push it to sit behind psawningclosed's own MOST RECESSED point (psBox.
+  // max.x, not the average), so the real panel's relief always wins the depth test everywhere and this
+  // only shows through in a genuine gap, never in front of real geometry.
+  const surfX=psBox.max.x+.012;
   const w=frBox.max.z-frBox.min.z, h=frBox.max.y-frBox.min.y;
   const cy=(frBox.min.y+frBox.max.y)/2, cz=(frBox.min.z+frBox.max.z)/2;
   // BoxGeometry with real depth along X (the surface-normal direction here), not a zero-thickness
@@ -3095,10 +3116,17 @@ function applyAwning(){
   ['rearawninghw','rearawningmounthw','sideawninghw','slidedoorhw'].forEach(k=>{ if(scanParts[k]) scanParts[k].visible=open; });
   if(scanParts['slidedoorpanel_open']) scanParts['slidedoorpanel_open'].visible=open;
   if(scanParts['slidedoorpanel_closed']) scanParts['slidedoorpanel_closed'].visible=!open;
-  // the synthetic side-door infill panel covering a real gap in the export (see _addSlideDoorInfill)
-  // -- same closed-only visibility as the other closed-state cover parts it sits alongside. No rear
-  // equivalent needed anymore -- 'reardoorclosed' (real geometry, added above) replaced the synthetic
-  // _addRearInfill() patch outright rather than sitting alongside it.
+  // 'slidedoorinfill' -- KEPT as a backing safety layer, not retired (a first attempt at retiring it
+  // outright was wrong -- see below). Rich sent the REAL "Passenger Side Awning Closed" CAD file (his
+  // own upload, pulled from the pipeline blob -- see 'psawningclosed's SCAN_PARTS comment) and it now
+  // covers most of the closed-door area with real molded geometry. The actual cause of the "seam" and
+  // "arrow artifact" Rich kept pointing at was this backing sitting at psawningclosed's AVERAGE depth
+  // (fine when 'ps' was flat, wrong now that it has real relief) -- fixed at the source in
+  // _addSlideDoorInfill() by pushing this panel behind psawningclosed's own most-recessed point
+  // instead. Tried hiding this outright first (wrong) -- confirmed with a real screenshot that
+  // psawningclosed alone leaves a genuine triangular gap straight through to the interior; Rich
+  // confirmed the real design intent too: the awning closes ON TOP OF an existing door, it was never
+  // meant to be the sole seal by itself. Same closed-only visibility as before.
   if(scanParts['slidedoorinfill']) scanParts['slidedoorinfill'].visible=!open;
   if(scanParts['reardoorclosed']) scanParts['reardoorclosed'].visible=!open;
   const btn=document.getElementById('awningBtn');
