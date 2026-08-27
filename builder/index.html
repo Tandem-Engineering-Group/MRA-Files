@@ -1892,7 +1892,7 @@ function applyWrap(){ M.wrap.color.set(state.wrap);
   // why), so the loop above skips it; re-tint it here explicitly or it'd stay stuck at whatever color
   // was active on page load while the rest of the body follows wrap color changes.
   if(scanParts['slidedoorinfill']){ const m=scanParts['slidedoorinfill'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
-  if(scanParts['psrockerskirt']){ const m=scanParts['psrockerskirt'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
+  ['psrockerskirt','psrockerlow'].forEach(k=>{ if(scanParts[k]){ const m=scanParts[k].material; m.color.set(state.wrap); m.emissive.set(state.wrap); } });
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -2767,47 +2767,58 @@ function _addSlideDoorInfill(){
 }
 // Second, separate gap found the same way 2026-08-27 -- Rich circled it directly in a real reference
 // photo: "a little piece of body, the vertical piece... supposed to be body color. And then the
-// horizontal piece on top is the floor." Confirmed with a dense raycast sweep: the passenger-side
-// skin has NO coverage at all -- floor to ceiling -- across the whole span between the slide-door
-// opening and the cab (checked the ORIGINAL unedited shell.obj too, before today's sliver cleanup --
-// same result, so this isn't something today's other fixes caused). Most of that void is legitimate
-// -- 'slidedoorinfill' right above correctly covers the actual door-sized opening when closed, and
-// leaving it open when the door/room is open is the whole point. But the LOW rocker band below the
-// door -- from the shell's own floor-height bottom up through the existing 'psawningclosed' strip --
-// isn't part of that opening at all, it's just never had anything covering it in ANY state (Rich's
-// reference photos were both in the Open state, and 'psawningclosed' itself is closed-only). Same
-// infill technique as above, sized off real geometry: 'psawningclosed' sets the real exterior surface
-// X and the z-span; the shell's own bottom sets the low edge; 'psawningclosed's own bottom sets the
-// top edge so the two pieces read as one continuous panel. Always visible, not gated by open/closed.
+// horizontal piece on top is the floor." The first attempt at this (single full-height panel spanning
+// the WHOLE passenger side, psawningclosed's z-span through cabbody) over-corrected: Rich sent another
+// screenshot (Van:Open, Flooring:None) still showing something wrong, and a raycast/bbox check found
+// why -- that panel's height (shell's bottom up through psawningclosed's OWN bottom, ~0.3 to ~0.77)
+// completely swallows 'floor's height (~0.45 to ~0.48), so across the whole open-door span it was
+// sitting in front of the floor's own visible sill instead of stopping below it. Rich's own words
+// describe two STACKED pieces at one narrow spot (vertical body piece, floor visible on top of it) --
+// not a floor-to-ceiling wall down the whole door. Real fix is two segments, not one:
+// - 'psrockerskirt': the actual narrow gap outside the door's own opening (door's forward edge to
+//   cabbody) -- full height, all body, matches "the vertical piece is body color" exactly since the
+//   floor doesn't reach out this far forward.
+// - 'psrockerlow': a separate, SHORT below-floor rocker strip spanning the rest of the door's open
+//   span (psawningclosed's rear edge to the door's forward edge) -- capped at floor's own bottom so
+//   'floor's sill stays visible above it ("the horizontal piece on top is the floor") instead of being
+//   hidden behind a too-tall panel.
 function _addPsRockerSkirt(){
   const ps=scanParts['psawningclosed'], sh=scanParts['shell'], cb=scanParts['cabbody'];
+  const dfr=scanParts['slidedoorfr'], fl=scanParts['floor'];
   if(!ps||!sh) return;
   const psBox=new THREE.Box3().setFromObject(ps), shBox=new THREE.Box3().setFromObject(sh);
   const surfX=(psBox.min.x+psBox.max.x)/2;
-  // Extend the forward edge to meet 'cabbody' (where the cab's own panel picks up), not just
-  // psawningclosed's own shorter z-range -- verified visually a first pass using psawningclosed's raw
-  // z-extent alone left a real ~0.2-unit sliver still showing near the front wheel.
-  const zMin=psBox.min.z, zMax=cb?new THREE.Box3().setFromObject(cb).min.z:psBox.max.z;
-  const w=zMax-zMin;
-  const yMin=shBox.min.y, yMax=psBox.min.y;
-  const h=yMax-yMin;
-  const cy=(yMin+yMax)/2, cz=(zMin+zMax)/2;
-  const depth=.04;
-  const geo=new THREE.BoxGeometry(depth,h,w);
-  const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6,
-    side:THREE.DoubleSide, emissive:new THREE.Color(state.wrap), emissiveIntensity:.18});
-  const mesh=new THREE.Mesh(geo, mat);
-  // Nudged slightly further out than the raw surfX average (real depth-fight, not just theory --
-  // verified with a raycast sweep: at the exact height where this panel's coverage overlaps 'floor's
-  // own edge, floor was still winning the depth test at some sample points, same class of issue as
-  // the walls-vs-shell fight documented elsewhere in this file). A small fixed outward push is the
-  // simplest reliable fix instead of another shrink-toward-center (which would leave a real inset gap
-  // on a part this short/thin).
-  const local=scanG.worldToLocal(new THREE.Vector3(surfX-.01,cy,cz));
-  mesh.position.copy(local);
-  mesh.castShadow=true; mesh.receiveShadow=true;
-  scanG.add(mesh);
-  scanParts['psrockerskirt']=mesh;
+  const mkPanel=(zMin,zMax,yMin,yMax,key)=>{
+    const w=zMax-zMin, h=yMax-yMin;
+    if(w<=0||h<=0) return;
+    const cy=(yMin+yMax)/2, cz=(zMin+zMax)/2;
+    const depth=.04;
+    const geo=new THREE.BoxGeometry(depth,h,w);
+    const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6,
+      side:THREE.DoubleSide, emissive:new THREE.Color(state.wrap), emissiveIntensity:.18});
+    const mesh=new THREE.Mesh(geo, mat);
+    // Nudged slightly further out than the raw surfX average (real depth-fight, not just theory --
+    // verified with a raycast sweep: at the exact height where this panel's coverage overlaps 'floor's
+    // own edge, floor was still winning the depth test at some sample points, same class of issue as
+    // the walls-vs-shell fight documented elsewhere in this file). A small fixed outward push is the
+    // simplest reliable fix instead of another shrink-toward-center (which would leave a real inset gap
+    // on a part this short/thin).
+    const local=scanG.worldToLocal(new THREE.Vector3(surfX-.01,cy,cz));
+    mesh.position.copy(local);
+    mesh.castShadow=true; mesh.receiveShadow=true;
+    scanG.add(mesh);
+    scanParts[key]=mesh;
+  };
+  // Narrow full-height segment: door's own forward edge to where cabbody's panel picks up. Extend to
+  // 'cabbody' (not just psawningclosed's own shorter z-range) -- verified visually a first pass using
+  // psawningclosed's raw z-extent alone left a real ~0.2-unit sliver still showing near the front wheel.
+  const doorZMax=dfr?new THREE.Box3().setFromObject(dfr).max.z:psBox.max.z;
+  const cabZMin=cb?new THREE.Box3().setFromObject(cb).min.z:psBox.max.z;
+  mkPanel(doorZMax, cabZMin, shBox.min.y, psBox.min.y, 'psrockerskirt');
+  // Wide low segment under the rest of the open door span, capped below 'floor's own bottom so the
+  // floor's sill stays visible above it instead of getting hidden behind a too-tall panel.
+  const flYMin=fl?new THREE.Box3().setFromObject(fl).min.y:psBox.min.y;
+  mkPanel(psBox.min.z, doorZMax, shBox.min.y, flYMin, 'psrockerlow');
 }
 // Driver-side Low is a one-piece cabinet now (see 'dscablow1pc' above) -- Rich: "if you select that
 // there is no other choice available." Picking Low on any of dsfwd/dsctr/dsrear syncs+locks the other
