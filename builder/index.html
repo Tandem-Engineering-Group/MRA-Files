@@ -2575,10 +2575,24 @@ const FLOOR_FILES={
   'black':          'floors/floor-black.jpg',
 };
 const _floorTexCache={};
+// REAL BUG FOUND 2026-08-27 (Rich again, same-session follow-up: the coin pattern rendered as huge
+// swirling ripples on his device, not the small dense dots it correctly showed here in every local
+// test -- top-down AND at a raking angle, in both cases the UV math itself checked out exactly right,
+// ~7x15 real tile repeats across the floor). Not a UV/scale bug at all -- it's texture aliasing/moire:
+// the source JPGs were NPOT (800x641, 1125x901, inconsistent sizes across the 5 swatches) with a dense
+// repeating dot pattern, and `anisotropy` was hardcoded to 8 regardless of what the actual GPU/browser
+// could do. A fine repeating pattern sampled at a shallow angle without enough anisotropic filtering
+// aliases into exactly this kind of large false swirl -- worse on some real devices/GPUs than in this
+// software-rendered test harness, which is why it couldn't be reproduced here. Fixed both real causes:
+// resized every floor JPG to a clean power-of-two 512x512 (guarantees a correct full mipmap chain on
+// every WebGL implementation, not just the ones that tolerate NPOT well) and now ask the renderer for
+// its real max anisotropy instead of a guessed constant.
 function _loadFloorTex(url, cb){
   if(_floorTexCache[url]){ cb(_floorTexCache[url]); return; }
   new THREE.TextureLoader().load(url, tex=>{
-    tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.anisotropy=8;
+    tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+    tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+    tex.generateMipmaps=true; tex.minFilter=THREE.LinearMipmapLinearFilter; tex.magFilter=THREE.LinearFilter;
     _floorTexCache[url]=tex; cb(tex);
   });
 }
