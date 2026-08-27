@@ -2431,7 +2431,18 @@ function ensureScanLoaded(cb){
         const counts=[0,0,0,0]; for(const r of regionOf) counts[r]++;
         let start=0;
         for(let r=0;r<4;r++){ if(counts[r]>0){ geo.addGroup(start*3, counts[r]*3, r); start+=counts[r]; } }
-      } else if(['rearawning','sideawning'].indexOf(p.key)>=0){
+      } else if(['rearawning','sideawning','rearawningclosed','psawningclosed','reardoorclosed','slidedoorpanel_open','slidedoorpanel_closed'].indexOf(p.key)>=0){
+        // REAL BUG FOUND 2026-08-27 (Rich, late night: wiring these five into the decal system a moment
+        // ago -- see DECAL_TARGETS above -- wasn't enough on its own. Checked why: none of them had ANY
+        // uv attribute at all (confirmed directly, not assumed) -- unlike 'rearawning'/'sideawning'
+        // themselves, which DO carry real UVs straight from Brandon's export and already displayed a
+        // decal correctly. A THREE.js material with a map but no uv attribute doesn't error, it just
+        // samples an undefined/degenerate coordinate -- reads as a flat, uniform tint, which is exactly
+        // what showed up: assigning the map "worked" (material.map was genuinely set) but rendered as
+        // plain flat color, indistinguishable from no map at all. This reuses the exact same triplanar
+        // per-vertex-normal projector immediately below (already proven correct for rearawning/
+        // sideawning) rather than writing a second UV scheme -- these are the same class of object
+        // (flat-ish exterior panels), the only thing missing was UV coordinates existing at all.
         geo.computeBoundingBox();
         const bb=geo.boundingBox, pos=geo.getAttribute('position'), nrm=geo.getAttribute('normal'), n=pos.count;
         const xr=(bb.max.x-bb.min.x)||1, yr=(bb.max.y-bb.min.y)||1, zr=(bb.max.z-bb.min.z)||1;
@@ -2627,14 +2638,48 @@ function applyFloor(){
   });
 }
 document.querySelectorAll('[data-floor]').forEach(b=>b.onclick=()=>{ state.floorTex=b.dataset.floor; applyFloor(); saveHash(); });
+// REAL BUG FOUND 2026-08-27 (Rich, late night, furious: "you don't have the rear awning wrapped or the
+// missing side awning wrapped" -- he'd uploaded a custom wrap graphic and the CLOSED-state van didn't
+// show it on either awning). Root cause: this function only ever knew about the OPEN-pose canopy parts
+// ('rearawning'/'sideawning') -- their real closed-pose siblings ('rearawningclosed'/'psawningclosed',
+// added in later sessions for the actual closed-pose geometry) were never added here, so switching to
+// Van:Closed with a graphic selected left them showing flat wrap-color instead of the graphic, even
+// though they're tint:true and get a solid COLOR correctly from applyWrap() elsewhere -- just never the
+// actual image. Same real gap on 'reardoorclosed' (real closed rear cargo door geometry) and both slide
+// door panels ('slidedoorpanel_open'/'_closed') -- none of the four were ever wired into the decal
+// system at all, open or closed. Fixed by covering every exterior-facing tint:true part that isn't part
+// of the shell's own material-group array, each mapped to the same decal region its position matches.
+// SECOND real bug found chasing the first one, same night: even after wiring the four parts above
+// into the decal system AND giving them real UVs (see the triplanar UV block below), the closed
+// SLIDE DOOR specifically still looked flat no matter what -- tried everything on
+// 'slidedoorpanel_closed' (forced its material to the SAME already-loaded, already-proven-working
+// texture object off the shell, by identical uuid -- still flat), which made no sense until a raycast
+// straight at the visible flat orange rectangle proved it was hitting 'slidedoorinfill', not
+// 'slidedoorpanel_closed', at all. That's correct, by design -- see _addSlideDoorInfill()'s own
+// comment: 'slidedoorpanel_closed' is the INTERIOR-facing panel (barely visible from outside),
+// 'slidedoorinfill' is the real synthetic EXTERIOR skin patch covering the gap Brandon's export never
+// had a real panel for. Every material edit I was making was landing on a mesh that was never the one
+// actually on screen. Added it here with its own region -- it's a plain BoxGeometry (built in
+// _addSlideDoorInfill, not the SCAN_PARTS/parseObj pipeline) so it already carries THREE's normal
+// per-face box UVs, no extra UV generation needed.
+const DECAL_TARGETS=[
+  {key:'rearawning',            region:'passenger'},
+  {key:'sideawning',            region:'passenger'},
+  {key:'rearawningclosed',      region:'passenger'},
+  {key:'psawningclosed',        region:'passenger'},
+  {key:'reardoorclosed',        region:'rear'},
+  {key:'slidedoorpanel_open',   region:'passenger'},
+  {key:'slidedoorpanel_closed', region:'passenger'},
+  {key:'slidedoorinfill',       region:'passenger'},
+];
 function applyDecal(){
   const key=state.decal||'none';
   document.querySelectorAll('[data-decal]').forEach(b=>b.classList.toggle('on', b.dataset.decal===key));
   const shell=scanParts['shell'];
-  const awnings=['rearawning','sideawning'].map(k=>scanParts[k]).filter(Boolean);
+  const targets=DECAL_TARGETS.map(t=>({m:scanParts[t.key],region:t.region})).filter(t=>t.m);
   if(key==='none'){
     if(shell) shell.material.forEach(m=>{ m.map=null; m.color.set(state.wrap); m.needsUpdate=true; });
-    awnings.forEach(m=>{ m.material.map=null; m.material.color.set(state.wrap); m.material.needsUpdate=true; });
+    targets.forEach(({m})=>{ m.material.map=null; m.material.color.set(state.wrap); m.material.needsUpdate=true; });
     return;
   }
   // A custom upload is one image with no separate per-panel art -- fall back to using it everywhere,
@@ -2644,7 +2689,7 @@ function applyDecal(){
   if(!urls) return;
   const applyToMat=(m,url)=>{ if(!url) return; _loadDecalTex(url, tex=>{ if((state.decal||'none')!==key) return; m.map=tex; m.color.set(0xffffff); m.needsUpdate=true; }); };
   if(shell){ applyToMat(shell.material[0],urls.passenger); applyToMat(shell.material[1],urls.driver); applyToMat(shell.material[2],urls.rear); }
-  awnings.forEach(m=>applyToMat(m.material, urls.passenger));
+  targets.forEach(({m,region})=>applyToMat(m.material, urls[region]));
 }
 document.querySelectorAll('[data-decal]').forEach(b=>b.onclick=()=>{ state.decal=b.dataset.decal; applyDecal(); saveHash(); });
 // "+ Upload logo" -- session-only (a data: URL is too big to round-trip through the shareable
