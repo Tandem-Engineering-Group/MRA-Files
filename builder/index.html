@@ -2064,7 +2064,11 @@ const SCAN_PARTS=[
   {key:'wheelwells',   file:'INTERIOR - Wheel Wells.obj',             tint:false, color:0xd9d5cc, rough:.8,  metal:0},
   // Genuinely new (rev 7.6) -- real floor slab geometry, also never wired in before. Plain color
   // by default; a real pattern texture applies once a Flooring option is picked (applyFloor()).
-  {key:'floor',        file:'INTERIOR - Floor.obj',                   tint:false, color:0xe8e4da, rough:.85, metal:0},
+  // 2026-08-27: Rich -- "the floor needs to look a little more realistic." Was fully matte (rough:.85,
+  // no clearcoat) -- real commercial coin/diamond-plate flooring (rubber or vinyl composite) has a real,
+  // if subtle, sealed-surface sheen that a pure-diffuse material can't show under directional lighting.
+  // Lower roughness + a light clearcoat, same mechanism already used for the wrap/shell finish.
+  {key:'floor',        file:'INTERIOR - Floor.obj',                   tint:false, color:0xe8e4da, rough:.58, metal:0, clearcoat:.18, clearcoatRoughness:.4},
   {key:'ceillights',   file:'INTERIOR - Ceiling Lights.obj',          tint:false, color:0xfff8ec, rough:.5,  metal:0},
   {key:'tvframe',      file:'INTERIOR - TV Frame.obj',                tint:false, color:0x101114, rough:.4,  metal:.15},
   // -- FURNITURE --
@@ -2077,15 +2081,15 @@ const SCAN_PARTS=[
   // (20in) option (the 20in files were 11-12MB each, decimated ~62k tris → 6k tris same as the body
   // scan decimation elsewhere in this file). Only one height (or none) is visible per position at a
   // time — see CAB_POS + applyCabinets() below for the selection logic.
-  {key:'dscabfwd',     file:'FURNITURE - DS Cabinet Forward.obj',      tint:false, color:0x6b4a34, rough:.6,  metal:0},
-  {key:'dscabctr',     file:'FURNITURE - DS Cabinet Center.obj',       tint:false, color:0x6b4a34, rough:.6,  metal:0},
-  {key:'dscabrear',    file:'FURNITURE - DS Cabinet Rear.obj',         tint:false, color:0x6b4a34, rough:.6,  metal:0},
+  {key:'dscabfwd',     file:'FURNITURE - DS Cabinet Forward.obj',      tint:false, color:0x6b4a34, rough:.42, metal:0, clearcoat:.22, clearcoatRoughness:.35},
+  {key:'dscabctr',     file:'FURNITURE - DS Cabinet Center.obj',       tint:false, color:0x6b4a34, rough:.42, metal:0, clearcoat:.22, clearcoatRoughness:.35},
+  {key:'dscabrear',    file:'FURNITURE - DS Cabinet Rear.obj',         tint:false, color:0x6b4a34, rough:.42, metal:0, clearcoat:.22, clearcoatRoughness:.35},
   // 2026-08-27: same file/key, updated content -- the new export's "PS CounterHeight Cabinet" occupies
   // this exact same slot (bbox matches within a few cm) with real, more detailed geometry (15,233 raw
   // verts vs the old file's 2,227), including a genuine wheel-arch clearance notch this position never
   // had before. No selector/UI change needed since it's a straight content swap under the same key.
-  {key:'pscabfwd',     file:'FURNITURE - PS Cabinet Forward.obj',      tint:false, color:0x6b4a34, rough:.6,  metal:0},
-  {key:'pscabrear',    file:'FURNITURE - PS Cabinet Rear.obj',         tint:false, color:0x6b4a34, rough:.6,  metal:0},
+  {key:'pscabfwd',     file:'FURNITURE - PS Cabinet Forward.obj',      tint:false, color:0x6b4a34, rough:.42, metal:0, clearcoat:.22, clearcoatRoughness:.35},
+  {key:'pscabrear',    file:'FURNITURE - PS Cabinet Rear.obj',         tint:false, color:0x6b4a34, rough:.42, metal:0, clearcoat:.22, clearcoatRoughness:.35},
   // FOUND + WIRED 2026-08-27, same session as the walls/rear-door fixes: the same fresh export also
   // has a genuinely different driver-side Low cabinet design -- one real continuous 120.625in piece
   // (105,966 raw triangles) instead of 3 separately-selected segments. Rich, asked directly how it
@@ -2097,9 +2101,9 @@ const SCAN_PARTS=[
   // rear door (fan-triangulate every quad first -- this file is 27,612 n-gons -- THEN quadric-decimate,
   // or the flat door faces come out with holes) to 30,000 triangles; verified with a full raycast
   // sweep of both the top and the room-facing front face before shipping -- zero gaps either way.
-  {key:'dscablow1pc',  file:'FURNITURE - DS Low Cabinet (One-Piece).obj', tint:false, color:0x6b4a34, rough:.6, metal:0},
-  {key:'pscabfwdlo',   file:'FURNITURE - PS Cabinet Forward Low.obj',  tint:false, color:0x6b4a34, rough:.6,  metal:0},
-  {key:'pscabrearlo',  file:'FURNITURE - PS Cabinet Rear Low.obj',     tint:false, color:0x6b4a34, rough:.6,  metal:0},
+  {key:'dscablow1pc',  file:'FURNITURE - DS Low Cabinet (One-Piece).obj', tint:false, color:0x6b4a34, rough:.42, metal:0, clearcoat:.22, clearcoatRoughness:.35},
+  {key:'pscabfwdlo',   file:'FURNITURE - PS Cabinet Forward Low.obj',  tint:false, color:0x6b4a34, rough:.42, metal:0, clearcoat:.22, clearcoatRoughness:.35},
+  {key:'pscabrearlo',  file:'FURNITURE - PS Cabinet Rear Low.obj',     tint:false, color:0x6b4a34, rough:.42, metal:0, clearcoat:.22, clearcoatRoughness:.35},
   {key:'tvmount',      file:'FURNITURE - TV Mount.obj',                tint:false, color:0x24262a, rough:.4,  metal:.3},
   {key:'tv',           file:'FURNITURE - TV.obj',                     tint:false, color:0x0a0a0c, rough:.3,  metal:.1},
   // Bench, per position (rev 7.4, Rich: "a selector choice for each one... to place in various
@@ -2665,7 +2669,7 @@ function _addLowCabFrontStubs(){
     // same ~0.456m every position measured at) so it actually occludes what's behind it.
     const depth=Math.abs(s.xFace-s.xBack);
     const geo=new THREE.BoxGeometry(depth, s.y[1]-s.y[0], s.z[1]-s.z[0]);
-    const mat=new THREE.MeshPhysicalMaterial({color:0x6b4a34, roughness:.6, metalness:0, side:THREE.DoubleSide});
+    const mat=new THREE.MeshPhysicalMaterial({color:0x6b4a34, roughness:.42, metalness:0, clearcoat:.22, clearcoatRoughness:.35, side:THREE.DoubleSide});
     const mesh=new THREE.Mesh(geo, mat);
     mesh.position.set((s.xFace+s.xBack)/2, (s.y[0]+s.y[1])/2, (s.z[0]+s.z[1])/2);
     mesh.castShadow=true; mesh.receiveShadow=true;
