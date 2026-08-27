@@ -2523,6 +2523,7 @@ function ensureScanLoaded(cb){
     scanG.position.y-=box.min.y;
     _addLowCabFrontStubs();
     _addSlideDoorInfill();
+    _fixOverlapDecalUVs();
     // _addSlideDoorBottomTrim() retired same night, same reason as slidedoorinfill just above: it was
     // a synthetic stand-in built BEFORE the real "Passenger Side Awning Closed" panel existed. Checked
     // the real mesh directly after Rich pointed at latches in his own CAD reference -- the bottom-left
@@ -2904,6 +2905,74 @@ function _addSlideDoorInfill(){
   mesh.castShadow=true; mesh.receiveShadow=true;
   scanG.add(mesh);
   scanParts['slidedoorinfill']=mesh;
+}
+// REAL BUG FOUND 2026-08-27 (Rich, after applying a real wrap decal to the closed van for the first
+// time): 'psawningclosed'/'slidedoorinfill' (passenger) and 'reardoorclosed' (rear) each got their OWN
+// independent triplanar UV in the per-part branch above, spanning 0..1 across ONLY their own small
+// bounding box -- correct for a part that's genuinely its own separate surface (rearawning/sideawning,
+// the open canopy, really is one), but WRONG for these three: they sit flush against/directly over the
+// shell's own passenger or rear surface in the closed state, so giving each its own full 0..1 image
+// prints a SECOND, independently-scaled copy of the SAME photo right on top of the shell's own single
+// continuous image -- exactly the "doubled graphic" Rich circled (two copies of "Hi, introducing
+// InfoWheels", overlapping at different sizes, plus a wrinkled/foil-looking sliver where slidedoorinfill's
+// own tiny reprint peeked through a real gap). Real fix: don't give these their own image at all --
+// sample the EXACT SAME coordinate frame the shell itself uses for that region (same formula as the
+// R_PASSENGER/R_REAR branches in the shell's own UV block above), so the photo just continues
+// seamlessly onto them like a window cut into the shell's own surface, instead of reprinting.
+// Works in WORLD space (not local geometry space) since 'slidedoorinfill' -- unlike every SCAN_PARTS
+// part -- carries a real non-zero mesh.position (see _addSlideDoorInfill above) while the others don't;
+// world space is the one frame all of them agree on.
+function _fixOverlapDecalUVs(){
+  const shell=scanParts['shell'];
+  if(!shell) return;
+  scanG.updateMatrixWorld(true);
+  const sbb=new THREE.Box3().setFromObject(shell);
+  const zr=(sbb.max.z-sbb.min.z)||1, yr=(sbb.max.y-sbb.min.y)||1, xr=(sbb.max.x-sbb.min.x)||1;
+  const ARCH=.22;   // matches the ARCH constant in the shell's own UV block above
+  const v3=new THREE.Vector3(), n3=new THREE.Vector3();
+  // Same defensive per-vertex normal check the ORIGINAL (now-replaced) per-part triplanar block used
+  // (see the general branch above: "flip U when the dominant normal component is negative so the
+  // image reads the same left-to-right direction regardless of which way that panel actually faces").
+  // First pass at this shared-frame fix dropped that check (assumed every vertex on these panels faces
+  // the same way, since they read as flat exterior skin) -- wrong: a real molded panel like
+  // psawningclosed has actual relief (a return flange / fold near its edge, confirmed by the mirrored
+  // strip of text that showed up right there on the first render of this fix), so SOME of its vertices
+  // genuinely have a locally-reversed normal even though the panel as a whole faces the passenger side.
+  // Normal transforms by the INVERSE TRANSPOSE of the world matrix, not the same matrix as a position --
+  // for this uniform-scale, no-shear transform chain (scanG only ever translates) they're equivalent, so
+  // reusing localToWorld's rotation via a zero-origin vector is safe here, but call out why rather than
+  // let it look like an accidental shortcut.
+  const remapPart=(key, axis, fn)=>{
+    const part=scanParts[key];
+    if(!part) return;
+    const geo=part.geometry, pos=geo.getAttribute('position'), nrm=geo.getAttribute('normal'), n=pos.count;
+    const uv=new Float32Array(n*2);
+    for(let vi=0; vi<n; vi++){
+      v3.set(pos.getX(vi),pos.getY(vi),pos.getZ(vi));
+      part.localToWorld(v3);
+      let flip=false;
+      if(nrm){
+        n3.set(nrm.getX(vi),nrm.getY(vi),nrm.getZ(vi));
+        n3.transformDirection(part.matrixWorld);
+        flip = axis==='x' ? n3.x<0 : n3.z<0;
+      }
+      const uvPair=fn(v3,flip);
+      uv[vi*2]=uvPair[0]; uv[vi*2+1]=uvPair[1];
+    }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv,2));
+  };
+  ['psawningclosed','slidedoorinfill'].forEach(key=>remapPart(key, 'x', (w,flip)=>{
+    const yFrac=(w.y-sbb.min.y)/yr;
+    let u=1-(w.z-sbb.min.z)/zr;
+    if(flip) u=1-u;
+    const v=yFrac<ARCH ? 0 : Math.max(0,(yFrac-ARCH)/(1-ARCH));
+    return [u,v];
+  }));
+  remapPart('reardoorclosed', 'z', (w,flip)=>{
+    let u=(w.x-sbb.min.x)/xr;
+    if(flip) u=1-u;
+    return [u,(w.y-sbb.min.y)/yr];
+  });
 }
 // Second, separate gap found the same way 2026-08-27 -- Rich circled it directly in a real reference
 // photo: "a little piece of body, the vertical piece... supposed to be body color. And then the
