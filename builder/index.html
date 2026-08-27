@@ -1892,6 +1892,7 @@ function applyWrap(){ M.wrap.color.set(state.wrap);
   // why), so the loop above skips it; re-tint it here explicitly or it'd stay stuck at whatever color
   // was active on page load while the rest of the body follows wrap color changes.
   if(scanParts['slidedoorinfill']){ const m=scanParts['slidedoorinfill'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
+  if(scanParts['psrockerskirt']){ const m=scanParts['psrockerskirt'].material; m.color.set(state.wrap); m.emissive.set(state.wrap); }
   const swatches=document.querySelectorAll('[data-wrap]');
   swatches.forEach(b=>b.classList.toggle('on',b.dataset.wrap===state.wrap));
   const match=Array.from(swatches).find(b=>b.dataset.wrap===state.wrap);
@@ -2266,10 +2267,21 @@ function ensureScanLoaded(cb){
       // software-renderer quirk); a real geometric pull-in (scaled toward their own center) reliably
       // lets the shell win instead. ('framing'/'segframing' used to need this same treatment -- both
       // retired 2026-08-26, see the 'walls' SCAN_PARTS entry above.)
-      if(['walls'].indexOf(p.key)>=0){
+      // 'floor' gets the same treatment now too (2026-08-27, Rich: circled a visible white strip along
+      // the rocker between the slide door and the front wheel in a real reference photo) -- confirmed
+      // with a watertight raycast sweep that the shell has zero actual holes there, so the white bleed
+      // is the exact same coincident-boundary depth-fight as 'walls', just never caught for 'floor'
+      // before since it wasn't part of the original 'walls' investigation.
+      if(['walls','floor'].indexOf(p.key)>=0){
         geo.computeBoundingBox();
         const c=new THREE.Vector3(); geo.boundingBox.getCenter(c);
-        geo.translate(-c.x,-c.y,-c.z); geo.scale(.9,.9,.9); geo.translate(c.x,c.y,c.z);
+        // 'floor' is a large horizontal slab visible edge-to-edge all around the interior (unlike
+        // 'walls', mostly hidden behind cabinets/benches at its own edges) -- the same .9 shrink used
+        // for walls would pull its perimeter visibly inward from the actual wall base, reading as a
+        // gap around the whole room instead of fixing one coincident seam. A much smaller pull-in
+        // (.995) is enough to break the exact-depth tie with the shell without an obvious inset.
+        const s=(p.key==='floor')?.995:.9;
+        geo.translate(-c.x,-c.y,-c.z); geo.scale(s,s,s); geo.translate(c.x,c.y,c.z);
       }
       // Rich: "the TV mount doesn't appear when you click it, it's always gone." Confirmed by
       // raycasting the real wall surface vs. the TV parts at the same X/Y: the finished interior
@@ -2442,6 +2454,7 @@ function ensureScanLoaded(cb){
     scanG.position.y-=box.min.y;
     _addLowCabFrontStubs();
     _addSlideDoorInfill();
+    _addPsRockerSkirt();
     scanLoaded=true; scanLoading=false; hint.textContent=origHint;
     cb&&cb();
   }).catch(err=>{
@@ -2751,6 +2764,50 @@ function _addSlideDoorInfill(){
   mesh.castShadow=true; mesh.receiveShadow=true;
   scanG.add(mesh);
   scanParts['slidedoorinfill']=mesh;
+}
+// Second, separate gap found the same way 2026-08-27 -- Rich circled it directly in a real reference
+// photo: "a little piece of body, the vertical piece... supposed to be body color. And then the
+// horizontal piece on top is the floor." Confirmed with a dense raycast sweep: the passenger-side
+// skin has NO coverage at all -- floor to ceiling -- across the whole span between the slide-door
+// opening and the cab (checked the ORIGINAL unedited shell.obj too, before today's sliver cleanup --
+// same result, so this isn't something today's other fixes caused). Most of that void is legitimate
+// -- 'slidedoorinfill' right above correctly covers the actual door-sized opening when closed, and
+// leaving it open when the door/room is open is the whole point. But the LOW rocker band below the
+// door -- from the shell's own floor-height bottom up through the existing 'psawningclosed' strip --
+// isn't part of that opening at all, it's just never had anything covering it in ANY state (Rich's
+// reference photos were both in the Open state, and 'psawningclosed' itself is closed-only). Same
+// infill technique as above, sized off real geometry: 'psawningclosed' sets the real exterior surface
+// X and the z-span; the shell's own bottom sets the low edge; 'psawningclosed's own bottom sets the
+// top edge so the two pieces read as one continuous panel. Always visible, not gated by open/closed.
+function _addPsRockerSkirt(){
+  const ps=scanParts['psawningclosed'], sh=scanParts['shell'], cb=scanParts['cabbody'];
+  if(!ps||!sh) return;
+  const psBox=new THREE.Box3().setFromObject(ps), shBox=new THREE.Box3().setFromObject(sh);
+  const surfX=(psBox.min.x+psBox.max.x)/2;
+  // Extend the forward edge to meet 'cabbody' (where the cab's own panel picks up), not just
+  // psawningclosed's own shorter z-range -- verified visually a first pass using psawningclosed's raw
+  // z-extent alone left a real ~0.2-unit sliver still showing near the front wheel.
+  const zMin=psBox.min.z, zMax=cb?new THREE.Box3().setFromObject(cb).min.z:psBox.max.z;
+  const w=zMax-zMin;
+  const yMin=shBox.min.y, yMax=psBox.min.y;
+  const h=yMax-yMin;
+  const cy=(yMin+yMax)/2, cz=(zMin+zMax)/2;
+  const depth=.04;
+  const geo=new THREE.BoxGeometry(depth,h,w);
+  const mat=new THREE.MeshPhysicalMaterial({color:state.wrap, roughness:.32, metalness:.15, clearcoat:.6,
+    side:THREE.DoubleSide, emissive:new THREE.Color(state.wrap), emissiveIntensity:.18});
+  const mesh=new THREE.Mesh(geo, mat);
+  // Nudged slightly further out than the raw surfX average (real depth-fight, not just theory --
+  // verified with a raycast sweep: at the exact height where this panel's coverage overlaps 'floor's
+  // own edge, floor was still winning the depth test at some sample points, same class of issue as
+  // the walls-vs-shell fight documented elsewhere in this file). A small fixed outward push is the
+  // simplest reliable fix instead of another shrink-toward-center (which would leave a real inset gap
+  // on a part this short/thin).
+  const local=scanG.worldToLocal(new THREE.Vector3(surfX-.01,cy,cz));
+  mesh.position.copy(local);
+  mesh.castShadow=true; mesh.receiveShadow=true;
+  scanG.add(mesh);
+  scanParts['psrockerskirt']=mesh;
 }
 // Driver-side Low is a one-piece cabinet now (see 'dscablow1pc' above) -- Rich: "if you select that
 // there is no other choice available." Picking Low on any of dsfwd/dsctr/dsrear syncs+locks the other
