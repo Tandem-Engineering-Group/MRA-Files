@@ -478,6 +478,44 @@ pattern (a parallel watchdog branch off the trigger, ending in Terminate) — bu
   goes stale again, check whether it self-recovered within ~10-15 min (watchdog working, root cause
   still there) vs. sat stale for real (watchdog itself failed somehow) before re-diagnosing from scratch.
 
+**✅ FOUND + FIXED 2026-08-28 — the watchdog above was firing on EVERY run, not just hung ones (this is
+the real explanation for the huge "Failed" run-history backlog Rich found spanning 8/26-8/28, and very
+likely a contributing factor in some of the "recurrence" entries above too, in hindsight).** Rich sent a
+screenshot of a run: every single action in the main chain green-checked, total real work under 2
+minutes (Get Jobs 6s → Get Project Tasks 39s → Get Shop Tasks 38s → Get Users 0.5s → Create file 3s →
+Create blob (V2) 2s → HTTP 0.3s → Mark run done 1s) — yet the banner read "Flow run failed." Root cause:
+the 8/26 watchdog's Terminate action was unconditional. The parallel Delay(10min)→Terminate branch has
+no way to know the main chain already finished — it counts down 10 minutes and terminates-as-Failed
+**every time**, whether or not the real work already succeeded. Two real consequences, not just cosmetic:
+(1) every run's history entry reads "Failed" even on a totally healthy sync, which is exactly the wall of
+red Rich found and reasonably panicked over; (2) because Power Automate won't consider the overall run
+resolved until BOTH parallel branches finish, every run now takes the full 10 minutes to close out — and
+since this flow also recurs every 10 minutes, there was **zero slack**: the tiniest real-world timing
+jitter cascades into the next trigger queuing up behind the previous one (Degree of Parallelism = 1),
+which is the queue-pileup pattern from both the 8/26 run history (failures every 5 min, each one's
+duration exactly 5 min longer than the last — the signature of a growing backlog) and the 8/28 one
+(runs sitting "Waiting," 10 min apart, ages climbing toward 1h37m+).
+- **Fix (built by Rich, verified via his own screenshots, both halves confirmed in place):** added a
+  Boolean variable **`RunDone`**, `Initialize variable` = **false** right after `Mark run started` (top
+  of the main chain), and a new `Set variable RunDone = true` step as the very last action in the main
+  chain, right after the existing `Mark run done`. On the watchdog branch, inserted a **Condition**
+  (`RunDone` is equal to `false`) between `Delay` and `Terminate`; the existing `Terminate` (Status
+  Failed, Code `auto cancel`, same message as before) now lives inside the Condition's **True** branch
+  only, with **False** left as "No Actions." So the watchdog now only actually terminates if the main
+  chain is STILL running after 10 minutes — a normal run sets `RunDone=true` and finishes clean, and the
+  watchdog branch sees that and does nothing.
+- **What this does and doesn't fix, same distinction as the original 8/26 note:** stops the false
+  "Failed" status on healthy runs, and restores real slack between the recurrence interval and how long a
+  normal run takes to close out (so a routine bit of timing jitter no longer cascades into a multi-run
+  queue-jam). Does **not** fix WHY a step occasionally hangs in the first place — that root cause (the
+  unconfirmed stuck-blob-lease theory, or whatever else) is still open and still worth chasing if a
+  genuinely stuck run recurs.
+- Not yet proven over a real stretch — watch the next several run-history entries and confirm they read
+  **Succeeded** (not Failed) when the main chain completes normally, and that the very next scheduled
+  trigger after one starts on time rather than queuing. If "Failed" entries keep showing up even now, the
+  RunDone wiring itself needs re-checking (e.g. confirm the Set-variable step is really the LAST thing in
+  the main chain, after every write step, not accidentally inserted somewhere earlier).
+
 **✅ WATCHDOG BUILT 2026-08-06 (`.github/workflows/pipeline-watchdog.yml`, on both branches — it uses
 `schedule:`, which only reads from the DEFAULT branch, same rule as `export.yml`).** Checks the live
 `data.js`'s `listsAsOf` every 10 min; if stale past 20 min, the job **deliberately fails** with a clear
