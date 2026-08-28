@@ -1846,7 +1846,7 @@
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
       <div class="tab" data-view="assets" onclick="setView('assets')">ASSETS</div>
       <div class="tab" data-view="finance" onclick="setView('finance')" title="Hours + cost reporting — visible only to Rich &amp; Kyle Maynard">FINANCE</div>
-      <div class="tab" data-view="propdd" onclick="setView('propdd')" style="display:none" title="Private — visible only to Rich and Tony">🔒 DUE DILIGENCE</div>
+      <div class="tab" data-view="propdd" onclick="setView('propdd')" style="display:none" title="Private — visible only to Rich, Tony, John Renaud &amp; Doug McLean">🔒 DUE DILIGENCE</div>
     </div>
     <button class="helpbtn" onclick="openSearch()" style="margin-left:auto" title="Search everything — jobs (open &amp; completed), projects, units, equipment, people">🔍</button>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
@@ -4061,6 +4061,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.70", date:"2026-08-28", title:"🔒 Due Diligence tab: John Renaud + Doug McLean added, same access as Tony", items:[
+    "The private Due Diligence tab was Rich + Tony only — now also opens for John Renaud (johnr@gomra.com) and Doug McLean (dougm@gomra.com), same full access as Tony (view + edit, same live sync). Everything else about the tab is unchanged — still hidden from everyone else, still requires a real Microsoft sign-in as one of these accounts." ] },
   { rev:"37.69", date:"2026-08-28", title:"🔗 Due Diligence tab: links now actually jump to the cited page, not just the file", items:[
     "Real gap, called out directly: the 🔗 links only opened the PDF at page 1 — they didn't take you to the actual page a finding was citing, despite being described that way. Fixed for real, for the two documents where it's possible: the 6 items citing the Phase II ESA (B1, B3, C1, D2-D4) and the 2 citing the listing flyer (F6, J1) now link straight to the exact page (e.g. §5.0's arsenic findings jumps to page 12, the crane count jumps to the Floor Plan page) — verified against the actual page numbers in each real PDF, not guessed.",
     "Honest limit, not a bug to chase: the ALTA Survey, the Phase I ESA cover letter, and the C of O requirements are each a single page in the real file (the survey is one giant composite drawing sheet, not a paginated document) — there's no \"specific spot\" to jump to inside those, so those links just open the file, which is all that's physically possible.",
@@ -6533,11 +6535,16 @@ function ssoCanEdit(){ if(typeof ssoRole!=='function') return false; const r=sso
 function ssoIsCloser(){ try{ return ssoEnforcing() && !!(SSO&&SSO.user) && ssoRole()==='closer'; }catch(e){ return false; } }
 // Super-admin = Rich ONLY (throughput view, dead-tracker list, and the My-Work person-picker are his alone).
 function isSuperAdmin(){ try{ if(!(typeof ssoEnforcing==='function'&&ssoEnforcing()&&SSO.user)) return false; return SSO.email()==='rmiller@gomra.com' || (typeof _nmKey==='function' && _nmKey(SSO.name())===_nmKey('Rich Miller')); }catch(e){ return false; } }
-// Property due-diligence tab: Rich + Tony Amato only (Rich, 2026-08-28: "add Tony so he can view his
-// new tab"). Deliberately separate from isSuperAdmin() -- that gate is reused elsewhere (exec report,
-// command center) for Rich alone, and shouldn't quietly widen just because this one tab now allows two.
+// Property due-diligence tab: started Rich + Tony Amato only (Rich, 2026-08-28: "add Tony so he can
+// view his new tab"), same day extended to John Renaud then Doug McLean ("give him the same access as
+// Tony [and John]"). Deliberately separate from isSuperAdmin() -- that gate is reused elsewhere (exec
+// report, command center) for Rich alone, and shouldn't quietly widen just because this one tab's list
+// grows. Add someone later = append their email (+ name, for the fuzzy fallback) to these two arrays.
+const PROPDD_EMAILS = ['tony@gomra.com','johnr@gomra.com','dougm@gomra.com'];
+const PROPDD_NAMES = ['Tony Amato','John Renaud','Doug McLean'];
 function propddAllowed(){ try{ if(isSuperAdmin()) return true; if(!(typeof ssoEnforcing==='function'&&ssoEnforcing()&&SSO.user)) return false;
-  return SSO.email()==='tony@gomra.com' || (typeof _nmKey==='function' && _nmKey(SSO.name())===_nmKey('Tony Amato')); }catch(e){ return false; } }
+  if(PROPDD_EMAILS.indexOf(SSO.email())>=0) return true;
+  return typeof _nmKey==='function' && PROPDD_NAMES.some(function(n){ return _nmKey(SSO.name())===_nmKey(n); }); }catch(e){ return false; } }
 function ensureAuth(action, retry){
   if(CLOSE_PIN) return true;
   // 🔐 One login: a signed-in @gomra.com user whose role can edit needs NO number code.
@@ -19345,7 +19352,7 @@ function _propddDetailHtml(i,s){
   const status=s.status||'Open'; const resolution=s.resolution||'';
   return '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">'
     +'<input onclick="event.stopPropagation()" value="'+esc(i.t)+'" oninput="propddSet(\''+i.id+'\',\'t\',this.value)" style="flex:1;font-weight:700;font-size:13.5px;padding:5px 8px;border-radius:6px;border:1px solid var(--line)">'
-    +'<button onclick="event.stopPropagation();propddDeleteItem(\''+i.id+'\')" title="Delete this item permanently -- syncs to Tony too" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);font-weight:700;cursor:pointer;white-space:nowrap">🗑 Delete</button>'
+    +'<button onclick="event.stopPropagation();propddDeleteItem(\''+i.id+'\')" title="Delete this item permanently -- syncs to everyone else with access too" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);font-weight:700;cursor:pointer;white-space:nowrap">🗑 Delete</button>'
     +'</div>'
     +'<textarea onclick="event.stopPropagation()" oninput="propddSet(\''+i.id+'\',\'d\',this.value)" placeholder="Description…" style="width:100%;box-sizing:border-box;font-size:13px;margin-bottom:8px;min-height:56px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);font-family:inherit;resize:vertical">'+esc(i.d)+'</textarea>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Suggested owner: <b>'+esc(i.owner)+'</b> &nbsp;|&nbsp; Source: '+esc(i.src)+' &nbsp;|&nbsp; <i>'+esc(i.conf)+'</i></div>'
@@ -19386,11 +19393,11 @@ function renderPropDD(){
   // person's device actually show up (same one-time-fetch-then-rerender pattern as Quotes' openQuote()).
   if(PROPDD_STORE_URL && !_propddSharedTried){ _propddLoadShared(function(){ renderPropDD(); }); }
   const stats=_propddStats();
-  const syncTxt = PROPDD_STORE_URL ? 'edits sync between you two automatically' : 'edits save to <b>whichever device you\'re using</b> for now (Rich\'s and Tony\'s edits don\'t sync to each other yet)';
+  const syncTxt = PROPDD_STORE_URL ? 'edits sync between everyone with access automatically' : 'edits save to <b>whichever device you\'re using</b> for now (edits don\'t sync between people yet)';
   let h='<div style="margin-bottom:14px">'
     +'<div style="font-size:20px;font-weight:800">🔒 37900 Mound Road — Due Diligence (draft) '
     +'<span onclick="propddShowHelp()" title="Show the how-to explainer again" style="cursor:pointer;font-size:14px;color:var(--muted);vertical-align:middle">❓</span></div>'
-    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private — visible only to Rich and Tony, nobody else. 3 layout options below to review together and pick one — '+syncTxt+'.</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private — visible only to Rich, Tony, John Renaud &amp; Doug McLean, nobody else. 3 layout options below to review together and pick one — '+syncTxt+'.</div>'
     +'</div>';
   if(!_propddHelpDismissed()){
     h+='<div style="background:var(--panel2);border:1px solid var(--brand);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:12.5px;color:var(--txt);line-height:1.7">'
