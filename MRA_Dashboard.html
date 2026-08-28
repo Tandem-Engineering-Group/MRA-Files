@@ -1846,7 +1846,7 @@
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
       <div class="tab" data-view="assets" onclick="setView('assets')">ASSETS</div>
       <div class="tab" data-view="finance" onclick="setView('finance')" title="Hours + cost reporting — visible only to Rich &amp; Kyle Maynard">FINANCE</div>
-      <div class="tab" data-view="propdd" onclick="setView('propdd')" style="display:none" title="Private — visible only to you">🔒 DUE DILIGENCE</div>
+      <div class="tab" data-view="propdd" onclick="setView('propdd')" style="display:none" title="Private — visible only to Rich and Tony">🔒 DUE DILIGENCE</div>
     </div>
     <button class="helpbtn" onclick="openSearch()" style="margin-left:auto" title="Search everything — jobs (open &amp; completed), projects, units, equipment, people">🔍</button>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
@@ -6523,6 +6523,11 @@ function ssoCanEdit(){ if(typeof ssoRole!=='function') return false; const r=sso
 function ssoIsCloser(){ try{ return ssoEnforcing() && !!(SSO&&SSO.user) && ssoRole()==='closer'; }catch(e){ return false; } }
 // Super-admin = Rich ONLY (throughput view, dead-tracker list, and the My-Work person-picker are his alone).
 function isSuperAdmin(){ try{ if(!(typeof ssoEnforcing==='function'&&ssoEnforcing()&&SSO.user)) return false; return SSO.email()==='rmiller@gomra.com' || (typeof _nmKey==='function' && _nmKey(SSO.name())===_nmKey('Rich Miller')); }catch(e){ return false; } }
+// Property due-diligence tab: Rich + Tony Amato only (Rich, 2026-08-28: "add Tony so he can view his
+// new tab"). Deliberately separate from isSuperAdmin() -- that gate is reused elsewhere (exec report,
+// command center) for Rich alone, and shouldn't quietly widen just because this one tab now allows two.
+function propddAllowed(){ try{ if(isSuperAdmin()) return true; if(!(typeof ssoEnforcing==='function'&&ssoEnforcing()&&SSO.user)) return false;
+  return SSO.email()==='tony@gomra.com' || (typeof _nmKey==='function' && _nmKey(SSO.name())===_nmKey('Tony Amato')); }catch(e){ return false; } }
 function ensureAuth(action, retry){
   if(CLOSE_PIN) return true;
   // 🔐 One login: a signed-in @gomra.com user whose role can edit needs NO number code.
@@ -7737,7 +7742,13 @@ function ssoCaps(){ const r=ssoRole(); return r?ROLE_CAPS[r]:null; }
 // real, reported bug: refreshing on a tab kept bouncing back to Floor for people who were fully
 // entitled to be there, purely because of MSAL's timing.
 function _softForceFloor(){ try{ setView('floor', {persist:false, updateUrl:false}); }catch(e){} }
-function _viewAllowed(caps, v){ if(v==='mywork') return mwTabAllowed(); if(v==='finance') return financeTabAllowed(); return !caps || caps.tabs.indexOf(v)>=0; }
+function _viewAllowed(caps, v){ if(v==='mywork') return mwTabAllowed(); if(v==='finance') return financeTabAllowed();
+  // 'propdd' is deliberately NOT in any role's caps.tabs (see propddAllowed()) -- without this case it falls
+  // through to the generic caps.tabs.indexOf() check below, which is always -1 for it, so the periodic
+  // ~30s renderAll()->applyRoleUI() tick would silently boot Rich/Tony back to floor every single time
+  // (Rich, 2026-08-28: "after fifteen to thirty seconds, it goes back to the floor tab automatically").
+  if(v==='propdd') return (typeof propddAllowed==='function' && propddAllowed());
+  return !caps || caps.tabs.indexOf(v)>=0; }
 // Apply tab + menu visibility for the current role (no-op when not gating).
 function applyRoleUI(){
   const caps=ssoCaps();
@@ -7751,8 +7762,8 @@ function applyRoleUI(){
   { const fn=document.querySelector('.tab[data-view="finance"]'); if(fn) fn.style.display = financeTabAllowed() ? '' : 'none'; }
   if(typeof VIEW!=='undefined' && VIEW==='finance' && !financeTabAllowed()){ _softForceFloor(); }
   // 🔒 Property due diligence tab — Rich only, nobody else (not even other admins), independent of role.
-  { const pd=document.querySelector('.tab[data-view="propdd"]'); if(pd) pd.style.display = (typeof isSuperAdmin==='function' && isSuperAdmin()) ? '' : 'none'; }
-  if(typeof VIEW!=='undefined' && VIEW==='propdd' && !(typeof isSuperAdmin==='function' && isSuperAdmin())){ _softForceFloor(); }
+  { const pd=document.querySelector('.tab[data-view="propdd"]'); if(pd) pd.style.display = (typeof propddAllowed==='function' && propddAllowed()) ? '' : 'none'; }
+  if(typeof VIEW!=='undefined' && VIEW==='propdd' && !(typeof propddAllowed==='function' && propddAllowed())){ _softForceFloor(); }
   const hide=caps?caps.hide:[];
   document.querySelectorAll('[data-perm]').forEach(el=>{
     el.style.display = (hide.indexOf(el.getAttribute('data-perm'))>=0) ? 'none' : '';
@@ -19081,11 +19092,12 @@ function stColor(s){ s=(s||'').toLowerCase();
          s==='scheduled'?'var(--violet)':'var(--muted)'; }
 function histToggle(key){ histExpanded.has(key)?histExpanded.delete(key):histExpanded.add(key); renderHistory(); }
 
-// ===================== PROPERTY DUE DILIGENCE (private, Rich-only — see setView/applyRoleUI gates) =====================
+// ===================== PROPERTY DUE DILIGENCE (private, Rich + Tony only — see propddAllowed() / setView/applyRoleUI gates) =====================
 // 37900 Mound Road, Sterling Heights MI — draft open-items list built from Tony's real due-diligence documents
-// (title/survey, 2010 + 2024 environmental reports, EGLE/BEA/Due Care paperwork). This is a PREVIEW for Rich only —
-// Tony hasn't seen it yet. No shared backend flow exists for this yet, so status/assignee/notes edits save to
-// THIS DEVICE ONLY (localStorage) until a real shared store is wired up, same pattern as Quotes/EOTM.
+// (title/survey, 2010 + 2024 environmental reports, EGLE/BEA/Due Care paperwork). Nobody outside Rich + Tony
+// can see this tab at all. No shared backend flow exists for this yet, so status/assignee/notes edits save to
+// THIS DEVICE ONLY (localStorage) until a real shared store is wired up, same pattern as Quotes/EOTM -- so
+// right now Rich's edits and Tony's edits do NOT sync to each other, each only sees their own device's edits.
 const PROPDD_KEY='mra_propdd_v1';
 function _propddState(){ try{ return JSON.parse(localStorage.getItem(PROPDD_KEY)||'{}'); }catch(e){ return {}; } }
 function _propddSave(st){ try{ localStorage.setItem(PROPDD_KEY, JSON.stringify(st)); }catch(e){} }
@@ -19183,7 +19195,7 @@ function renderPropDD(){
   let h='<div style="margin-bottom:14px">'
     +'<div style="font-size:20px;font-weight:800">🔒 37900 Mound Road — Due Diligence (draft) '
     +'<span onclick="propddShowHelp()" title="Show the how-to explainer again" style="cursor:pointer;font-size:14px;color:var(--muted);vertical-align:middle">❓</span></div>'
-    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private preview, visible only to you — Tony hasn\'t seen this yet. 3 layout options below to review together — edits save to <b>this device only</b> for now.</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private — visible only to Rich and Tony, nobody else. 3 layout options below to review together and pick one — edits save to <b>whichever device you\'re using</b> for now (Rich\'s and Tony\'s edits don\'t sync to each other yet).</div>'
     +'</div>';
   if(!_propddHelpDismissed()){
     h+='<div style="background:var(--panel2);border:1px solid var(--brand);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:12.5px;color:var(--ink);line-height:1.7">'
@@ -19643,7 +19655,7 @@ function setView(v,opts){
     }
   }
   // 🔒 Property due diligence — Rich only, independent of role/tabs (not a general feature, see 'propdd' tab).
-  if(v==='propdd' && !(typeof isSuperAdmin==='function' && isSuperAdmin())) v='floor';
+  if(v==='propdd' && !(typeof propddAllowed==='function' && propddAllowed())) v='floor';
   // 'history' has no tab of its own — it opens via ☰ Actions ▸ 🔎 Search closed / history (or the 🔍 modal's footer link)
   VIEW=v;
   if(opts.persist!==false){
