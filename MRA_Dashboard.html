@@ -1846,6 +1846,7 @@
       <div class="tab" data-view="fleetio" onclick="setView('fleetio')">FLEETIO</div>
       <div class="tab" data-view="assets" onclick="setView('assets')">ASSETS</div>
       <div class="tab" data-view="finance" onclick="setView('finance')" title="Hours + cost reporting — visible only to Rich &amp; Kyle Maynard">FINANCE</div>
+      <div class="tab" data-view="propdd" onclick="setView('propdd')" style="display:none" title="Private — visible only to you">🔒 DUE DILIGENCE</div>
     </div>
     <button class="helpbtn" onclick="openSearch()" style="margin-left:auto" title="Search everything — jobs (open &amp; completed), projects, units, equipment, people">🔍</button>
     <button class="helpbtn" onclick="openHelp()" title="How to use this dashboard">?</button>
@@ -2445,6 +2446,11 @@
       </div>
       <div class="teamgrid fscroll" id="fByTrailer"></div>
     </div>
+  </div>
+
+  <!-- ===================== PROPERTY DUE DILIGENCE (private — Rich only) ===================== -->
+  <div id="propddView" class="hidden">
+    <div class="panel" id="propddRoot"></div>
   </div>
 
   <!-- ===================== ASSETS VIEW (Fleet + Equipment, two lenses) ===================== -->
@@ -7687,6 +7693,9 @@ function applyRoleUI(){
   if(typeof VIEW!=='undefined' && VIEW==='mywork' && !mwTabAllowed()){ _softForceFloor(); }
   { const fn=document.querySelector('.tab[data-view="finance"]'); if(fn) fn.style.display = financeTabAllowed() ? '' : 'none'; }
   if(typeof VIEW!=='undefined' && VIEW==='finance' && !financeTabAllowed()){ _softForceFloor(); }
+  // 🔒 Property due diligence tab — Rich only, nobody else (not even other admins), independent of role.
+  { const pd=document.querySelector('.tab[data-view="propdd"]'); if(pd) pd.style.display = (typeof isSuperAdmin==='function' && isSuperAdmin()) ? '' : 'none'; }
+  if(typeof VIEW!=='undefined' && VIEW==='propdd' && !(typeof isSuperAdmin==='function' && isSuperAdmin())){ _softForceFloor(); }
   const hide=caps?caps.hide:[];
   document.querySelectorAll('[data-perm]').forEach(el=>{
     el.style.display = (hide.indexOf(el.getAttribute('data-perm'))>=0) ? 'none' : '';
@@ -19015,6 +19024,92 @@ function stColor(s){ s=(s||'').toLowerCase();
          s==='scheduled'?'var(--violet)':'var(--muted)'; }
 function histToggle(key){ histExpanded.has(key)?histExpanded.delete(key):histExpanded.add(key); renderHistory(); }
 
+// ===================== PROPERTY DUE DILIGENCE (private, Rich-only — see setView/applyRoleUI gates) =====================
+// 37900 Mound Road, Sterling Heights MI — draft open-items list built from Tony's real due-diligence documents
+// (title/survey, 2010 + 2024 environmental reports, EGLE/BEA/Due Care paperwork). This is a PREVIEW for Rich only —
+// Tony hasn't seen it yet. No shared backend flow exists for this yet, so status/assignee/notes edits save to
+// THIS DEVICE ONLY (localStorage) until a real shared store is wired up, same pattern as Quotes/EOTM.
+const PROPDD_KEY='mra_propdd_v1';
+function _propddState(){ try{ return JSON.parse(localStorage.getItem(PROPDD_KEY)||'{}'); }catch(e){ return {}; } }
+function _propddSave(st){ try{ localStorage.setItem(PROPDD_KEY, JSON.stringify(st)); }catch(e){} }
+const PROPDD_ITEMS=[
+{id:'a1',cat:'A. Legal — Recorded Instruments & Title',t:'Obtain and review the 1972 recorded restriction (Liber 2285, Page 142)',d:'Cited by citation only in the deed, title policy, and survey — flagged by the survey as one of only two exceptions that actually "affects" the property rather than merely being plotted. Content unknown.',owner:'Legal counsel',src:'Title Policy Sch. B Item 6; Deed Exhibit B Item 6; ALTA Survey',conf:'Confirmed to exist; content unread'},
+{id:'a2',cat:'A. Legal — Recorded Instruments & Title',t:'Obtain and review the 2011 Notice of Variance + Hold Harmless/Indemnification Agreement (Liber 20801, Pages 155 & 159)',d:'Same gap as above. The pairing of a variance with an indemnity agreement suggests a zoning variance conditioned on assuming liability — plausibly tied to the metal building’s setback nonconformity (Section E), but unconfirmed.',owner:'Legal counsel',src:'Title Policy Sch. B Item 10; Deed Exhibit B Item 5; ALTA Survey',conf:'Confirmed to exist; content unread'},
+{id:'a3',cat:'A. Legal — Recorded Instruments & Title',t:'Confirm whether a separate recorded environmental deed restriction exists anywhere',d:'The vesting deed itself carries no environmental-use language at all — no groundwater-well ban, no residential-use ban, no cap-maintenance clause. If one exists given the site’s contamination history, it is a different, unlocated instrument.',owner:'Legal counsel',src:'RECORDED Covenant Deed (entire document)',conf:'Uncertain — flag for a human to check'},
+{id:'a4',cat:'A. Legal — Recorded Instruments & Title',t:'Ownership is two unrelated LLCs, as tenants in common',d:'RDB Industrial Drive, LLC (Michigan) and S&S Holdings of Southwest Florida, LLC (Florida) jointly hold title. Confirm both entities must authorize any sale/lease and whether a co-tenancy agreement requires unanimous consent.',owner:'Legal counsel',src:'Title Policy Schedule A; Deed granting clause',conf:'Structure confirmed; closing implications need review'},
+{id:'a5',cat:'A. Legal — Recorded Instruments & Title',t:'Routine title items — acknowledge, no negotiation expected',d:'1970s municipal utility easements, a mineral-rights reservation, standard closing-date tax proration, and a hand-corrected tax-parcel-number typo on the recorded deed.',owner:'Title company / closing attorney',src:'Title Policy Sch. B Items 1, 4, 7, 9, 11, 12; Deed p.2 & Exhibit A',conf:'Clear — routine'},
+{id:'b1',cat:'B. Legal / Environmental — Liability Protection',t:'Determine whether MRA needs its own new BEA or a formal reliance letter',d:'The 2024 purchasers (RDB Industrial Drive LLC and S&S Holdings LLC) each filed their own Baseline Environmental Assessment in September 2024, acknowledged by EGLE with no issues raised. But Michigan’s BEA liability protection generally runs to the specific entity that files it, tied to that entity’s own acquisition date. Unless MRA is acquiring through the same entity or obtains a written reliance mechanism from RDB/S&S, MRA most likely needs its own new BEA.',owner:'Legal counsel',src:"2024 Phase II ESA §6.0; both 2024 EGLE acknowledgement letters; NREPA Part 201 BEA timing rules",conf:'Clear legal mechanism; MRA-specific answer needs counsel'},
+{id:'b2',cat:'B. Legal / Environmental — Liability Protection',t:'Confirm the 2010 BEA is fully superseded and carries no independent reliance value for MRA',d:'The 2010 BEA was prepared for and protects only Chelmsford Properties, LLC (the prior owner), and its own limitations section bars third-party reliance without AKT Peerless’s written consent. The 2024 BEA/Due Care Plan is the current, operative paperwork.',owner:'Legal counsel',src:'2010 BEA §9.0 Limitations; 2024 EGLE acknowledgement letters',conf:'Clear'},
+{id:'b3',cat:'B. Legal / Environmental — Liability Protection',t:'Be aware: the 2024 Phase II explicitly disclaims being a purchase recommendation',d:'Standard consultant boilerplate limiting their own liability and stating the report should not be relied on to decide whether to buy, sell, or develop the property — and that contamination beyond its scope may exist.',owner:'Legal counsel',src:'2024 Phase II ESA §7.0',conf:'Clear (direct quote)'},
+{id:'b4',cat:'B. Legal / Environmental — Liability Protection',t:'Be aware: the title policy excludes coverage for future environmental-covenant violations',d:'ALTA Endorsement 9.2-06 categorically excludes this — compounds the importance of items A1/A2.',owner:'Legal counsel',src:'Title Policy ALTA Endorsement 9.2-06 §§3-4',conf:'Clear'},
+{id:'c1',cat:'C. Environmental — Confirmed Condition & Ongoing Due-Care Obligations',t:'Property is legally a contaminated "facility" under Michigan Part 201',d:'Arsenic exceeds the state’s cleanup criteria at 3 of 10 soil sample locations per the 2024 Phase II (7,200 / 6,480 / 11,700 µg/kg vs. a 5,800 µg/kg standard; the 11,700 reading also exceeds the stricter direct-contact standard). Historical cadmium, chromium, and lead exceedances are also on record from 2009-2010. This status transfers to whoever owns/operates the property next.',owner:'Environmental consultant / Legal',src:'2024 Phase II ESA §5.0/6.0, Table 1; 2010 BEA Table 1 & 2',conf:'Clear — confirmed exceedance'},
+{id:'c2',cat:'C. Environmental — Confirmed Condition & Ongoing Due-Care Obligations',t:'A current, joint Due Care Plan (RDB & S&S, 2024) is already in place and imposes real ongoing obligations',d:'No ground disturbance without prior environmental-consultant oversight; a Health & Safety Plan for any digging; EGLE notified within 48 hours if contaminated soil is removed; no groundwater wells/use; recordkeeping and periodic inspection; demolition contingency if the building is ever removed. No expiration date — these become MRA’s obligations upon acquisition/occupancy.',owner:'MRA operations/facilities',src:'RDB and S&S Due Care Plan.pdf (104 pp.); 2010 Compliance Analysis §4.2',conf:'Clear — explicit requirements in the current plan'},
+{id:'c3',cat:'C. Environmental — Confirmed Condition & Ongoing Due-Care Obligations',t:'Confirm MRA’s planned use stays within "industrial / non-residential"',d:'Soil/groundwater data exceed Michigan’s stricter residential cleanup standard. Every due-care conclusion — 2010 and 2024 alike — is written around continued non-residential use; a use change would trigger new assessment obligations.',owner:'Legal counsel',src:'2010 BEA §3.5, Tables 1-2; 2010 Compliance Analysis §5.1',conf:'Clear'},
+{id:'c4',cat:'C. Environmental — Confirmed Condition & Ongoing Due-Care Obligations',t:'Confirm the property still receives only municipal water (no on-site wells)',d:'Stated basis for "no unacceptable drinking-water exposure risk" in every environmental report back to 2010.',owner:'MRA operations/facilities',src:'2010 Compliance Analysis §4.2.1; 2010 BEA §2.2',conf:'Basis of a conclusion — needs reconfirming'},
+{id:'c5',cat:'C. Environmental — Confirmed Condition & Ongoing Due-Care Obligations',t:'Evaluate the pad-mounted transformer and pre-1980 fluorescent ballasts for PCB content before any repair, replacement, or disposal',d:'Flagged since 2009 (building built 1974); no expiration — applies whenever that equipment is eventually serviced.',owner:'Environmental consultant',src:'2010 Phase I ESA §6.3.5 & 7.3',conf:'Clear obligation stated'},
+{id:'c6',cat:'C. Environmental — Confirmed Condition & Ongoing Due-Care Obligations',t:'Two items the current Due Care Plan’s own authors flag as unresolved',d:'(a) The area of a former on-site drain — filled in during 1970s construction, never tested for methane — needs additional investigation. (b) A county health department records request never received a response.',owner:'Environmental consultant',src:'RDB and S&S Due Care Plan.pdf, conclusions; 2010 Phase I ESA §4.1.1',conf:'Clear — stated as open by the plan itself'},
+{id:'c7',cat:'C. Environmental — Confirmed Condition & Ongoing Due-Care Obligations',t:'Walk the site to confirm the historically-impacted areas are still capped and undisturbed',d:'The "no exposure risk" conclusion depends on existing building/pavement cover remaining intact — no exposed soil, uncontrolled excavation, or erosion.',owner:'MRA operations/facilities',src:'2010 Compliance Analysis §4.2.4; BEA Figures 2-4',conf:'Inferred — logical follow-up'},
+{id:'c8',cat:'C. Environmental — Confirmed Condition & Ongoing Due-Care Obligations',t:'Confirm a standing procedure exists to warn contractors/utility workers about subsurface contamination',d:'Required by the due-care framework; nothing in any document confirms one has actually been implemented (signage, a dig-permit process, contractor briefing, etc.).',owner:'MRA operations/facilities',src:'2010 Compliance Analysis §5.3',conf:'Requirement clear; implementation status unknown'},
+{id:'d1',cat:'D. Environmental — Data Gaps & Unresolved Follow-Up',t:'Reconfirm current status of the Wiegand’s (37580 Mound Road, ~725 ft away) leaking underground storage tank',d:'A diesel release was reported to the state in January 2000; as of the 2010 Phase I, the case was still listed "open," with a 20,000-gallon diesel tank still in active use there. Never rechecked since — confirm current status, and whether it’s the same site as D2.',owner:'Environmental consultant',src:'2010 Phase I ESA §4.3.2 / REC #7',conf:'Clear as of 2010; current status unknown'},
+{id:'d2',cat:'D. Environmental — Data Gaps & Unresolved Follow-Up',t:'The 2024 Phase I separately flags the adjoining property to the north',d:'A history of hazardous-waste storage/handling violations at the neighboring property along the shared boundary — an off-site condition MRA cannot test or control directly. May or may not be the same site as Wiegand’s (D1).',owner:'Legal counsel',src:'2024 Phase II ESA §1.0, Item D',conf:'Clear'},
+{id:'d3',cat:'D. Environmental — Data Gaps & Unresolved Follow-Up',t:'Groundwater could not be sampled at all in the 2024 investigation',d:'Both temporary wells and all ten soil borings came up dry. The original 2009-10 finding that first triggered this property’s contaminated status included groundwater exceedances — current status is unknown.',owner:'Environmental consultant',src:'2024 Phase II ESA §3.2/6.0',conf:'Clear data gap'},
+{id:'d4',cat:'D. Environmental — Data Gaps & Unresolved Follow-Up',t:'No vapor intrusion assessment has been performed or explicitly ruled out',d:'All soil VOCs came back non-detect in 2024, which is reassuring, but given the site’s manufacturing history the question is never directly addressed either way in any report.',owner:'Environmental consultant',src:'2024 Phase II ESA §5.0/6.0 (absence of discussion)',conf:'Uncertain — flag for a human to check'},
+{id:'d5',cat:'D. Environmental — Data Gaps & Unresolved Follow-Up',t:'Current on-site staining, chemical storage, and spill-absorbent use',d:'Independent of the historical contamination question, the 2024 Phase I describes active staining and hazardous-materials storage still being managed with absorbent pads — worth a fresh operational review once MRA occupies the building.',owner:'MRA operations/facilities',src:'2024 Phase I ESA (per 2024 Phase II §1.0, Item C)',conf:'Clear'},
+{id:'d6',cat:'D. Environmental — Data Gaps & Unresolved Follow-Up',t:'Groundwater flow direction beneath the property has never been directly measured',d:'Only inferred from regional drainage patterns, not confirmed via monitoring-well gauging — relevant if the Wiegand’s or north-neighbor migration questions ever need a definitive answer.',owner:'Environmental consultant',src:'2010 Phase I ESA §4.1.1',conf:'Inferred observation'},
+{id:'e1',cat:'E. Survey & Physical Site Conditions',t:'Metal building encroaches into the City’s water-main easement',d:'The title policy’s own ALTA 28.1 endorsement explicitly excludes coverage for enforced-removal risk because the metal building sits within the water-main easement area.',owner:'Legal counsel',src:'Title Policy ALTA Endorsement 28.1 §4; ALTA Survey Item 13(j)',conf:'Clear'},
+{id:'e2',cat:'E. Survey & Physical Site Conditions',t:'Metal building sits within the required zoning setback',d:'A zoning nonconformity, plausibly tied to the 2011 variance (A2) — confirm it’s legally protected rather than an open violation.',owner:'Legal counsel',src:'Title Policy Sch. B 13(k); ALTA Survey',conf:'Nonconformity confirmed; variance link inferred'},
+{id:'e3',cat:'E. Survey & Physical Site Conditions',t:'Overhead utility lines and an underground gas line cross the property with no recorded easement',d:'Two separate utilities physically present without documented legal right — needs resolution with DTE/Consumers.',owner:'Legal counsel',src:'ALTA Survey 13(e), 13(i); Title Policy Sch. B 13(e), 13(i)',conf:'Clear'},
+{id:'e4',cat:'E. Survey & Physical Site Conditions',t:'City water main physically extends outside its own recorded easement; a separate easement’s legal description may not match its as-built location',d:'A mismatch between what’s recorded and what’s actually in the ground — confirm with the City and consider a corrective easement.',owner:'Title company / closing attorney',src:'ALTA Survey 13(f) + surveyor annotation; Title Policy Sch. B 13(f), Item 2',conf:'Clear physical mismatch; legal description question inferred'},
+{id:'e5',cat:'E. Survey & Physical Site Conditions',t:'Multiple boundary fences of unknown ownership, several encroaching',d:'Four distinct fence conditions along the property line (0.9’ off, 2.5’ off, crossing the line, 0.7’ onto the property) — potential neighbor-dispute or adverse-possession exposure.',owner:'Legal counsel',src:'ALTA Survey 13(a)-(d); Title Policy Sch. B 13(a)-(d)',conf:'Conditions confirmed; dispute risk inferred'},
+{id:'e6',cat:'E. Survey & Physical Site Conditions',t:'A sidewalk and storm-water facilities cross the property line with possible rights of others to use them',d:'Possible unrecorded public/pedestrian and cross-boundary drainage rights — unclear maintenance responsibility.',owner:'MRA operations/facilities',src:'ALTA Survey 13(g), 13(h); Title Policy Sch. B 13(g), 13(h)',conf:'Inferred'},
+{id:'e7',cat:'E. Survey & Physical Site Conditions',t:'No formal zoning compliance report was ever obtained',d:'The surveyor states the client never provided one; all zoning data on the survey was self-sourced from the ordinance, not confirmed directly by the City.',owner:'Legal counsel',src:'ALTA Survey, Surveyor’s Notes',conf:'Clear'},
+{id:'e8',cat:'E. Survey & Physical Site Conditions',t:'Flood zone determination is based on an 18-year-old FEMA map',d:'Zone X (favorable/minimal hazard) per a map dated 2006 — confirm no newer FEMA revision changes this if financing/insurance requires current data.',owner:'MRA operations/facilities',src:'ALTA Survey, Floodplain block',conf:'Map date confirmed; materiality inferred'},
+{id:'e9',cat:'E. Survey & Physical Site Conditions',t:'The private 20-ft easement along the north property line has undocumented beneficiary/use rights',d:'Unlike the municipal easements, this one is private (likely benefiting other subdivision lot owners) with unclear scope — could constrain future building or paving there.',owner:'Title company / closing attorney',src:'Title Policy Sch. B Item 8; Deed Exhibit B Item 8',conf:'Inferred'},
+];
+const PROPDD_TOP5=['a1','a2','b1','e1','d1'];
+function propddSet(id,field,val){ const st=_propddState(); st[id]=st[id]||{}; st[id][field]=val; _propddSave(st); }
+function propddCatColor(cat){ const c=cat[0]; return {A:'var(--red)',B:'var(--amber)',C:'var(--brand)',D:'var(--violet)',E:'var(--blue)'}[c]||'var(--muted)'; }
+function renderPropDD(){
+  const root=document.getElementById('propddRoot'); if(!root) return;
+  const st=_propddState();
+  const cats=[...new Set(PROPDD_ITEMS.map(i=>i.cat))];
+  const openN=PROPDD_ITEMS.filter(i=>(st[i.id]&&st[i.id].status)!=='Done').length;
+  let h='';
+  h+='<div style="margin-bottom:16px">'
+    +'<div style="font-size:20px;font-weight:800">🔒 37900 Mound Road — Due Diligence (draft)</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private preview, visible only to you — Tony hasn\'t seen this yet. Edits here save to <b>this device only</b> for now (no shared store wired up yet — say the word and I\'ll set one up, same way Quotes/EOTM work, once you\'re ready to also show Tony).</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-top:6px">'+PROPDD_ITEMS.length+' items · <b>'+openN+'</b> still open</div>'
+    +'</div>';
+  h+='<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:18px">'
+    +'<div style="font-weight:700;margin-bottom:6px">Top priority</div>'
+    +'<div style="font-size:13px;color:var(--muted);line-height:1.7">1. Pull the 1972 &amp; 2011 recorded instruments — every document references them, none includes the text.<br>'
+    +'2. Confirm whether MRA needs its own new BEA — the 2024 one protects RDB/S&amp;S, not automatically MRA.<br>'
+    +'3. Metal building sits in a water-main easement + zoning setback — title won\'t cover forced removal.<br>'
+    +'4. Reconfirm the nearby Wiegand\'s underground tank leak status — listed "open" as of 2010, never rechecked.</div>'
+    +'</div>';
+  cats.forEach(cat=>{
+    const items=PROPDD_ITEMS.filter(i=>i.cat===cat);
+    h+='<div style="margin:22px 0 10px;font-weight:800;font-size:14px;color:'+propddCatColor(cat)+'">'+esc(cat)+'</div>';
+    items.forEach(i=>{
+      const s=st[i.id]||{};
+      const status=s.status||'Open';
+      h+='<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--panel)">'
+        +'<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+        +'<div style="font-weight:700;flex:1;min-width:220px">'+esc(i.t)+'</div>'
+        +'<select onchange="propddSet(\''+i.id+'\',\'status\',this.value);renderPropDD()" style="font-size:12px;padding:2px 6px;border-radius:6px">'
+        +['Open','In Progress','Done'].map(o=>'<option '+(status===o?'selected':'')+'>'+o+'</option>').join('')
+        +'</select></div>'
+        +'<div style="font-size:13px;color:var(--ink);margin:6px 0">'+esc(i.d)+'</div>'
+        +'<div style="font-size:12px;color:var(--muted)">Suggested owner: <b>'+esc(i.owner)+'</b> &nbsp;|&nbsp; Source: '+esc(i.src)+' &nbsp;|&nbsp; <i>'+esc(i.conf)+'</i></div>'
+        +'<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
+        +'<input placeholder="Assigned to…" value="'+esc(s.assignee||'')+'" oninput="propddSet(\''+i.id+'\',\'assignee\',this.value)" style="flex:1;min-width:140px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
+        +'<input placeholder="Notes…" value="'+esc(s.notes||'')+'" oninput="propddSet(\''+i.id+'\',\'notes\',this.value)" style="flex:2;min-width:200px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
+        +'</div></div>';
+    });
+  });
+  root.innerHTML=h;
+}
+
 function renderHistory(){
   const box=document.getElementById('histResults'); if(!box) return;
   const D=window.MRA_DATA||{}, jobs=(D.jobs||[]).filter(j=>j.category!=='leave');
@@ -19282,8 +19377,9 @@ function setView(v,opts){
   if(v==='fleet'||v==='equipment') v='assets';   // FLEET + EQUIPMENT merged into the ASSETS tab
   // 🔐 role gate: a locked tab either prompts sign-in (nobody signed in) or falls back to floor.
   // FINANCE isn't part of the role/caps system at all (it's 2 specific people, not a role tier),
-  // so it's gated separately via financeTabAllowed() rather than caps.tabs.
-  if(typeof ssoEnforcing==='function' && ssoEnforcing() && v!=='history'){
+  // so it's gated separately via financeTabAllowed() rather than caps.tabs. 'propdd' (Rich-only,
+  // see isSuperAdmin() check just below) is excluded from the generic caps.tabs check the same way.
+  if(typeof ssoEnforcing==='function' && ssoEnforcing() && v!=='history' && v!=='propdd'){
     if(v==='finance'){
       if(!financeTabAllowed()){ if(!SSO.user){ SSO.signIn(); return; } v='floor'; }
     } else {
@@ -19291,6 +19387,8 @@ function setView(v,opts){
       if(caps && caps.tabs.indexOf(v)<0){ if(!SSO.user){ SSO.signIn(); return; } v='floor'; }
     }
   }
+  // 🔒 Property due diligence — Rich only, independent of role/tabs (not a general feature, see 'propdd' tab).
+  if(v==='propdd' && !(typeof isSuperAdmin==='function' && isSuperAdmin())) v='floor';
   // 'history' has no tab of its own — it opens via ☰ Actions ▸ 🔎 Search closed / history (or the 🔍 modal's footer link)
   VIEW=v;
   if(opts.persist!==false){
@@ -19311,9 +19409,11 @@ function setView(v,opts){
   { const _mw=document.getElementById('myworkView'); if(_mw) _mw.classList.toggle('hidden',v!=='mywork'); }
   { const _fn=document.getElementById('financeView'); if(_fn) _fn.classList.toggle('hidden',v!=='finance'); }
   document.getElementById('historyView').classList.toggle('hidden',v!=='history');
+  { const _pd=document.getElementById('propddView'); if(_pd) _pd.classList.toggle('hidden',v!=='propdd'); }
   if(v==='history') renderHistory();
   if(v==='mywork') renderMyWork();
   if(v==='finance') renderFinance();
+  if(v==='propdd') renderPropDD();
   if(v==='assets') setAssetLens(ASSET_LENS);   // show the right lens + render it
   if(_MINI_BY_VIEW[v]) setTimeout(()=>refreshMiniMap(v), 40);   // mount/refresh the unit map once the tab is visible
   if(typeof closeDrops==='function') closeDrops();              // close any open menu when switching tabs
