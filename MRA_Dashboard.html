@@ -4061,6 +4061,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.68", date:"2026-08-28", title:"🐛 Due Diligence tab: fixed typing getting wiped out by the auto-refresh", items:[
+    "Real bug, caught live: the tab's ~30-second live-refresh poll was rebuilding the whole item list from scratch even while you were mid-edit in a box — same as every other view WOULD have done, except Production Meeting/Sales Plan/Design Team already had a guard against exactly this, and Due Diligence never got one. That's why typing into Assigned-to/Notes felt finicky and edits sometimes didn't stick — the poll landed mid-keystroke, replaced the box, and stole focus. Fixed: the poll now skips re-rendering this tab while you're actually typing in it (same fix pattern already used on those other 3 views)." ] },
   { rev:"37.67", date:"2026-08-28", title:"🔒 Due Diligence tab: 3 more real deal documents added (Phase I ESA cover letter, ALTA Survey, Phase II ESA)", items:[
     "Rich sent 3 more real 37900 Mound Road documents — the Phase I ESA transmittal cover letter, the full ALTA Survey (34 pp., PEA Group), and the full Phase II ESA report (G2 Consulting Group) — all now committed and linked from the Due Diligence tab (Rich + Tony only).",
     "<b>20 tracker items now link straight to their source PDF</b> (via the same 📎 Documents dropdown shipped last time): every item citing the ALTA Survey (E1-E10) now links the real survey; every item citing the Phase II ESA (B1, B3, C1, D2-D4) now links the real report; D5 links the Phase I cover letter (clearly labeled as cover-letter-only — the full Phase I technical report itself hasn't been received yet).",
@@ -19348,6 +19350,22 @@ function _propddDetailHtml(i,s){
 function _propddHelpDismissed(){ try{ return localStorage.getItem('mra_propdd_help_dismissed')==='1'; }catch(e){ return false; } }
 function propddDismissHelp(){ try{ localStorage.setItem('mra_propdd_help_dismissed','1'); }catch(e){} renderPropDD(); }
 function propddShowHelp(){ try{ localStorage.removeItem('mra_propdd_help_dismissed'); }catch(e){} renderPropDD(); }
+// 🐛 FIXED 2026-08-28 -- the ~30s live-refresh poll (renderAll -> setView -> renderPropDD) was
+// rebuilding this whole view's HTML from scratch UNCONDITIONALLY, same as every other view -- but
+// unlike Production Meeting/Sales Plan/Design Team (which all guard against exactly this via
+// _pmtBusy()-style checks, see renderAll()), propdd had no such guard. Rebuilding the innerHTML while
+// Rich was mid-edit in an item's Assigned-to/Notes box destroyed and recreated that <input>, stealing
+// focus and resetting the cursor -- looked like "typing is finicky, doesn't save every time" because
+// keystrokes after the poll landed nowhere. Same fix pattern as _pmtBusy(): skip the poll-driven
+// re-render while a field inside this view is actually focused or the add-item form has unsaved text.
+function _propddBusy(){
+  const ae=document.activeElement;
+  if(ae && ae.closest && ae.closest('#propddRoot') && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName||'')) return true;
+  const t=document.getElementById('propddAddTitle'), o=document.getElementById('propddAddOwner'),
+        a=document.getElementById('propddAddAssignee'), d=document.getElementById('propddAddDesc');
+  if((t&&t.value.trim())||(o&&o.value.trim())||(a&&a.value.trim())||(d&&d.value.trim())) return true;
+  return false;
+}
 function renderPropDD(){
   const root=document.getElementById('propddRoot'); if(!root) return;
   // Pull the shared store once per page load, then re-render so Tony's/Rich's edits from the OTHER
@@ -19854,7 +19872,7 @@ function setView(v,opts){
   if(v==='history') renderHistory();
   if(v==='mywork') renderMyWork();
   if(v==='finance') renderFinance();
-  if(v==='propdd') renderPropDD();
+  if(v==='propdd' && !_propddBusy()) renderPropDD();   // don't wipe half-typed edits on the ~30s poll -- see _propddBusy()
   if(v==='assets') setAssetLens(ASSET_LENS);   // show the right lens + render it
   if(_MINI_BY_VIEW[v]) setTimeout(()=>refreshMiniMap(v), 40);   // mount/refresh the unit map once the tab is visible
   if(typeof closeDrops==='function') closeDrops();              // close any open menu when switching tabs
