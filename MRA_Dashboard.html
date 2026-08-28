@@ -19212,6 +19212,14 @@ function propddAllItems(){
   const custom=(st.__custom||[]).map(applyOverride);
   return seed.concat(custom);
 }
+// Rich (2026-08-28): "just needs to be easier to find if we're gonna be adding stuff here" -- a top-right
+// dropdown listing every reference doc linked from any item, deduped by URL, so a new PDF added to any
+// future item shows up here automatically without a separate list to maintain.
+function _propddDocsList(){
+  const seen={}; const out=[];
+  propddAllItems().forEach(function(i){ if(i.doc && i.doc.url && !seen[i.doc.url]){ seen[i.doc.url]=1; out.push(i.doc); } });
+  return out;
+}
 function propddDeleteItem(id){
   if(!confirm('Delete this due-diligence item for good? It disappears for both Rich and Tony once this syncs — not just hidden.')) return;
   const st=_propddState();
@@ -19363,7 +19371,13 @@ function renderPropDD(){
       ['C','③ Deal Memo','Reads top-to-bottom like a written memo: a summary paragraph, a color risk strip, then a tight bullet list per category.']]
       .map(function(p){ const k=p[0],lbl=p[1],tip=p[2];
         return '<button onclick="propddSetVariant(\''+k+'\')" title="'+esc(tip)+'" style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:'+(PROPDD_VARIANT===k?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_VARIANT===k?'#fff':'var(--txt)')+';font-weight:700;font-size:12.5px;cursor:pointer">'+lbl+'</button>'; }).join('')
-    +'<button onclick="propddToggleAdd()" title="Add a brand-new item that isn\'t already on this list" style="margin-left:auto;padding:6px 14px;border-radius:8px;border:1px solid '+(PROPDD_ADD_OPEN?'var(--brand)':'var(--line)')+';background:'+(PROPDD_ADD_OPEN?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_ADD_OPEN?'#fff':'var(--txt)')+';font-weight:700;font-size:12.5px;cursor:pointer">➕ Add item</button>'
+    +'<details class="tbmenu" style="margin-left:auto"><summary style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-weight:700;font-size:12.5px" title="Every reference document linked from any item below, in one place">📎 Documents'+(function(){ const n=_propddDocsList().length; return n?(' ('+n+')'):''; })()+'</summary>'
+    +'<div class="tbpanel r0">'
+    +(function(){ const docs=_propddDocsList(); return docs.length
+      ? docs.map(function(d){ return '<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="display:block;padding:7px 8px;border-radius:6px;color:var(--txt);text-decoration:none;font-size:13px;font-weight:600" onmouseover="this.style.background=\'var(--panel)\'" onmouseout="this.style.background=\'\'">🔗 '+esc(d.label)+'</a>'; }).join('')
+      : '<div class="muted" style="font-size:12px;padding:4px">No reference documents linked yet.</div>'; })()
+    +'</div></details>'
+    +'<button onclick="propddToggleAdd()" title="Add a brand-new item that isn\'t already on this list" style="padding:6px 14px;border-radius:8px;border:1px solid '+(PROPDD_ADD_OPEN?'var(--brand)':'var(--line)')+';background:'+(PROPDD_ADD_OPEN?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_ADD_OPEN?'#fff':'var(--txt)')+';font-weight:700;font-size:12.5px;cursor:pointer">➕ Add item</button>'
     +'<button onclick="propddPrint()" title="Open a clean, print-ready version of the tab you\'re currently on in a new tab (then Print → Save as PDF)" style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-weight:700;font-size:12.5px;cursor:pointer">🖨 Print this view</button>'
     +'</div>'
     +(PROPDD_ADD_OPEN?_propddAddFormHtml():'')
