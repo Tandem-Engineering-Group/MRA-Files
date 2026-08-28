@@ -2520,9 +2520,9 @@
           <select id="finRange" onchange="updateFinCustomRangeUI();renderFinance()">
             <option value="tw">This week</option>
             <option value="lw">Last week</option>
-            <option value="2w" selected>Last 2 weeks</option>
+            <option value="2w">Last 2 weeks</option>
             <option value="m">This month</option>
-            <option value="all">All time</option>
+            <option value="all" selected>All time</option>
             <option value="custom">Custom range&hellip;</option>
           </select>
           <input type="date" id="finFrom" class="hidden" title="From date" onchange="renderFinance()">
@@ -2549,6 +2549,7 @@
           <div id="finByPerson" class="fin-barlist"></div>
         </div>
       </div>
+      <div id="finDrill" class="hidden" style="margin-top:16px"></div>
       <div class="fin-card" style="margin-top:16px">
         <div class="fin-card-head">
           <h3 style="margin:0">Cost by project</h3>
@@ -6834,14 +6835,67 @@ function _finBarRow(name, val, max, fmt){
     +'<span class="tk"><span class="fill" style="width:'+pct+'%"></span></span>'
     +'<span class="vv">'+fmt+'</span></div>';
 }
+function _finJsStr(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+// ---- Drill-down (Rich 2026-08-28): click a week bar or a job row to see its own clean By person /
+// By week breakdown -- reuses the exact same ranked bar-list style as the main tiles, never a raw
+// day-by-day grid ("easy to read organized data... not eye charts of day by day employees"). ----
+let FIN_DRILL=null;   // {type:'week'|'job', key, label}
+function finDrillWeek(wk){ if(!FIN_LAST||!FIN_LAST.byWeek[wk]) return; FIN_DRILL={type:'week',key:wk}; _finRenderDrill(); }
+function finDrillJob(jobName){ if(!FIN_LAST) return; FIN_DRILL={type:'job',key:jobName}; _finRenderDrill(); }
+function finDrillClose(){ FIN_DRILL=null; const el=document.getElementById('finDrill'); if(el){ el.classList.add('hidden'); el.innerHTML=''; } }
+function _finDrillRanked(byMap, haveCost){
+  const names=Object.keys(byMap).sort((a,b)=>{
+    const av=haveCost?(byMap[a].regC+byMap[a].otC):(byMap[a].regH+byMap[a].otH);
+    const bv=haveCost?(byMap[b].regC+byMap[b].otC):(byMap[b].regH+byMap[b].otH);
+    return bv-av; });
+  if(!names.length) return '<div class="fin-empty">No hours.</div>';
+  const vals=names.map(n=> haveCost ? (byMap[n].regC+byMap[n].otC) : (byMap[n].regH+byMap[n].otH));
+  const max=Math.max.apply(null, vals.concat([0.0001]));
+  return names.map((n,i)=>{ const h=byMap[n].regH+byMap[n].otH, c=byMap[n].regC+byMap[n].otC, hTxt=(Math.round(h*10)/10)+'h';
+    const fmt = haveCost ? (financeMoney(c)+' · '+hTxt) : hTxt;
+    return _finBarRow(n, vals[i], max, fmt); }).join('');
+}
+function _finRenderDrill(){
+  const el=document.getElementById('finDrill'); if(!el || !FIN_LAST || !FIN_DRILL) return;
+  const {rows, rates, haveCost}=FIN_LAST;
+  let scopedRows, title, secondHtml;
+  if(FIN_DRILL.type==='week'){
+    scopedRows=FIN_LAST.byWeek[FIN_DRILL.key].rows;
+    title='Week of '+_finWeekLabel(FIN_LAST.byWeek[FIN_DRILL.key].d);
+    const calc=_finCostCalc(scopedRows, rates||[]);
+    secondHtml='<div class="fin-card"><h3>By job</h3><div class="fin-barlist">'+_finDrillRanked(calc.byJob,haveCost)+'</div></div>'
+      +'<div class="fin-card"><h3>By person</h3><div class="fin-barlist">'+_finDrillRanked(calc.byEmp,haveCost)+'</div></div>';
+    var grand=_finGrand(calc.byEmp);
+  } else {
+    scopedRows=rows.filter(e=>(e.job||'(no job)')===FIN_DRILL.key);
+    title=FIN_DRILL.key;
+    const calc=_finCostCalc(scopedRows, rates||[]);
+    const byWeekForJob={};
+    scopedRows.forEach(e=>{ if(!e.dateISO) return; const wk=+_finStartOfWeek(new Date(e.dateISO+'T00:00:00')); (byWeekForJob[wk]=byWeekForJob[wk]||[]).push(e); });
+    const wkMap={};
+    Object.keys(byWeekForJob).sort((a,b)=>a-b).forEach(wk=>{ const c=_finCostCalc(byWeekForJob[wk], rates||[]); const g=_finGrand(c.byEmp);
+      wkMap[_finWeekLabel(new Date(+wk))]={regH:g.regH,otH:g.otH,regC:g.regC,otC:g.otC}; });
+    secondHtml='<div class="fin-card"><h3>By person</h3><div class="fin-barlist">'+_finDrillRanked(calc.byEmp,haveCost)+'</div></div>'
+      +'<div class="fin-card"><h3>By week</h3><div class="fin-barlist">'+_finDrillRanked(wkMap,haveCost)+'</div></div>';
+    var grand=_finGrand(calc.byEmp);
+  }
+  const totalTxt = haveCost ? (financeMoney(grand.c)+' · '+(Math.round(grand.h*10)/10)+'h') : ((Math.round(grand.h*10)/10)+'h');
+  el.classList.remove('hidden');
+  el.innerHTML='<div class="fin-card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+    +'<h3 style="margin:0">🔎 '+esc(title)+' <span style="font-weight:400;color:var(--muted);font-size:13px">— '+totalTxt+'</span></h3>'
+    +'<button class="expandbtn" onclick="finDrillClose()">✕ Close</button></div></div>'
+    +'<div class="fin-grid">'+secondHtml+'</div>';
+  el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
 function renderFinance(force){
   const view=document.getElementById('financeView'); if(!view || view.classList.contains('hidden')) return;
+  finDrillClose();   // range/refresh changed -- the old drill-down's week/job keys may no longer be valid
   updateFinCustomRangeUI();
   if(FIN_LOADING) return; FIN_LOADING=true;
   loadFinanceEntries(entries=>{
     FIN_LOADING=false;
     _pcPopulateProjects(); renderProjectCost();
-    const range=(document.getElementById('finRange')||{}).value||'2w';
+    const range=(document.getElementById('finRange')||{}).value||'all';
     const rows=entries.filter(e=>_finInRange(e.dateISO, range));
     const empSet={}, jobSet={};
     rows.forEach(e=>{ empSet[e.who||'—']=1; if(e.job) jobSet[e.job]=1; });
@@ -6900,12 +6954,14 @@ function renderFinance(force){
             const lbl=_finWeekLabel(byWeek[wk].d), hTxt=(Math.round(wg.h*10)/10)+'h';
             const valHtml = haveCost ? ('<b>'+financeMoney(wg.c)+'</b><span class="val-sub">'+hTxt+'</span>') : hTxt;
             const titleTxt = haveCost ? (lbl+' — '+financeMoney(wg.c)+' · '+hTxt) : (lbl+' — '+hTxt);
-            return '<div class="fin-col" title="'+escA(titleTxt)+'"><span class="val">'+valHtml+'</span><span class="bar" style="height:'+h+'px;background:'+(haveCost?'var(--brand)':'var(--blue)')+'"></span><span class="lbl">'+esc(lbl)+'</span></div>';
+            return '<div class="fin-col" style="cursor:pointer" title="'+escA(titleTxt)+' — click to drill in" onclick="finDrillWeek('+wk+')"><span class="val">'+valHtml+'</span><span class="bar" style="height:'+h+'px;background:'+(haveCost?'var(--brand)':'var(--blue)')+'"></span><span class="lbl">'+esc(lbl)+'</span></div>';
           }).join('') + '</div>';
       }
 
-      // by job / by person ranked lists — $ drives sort/height when available, hours always shown too
-      function rankedList(byMap, elId){
+      // by job / by person ranked lists — $ drives sort/height when available, hours always shown too.
+      // drillFn (job list only, per Rich 2026-08-28): click a job to see its own By person / By week
+      // breakdown below, same clean bar-list style -- never a raw day-by-day grid.
+      function rankedList(byMap, elId, drillFn){
         const names=Object.keys(byMap).sort((a,b)=>{
           const av=haveCost?(byMap[a].regC+byMap[a].otC):(byMap[a].regH+byMap[a].otH);
           const bv=haveCost?(byMap[b].regC+byMap[b].otC):(byMap[b].regH+byMap[b].otH);
@@ -6918,12 +6974,13 @@ function renderFinance(force){
           ? cap.map((n,i)=>{
               const h=byMap[n].regH+byMap[n].otH, c=byMap[n].regC+byMap[n].otC, hTxt=(Math.round(h*10)/10)+'h';
               const fmt = haveCost ? (financeMoney(c)+' · '+hTxt) : hTxt;
-              return _finBarRow(n, vals[i], max, fmt);
+              const row=_finBarRow(n, vals[i], max, fmt);
+              return drillFn ? ('<div style="cursor:pointer" title="Click to drill into '+escA(n)+'" onclick="'+drillFn(n)+'">'+row+'</div>') : row;
             }).join('')
             + (names.length>8?'<div class="fin-empty" style="padding:6px 0 0;text-align:left">+'+(names.length-8)+' more not shown</div>':'')
           : '<div class="fin-empty">No hours in this range.</div>';
       }
-      rankedList(calcAll.byJob, 'finByJob');
+      rankedList(calcAll.byJob, 'finByJob', n=>"finDrillJob('"+_finJsStr(n)+"')");
       rankedList(calcAll.byEmp, 'finByPerson');
 
       // stash everything the print reports need, so they don't re-fetch rates a second time
@@ -7494,7 +7551,7 @@ function buildCostReportInto(win, rows, rates){
 }
 
 function openDetailedCostReport(){
-  const range=(document.getElementById('finRange')||{}).value||'2w';
+  const range=(document.getElementById('finRange')||{}).value||'all';
   // Open the blank tab FIRST, synchronously, right in the click handler -- everything after this is
   // async (loading entries, then rates), and a window.open() fired after that async work is done is
   // no longer treated as tied to the original click, so browsers silently block it as a popup. This
@@ -19066,48 +19123,246 @@ const PROPDD_ITEMS=[
 {id:'e8',cat:'E. Survey & Physical Site Conditions',t:'Flood zone determination is based on an 18-year-old FEMA map',d:'Zone X (favorable/minimal hazard) per a map dated 2006 — confirm no newer FEMA revision changes this if financing/insurance requires current data.',owner:'MRA operations/facilities',src:'ALTA Survey, Floodplain block',conf:'Map date confirmed; materiality inferred'},
 {id:'e9',cat:'E. Survey & Physical Site Conditions',t:'The private 20-ft easement along the north property line has undocumented beneficiary/use rights',d:'Unlike the municipal easements, this one is private (likely benefiting other subdivision lot owners) with unclear scope — could constrain future building or paving there.',owner:'Title company / closing attorney',src:'Title Policy Sch. B Item 8; Deed Exhibit B Item 8',conf:'Inferred'},
 ];
-const PROPDD_TOP5=['a1','a2','b1','e1','d1'];
 function propddSet(id,field,val){ const st=_propddState(); st[id]=st[id]||{}; st[id][field]=val; _propddSave(st); }
-function propddCatColor(cat){ const c=cat[0]; return {A:'var(--red)',B:'var(--amber)',C:'var(--brand)',D:'var(--violet)',E:'var(--blue)'}[c]||'var(--muted)'; }
+// Rich (2026-08-28): 3 layout options to review with Tony live, side by side as tabs, pick one after.
+const PROPDD_CATS=[
+  {key:'A',label:'Legal & Title',icon:'⚖️',color:'var(--red)'},
+  {key:'B',label:'Liability Protection',icon:'🛡️',color:'var(--amber)'},
+  {key:'C',label:'Due-Care Obligations',icon:'📋',color:'var(--brand)'},
+  {key:'D',label:'Data Gaps',icon:'🔍',color:'var(--violet)'},
+  {key:'E',label:'Survey & Site',icon:'📐',color:'var(--blue)'},
+];
+function propddCatKey(cat){ return cat[0]; }
+function propddCatMeta(cat){ return PROPDD_CATS.find(c=>c.key===propddCatKey(cat))||PROPDD_CATS[0]; }
+function propddCatColor(cat){ return propddCatMeta(cat).color; }
+function propddStatusBadgeColor(s){ return s==='Done'?'green':(s==='In Progress'?'blue':'amber'); }
+function _propddStats(){
+  const st=_propddState(); const byCat={}; PROPDD_CATS.forEach(c=>byCat[c.key]={total:0,done:0,inprog:0,open:0});
+  let total=0,done=0,inprog=0,open=0;
+  PROPDD_ITEMS.forEach(i=>{ const k=propddCatKey(i.cat); const s=(st[i.id]&&st[i.id].status)||'Open';
+    byCat[k].total++; total++;
+    if(s==='Done'){byCat[k].done++;done++;} else if(s==='In Progress'){byCat[k].inprog++;inprog++;} else {byCat[k].open++;open++;} });
+  return {byCat,total,done,inprog,open};
+}
+let PROPDD_VARIANT=(function(){ try{ return localStorage.getItem('mra_propdd_variant')||'A'; }catch(e){ return 'A'; } })();
+function propddSetVariant(v){ PROPDD_VARIANT=v; try{localStorage.setItem('mra_propdd_variant',v);}catch(e){} renderPropDD(); }
+let PROPDD_EXPANDED=new Set();
+function propddToggleExpand(id){ PROPDD_EXPANDED.has(id)?PROPDD_EXPANDED.delete(id):PROPDD_EXPANDED.add(id); renderPropDD(); }
+let PROPDD_B_OPEN=null;
+function propddSetBOpen(key){ PROPDD_B_OPEN=(PROPDD_B_OPEN===key)?null:key; renderPropDD(); }
+let PROPDD_TABLE_FILTER=null;
+function propddSetTableFilter(key){ PROPDD_TABLE_FILTER=(PROPDD_TABLE_FILTER===key)?null:key; renderPropDD(); }
+// Rich (2026-08-28, reviewing with Tony): wants to sort/group by who's actually responsible, not just the
+// suggested owner TYPE (Legal counsel / Environmental consultant / etc.) -- that's a role, not a person.
+// Real names come from each item's own "Assigned to" field (typed in the expanded row); this just changes
+// how the Register (Variant A) groups/filters the SAME rows, once real names start getting typed in.
+let PROPDD_GROUP_A='cat';   // 'cat' | 'person'
+function propddSetGroupA(g){ PROPDD_GROUP_A=g; PROPDD_TABLE_FILTER=null; renderPropDD(); }
+function propddPeopleList(){ const st=_propddState(); const names=new Set();
+  PROPDD_ITEMS.forEach(function(i){ const a=(st[i.id]&&st[i.id].assignee||'').trim(); names.add(a||'Unassigned'); });
+  const arr=[...names]; arr.sort(function(a,b){ if(a==='Unassigned') return 1; if(b==='Unassigned') return -1; return a.localeCompare(b); });
+  return arr; }
+function _propddDetailHtml(i,s){
+  const status=s.status||'Open';
+  return '<div style="font-size:13px;color:var(--ink);margin-bottom:8px">'+esc(i.d)+'</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Suggested owner: <b>'+esc(i.owner)+'</b> &nbsp;|&nbsp; Source: '+esc(i.src)+' &nbsp;|&nbsp; <i>'+esc(i.conf)+'</i></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    +'<select onclick="event.stopPropagation()" onchange="event.stopPropagation();propddSet(\''+i.id+'\',\'status\',this.value);renderPropDD()" style="font-size:12px;padding:3px 6px;border-radius:6px">'
+    +['Open','In Progress','Done'].map(o=>'<option '+(status===o?'selected':'')+'>'+o+'</option>').join('')
+    +'</select>'
+    +'<input onclick="event.stopPropagation()" placeholder="Assigned to…" value="'+esc(s.assignee||'')+'" oninput="propddSet(\''+i.id+'\',\'assignee\',this.value)" style="flex:1;min-width:120px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
+    +'<input onclick="event.stopPropagation()" placeholder="Notes…" value="'+esc(s.notes||'')+'" oninput="propddSet(\''+i.id+'\',\'notes\',this.value)" style="flex:2;min-width:160px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
+    +'</div>';
+}
+function _propddHelpDismissed(){ try{ return localStorage.getItem('mra_propdd_help_dismissed')==='1'; }catch(e){ return false; } }
+function propddDismissHelp(){ try{ localStorage.setItem('mra_propdd_help_dismissed','1'); }catch(e){} renderPropDD(); }
+function propddShowHelp(){ try{ localStorage.removeItem('mra_propdd_help_dismissed'); }catch(e){} renderPropDD(); }
 function renderPropDD(){
   const root=document.getElementById('propddRoot'); if(!root) return;
-  const st=_propddState();
-  const cats=[...new Set(PROPDD_ITEMS.map(i=>i.cat))];
-  const openN=PROPDD_ITEMS.filter(i=>(st[i.id]&&st[i.id].status)!=='Done').length;
-  let h='';
-  h+='<div style="margin-bottom:16px">'
-    +'<div style="font-size:20px;font-weight:800">🔒 37900 Mound Road — Due Diligence (draft)</div>'
-    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private preview, visible only to you — Tony hasn\'t seen this yet. Edits here save to <b>this device only</b> for now (no shared store wired up yet — say the word and I\'ll set one up, same way Quotes/EOTM work, once you\'re ready to also show Tony).</div>'
-    +'<div style="color:var(--muted);font-size:13px;margin-top:6px">'+PROPDD_ITEMS.length+' items · <b>'+openN+'</b> still open</div>'
+  const stats=_propddStats();
+  let h='<div style="margin-bottom:14px">'
+    +'<div style="font-size:20px;font-weight:800">🔒 37900 Mound Road — Due Diligence (draft) '
+    +'<span onclick="propddShowHelp()" title="Show the how-to explainer again" style="cursor:pointer;font-size:14px;color:var(--muted);vertical-align:middle">❓</span></div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private preview, visible only to you — Tony hasn\'t seen this yet. 3 layout options below to review together — edits save to <b>this device only</b> for now.</div>'
     +'</div>';
-  h+='<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:18px">'
-    +'<div style="font-weight:700;margin-bottom:6px">Top priority</div>'
-    +'<div style="font-size:13px;color:var(--muted);line-height:1.7">1. Pull the 1972 &amp; 2011 recorded instruments — every document references them, none includes the text.<br>'
-    +'2. Confirm whether MRA needs its own new BEA — the 2024 one protects RDB/S&amp;S, not automatically MRA.<br>'
-    +'3. Metal building sits in a water-main easement + zoning setback — title won\'t cover forced removal.<br>'
-    +'4. Reconfirm the nearby Wiegand\'s underground tank leak status — listed "open" as of 2010, never rechecked.</div>'
-    +'</div>';
-  cats.forEach(cat=>{
-    const items=PROPDD_ITEMS.filter(i=>i.cat===cat);
-    h+='<div style="margin:22px 0 10px;font-weight:800;font-size:14px;color:'+propddCatColor(cat)+'">'+esc(cat)+'</div>';
-    items.forEach(i=>{
-      const s=st[i.id]||{};
-      const status=s.status||'Open';
-      h+='<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--panel)">'
-        +'<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">'
-        +'<div style="font-weight:700;flex:1;min-width:220px">'+esc(i.t)+'</div>'
-        +'<select onchange="propddSet(\''+i.id+'\',\'status\',this.value);renderPropDD()" style="font-size:12px;padding:2px 6px;border-radius:6px">'
-        +['Open','In Progress','Done'].map(o=>'<option '+(status===o?'selected':'')+'>'+o+'</option>').join('')
-        +'</select></div>'
-        +'<div style="font-size:13px;color:var(--ink);margin:6px 0">'+esc(i.d)+'</div>'
-        +'<div style="font-size:12px;color:var(--muted)">Suggested owner: <b>'+esc(i.owner)+'</b> &nbsp;|&nbsp; Source: '+esc(i.src)+' &nbsp;|&nbsp; <i>'+esc(i.conf)+'</i></div>'
-        +'<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
-        +'<input placeholder="Assigned to…" value="'+esc(s.assignee||'')+'" oninput="propddSet(\''+i.id+'\',\'assignee\',this.value)" style="flex:1;min-width:140px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
-        +'<input placeholder="Notes…" value="'+esc(s.notes||'')+'" oninput="propddSet(\''+i.id+'\',\'notes\',this.value)" style="flex:2;min-width:200px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
-        +'</div></div>';
-    });
-  });
+  if(!_propddHelpDismissed()){
+    h+='<div style="background:var(--panel2);border:1px solid var(--brand);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:12.5px;color:var(--ink);line-height:1.7">'
+      +'<div style="display:flex;justify-content:space-between;gap:10px"><b>How this page works</b>'
+      +'<span onclick="propddDismissHelp()" title="Hide this" style="cursor:pointer;color:var(--muted);font-weight:700">✕</span></div>'
+      +'<b>① ② ③ tabs</b> — three different ways of laying out the exact same items. Flip between them with Tony live to pick a favorite; nothing is final yet.<br>'
+      +'<b>🖨 Print this view</b> — opens a clean, print-ready version of whichever tab you\'re on in a new tab; use your browser\'s Print → Save as PDF from there.<br>'
+      +'<b>Group by: Category / Person</b> (on tab ①) — switch between organizing by issue type or by whoever you\'ve actually assigned. Type a name into any item\'s "Assigned to" box first, then flip to Person to see everyone\'s workload grouped together.<br>'
+      +'<b>Click any item</b> to expand it — full description, source document, and where you can set its status, assignee, and notes.'
+      +'</div>';
+  }
+  h+='<div style="display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:10px;flex-wrap:wrap">'
+    +[['A','① Scorecard + Register','A clickable summary by category, plus a full sortable-feeling list below — click a row to expand its detail.'],
+      ['B','② Category Tiles','Five big tiles, one per category — click one to drill into just its items; everything else stays collapsed.'],
+      ['C','③ Deal Memo','Reads top-to-bottom like a written memo: a summary paragraph, a color risk strip, then a tight bullet list per category.']]
+      .map(function(p){ const k=p[0],lbl=p[1],tip=p[2];
+        return '<button onclick="propddSetVariant(\''+k+'\')" title="'+esc(tip)+'" style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:'+(PROPDD_VARIANT===k?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_VARIANT===k?'#fff':'var(--ink)')+';font-weight:700;font-size:12.5px;cursor:pointer">'+lbl+'</button>'; }).join('')
+    +'<button onclick="propddPrint()" title="Open a clean, print-ready version of the tab you\'re currently on in a new tab (then Print → Save as PDF)" style="margin-left:auto;padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-weight:700;font-size:12.5px;cursor:pointer">🖨 Print this view</button>'
+    +'</div>'
+    +'<div id="propddBody"></div>';
   root.innerHTML=h;
+  const body=document.getElementById('propddBody');
+  body.innerHTML = PROPDD_VARIANT==='A' ? _propddRenderA(stats) : PROPDD_VARIANT==='B' ? _propddRenderB(stats) : _propddRenderC(stats);
+}
+// ---- Variant A: scorecard tiles (click to filter) + a sortable-feeling register table, click a row to expand ----
+// "Group by" toggle: Category (suggested owner TYPE, e.g. Legal counsel) or Person (the real name typed
+// into "Assigned to" on each item) -- same rows either way, just regrouped/refiltered.
+function _propddRenderA(stats){
+  const st=_propddState();
+  let h='<div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;font-size:12px;color:var(--muted)" title="Switch how the tiles + table below are organized and filtered">Group by:'
+    +['cat','person'].map(function(g){ const lbl=g==='cat'?'Category':'Person';
+        const tip=g==='cat'?'Organize by issue type (Legal, Environmental, etc.)':'Organize by whoever is typed into each item\'s "Assigned to" box';
+        return '<button onclick="propddSetGroupA(\''+g+'\')" title="'+esc(tip)+'" style="padding:3px 12px;border-radius:14px;border:1px solid '+(PROPDD_GROUP_A===g?'var(--brand)':'var(--line)')+';background:'+(PROPDD_GROUP_A===g?'var(--brand)':'transparent')+';color:'+(PROPDD_GROUP_A===g?'#fff':'var(--ink)')+';font-weight:700;font-size:12px;cursor:pointer">'+lbl+'</button>'; }).join('')
+    +'</div>';
+  if(PROPDD_GROUP_A==='cat'){
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px">';
+    PROPDD_CATS.forEach(function(c){ const s=stats.byCat[c.key]; const active=PROPDD_TABLE_FILTER===c.key;
+      const openN=s.open+s.inprog; const heat= openN===0 ? 'var(--green)' : (openN>=s.total*0.6 ? 'var(--red)' : 'var(--amber)');
+      h+='<div onclick="propddSetTableFilter(\''+c.key+'\')" style="cursor:pointer;border:1px solid '+(active?'var(--brand)':'var(--line)')+';border-left:4px solid '+heat+';border-radius:8px;padding:10px 12px;background:var(--panel2)">'
+        +'<div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px">'+c.icon+' '+esc(c.label)+'</div>'
+        +'<div style="font-size:20px;font-weight:800;margin-top:4px">'+openN+'<span style="font-size:12px;color:var(--muted);font-weight:600"> / '+s.total+' open</span></div>'
+        +'</div>'; });
+    h+='</div>';
+  } else {
+    const people=propddPeopleList();
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">';
+    people.forEach(function(p){
+      const items=PROPDD_ITEMS.filter(function(i){ return ((st[i.id]&&st[i.id].assignee||'').trim()||'Unassigned')===p; });
+      const openN=items.filter(function(i){ return (st[i.id]&&st[i.id].status||'Open')!=='Done'; }).length;
+      const active=PROPDD_TABLE_FILTER===p; const isUn=p==='Unassigned';
+      h+='<div onclick="propddSetTableFilter(\''+esc(p).replace(/'/g,"\\'")+'\')" style="cursor:pointer;border:1px solid '+(active?'var(--brand)':'var(--line)')+';border-left:4px solid '+(isUn?'var(--muted)':(openN>0?'var(--amber)':'var(--green)'))+';border-radius:8px;padding:10px 12px;background:var(--panel2)">'
+        +'<div style="font-size:12px;font-weight:700;'+(isUn?'color:var(--muted);font-style:italic':'')+'">'+(isUn?'👤 ':'👤 ')+esc(p)+'</div>'
+        +'<div style="font-size:20px;font-weight:800;margin-top:4px">'+openN+'<span style="font-size:12px;color:var(--muted);font-weight:600"> / '+items.length+' open</span></div>'
+        +'</div>'; });
+    h+='</div>';
+    if(people.length<=1 || (people.length===2 && people.indexOf('Unassigned')>=0)) h+='<div style="color:var(--muted);font-size:12px;margin:-8px 0 16px">No one\'s been tagged yet — expand an item below and fill in "Assigned to" to start grouping by person.</div>';
+  }
+  if(PROPDD_TABLE_FILTER) h+='<div style="margin-bottom:10px"><button onclick="propddSetTableFilter(\''+PROPDD_TABLE_FILTER.replace(/'/g,"\\'")+'\')" style="font-size:12px;padding:3px 10px;border-radius:14px;border:1px solid var(--brand);background:transparent;color:var(--brand);cursor:pointer">✕ clear filter</button></div>';
+  const items=PROPDD_ITEMS.filter(function(i){
+    if(!PROPDD_TABLE_FILTER) return true;
+    if(PROPDD_GROUP_A==='cat') return propddCatKey(i.cat)===PROPDD_TABLE_FILTER;
+    return ((st[i.id]&&st[i.id].assignee||'').trim()||'Unassigned')===PROPDD_TABLE_FILTER;
+  });
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--line)">'
+    +'<th style="padding:6px 8px;width:22px"></th><th style="padding:6px 8px">Item</th><th style="padding:6px 8px">Category</th><th style="padding:6px 8px">'+(PROPDD_GROUP_A==='person'?'Assigned to':'Owner')+'</th><th style="padding:6px 8px">Status</th></tr></thead><tbody>';
+  items.forEach(function(i){ const s=st[i.id]||{}; const status=s.status||'Open'; const meta=propddCatMeta(i.cat); const exp=PROPDD_EXPANDED.has(i.id);
+    const ownerCell=PROPDD_GROUP_A==='person' ? (s.assignee?esc(s.assignee):'<i style="color:var(--muted)">Unassigned</i>') : esc(i.owner);
+    h+='<tr style="border-bottom:1px solid var(--line);cursor:pointer" onclick="propddToggleExpand(\''+i.id+'\')">'
+      +'<td style="padding:8px">'+(exp?'▾':'▸')+'</td>'
+      +'<td style="padding:8px;font-weight:600">'+esc(i.t)+'</td>'
+      +'<td style="padding:8px;color:var(--muted);font-size:12px;white-space:nowrap">'+meta.icon+' '+esc(meta.label)+'</td>'
+      +'<td style="padding:8px;color:var(--muted);font-size:12px">'+ownerCell+'</td>'
+      +'<td style="padding:8px"><span class="badge '+propddStatusBadgeColor(status)+'">'+status+'</span></td>'
+      +'</tr>';
+    if(exp) h+='<tr style="border-bottom:1px solid var(--line);background:var(--panel2)"><td></td><td colspan="4" style="padding:10px 8px 14px">'+_propddDetailHtml(i,s)+'</td></tr>'; });
+  h+='</tbody></table></div>';
+  return h;
+}
+// ---- Variant B: 5 big category tiles, click one to drill in below (everything else stays collapsed) ----
+function _propddRenderB(stats){
+  let h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:20px">';
+  PROPDD_CATS.forEach(function(c){ const s=stats.byCat[c.key]; const openN=s.open+s.inprog; const active=PROPDD_B_OPEN===c.key;
+    h+='<div onclick="propddSetBOpen(\''+c.key+'\')" style="cursor:pointer;border:2px solid '+(active?'var(--brand)':'var(--line)')+';border-radius:12px;padding:18px 10px;background:var(--panel2);text-align:center">'
+      +'<div style="font-size:30px">'+c.icon+'</div>'
+      +'<div style="font-weight:800;font-size:13.5px;margin-top:6px">'+esc(c.label)+'</div>'
+      +'<div style="font-size:24px;font-weight:800;color:'+(openN>0?'var(--amber)':'var(--green)')+';margin-top:4px">'+openN+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">open of '+s.total+'</div>'
+      +'</div>'; });
+  h+='</div>';
+  if(PROPDD_B_OPEN){
+    const meta=PROPDD_CATS.find(function(c){ return c.key===PROPDD_B_OPEN; });
+    const items=PROPDD_ITEMS.filter(function(i){ return propddCatKey(i.cat)===PROPDD_B_OPEN; });
+    const st=_propddState();
+    h+='<div style="font-weight:800;font-size:15px;margin-bottom:10px">'+meta.icon+' '+esc(meta.label)+'</div>';
+    items.forEach(function(i){ const s=st[i.id]||{}; const status=s.status||'Open'; const exp=PROPDD_EXPANDED.has(i.id);
+      h+='<div style="border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;background:var(--panel)">'
+        +'<div style="display:flex;justify-content:space-between;gap:10px;cursor:pointer" onclick="propddToggleExpand(\''+i.id+'\')">'
+        +'<div style="font-weight:700">'+(exp?'▾':'▸')+' '+esc(i.t)+'</div>'
+        +'<span class="badge '+propddStatusBadgeColor(status)+'">'+status+'</span></div>'
+        +(exp?'<div style="margin-top:10px">'+_propddDetailHtml(i,s)+'</div>':'')
+        +'</div>'; });
+  } else {
+    h+='<div style="color:var(--muted);font-size:13px;text-align:center;padding:30px 0">Click a category above to see its items.</div>';
+  }
+  return h;
+}
+// ---- Variant C: one-page "deal memo" -- exec summary + risk-heat strip + tight bullet groups per category ----
+function _propddRenderC(stats){
+  let h='<div style="font-size:13px;line-height:1.7;color:var(--ink);margin-bottom:18px;max-width:800px">'
+    +'37900 Mound Road is a 3.58-acre M-1 light-industrial parcel with two buildings, purchased August 2024 by RDB Industrial Drive LLC and S&amp;S Holdings of Southwest Florida LLC. The property has a confirmed history of soil/groundwater metals contamination dating to 2009, reconfirmed by a 2024 Phase I/II ESA. The 2024 owners filed new environmental liability paperwork and a joint Due Care Plan, acknowledged by EGLE with no issues raised. Two recorded legal instruments (1972, 2011) are referenced everywhere but included nowhere in this document set — that\'s the single highest-priority item below.'
+    +'</div>';
+  h+='<div style="display:flex;height:10px;border-radius:6px;overflow:hidden;margin-bottom:20px">';
+  PROPDD_CATS.forEach(function(c){ const s=stats.byCat[c.key]; const openN=s.open+s.inprog;
+    const heat= openN===0 ? 'var(--green)' : (openN>=s.total*0.6 ? 'var(--red)' : 'var(--amber)');
+    h+='<div title="'+esc(c.label)+': '+openN+' open of '+s.total+'" style="flex:1;background:'+heat+'"></div>'; });
+  h+='</div>';
+  const st=_propddState();
+  PROPDD_CATS.forEach(function(c){
+    const items=PROPDD_ITEMS.filter(function(i){ return propddCatKey(i.cat)===c.key; });
+    h+='<div style="font-weight:800;font-size:14px;margin:18px 0 8px;color:'+c.color+'">'+c.icon+' '+esc(c.label)+'</div><ul style="margin:0;padding-left:0;list-style:none">';
+    items.forEach(function(i){ const s=st[i.id]||{}; const status=s.status||'Open';
+      const dot = status==='Done'?'#22c55e':(status==='In Progress'?'#3b82f6':'#f59e0b');
+      h+='<li style="padding:5px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:baseline;cursor:pointer" onclick="propddToggleExpand(\''+i.id+'\')">'
+        +'<span style="width:8px;height:8px;border-radius:50%;background:'+dot+';flex-shrink:0"></span>'
+        +'<span style="font-size:13px"><b>'+esc(i.t)+'</b> <span style="color:var(--muted)">— '+esc(i.owner)+'</span></span>'
+        +'</li>';
+      if(PROPDD_EXPANDED.has(i.id)) h+='<li style="padding:8px 0 12px 16px">'+_propddDetailHtml(i,s)+'</li>'; });
+    h+='</ul>'; });
+  return h;
+}
+// ---- Print: each variant opens a clean standalone doc (same pattern as every other 🖨 Print button here) ----
+function propddPrint(){ if(PROPDD_VARIANT==='A') _propddPrintDoc('A'); else if(PROPDD_VARIANT==='B') _propddPrintDoc('B'); else _propddPrintDoc('C'); }
+function _propddPrintCss(){
+  return '@media print{.bar{display:none}body{background:#fff}}'
+    +'body{font-family:Segoe UI,Arial,sans-serif;color:#1a2130;max-width:900px;margin:0 auto;padding:30px}'
+    +'.bar{position:sticky;top:0;background:#111827;color:#fff;padding:10px 16px;border-radius:8px;margin-bottom:20px;display:flex;gap:12px;align-items:center}'
+    +'.bar button{background:#e04826;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer}'
+    +'h1{font-size:22px;margin:0 0 4px}.sub{color:#667;font-size:13px;margin-bottom:18px}'
+    +'.cathead{font-weight:800;font-size:14px;margin:20px 0 8px;border-bottom:2px solid #eee;padding-bottom:4px}'
+    +'.item{padding:8px 0;border-bottom:1px solid #eee}.item b{font-size:13.5px}'
+    +'.meta{color:#667;font-size:11.5px;margin-top:3px}.desc{font-size:12.5px;margin-top:4px;color:#333}'
+    +'.pill{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px}'
+    +'.tile{display:inline-block;width:17%;text-align:center;vertical-align:top;margin-right:1%}'
+    +'table{width:100%;border-collapse:collapse;font-size:12.5px}td,th{padding:6px 8px;text-align:left;border-bottom:1px solid #eee}';
+}
+function _propddPillHtml(status){
+  const bg=status==='Done'?'#dcf5e6':(status==='In Progress'?'#dde9fb':'#fdeccb');
+  const fg=status==='Done'?'#15803d':(status==='In Progress'?'#1d65c9':'#8a5e00');
+  return '<span class="pill" style="background:'+bg+';color:'+fg+'">'+status+'</span>';
+}
+function _propddPrintDoc(variant){
+  const w=window.open('','_blank'); if(!w){ alert('Pop-up blocked — allow pop-ups to print.'); return; }
+  const stats=_propddStats(); const st=_propddState();
+  const today=(typeof fmtMDY==='function'&&typeof localISO==='function')?fmtMDY(localISO(Date.now())):new Date().toLocaleDateString();
+  let body='<h1>🔒 37900 Mound Road — Due Diligence (draft)</h1><div class="sub">Private working draft · '+esc(today)+'</div>';
+  if(variant==='A'){
+    body+='<div style="margin-bottom:16px">'+PROPDD_CATS.map(function(c){ const s=stats.byCat[c.key]; const openN=s.open+s.inprog;
+      return '<div class="tile"><div style="font-size:11px;color:#667">'+c.icon+' '+esc(c.label)+'</div><div style="font-size:18px;font-weight:800">'+openN+' / '+s.total+'</div></div>'; }).join('')+'</div>';
+    body+='<table><thead><tr><th>Item</th><th>Category</th><th>Owner</th><th>Status</th></tr></thead><tbody>'
+      +PROPDD_ITEMS.map(function(i){ const s=st[i.id]||{}; const status=s.status||'Open'; const meta=propddCatMeta(i.cat);
+        return '<tr><td><b>'+esc(i.t)+'</b><div class="desc">'+esc(i.d)+'</div><div class="meta">Source: '+esc(i.src)+' · '+esc(i.conf)+(s.notes?' · Notes: '+esc(s.notes):'')+'</div></td>'
+          +'<td>'+meta.icon+' '+esc(meta.label)+'</td><td>'+esc(i.owner)+(s.assignee?'<br><i>'+esc(s.assignee)+'</i>':'')+'</td><td>'+_propddPillHtml(status)+'</td></tr>'; }).join('')
+      +'</tbody></table>';
+  } else if(variant==='B'){
+    PROPDD_CATS.forEach(function(c){ const items=PROPDD_ITEMS.filter(function(i){ return propddCatKey(i.cat)===c.key; }); const s=stats.byCat[c.key];
+      body+='<div class="cathead">'+c.icon+' '+esc(c.label)+' — '+(s.open+s.inprog)+' open of '+s.total+'</div>';
+      items.forEach(function(i){ const st2=st[i.id]||{}; const status=st2.status||'Open';
+        body+='<div class="item"><b>'+esc(i.t)+'</b>'+_propddPillHtml(status)+'<div class="desc">'+esc(i.d)+'</div>'
+          +'<div class="meta">Owner: '+esc(i.owner)+(st2.assignee?' <i>('+esc(st2.assignee)+')</i>':'')+' · Source: '+esc(i.src)+' · '+esc(i.conf)+(st2.notes?' · Notes: '+esc(st2.notes):'')+'</div></div>'; }); });
+  } else {
+    body+='<div style="font-size:13px;line-height:1.7;margin-bottom:16px">37900 Mound Road is a 3.58-acre M-1 light-industrial parcel with two buildings, purchased August 2024 by RDB Industrial Drive LLC and S&amp;S Holdings of Southwest Florida LLC. The property has a confirmed history of soil/groundwater metals contamination dating to 2009, reconfirmed by a 2024 Phase I/II ESA. The 2024 owners filed new environmental liability paperwork and a joint Due Care Plan, acknowledged by EGLE with no issues raised. Two recorded legal instruments (1972, 2011) are referenced everywhere but included nowhere in this document set.</div>';
+    PROPDD_CATS.forEach(function(c){ const items=PROPDD_ITEMS.filter(function(i){ return propddCatKey(i.cat)===c.key; });
+      body+='<div class="cathead">'+c.icon+' '+esc(c.label)+'</div>';
+      items.forEach(function(i){ const st2=st[i.id]||{}; const status=st2.status||'Open';
+        body+='<div class="item"><b>'+esc(i.t)+'</b> — '+esc(i.owner)+' '+_propddPillHtml(status)+'</div>'; }); });
+  }
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Due Diligence — 37900 Mound Road</title><style>'+_propddPrintCss()+'</style></head><body>'
+    +'<div class="bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><span>Use your browser\'s "Save as PDF".</span></div>'+body+'</body></html>';
+  w.document.open(); w.document.write(html); w.document.close();
 }
 
 function renderHistory(){
