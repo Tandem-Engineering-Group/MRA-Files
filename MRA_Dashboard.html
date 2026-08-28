@@ -11682,7 +11682,7 @@ function renderFloor(D){
     // Normal view: open by default (tasks visible up top); wall view: collapsed (count-only).
     const jOpen = (WALL||defColl) ? expandedJobs.has(j.row) : !collapsedJobs.has(j.row);
     const _trk=new Set((j.tasks||[]).filter(t=>!t.done).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
-    const fl=jobIsSub(j)?[]:fleetioFor(j).filter(it=>!_trk.has(String(it.num)) && !_fleetioTasked.has(String(it.num)));  // hide issues already a STILL-OPEN task on THIS or ANY job; a Done task no longer suppresses (Fleetio might still show it open); 🧩 sub-jobs never carry Fleetio
+    const fl=(jobIsSub(j)&&_subHasVisibleMain(j,jobs))?[]:fleetioFor(j).filter(it=>!_trk.has(String(it.num)) && !_fleetioTasked.has(String(it.num)));  // hide issues already a STILL-OPEN task on THIS or ANY job; a Done task no longer suppresses (Fleetio might still show it open); 🧩 sub-jobs skip Fleetio only while a visible main sibling is still around to carry it
     const pj=(WALL||jobIsSub(j))?[]:_projTasksForJob(j);   // 📋 schedule work linked to this job (J# first, name fallback)
     // Open-task count pill. WALL/TV: a plain count (tasks live in the Open Tasks by Assignee
     // panel below, so the TV stays compact). NORMAL view: a clickable "N tasks ▸" that
@@ -12321,6 +12321,20 @@ let _fioRetGen=null, _fioRetMap=null;
    job's Notes so it rides the normal write path — and Fleetio (MRA date range, 🔧 issue pill, GPS
    on What's Next) follows ONLY the main job. */
 function jobIsSub(j){ return /\[subjob\]/i.test((j&&j.notesRaw)||''); }
+// A 🧩 sub-job normally carries NO Fleetio (its issues "follow" the main job's card instead) -- but if the
+// main job has since shipped (or is otherwise off the visible board), there's no card left for the issue to
+// follow, and it would silently vanish. Rich (2026-08-28): "if it's showing in Fleetio, it needs to show on
+// the board... for any job." So a sub-job only suppresses its Fleetio pill when a VISIBLE (non-shipped,
+// non-sub) sibling sharing the same J# is actually on the board to carry it; otherwise it shows its own.
+function _subHasVisibleMain(j, allJobs){
+  const jn=String((j&&j.jobNum)||'').match(/\d{3,}/g)||[]; if(!jn.length) return false;
+  return (allJobs||[]).some(function(o){
+    if(o===j || jobIsSub(o)) return false;
+    if((o.status||'').toLowerCase()==='shipped') return false;
+    const on=String(o.jobNum||'').match(/\d{3,}/g)||[];
+    return on.some(function(k){ return jn.indexOf(k)>=0; });
+  });
+}
 function stripSubTag(n){ return String(n||'').replace(/\s*\[subjob\]\s*/ig,' ').replace(/\s{2,}/g,' ').trim(); }
 function _subNotes(n,cbId){ n=stripSubTag(n); const c=document.getElementById(cbId); if(c&&c.checked) n=(n?n+' ':'')+'[subjob]'; return n; }
 function _fioRetForJob(jobNum){
@@ -20999,7 +21013,7 @@ function unassignedTasks(){
     const seen=new Set();
     (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
       if(String(j.row||'').indexOf('orphan:')===0 || j.category==='pipeline') return;
-      if(typeof jobIsSub==='function' && jobIsSub(j)) return;                         // 🧩 sub-jobs don't carry Fleetio
+      if(typeof jobIsSub==='function' && jobIsSub(j) && _subHasVisibleMain(j,D.jobs||[])) return;   // 🧩 sub-jobs skip Fleetio only while a visible main sibling still carries it
       (((String(j.jobNum||'').match(/\d{3,}/g))||[])).forEach(k=>{ (flByJob[k]||[]).forEach(it=>{ const num=String(it.num);
         if(tasked.has(num)||seen.has(num)) return; seen.add(num);
         out.push({kind:'fleetio', proj:j.project, jobNum:j.jobNum||'', bay:j.bay||'', row:j.row, num:num,
