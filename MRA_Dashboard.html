@@ -19099,8 +19099,28 @@ function histToggle(key){ histExpanded.has(key)?histExpanded.delete(key):histExp
 // THIS DEVICE ONLY (localStorage) until a real shared store is wired up, same pattern as Quotes/EOTM -- so
 // right now Rich's edits and Tony's edits do NOT sync to each other, each only sees their own device's edits.
 const PROPDD_KEY='mra_propdd_v1';
-function _propddState(){ try{ return JSON.parse(localStorage.getItem(PROPDD_KEY)||'{}'); }catch(e){ return {}; } }
-function _propddSave(st){ try{ localStorage.setItem(PROPDD_KEY, JSON.stringify(st)); }catch(e){} }
+// Shared store (Rich, 2026-08-28: "meaning sync... fix it" -- Rich + Tony's status/assignee/notes edits
+// need to sync to each other, not just persist per-device). Same pattern as Quotes' _qLoadShared/_QUOTES_SHARED:
+// PROPDD_STORE_URL is the one-time "MRA Due Diligence Write" flow Rich builds (HTTP trigger -> Create blob
+// (V2) -> duediligence.json in $web) -- until he sends the real URL this stays '', so _propddSave() simply
+// skips the POST and everything behaves exactly like the old localStorage-only version (safe to ship now).
+const PROPDD_STORE_URL='';   // TBD -- fill in once Rich sends the flow's HTTP POST URL, then redeploy
+let _PROPDD_SHARED=null, _propddSharedTried=false;
+function _propddLoadShared(cb){
+  _propddSharedTried=true;
+  function done(a){ if(a && typeof a==='object' && !Array.isArray(a)) _PROPDD_SHARED=a; if(cb) cb(); }
+  fetch('duediligence.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(done)
+    .catch(function(){ if(cb) cb(); });   // file doesn't exist yet / offline -- fall back to localStorage below, same as before
+}
+function _propddState(){
+  if(_PROPDD_SHARED && typeof _PROPDD_SHARED==='object') return _PROPDD_SHARED;
+  try{ return JSON.parse(localStorage.getItem(PROPDD_KEY)||'{}'); }catch(e){ return {}; }
+}
+function _propddSave(st){
+  try{ localStorage.setItem(PROPDD_KEY, JSON.stringify(st)); }catch(e){}   // keep the local cache warm regardless
+  _PROPDD_SHARED=st;
+  if(PROPDD_STORE_URL){ try{ fetch(PROPDD_STORE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({json:JSON.stringify(st)})}); }catch(e){} }
+}
 const PROPDD_ITEMS=[
 {id:'a1',cat:'A. Legal — Recorded Instruments & Title',t:'Obtain and review the 1972 recorded restriction (Liber 2285, Page 142)',d:'Cited by citation only in the deed, title policy, and survey — flagged by the survey as one of only two exceptions that actually "affects" the property rather than merely being plotted. Content unknown.',owner:'Legal counsel',src:'Title Policy Sch. B Item 6; Deed Exhibit B Item 6; ALTA Survey',conf:'Confirmed to exist; content unread'},
 {id:'a2',cat:'A. Legal — Recorded Instruments & Title',t:'Obtain and review the 2011 Notice of Variance + Hold Harmless/Indemnification Agreement (Liber 20801, Pages 155 & 159)',d:'Same gap as above. The pairing of a variance with an indemnity agreement suggests a zoning variance conditioned on assuming liability — plausibly tied to the metal building’s setback nonconformity (Section E), but unconfirmed.',owner:'Legal counsel',src:'Title Policy Sch. B Item 10; Deed Exhibit B Item 5; ALTA Survey',conf:'Confirmed to exist; content unread'},
@@ -19191,11 +19211,15 @@ function propddDismissHelp(){ try{ localStorage.setItem('mra_propdd_help_dismiss
 function propddShowHelp(){ try{ localStorage.removeItem('mra_propdd_help_dismissed'); }catch(e){} renderPropDD(); }
 function renderPropDD(){
   const root=document.getElementById('propddRoot'); if(!root) return;
+  // Pull the shared store once per page load, then re-render so Tony's/Rich's edits from the OTHER
+  // person's device actually show up (same one-time-fetch-then-rerender pattern as Quotes' openQuote()).
+  if(PROPDD_STORE_URL && !_propddSharedTried){ _propddLoadShared(function(){ renderPropDD(); }); }
   const stats=_propddStats();
+  const syncTxt = PROPDD_STORE_URL ? 'edits sync between you two automatically' : 'edits save to <b>whichever device you\'re using</b> for now (Rich\'s and Tony\'s edits don\'t sync to each other yet)';
   let h='<div style="margin-bottom:14px">'
     +'<div style="font-size:20px;font-weight:800">🔒 37900 Mound Road — Due Diligence (draft) '
     +'<span onclick="propddShowHelp()" title="Show the how-to explainer again" style="cursor:pointer;font-size:14px;color:var(--muted);vertical-align:middle">❓</span></div>'
-    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private — visible only to Rich and Tony, nobody else. 3 layout options below to review together and pick one — edits save to <b>whichever device you\'re using</b> for now (Rich\'s and Tony\'s edits don\'t sync to each other yet).</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private — visible only to Rich and Tony, nobody else. 3 layout options below to review together and pick one — '+syncTxt+'.</div>'
     +'</div>';
   if(!_propddHelpDismissed()){
     h+='<div style="background:var(--panel2);border:1px solid var(--brand);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:12.5px;color:var(--ink);line-height:1.7">'
