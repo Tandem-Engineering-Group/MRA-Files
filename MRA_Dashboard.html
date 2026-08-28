@@ -4061,6 +4061,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.71", date:"2026-08-28", title:"🐛 Due Diligence tab: assigning someone actually shows up now (it WAS saving, just invisibly)", items:[
+    "Real gap, confirmed straight from the live shared data: typing a name into an item's \"Assigned to\" box WAS saving correctly the whole time — but the Owner column on the main list (the default, by-category view) always showed the item's static suggested owner and never the real assignment, so it looked exactly like the edit did nothing. Fixed: that column, plus the Deal Memo view and its print, now show the real assignee once one's set (suggested owner kept as a small note alongside it, in the table view)." ] },
   { rev:"37.70", date:"2026-08-28", title:"🔒 Due Diligence tab: John Renaud + Doug McLean added, same access as Tony", items:[
     "The private Due Diligence tab was Rich + Tony only — now also opens for John Renaud (johnr@gomra.com) and Doug McLean (dougm@gomra.com), same full access as Tony (view + edit, same live sync). Everything else about the tab is unchanged — still hidden from everyone else, still requires a real Microsoft sign-in as one of these accounts." ] },
   { rev:"37.69", date:"2026-08-28", title:"🔗 Due Diligence tab: links now actually jump to the cited page, not just the file", items:[
@@ -19475,7 +19477,14 @@ function _propddRenderA(stats){
   h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--line)">'
     +'<th style="padding:6px 8px;width:22px"></th><th style="padding:6px 8px">Item</th><th style="padding:6px 8px">Category</th><th style="padding:6px 8px">'+(PROPDD_GROUP_A==='person'?'Assigned to':'Owner')+'</th><th style="padding:6px 8px">Status</th></tr></thead><tbody>';
   items.forEach(function(i){ const s=st[i.id]||{}; const status=s.status||'Open'; const meta=propddCatMeta(i.cat); const exp=PROPDD_EXPANDED.has(i.id);
-    const ownerCell=PROPDD_GROUP_A==='person' ? (s.assignee?esc(s.assignee):'<i style="color:var(--muted)">Unassigned</i>') : esc(i.owner);
+    // 🐛 FIXED 2026-08-28 -- this column ALWAYS showed the item's static suggested owner in the default
+    // (by-category) grouping, completely ignoring whatever was actually typed into "Assigned to" below --
+    // so assigning someone appeared to do nothing (Rich: "this is not updating"), even though the edit
+    // WAS saving correctly the whole time (confirmed live in duediligence.json). Now shows the real
+    // assignment wherever one exists, with the suggested owner kept as a small parenthetical for context.
+    const ownerCell=PROPDD_GROUP_A==='person'
+      ? (s.assignee?esc(s.assignee):'<i style="color:var(--muted)">Unassigned</i>')
+      : (s.assignee?('<b>'+esc(s.assignee)+'</b> <span style="color:var(--faint);font-size:10.5px">(sugg. '+esc(i.owner)+')</span>'):esc(i.owner));
     h+='<tr style="border-bottom:1px solid var(--line);cursor:pointer" onclick="propddToggleExpand(\''+i.id+'\')">'
       +'<td style="padding:8px">'+(exp?'▾':'▸')+'</td>'
       +'<td style="padding:8px;font-weight:600">'+esc(i.t)+'</td>'
@@ -19533,7 +19542,7 @@ function _propddRenderC(stats){
       const dot = status==='Done'?'#22c55e':(status==='In Progress'?'#3b82f6':'#f59e0b');
       h+='<li style="padding:5px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:baseline;cursor:pointer" onclick="propddToggleExpand(\''+i.id+'\')">'
         +'<span style="width:8px;height:8px;border-radius:50%;background:'+dot+';flex-shrink:0"></span>'
-        +'<span style="font-size:13px"><b>'+esc(i.t)+'</b> <span style="color:var(--muted)">— '+esc(i.owner)+'</span></span>'
+        +'<span style="font-size:13px"><b>'+esc(i.t)+'</b> <span style="color:var(--muted)">— '+esc(s.assignee||i.owner)+'</span></span>'
         +'</li>';
       if(PROPDD_EXPANDED.has(i.id)) h+='<li style="padding:8px 0 12px 16px">'+_propddDetailHtml(i,s)+'</li>'; });
     h+='</ul>'; });
@@ -19583,7 +19592,7 @@ function _propddPrintDoc(variant){
     PROPDD_CATS.forEach(function(c){ const items=propddAllItems().filter(function(i){ return propddCatKey(i.cat)===c.key; });
       body+='<div class="cathead">'+c.icon+' '+esc(c.label)+'</div>';
       items.forEach(function(i){ const st2=st[i.id]||{}; const status=st2.status||'Open';
-        body+='<div class="item"><b>'+esc(i.t)+'</b> — '+esc(i.owner)+' '+_propddPillHtml(status)+'</div>'; }); });
+        body+='<div class="item"><b>'+esc(i.t)+'</b> — '+esc(st2.assignee||i.owner)+' '+_propddPillHtml(status)+'</div>'; }); });
   }
   const html='<!doctype html><html><head><meta charset="utf-8"><title>MRA Due Diligence — 37900 Mound Road</title><style>'+_propddPrintCss()+'</style></head><body>'
     +'<div class="bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><span>Use your browser\'s "Save as PDF".</span></div>'+body+'</body></html>';
