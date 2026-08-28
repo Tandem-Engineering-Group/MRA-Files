@@ -8194,7 +8194,7 @@ function queueAllFleetio(rowRef){
   const mine=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>{
     if(njob(i.jobNum)&&njob(i.jobNum)===njob(j.jobNum)) return true;
     const m=String(i.asset||'').toUpperCase().match(/\d{3,5}/g); return !!(m&&njob(j.jobNum)&&m.indexOf(njob(j.jobNum))>=0); });
-  const have=new Set(); (j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) have.add(m[1]); });
+  const have=new Set(); (j.tasks||[]).forEach(t=>{ if(t.done) return; const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) have.add(m[1]); });   // a Done task doesn't block re-queuing if Fleetio still shows it open
   const todo=mine.filter(i=>!have.has(String(i.num)));
   if(!todo.length){ alert("All of this unit's open issues are already on the board."); return; }
   if(!confirm('Add '+todo.length+' Fleetio issue'+(todo.length===1?'':'s')+' on '+(j.project||j.jobNum)+' as Shop Tasks?\n\nAssign crews afterwards — they land unassigned.')) return;
@@ -11539,10 +11539,13 @@ function renderFloor(D){
   // Trailer issues only on the bay card — tractor issues (Doug's) stay on the FLEETIO tab.
   ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(!SHOW_TRACTOR && /tractor/i.test(it.asset||"")) return; const k=(((it.jobNum||"").match(/\d{3,}/)||[])[0]); if(k){(flByJob[k]=flByJob[k]||[]).push(it);} });
   const fleetioFor=j=>{ const out=[],seen={}; (((j.jobNum||"").match(/\d{3,}/g))||[]).forEach(k=>{(flByJob[k]||[]).forEach(it=>{ if(!seen[it.num]){seen[it.num]=1; out.push(it);} });}); return out; };
-  // A Fleetio issue that's already a task on ANY job (its 🔧 #num) shouldn't ALSO nag as unassigned on a
-  // sibling job that merely shares the number (e.g. an Equipment Return on the same J####). Hide it globally.
+  // A Fleetio issue that's still OPEN and already has a matching, still-OPEN task on ANY job (its 🔧 #num)
+  // shouldn't ALSO nag as unassigned on a sibling job that merely shares the number. Hide it globally --
+  // but ONLY while that task is still open. Rich (2026-08-28): "if it's showing in Fleetio, it needs to
+  // show on the board" -- a task getting marked Done on the board does NOT mean Fleetio was ever actually
+  // closed there (found 34 real cases board-wide where it wasn't), so a closed task must stop suppressing.
   const _fleetioTasked=new Set();
-  jobs.forEach(j=>(j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) _fleetioTasked.add(m[1]); }));
+  jobs.forEach(j=>(j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m && !t.done) _fleetioTasked.add(m[1]); }));
   const shortAsset=s=>{ s=(s||"").trim(); const m=s.match(/^(.*?)(?:19|20)\d\d/); return (m?m[1]:s).trim().slice(0,26); };
   // Prune locally-remembered closes the export has now confirmed (task no longer open).
   if(CLOSED_LOCAL.size){
@@ -11678,8 +11681,8 @@ function renderFloor(D){
     }
     // Normal view: open by default (tasks visible up top); wall view: collapsed (count-only).
     const jOpen = (WALL||defColl) ? expandedJobs.has(j.row) : !collapsedJobs.has(j.row);
-    const _trk=new Set((j.tasks||[]).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
-    const fl=jobIsSub(j)?[]:fleetioFor(j).filter(it=>!_trk.has(String(it.num)) && !_fleetioTasked.has(String(it.num)));  // hide issues already a task on THIS or ANY job; 🧩 sub-jobs never carry Fleetio
+    const _trk=new Set((j.tasks||[]).filter(t=>!t.done).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
+    const fl=jobIsSub(j)?[]:fleetioFor(j).filter(it=>!_trk.has(String(it.num)) && !_fleetioTasked.has(String(it.num)));  // hide issues already a STILL-OPEN task on THIS or ANY job; a Done task no longer suppresses (Fleetio might still show it open); 🧩 sub-jobs never carry Fleetio
     const pj=(WALL||jobIsSub(j))?[]:_projTasksForJob(j);   // 📋 schedule work linked to this job (J# first, name fallback)
     // Open-task count pill. WALL/TV: a plain count (tasks live in the Open Tasks by Assignee
     // panel below, so the TV stays compact). NORMAL view: a clickable "N tasks ▸" that
@@ -20991,8 +20994,8 @@ function unassignedTasks(){
   { const flByJob={};
     ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(typeof SHOW_TRACTOR!=='undefined' && !SHOW_TRACTOR && /tractor/i.test(it.asset||'')) return;
       const k=((String(it.jobNum||'').match(/\d{3,}/)||[])[0]); if(k){ (flByJob[k]=flByJob[k]||[]).push(it); } });
-    const tasked=new Set();
-    (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) tasked.add(m[1]); }));
+    const tasked=new Set();   // only a still-OPEN matching task suppresses -- a Done one might not mean Fleetio itself was closed
+    (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m && !t.done) tasked.add(m[1]); }));
     const seen=new Set();
     (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
       if(String(j.row||'').indexOf('orphan:')===0 || j.category==='pipeline') return;
