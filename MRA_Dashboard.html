@@ -19185,18 +19185,62 @@ function propddSet(id,field,val){ const st=_propddState(); st[id]=st[id]||{}; st
 // Edit/delete a SEED item (from PROPDD_ITEMS above): title/description edits are stored as overrides in the
 // same per-item synced state object as status/assignee/notes (st[id].t / st[id].d), merged over the seed at
 // display time by propddAllItems() below -- deletes are a soft `deleted` flag (keeps history, avoids mutating
-// the const array). No "add a brand-new item" UI (not asked for) -- just tweak/remove what's already there.
+// the const array). Brand-new items typed in via ➕ Add item live fully in st.__custom (there's no seed row to
+// merge over) but go through the exact same propddSet()/status/assignee/notes/resolution machinery once added.
 function propddAllItems(){
   const st=_propddState();
-  return PROPDD_ITEMS.filter(function(i){ return !(st[i.id]&&st[i.id].deleted); })
-    .map(function(i){ const o=st[i.id]; if(!o||(o.t==null&&o.d==null)) return i;
-      return Object.assign({},i,{t:(o.t!=null?o.t:i.t),d:(o.d!=null?o.d:i.d)}); });
+  function applyOverride(i){ const o=st[i.id]; if(!o||(o.t==null&&o.d==null)) return i;
+    return Object.assign({},i,{t:(o.t!=null?o.t:i.t),d:(o.d!=null?o.d:i.d)}); }
+  const seed=PROPDD_ITEMS.filter(function(i){ return !(st[i.id]&&st[i.id].deleted); }).map(applyOverride);
+  const custom=(st.__custom||[]).map(applyOverride);
+  return seed.concat(custom);
 }
 function propddDeleteItem(id){
   if(!confirm('Delete this due-diligence item for good? It disappears for both Rich and Tony once this syncs — not just hidden.')) return;
-  const st=_propddState(); st[id]=st[id]||{}; st[id].deleted=true;
+  const st=_propddState();
+  if(st.__custom && st.__custom.some(function(c){ return c.id===id; })){
+    st.__custom=st.__custom.filter(function(c){ return c.id!==id; });
+    delete st[id];
+  } else { st[id]=st[id]||{}; st[id].deleted=true; }
   PROPDD_EXPANDED.delete(id);
   _propddSave(st); renderPropDD();
+}
+let PROPDD_ADD_OPEN=false;
+function propddToggleAdd(){ PROPDD_ADD_OPEN=!PROPDD_ADD_OPEN; renderPropDD(); }
+function propddAddItem(){
+  const titleEl=document.getElementById('propddAddTitle'); const title=(titleEl.value||'').trim();
+  if(!title){ alert('Give the item a title first.'); titleEl.focus(); return; }
+  const catKey=(document.getElementById('propddAddCat')||{}).value||PROPDD_CATS[0].key;
+  const meta=PROPDD_CATS.find(function(c){ return c.key===catKey; })||PROPDD_CATS[0];
+  const owner=((document.getElementById('propddAddOwner')||{}).value||'').trim()||'Unassigned';
+  const assignee=((document.getElementById('propddAddAssignee')||{}).value||'').trim();
+  const desc=((document.getElementById('propddAddDesc')||{}).value||'').trim();
+  const id='custom_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  const st=_propddState(); st.__custom=st.__custom||[];
+  st.__custom.push({id:id,cat:catKey+'. '+meta.label,t:title,d:desc,owner:owner,src:'Added directly by Rich/Tony',conf:'New item — not from a source document'});
+  if(assignee){ st[id]=st[id]||{}; st[id].assignee=assignee; }
+  PROPDD_ADD_OPEN=false;
+  _propddSave(st); renderPropDD();
+}
+function _propddAddFormHtml(){
+  const defCat=PROPDD_B_OPEN||PROPDD_CATS[0].key;
+  return '<div style="border:1px solid var(--brand);border-radius:10px;padding:12px 14px;margin-bottom:16px;background:var(--panel2)">'
+    +'<div style="font-weight:800;font-size:13px;margin-bottom:8px">➕ Add a new item</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+    +'<select id="propddAddCat" style="font-size:12px;padding:5px 8px;border-radius:6px">'
+    +PROPDD_CATS.map(function(c){ return '<option value="'+c.key+'" '+(c.key===defCat?'selected':'')+'>'+c.icon+' '+esc(c.label)+'</option>'; }).join('')
+    +'</select>'
+    +'<input id="propddAddTitle" placeholder="What needs to happen…" style="flex:1;min-width:220px;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--line)">'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+    +'<input id="propddAddOwner" placeholder="Suggested owner (role, e.g. Legal counsel)…" style="flex:1;min-width:160px;font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--line)">'
+    +'<input id="propddAddAssignee" list="propddNames" placeholder="Assign to (a real name)…" style="flex:1;min-width:160px;font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--line)">'
+    +'</div>'
+    +'<textarea id="propddAddDesc" placeholder="Description (optional)…" style="width:100%;box-sizing:border-box;font-size:13px;min-height:44px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);font-family:inherit;resize:vertical"></textarea>'
+    +'<div style="display:flex;gap:8px;margin-top:10px">'
+    +'<button onclick="propddAddItem()" style="padding:6px 16px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">Add item</button>'
+    +'<button onclick="propddToggleAdd()" style="padding:6px 16px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--txt);font-size:12.5px;cursor:pointer">Cancel</button>'
+    +'</div></div>';
 }
 // Rich (2026-08-28): 3 layout options to review with Tony live, side by side as tabs, pick one after.
 const PROPDD_CATS=[
@@ -19253,10 +19297,10 @@ function _propddNamesDatalist(){
 function _propddDetailHtml(i,s){
   const status=s.status||'Open'; const resolution=s.resolution||'';
   return '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">'
-    +'<input onclick="event.stopPropagation()" value="'+esc(i.t)+'" oninput="propddSet(\''+i.id+'\',\'t\',this.value)" style="flex:1;font-weight:700;font-size:13.5px;padding:5px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel)">'
+    +'<input onclick="event.stopPropagation()" value="'+esc(i.t)+'" oninput="propddSet(\''+i.id+'\',\'t\',this.value)" style="flex:1;font-weight:700;font-size:13.5px;padding:5px 8px;border-radius:6px;border:1px solid var(--line)">'
     +'<button onclick="event.stopPropagation();propddDeleteItem(\''+i.id+'\')" title="Delete this item permanently -- syncs to Tony too" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);font-weight:700;cursor:pointer;white-space:nowrap">🗑 Delete</button>'
     +'</div>'
-    +'<textarea onclick="event.stopPropagation()" oninput="propddSet(\''+i.id+'\',\'d\',this.value)" placeholder="Description…" style="width:100%;box-sizing:border-box;font-size:13px;color:var(--ink);margin-bottom:8px;min-height:56px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel);font-family:inherit;resize:vertical">'+esc(i.d)+'</textarea>'
+    +'<textarea onclick="event.stopPropagation()" oninput="propddSet(\''+i.id+'\',\'d\',this.value)" placeholder="Description…" style="width:100%;box-sizing:border-box;font-size:13px;margin-bottom:8px;min-height:56px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);font-family:inherit;resize:vertical">'+esc(i.d)+'</textarea>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Suggested owner: <b>'+esc(i.owner)+'</b> &nbsp;|&nbsp; Source: '+esc(i.src)+' &nbsp;|&nbsp; <i>'+esc(i.conf)+'</i></div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     +'<select onclick="event.stopPropagation()" onchange="event.stopPropagation();propddSet(\''+i.id+'\',\'status\',this.value);renderPropDD()" style="font-size:12px;padding:3px 6px;border-radius:6px">'
@@ -19264,7 +19308,7 @@ function _propddDetailHtml(i,s){
     +'</select>'
     +'<input onclick="event.stopPropagation()" list="propddNames" placeholder="Assigned to…" value="'+esc(s.assignee||'')+'" oninput="propddSet(\''+i.id+'\',\'assignee\',this.value)" style="flex:1;min-width:120px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
     +'<input onclick="event.stopPropagation()" placeholder="Notes…" value="'+esc(s.notes||'')+'" oninput="propddSet(\''+i.id+'\',\'notes\',this.value)" style="flex:2;min-width:160px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
-    +'<select onclick="event.stopPropagation()" onchange="event.stopPropagation();propddSet(\''+i.id+'\',\'resolution\',this.value);renderPropDD()" title="How you\'re asking the seller to resolve this, once you know" style="font-size:12px;padding:3px 6px;border-radius:6px;color:'+(resolution?'var(--ink)':'var(--muted)')+'">'
+    +'<select onclick="event.stopPropagation()" onchange="event.stopPropagation();propddSet(\''+i.id+'\',\'resolution\',this.value);renderPropDD()" title="How you\'re asking the seller to resolve this, once you know" style="font-size:12px;padding:3px 6px;border-radius:6px;color:'+(resolution?'var(--txt)':'var(--muted)')+'">'
     +['','Seller cure','Price credit','Escrow holdback','Accept as-is'].map(o=>'<option value="'+esc(o)+'" '+(resolution===o?'selected':'')+'>'+(o||'Resolution…')+'</option>').join('')
     +'</select>'
     +'</div>';
@@ -19285,13 +19329,14 @@ function renderPropDD(){
     +'<div style="color:var(--muted);font-size:13px;margin-top:4px">Private — visible only to Rich and Tony, nobody else. 3 layout options below to review together and pick one — '+syncTxt+'.</div>'
     +'</div>';
   if(!_propddHelpDismissed()){
-    h+='<div style="background:var(--panel2);border:1px solid var(--brand);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:12.5px;color:var(--ink);line-height:1.7">'
+    h+='<div style="background:var(--panel2);border:1px solid var(--brand);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:12.5px;color:var(--txt);line-height:1.7">'
       +'<div style="display:flex;justify-content:space-between;gap:10px"><b>How this page works</b>'
       +'<span onclick="propddDismissHelp()" title="Hide this" style="cursor:pointer;color:var(--muted);font-weight:700">✕</span></div>'
       +'<b>① ② ③ tabs</b> — three different ways of laying out the exact same items. Flip between them with Tony live to pick a favorite; nothing is final yet.<br>'
       +'<b>🖨 Print this view</b> — opens a clean, print-ready version of whichever tab you\'re on in a new tab; use your browser\'s Print → Save as PDF from there.<br>'
       +'<b>Group by: Category / Person</b> (on tab ①) — switch between organizing by issue type or by whoever you\'ve actually assigned. Type a name into any item\'s "Assigned to" box first, then flip to Person to see everyone\'s workload grouped together.<br>'
-      +'<b>Click any item</b> to expand it — edit its title/description right in place, set status/assignee/notes/resolution, or 🗑 delete it if it doesn\'t apply. Assignee remembers every name you\'ve typed so it\'s a pick-list after the first time.'
+      +'<b>Click any item</b> to expand it — edit its title/description right in place, set status/assignee/notes/resolution, or 🗑 delete it if it doesn\'t apply. Assignee remembers every name you\'ve typed so it\'s a pick-list after the first time.<br>'
+      +'<b>➕ Add item</b> — for anything not already on the list. Pick a category, give it a title, and optionally a suggested owner/assignee up front.'
       +'</div>';
   }
   h+='<div style="display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:10px;flex-wrap:wrap">'
@@ -19299,9 +19344,11 @@ function renderPropDD(){
       ['B','② Category Tiles','Five big tiles, one per category — click one to drill into just its items; everything else stays collapsed.'],
       ['C','③ Deal Memo','Reads top-to-bottom like a written memo: a summary paragraph, a color risk strip, then a tight bullet list per category.']]
       .map(function(p){ const k=p[0],lbl=p[1],tip=p[2];
-        return '<button onclick="propddSetVariant(\''+k+'\')" title="'+esc(tip)+'" style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:'+(PROPDD_VARIANT===k?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_VARIANT===k?'#fff':'var(--ink)')+';font-weight:700;font-size:12.5px;cursor:pointer">'+lbl+'</button>'; }).join('')
-    +'<button onclick="propddPrint()" title="Open a clean, print-ready version of the tab you\'re currently on in a new tab (then Print → Save as PDF)" style="margin-left:auto;padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-weight:700;font-size:12.5px;cursor:pointer">🖨 Print this view</button>'
+        return '<button onclick="propddSetVariant(\''+k+'\')" title="'+esc(tip)+'" style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:'+(PROPDD_VARIANT===k?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_VARIANT===k?'#fff':'var(--txt)')+';font-weight:700;font-size:12.5px;cursor:pointer">'+lbl+'</button>'; }).join('')
+    +'<button onclick="propddToggleAdd()" title="Add a brand-new item that isn\'t already on this list" style="margin-left:auto;padding:6px 14px;border-radius:8px;border:1px solid '+(PROPDD_ADD_OPEN?'var(--brand)':'var(--line)')+';background:'+(PROPDD_ADD_OPEN?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_ADD_OPEN?'#fff':'var(--txt)')+';font-weight:700;font-size:12.5px;cursor:pointer">➕ Add item</button>'
+    +'<button onclick="propddPrint()" title="Open a clean, print-ready version of the tab you\'re currently on in a new tab (then Print → Save as PDF)" style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-weight:700;font-size:12.5px;cursor:pointer">🖨 Print this view</button>'
     +'</div>'
+    +(PROPDD_ADD_OPEN?_propddAddFormHtml():'')
     +_propddNamesDatalist()
     +'<div id="propddBody"></div>';
   root.innerHTML=h;
@@ -19316,7 +19363,7 @@ function _propddRenderA(stats){
   let h='<div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;font-size:12px;color:var(--muted)" title="Switch how the tiles + table below are organized and filtered">Group by:'
     +['cat','person'].map(function(g){ const lbl=g==='cat'?'Category':'Person';
         const tip=g==='cat'?'Organize by issue type (Legal, Environmental, etc.)':'Organize by whoever is typed into each item\'s "Assigned to" box';
-        return '<button onclick="propddSetGroupA(\''+g+'\')" title="'+esc(tip)+'" style="padding:3px 12px;border-radius:14px;border:1px solid '+(PROPDD_GROUP_A===g?'var(--brand)':'var(--line)')+';background:'+(PROPDD_GROUP_A===g?'var(--brand)':'transparent')+';color:'+(PROPDD_GROUP_A===g?'#fff':'var(--ink)')+';font-weight:700;font-size:12px;cursor:pointer">'+lbl+'</button>'; }).join('')
+        return '<button onclick="propddSetGroupA(\''+g+'\')" title="'+esc(tip)+'" style="padding:3px 12px;border-radius:14px;border:1px solid '+(PROPDD_GROUP_A===g?'var(--brand)':'var(--line)')+';background:'+(PROPDD_GROUP_A===g?'var(--brand)':'transparent')+';color:'+(PROPDD_GROUP_A===g?'#fff':'var(--txt)')+';font-weight:700;font-size:12px;cursor:pointer">'+lbl+'</button>'; }).join('')
     +'</div>';
   if(PROPDD_GROUP_A==='cat'){
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px">';
@@ -19392,7 +19439,7 @@ function _propddRenderB(stats){
 }
 // ---- Variant C: one-page "deal memo" -- exec summary + risk-heat strip + tight bullet groups per category ----
 function _propddRenderC(stats){
-  let h='<div style="font-size:13px;line-height:1.7;color:var(--ink);margin-bottom:18px;max-width:800px">'
+  let h='<div style="font-size:13px;line-height:1.7;color:var(--txt);margin-bottom:18px;max-width:800px">'
     +'37900 Mound Road is a 3.58-acre M-1 light-industrial parcel with two buildings, purchased August 2024 by RDB Industrial Drive LLC and S&amp;S Holdings of Southwest Florida LLC. The property has a confirmed history of soil/groundwater metals contamination dating to 2009, reconfirmed by a 2024 Phase I/II ESA. The 2024 owners filed new environmental liability paperwork and a joint Due Care Plan, acknowledged by EGLE with no issues raised. Two recorded legal instruments (1972, 2011) are referenced everywhere but included nowhere in this document set — that\'s the single highest-priority item below.'
     +'</div>';
   h+='<div style="display:flex;height:10px;border-radius:6px;overflow:hidden;margin-bottom:20px">';
