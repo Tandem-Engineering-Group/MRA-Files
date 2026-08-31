@@ -4061,6 +4061,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.73", date:"2026-08-31", title:"🐛 Fixed: reassigning a Fleetio task could silently land on the wrong (old, closed) row", items:[
+    "Real bug, confirmed live twice in one morning (SWC #1134, Ferguson #1306): when a Fleetio issue closes and then reopens, the board used to always create a BRAND-NEW task with the exact same name as the old closed one. Two tasks sharing an identical name broke every name-matched lookup in the app — clicking ✎ Edit on the new open one was silently opening and saving to the OLD closed one instead, so an assignment looked like it never took ('I assigned Doug 3 times and it keeps coming back unassigned'). Fixed at the source: a reopened Fleetio issue now REOPENS its existing closed task (same real work continuing) instead of creating a duplicate — so the name collision can't happen going forward. The two already-existing duplicates from this morning were corrected directly." ] },
   { rev:"37.72", date:"2026-08-31", title:"💰 Pricing approvals landed — 7 new items in the catalogue", items:[
     "New <b>MATERIALS_REF</b> entries, all approved by Rich via the automated pricing-approval flow on 8/28: <b>OCS millwork — Portable Table Refurbishment + Headphone Cabinet Fabrication — $3,940.00</b> (Brad Crosson, PO J1420), <b>OCS millwork — Refurbish 9 existing work tables + Headphone Cabinet — $3,030.00</b> (Dan Crosson, PO J1420 Oakland Schools), <b>Kenworth T680 hood/grille collision repair, vin 308554 — $5,558.67</b> (11 Mile Truck Frame & Axle), <b>Medtronic trailer electrical install — 30% acceptance invoice — $46,192.50</b> (Beyer Electrical), <b>3D-printed Nylon 12 Carbon Fiber replacement part, qty 12 — $748.80</b> (iDEAL Technology), <b>Blackhole Experience replacement parts — $89.49</b> (Beyer Electrical), and <b>Samsung Galaxy A11+ tablets, qty 40, Medtronic order — $9,600.00</b> (Square Trade Group). These approvals had been sitting in the My Command pricing queue since 8/28 without landing — now cleared." ] },
   { rev:"37.71", date:"2026-08-28", title:"🐛 Due Diligence tab: assigning someone actually shows up now (it WAS saving, just invisibly)", items:[
@@ -8196,6 +8198,26 @@ function addFleetioTask(row,num,who){
   const task="🔧 #"+num+" "+((it&&it.summary)||("Issue "+num));
   const tISO=D.todayISO||localISO(Date.now());
   const due=(j.completionISO&&j.completionISO>=tISO)?j.completionISO:"";   // default due = the unit's departure date
+  // 🐛 FIXED 2026-08-31 -- if a Fleetio issue was closed once and then reopens (real, common case: a
+  // repair wasn't actually finished, or recurs), this used to ALWAYS push a brand-new task row with the
+  // identical text as the old closed one. Two tasks with the exact same name on the same job breaks
+  // every text-matched lookup in the app (✎ edit, the write-back itself) -- clicking the new open one
+  // would silently open/save against the OLD closed row instead (Rich: "I assign it and it keeps coming
+  // back unassigned" -- confirmed live, twice, same day, two different jobs). REOPEN the existing closed
+  // row instead of duplicating it whenever one exists with this exact text -- same real-world work
+  // continuing, and it can never collide with itself.
+  const existing=(j.tasks||[]).find(x=>x.t===task);
+  if(existing && existing.done){
+    const payload={ action:"editTask", project:j.project, taskOld:task, task:task,
+      assigned:(who||existing.who||""), status:"Open", milestone:existing.ml||"", comments:existing.cm||("Fleetio issue #"+num),
+      due:due||(existing.due||""), pin:CLOSE_PIN, user:CURRENT_USER };
+    shopWrite(payload).then(()=>{
+      existing.who=payload.assigned; existing.st="Open"; existing.done=false; existing.cl=null; existing.due=payload.due||existing.due;
+      oRecompute(j); oApply();
+    }).catch(()=>alert("Couldn't reach the service — try again."));
+    return;
+  }
+  if(existing) return;   // already open -- nothing to do (shouldn't normally be reachable; the caller already checks)
   const payload={ action:"addTask", project:j.project, jobNum:j.jobNum||"", bay:j.bay||"", task:task,
     assigned:(who||""), milestone:"", comments:"Fleetio issue #"+num, due:due, pin:CLOSE_PIN, user:CURRENT_USER };
   shopWrite(payload).then(()=>{
