@@ -4061,6 +4061,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.75", date:"2026-08-31", title:"🐛 Fixed: reopening a Fleetio issue no longer auto-assigns the old assignee", items:[
+    "Follow-up to today's earlier fix — reopening a closed Fleetio task was defaulting to whoever had it assigned last time when you hit the plain ➕ (no assignee picked), so it looked like it silently reassigned itself. Now it lands unassigned every time, exactly like adding a brand-new task, so you actually choose who does it this time." ] },
   { rev:"37.74", date:"2026-08-31", title:"🔒 Due Diligence tab: 2 new action items, assigned to Rich", items:[
     "New item under Physical Building & Systems — Rich's own 5-part building-assessment punch list (call Finzel's for HVAC, cranes inspection, structural inspection, Sal's shop-floor layout review, plumbing inspection), tracked as one item.",
     "New item under MRA Fit & Capital Budget — commissioning an overall offices/shop-floor/site-plan layout, separate from the existing operational fit-test item." ] },
@@ -8209,10 +8211,15 @@ function addFleetioTask(row,num,who){
   // back unassigned" -- confirmed live, twice, same day, two different jobs). REOPEN the existing closed
   // row instead of duplicating it whenever one exists with this exact text -- same real-world work
   // continuing, and it can never collide with itself.
+  // 🐛 FIXED 2026-08-31 (2nd pass, same day) -- the reopen above defaulted the assignee to the task's
+  // PREVIOUS assignee when none was given, so hitting the plain ➕ (no assignee picked) silently
+  // re-assigned to whoever had it last time instead of leaving it blank like a real new-task add does
+  // (Rich: "it changes it as assigned to Doug without me assigning it"). Now always blank unless a
+  // specific `who` is actually passed in, matching the brand-new-task path below exactly.
   const existing=(j.tasks||[]).find(x=>x.t===task);
   if(existing && existing.done){
     const payload={ action:"editTask", project:j.project, taskOld:task, task:task,
-      assigned:(who||existing.who||""), status:"Open", milestone:existing.ml||"", comments:existing.cm||("Fleetio issue #"+num),
+      assigned:(who||""), status:"Open", milestone:existing.ml||"", comments:existing.cm||("Fleetio issue #"+num),
       due:due||(existing.due||""), pin:CLOSE_PIN, user:CURRENT_USER };
     shopWrite(payload).then(()=>{
       existing.who=payload.assigned; existing.st="Open"; existing.done=false; existing.cl=null; existing.due=payload.due||existing.due;
