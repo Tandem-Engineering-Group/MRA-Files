@@ -86,6 +86,17 @@
   .mgr .addrow{display:flex;gap:8px;margin-top:8px}
   .mgr .addrow input{flex:1;background:var(--input);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px}
   .mgr .lst .idbox{flex:0 0 66px;width:66px;background:var(--input);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:6px 7px;font-size:13px;text-align:center}
+  /* Compare vs Paylocity report */
+  .pcEmp{border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden}
+  .pcEmpHead{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;background:var(--card2);font-weight:800;font-size:13.5px}
+  .pcEmpHead .pcGap{font-weight:700;font-size:12.5px}
+  .pcEmpHead .pcGap.bad{color:var(--err)}
+  .pcChip{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+  .pcChip.good{background:#123a2c;color:#3ddc97}
+  .pcChip.bad{background:#3a1414;color:#ff8a8a}
+  body.light .pcChip.good{background:#e3f7ee;color:#0e7c4f}
+  body.light .pcChip.bad{background:#fde7e7;color:#b91c1c}
+  .pcDiff.good{color:var(--ok)} .pcDiff.bad{color:var(--err);font-weight:700}
   .hide{display:none!important}
   .muted{color:var(--muted)}
   .foot{color:var(--muted);font-size:12px;text-align:center;margin-top:20px}
@@ -182,8 +193,9 @@
   <div class="card hide" id="hoursCard">
     <h2 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <span>Tracked hours</span>
-      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm hide" id="costBtn" title="Cost report with pay rates and overtime -- visible to you only">💰 Cost report</button><button class="tbtn sm" id="refreshBtn" title="Pull the latest shared hours from everyone (reloads the shared list)">🔄 Refresh</button><button class="tbtn sm" id="paylocityBtn" title="Import the daily Paylocity 'Employee Time Cards by Cost Center with Notes' PDF -- pulls in each person's hours, leaving the job blank for you to assign">📥 Import Paylocity</button><button class="tbtn sm" id="sampleBtn" title="Reload the real 7/13–17 demo week">🧪 Reload demo week</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
+      <span class="noprint" style="display:flex;gap:8px;flex-wrap:wrap"><button class="tbtn sm primary" id="finBtn" title="Weekly finance summary (job codes + employee IDs) in your payroll format">📊 Finance report</button><button class="tbtn sm hide" id="costBtn" title="Cost report with pay rates and overtime -- visible to you only">💰 Cost report</button><button class="tbtn sm" id="refreshBtn" title="Pull the latest shared hours from everyone (reloads the shared list)">🔄 Refresh</button><button class="tbtn sm" id="paylocityBtn" title="Import the daily Paylocity 'Employee Time Cards by Cost Center with Notes' PDF -- pulls in each person's hours, leaving the job blank for you to assign">📥 Import Paylocity</button><button class="tbtn sm" id="paylocityCompareBtn" title="Upload a Paylocity PDF and see exactly what needs correcting THERE -- this tracker is treated as correct, nothing here changes">📋 Compare vs Paylocity</button><button class="tbtn sm" id="sampleBtn" title="Reload the real 7/13–17 demo week">🧪 Reload demo week</button><button class="tbtn sm" id="clearBtn">🗑 Clear</button><button class="tbtn sm" id="csvBtn">⬇ CSV</button><button class="tbtn sm" id="printBtn">🖨 Print</button></span></h2>
     <input type="file" id="paylocityFile" accept="application/pdf" class="hide">
+    <input type="file" id="paylocityCompareFile" accept="application/pdf" class="hide">
     <div id="shareNote" class="muted" style="font-size:11.5px;margin:0 0 8px"></div>
     <div class="filtrow noprint">
       <select id="fRange">
@@ -302,6 +314,27 @@
       <button class="tbtn primary" id="paylocityConfirmBtn">Import</button>
       <button class="tbtn" id="paylocityCancelBtn">Cancel</button>
       <span id="paylocityMsg" class="ok-msg hide"></span>
+    </div>
+  </div>
+</div>
+
+<!-- COMPARE VS PAYLOCITY (manager only) -- opposite direction from Import: THIS tracker is treated as
+     correct, and the report says exactly what to go change in Paylocity. Nothing here ever writes
+     back to the tracker or to Paylocity -- it's a read-only comparison to work from by hand. -->
+<div class="helpov noprint" id="pyCompModal">
+  <div class="helpbox" style="max-width:820px">
+    <button class="helpx" id="pyCompClose" aria-label="Close">✕</button>
+    <h2 style="font-size:19px">📋 Compare vs Paylocity</h2>
+    <p class="lead">Drop in the same Paylocity "Employee Time Cards by Cost Center with Notes" PDF. This tracker's hours are treated as correct — the report below shows exactly what needs to change in Paylocity, day by day, so you can go make the corrections there.</p>
+    <div id="pyCompSummary" style="font-size:13px;margin-bottom:10px"></div>
+    <div id="pyCompActionsWrap" class="hide" style="margin-bottom:16px;border:1.5px solid var(--brand);border-radius:12px;overflow:hidden">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--line);background:var(--card2);font-weight:800;font-size:13.5px">Paylocity needs these corrections</div>
+      <ol id="pyCompActions" style="margin:0;padding:10px 14px 12px 30px;font-size:13.5px;line-height:1.9"></ol>
+    </div>
+    <div id="pyCompDetail" style="overflow:auto;max-height:420px"></div>
+    <div class="submitrow">
+      <button class="tbtn" id="pyCompPrintBtn">🖨 Print this report</button>
+      <button class="tbtn" id="pyCompCloseBtn">Close</button>
     </div>
   </div>
 </div>
@@ -766,6 +799,167 @@ function _pyUpdateSplitTotal(kind, idx){
 var PY_PUNCH_INRANGE=[];
 function fmtShortDate(iso){ var p=String(iso||'').split('-'); return p.length===3?(+p[1])+'/'+(+p[2]):iso; }
 function closePaylocityModal(){ $('paylocityModal').classList.remove('on'); PY_PENDING=[]; PY_CHANGED=[]; PY_ALL_ROWS=[]; PY_ZERO_SKIPPED=0; PY_UNMATCHED={}; PY_PUNCH_ISSUES=[]; PY_PUNCH_INRANGE=[]; }
+
+/* ---------- 📋 Compare vs Paylocity -- the OPPOSITE direction from Import above. This tracker's
+   hours are treated as correct; the report says exactly what needs to change in PAYLOCITY, day by
+   day, for Rich to go fix there by hand. Nothing here ever writes back to the tracker or anywhere
+   else -- purely a read-only reconciliation built from the same PDF parser Import already uses.
+   Reused as-is: loadPdfJs / parsePaylocityTokens / _pyEmpName / _pyISO / fmtShortDate. */
+var PY_COMPARE_REPORT=null;
+function openPaylocityCompare(){ if(!isMgr()){ alert('Sign in with your MRA (Microsoft) account to use this.'); return; } $('paylocityCompareFile').value=''; $('paylocityCompareFile').click(); }
+function onPaylocityCompareFile(file){
+  if(!file) return;
+  $('pyCompModal').classList.add('on');
+  $('pyCompSummary').innerHTML='Reading '+esc(file.name)+'…';
+  $('pyCompActionsWrap').classList.add('hide'); $('pyCompActions').innerHTML=''; $('pyCompDetail').innerHTML=''; PY_COMPARE_REPORT=null;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    loadPdfJs(function(err){
+      if(err){ $('pyCompSummary').innerHTML='Could not load the PDF reader (no network to the CDN?) — try again in a minute.'; return; }
+      pdfjsLib.getDocument({data:new Uint8Array(ev.target.result)}).promise.then(function(doc){
+        var pageNums=[]; for(var p=1;p<=doc.numPages;p++) pageNums.push(p);
+        var allToks=[];
+        return pageNums.reduce(function(chain,p){
+          return chain.then(function(){ return doc.getPage(p).then(function(pg){ return pg.getTextContent(); }).then(function(content){
+            content.items.forEach(function(it){ var s=(it.str||'').trim(); if(s) allToks.push(s); }); }); });
+        }, Promise.resolve()).then(function(){
+          var flat=allToks.join(' ').split(/\s+/).filter(Boolean);
+          var report=buildPaylocityCompareReport(parsePaylocityTokens(flat));
+          PY_COMPARE_REPORT=report;
+          renderPaylocityCompare(report);
+        });
+      }).catch(function(e){ $('pyCompSummary').innerHTML='Could not read that PDF ('+esc(e&&e.message||'unknown error')+'). Is it the right file?'; });
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+function closePaylocityCompare(){ $('pyCompModal').classList.remove('on'); }
+// Sums this Paylocity file's rows per employee+day (same >8h → −.5 lunch rule Import uses, applied to
+// the DAY's total rather than per-row) against this tracker's own activeEntries() for that same
+// employee+day, across every calendar day the file actually spans. A day with nothing on either side
+// is skipped entirely; the ~0.5h lunch differential is called out but never listed as something to
+// fix (Rich, 2026-09-01: "that's our lunch differential ... that won't be part of the changes because
+// that's correct"). Everything else that doesn't match becomes one line in the Paylocity fix list.
+function buildPaylocityCompareReport(pRows){
+  var py={}, allDates={};
+  pRows.forEach(function(r){
+    var dateISO=_pyISO(r.dateRaw); if(!dateISO) return;
+    allDates[dateISO]=1;
+    if(!r.emp) return;
+    var who=_pyEmpName(r.emp.num); if(!who) return;
+    var k=who+'|'+dateISO;
+    if(!py[k]) py[k]={raw:0, notes:[], punchIssue:false};
+    if(r.hours>0) py[k].raw+=r.hours;
+    else if(r.code || ((!!r.start)!==(!!r.stop))) py[k].punchIssue=true;
+    if(r.note) py[k].notes.push(r.note);
+  });
+  Object.keys(py).forEach(function(k){ var d=py[k]; d.hours = d.raw>8 ? Math.round((d.raw-0.5)*100)/100 : d.raw; });
+  var dateList=Object.keys(allDates).sort();
+  if(!dateList.length) return null;
+  var minD=dateList[0], maxD=dateList[dateList.length-1];
+  var dash={};
+  (activeEntries()||[]).forEach(function(e){
+    if(!e.dateISO || e.dateISO<minD || e.dateISO>maxD) return;
+    var k=e.who+'|'+e.dateISO;
+    if(!dash[k]) dash[k]={hours:0, notes:[]};
+    dash[k].hours+=(e.hours||0);
+    var n=[e.task,e.notes].filter(Boolean).join(' — '); if(n) dash[k].notes.push(n);
+  });
+  var empSet={};
+  Object.keys(py).forEach(function(k){ empSet[k.split('|')[0]]=1; });
+  Object.keys(dash).forEach(function(k){ empSet[k.split('|')[0]]=1; });
+  var emps=Object.keys(empSet).sort();
+  var days=[]; (function(){ var d=new Date(minD+'T00:00:00'), end=new Date(maxD+'T00:00:00');
+    while(d<=end){ days.push(ymd(d)); d.setDate(d.getDate()+1); } })();
+  var report={emps:[], grandDash:0, grandPy:0, actions:[]};
+  emps.forEach(function(who){
+    var rows=[], empDash=0, empPy=0, hasAny=false;
+    days.forEach(function(dISO){
+      var k=who+'|'+dISO, dRec=dash[k], pRec=py[k];
+      var dHrs=dRec?Math.round(dRec.hours*100)/100:0;
+      var pHrs=pRec?pRec.hours:null;
+      var hasPunchIssue=!!(pRec && pRec.punchIssue);
+      if(dHrs<=0 && pHrs==null && !hasPunchIssue) return;
+      hasAny=true; empDash+=dHrs; if(pHrs!=null) empPy+=pHrs;
+      var diff=(pHrs==null?0:pHrs)-dHrs;
+      var status='match';
+      if(pHrs==null && dHrs>0) status='missing';
+      else if(hasPunchIssue && (pHrs||0)===0 && dHrs>0) status='mispunch';
+      else if(Math.abs(diff)>=0.4 && Math.abs(diff)<=0.6) status='lunch';
+      else if(Math.abs(diff)>0.03) status='diff';
+      var notesTxt=(pRec&&pRec.notes.length?pRec.notes.join('; '):'')||(dRec&&dRec.notes.length?dRec.notes.join('; '):'');
+      rows.push({dISO:dISO, dHrs:dHrs, pHrs:pHrs, status:status, notes:notesTxt});
+      if(status==='mispunch'||status==='missing'||status==='diff') report.actions.push({who:who, dISO:dISO, need:dHrs, have:(pHrs==null?0:pHrs), status:status});
+    });
+    if(!hasAny) return;
+    report.grandDash+=empDash; report.grandPy+=empPy;
+    report.emps.push({who:who, rows:rows, dashTotal:Math.round(empDash*100)/100, pyTotal:Math.round(empPy*100)/100});
+  });
+  report.actions.sort(function(a,b){ return Math.abs((b.need-b.have))-Math.abs((a.need-a.have)); });
+  return report;
+}
+function renderPaylocityCompare(report){
+  if(!report || !report.emps.length){
+    $('pyCompSummary').innerHTML='<span class="muted">No overlapping employee/day data found between this file and the tracker.</span>';
+    $('pyCompActionsWrap').classList.add('hide'); $('pyCompDetail').innerHTML='';
+    return;
+  }
+  var gap=Math.round((report.grandPy-report.grandDash)*100)/100;
+  $('pyCompSummary').innerHTML='<b>Tracker total:</b> '+report.grandDash.toFixed(2)+'h &nbsp;·&nbsp; <b>Paylocity total:</b> '+report.grandPy.toFixed(2)+'h &nbsp;·&nbsp; <b>Gap:</b> <span style="'+(gap!==0?'color:var(--err);font-weight:700':'')+'">'+(gap>=0?'+':'')+gap.toFixed(2)+'h</span>';
+  $('pyCompActionsWrap').classList.remove('hide');
+  $('pyCompActions').innerHTML = report.actions.length
+    ? report.actions.map(function(a){ var why = a.status==='mispunch'?' — missed clock-in/out':(a.status==='missing'?' — no Paylocity record at all':'');
+        return '<li><b>'+esc(a.who)+', '+esc(fmtShortDate(a.dISO))+' → '+a.need.toFixed(2)+' hrs paid</b> <span class="muted" style="font-size:12px">(currently '+a.have.toFixed(2)+why+')</span></li>'; }).join('')
+    : '<li style="list-style:none;margin-left:-30px">✨ Nothing to fix — Paylocity matches the tracker for every day in this file.</li>';
+  $('pyCompDetail').innerHTML = report.emps.map(function(emp){
+    var gapE=Math.round((emp.pyTotal-emp.dashTotal)*100)/100;
+    return '<div class="pcEmp"><div class="pcEmpHead"><span>'+esc(emp.who)+'</span><span>Tracker '+emp.dashTotal.toFixed(2)+'h &nbsp;·&nbsp; Paylocity '+emp.pyTotal.toFixed(2)+'h &nbsp;·&nbsp; <span class="pcGap'+(gapE!==0?' bad':'')+'">'+(gapE>=0?'+':'')+gapE.toFixed(2)+'h</span></span></div>'
+      +'<table class="t"><thead><tr><th>Day</th><th class="r">Tracker</th><th class="r">Paylocity</th><th class="r">Diff</th><th>Note</th></tr></thead><tbody>'
+      +emp.rows.map(function(r){
+        var pDisp=r.pHrs==null?'—':r.pHrs.toFixed(2);
+        var diffDisp, diffCls, chip;
+        if(r.status==='match'){ diffDisp='match'; diffCls='pcDiff good'; chip='<span class="pcChip good">OK</span>'; }
+        else if(r.status==='lunch'){ diffDisp=((r.pHrs-r.dHrs)>=0?'+':'')+(r.pHrs-r.dHrs).toFixed(2); diffCls='pcDiff good'; chip='<span class="pcChip good">Lunch differential</span>'; }
+        else { var d=(r.pHrs==null?0:r.pHrs)-r.dHrs; diffDisp=(d>=0?'+':'')+d.toFixed(2); diffCls='pcDiff bad';
+          chip = r.status==='mispunch' ? '<span class="pcChip bad">Missed clock-in/out</span>' : r.status==='missing' ? '<span class="pcChip bad">No Paylocity record</span>' : '<span class="pcChip bad">Needs correction</span>'; }
+        return '<tr><td>'+esc(fmtShortDate(r.dISO))+'</td><td class="r">'+r.dHrs.toFixed(2)+'</td><td class="r">'+pDisp+'</td><td class="r '+diffCls+'">'+diffDisp+'</td><td style="font-size:12px">'+chip+(r.notes?' <span class="muted">'+esc(r.notes)+'</span>':'')+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+  }).join('');
+}
+function printPaylocityCompare(){
+  var report=PY_COMPARE_REPORT; if(!report){ alert('Load a Paylocity PDF first.'); return; }
+  var w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for this site, then tap Print again.'); return; }
+  var gap=Math.round((report.grandPy-report.grandDash)*100)/100;
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>Paylocity Reconciliation</title><style>'
+    +'body{font-family:Segoe UI,Arial,sans-serif;color:#1a2130;max-width:820px;margin:0 auto;padding:26px}'
+    +'h1{font-size:20px;margin:0 0 4px}.sub{color:#667;font-size:12.5px;margin-bottom:16px}'
+    +'.actions{border:1.5px solid #DC4A26;border-radius:10px;padding:10px 16px;margin:14px 0 22px}'
+    +'.actions h2{font-size:13px;margin:0 0 6px}.actions ol{margin:0;padding-left:20px;font-size:13px;line-height:1.9}'
+    +'.emp{border:1px solid #ddd;border-radius:10px;margin-bottom:12px;overflow:hidden;page-break-inside:avoid}'
+    +'.emphead{background:#f4f4f4;padding:7px 10px;font-weight:700;font-size:13px;display:flex;justify-content:space-between}'
+    +'table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:5px 8px;text-align:left;border-bottom:1px solid #eee}th.r,td.r{text-align:right}'
+    +'.bad{color:#b91c1c;font-weight:700}.good{color:#0e7c4f}'
+    +'</style></head><body>'
+    +'<h1>Paylocity Reconciliation</h1><div class="sub">Tracker '+report.grandDash.toFixed(2)+'h · Paylocity '+report.grandPy.toFixed(2)+'h · Gap '+(gap>=0?'+':'')+gap.toFixed(2)+'h · Printed '+esc(new Date().toLocaleString())+'</div>';
+  if(report.actions.length){
+    html+='<div class="actions"><h2>Paylocity needs these corrections</h2><ol>'+report.actions.map(function(a){
+      return '<li><b>'+esc(a.who)+', '+esc(fmtShortDate(a.dISO))+' → '+a.need.toFixed(2)+' hrs paid</b> (currently '+a.have.toFixed(2)+')</li>'; }).join('')+'</ol></div>';
+  }
+  html+=report.emps.map(function(emp){
+    var gapE=Math.round((emp.pyTotal-emp.dashTotal)*100)/100;
+    return '<div class="emp"><div class="emphead"><span>'+esc(emp.who)+'</span><span>Tracker '+emp.dashTotal.toFixed(2)+'h · Paylocity '+emp.pyTotal.toFixed(2)+'h · '+(gapE>=0?'+':'')+gapE.toFixed(2)+'h</span></div>'
+      +'<table><thead><tr><th>Day</th><th class="r">Tracker</th><th class="r">Paylocity</th><th class="r">Diff</th><th>Note</th></tr></thead><tbody>'
+      +emp.rows.map(function(r){
+        var pDisp=r.pHrs==null?'—':r.pHrs.toFixed(2);
+        var d=(r.pHrs==null?0:r.pHrs)-r.dHrs; var isFlag=(r.status==='mispunch'||r.status==='missing'||r.status==='diff');
+        var diffDisp=r.status==='match'?'match':(d>=0?'+':'')+d.toFixed(2);
+        var note=r.status==='lunch'?'Lunch differential':(r.status==='mispunch'?'Missed clock-in/out':(r.status==='missing'?'No Paylocity record':(r.notes||'')));
+        return '<tr><td>'+esc(fmtShortDate(r.dISO))+'</td><td class="r">'+r.dHrs.toFixed(2)+'</td><td class="r">'+pDisp+'</td><td class="r '+(isFlag?'bad':'good')+'">'+esc(diffDisp)+'</td><td>'+esc(note)+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+  }).join('');
+  html+='</body></html>';
+  w.document.open(); w.document.write(html); w.document.close();
+}
 function confirmPaylocityImport(){
   // Only rows Rich explicitly checked get their hours updated -- unchecked "changed" rows are left
   // alone entirely (neither imported nor touched), same as if they were never shown.
@@ -2323,6 +2517,11 @@ function boot(){
   $('paylocityPunchRows').addEventListener('input', _pySplitHandler);
   $('paylocityPunchRows').addEventListener('click', _pySplitClickHandler);
   $('paylocityModal').addEventListener('click',function(e){ if(e.target===$('paylocityModal')) closePaylocityModal(); });
+  { var pcb=$('paylocityCompareBtn'); if(pcb) pcb.onclick=openPaylocityCompare; }
+  $('paylocityCompareFile').addEventListener('change',function(e){ onPaylocityCompareFile(e.target.files[0]); });
+  $('pyCompClose').onclick=closePaylocityCompare; $('pyCompCloseBtn').onclick=closePaylocityCompare;
+  $('pyCompPrintBtn').onclick=printPaylocityCompare;
+  $('pyCompModal').addEventListener('click',function(e){ if(e.target===$('pyCompModal')) closePaylocityCompare(); });
   // manage list edit/delete delegation
   $('mgrCard').addEventListener('click',function(e){
     var t=e.target; var i;
