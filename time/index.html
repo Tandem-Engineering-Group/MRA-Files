@@ -331,6 +331,10 @@
       <div style="padding:10px 14px;border-bottom:1px solid var(--line);background:var(--card2);font-weight:800;font-size:13.5px">Paylocity needs these corrections</div>
       <ol id="pyCompActions" style="margin:0;padding:10px 14px 12px 30px;font-size:13.5px;line-height:1.9"></ol>
     </div>
+    <div id="pyCompGapsWrap" class="hide" style="margin-bottom:16px;border:1.5px solid var(--warn);border-radius:12px;overflow:hidden">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--line);background:var(--card2);font-weight:800;font-size:13.5px">This Tracker needs updating <span class="muted" style="font-weight:400;font-size:12px">(Paylocity already has these — nothing to fix there)</span></div>
+      <ol id="pyCompGaps" style="margin:0;padding:10px 14px 12px 30px;font-size:13.5px;line-height:1.9"></ol>
+    </div>
     <div id="pyCompDetail" style="overflow:auto;max-height:420px"></div>
     <div class="submitrow">
       <button class="tbtn" id="pyCompPrintBtn">🖨 Print this report</button>
@@ -811,7 +815,7 @@ function onPaylocityCompareFile(file){
   if(!file) return;
   $('pyCompModal').classList.add('on');
   $('pyCompSummary').innerHTML='Reading '+esc(file.name)+'…';
-  $('pyCompActionsWrap').classList.add('hide'); $('pyCompActions').innerHTML=''; $('pyCompDetail').innerHTML=''; PY_COMPARE_REPORT=null;
+  $('pyCompActionsWrap').classList.add('hide'); $('pyCompActions').innerHTML=''; $('pyCompGapsWrap').classList.add('hide'); $('pyCompGaps').innerHTML=''; $('pyCompDetail').innerHTML=''; PY_COMPARE_REPORT=null;
   var reader=new FileReader();
   reader.onload=function(ev){
     loadPdfJs(function(err){
@@ -871,7 +875,7 @@ function buildPaylocityCompareReport(pRows){
   var emps=Object.keys(empSet).sort();
   var days=[]; (function(){ var d=new Date(minD+'T00:00:00'), end=new Date(maxD+'T00:00:00');
     while(d<=end){ days.push(ymd(d)); d.setDate(d.getDate()+1); } })();
-  var report={emps:[], grandDash:0, grandPy:0, actions:[]};
+  var report={emps:[], grandDash:0, grandPy:0, actions:[], trackerGaps:[]};
   emps.forEach(function(who){
     var rows=[], empDash=0, empPy=0, hasAny=false;
     days.forEach(function(dISO){
@@ -883,13 +887,20 @@ function buildPaylocityCompareReport(pRows){
       hasAny=true; empDash+=dHrs; if(pHrs!=null) empPy+=pHrs;
       var diff=(pHrs==null?0:pHrs)-dHrs;
       var status='match';
-      if(pHrs==null && dHrs>0) status='missing';
+      // dHrs<=0 but Paylocity already shows real hours -- this is NOT "Paylocity is overpaying,
+      // correct it down to 0". It means this tracker simply doesn't have that day entered yet (very
+      // common for the most recent day or two -- crew/foreman hours often go in at end of day/week).
+      // Telling Rich to zero out Paylocity here would erase real hours someone actually worked, so it
+      // gets its own status with the opposite message: check the TRACKER, don't touch Paylocity.
+      if(dHrs<=0 && pHrs>0) status='tracker_missing';
+      else if(pHrs==null && dHrs>0) status='missing';
       else if(hasPunchIssue && (pHrs||0)===0 && dHrs>0) status='mispunch';
       else if(Math.abs(diff)>=0.4 && Math.abs(diff)<=0.6) status='lunch';
       else if(Math.abs(diff)>0.03) status='diff';
       var notesTxt=(pRec&&pRec.notes.length?pRec.notes.join('; '):'')||(dRec&&dRec.notes.length?dRec.notes.join('; '):'');
       rows.push({dISO:dISO, dHrs:dHrs, pHrs:pHrs, status:status, notes:notesTxt});
       if(status==='mispunch'||status==='missing'||status==='diff') report.actions.push({who:who, dISO:dISO, need:dHrs, have:(pHrs==null?0:pHrs), status:status});
+      else if(status==='tracker_missing') report.trackerGaps.push({who:who, dISO:dISO, have:pHrs});
     });
     if(!hasAny) return;
     report.grandDash+=empDash; report.grandPy+=empPy;
@@ -901,7 +912,7 @@ function buildPaylocityCompareReport(pRows){
 function renderPaylocityCompare(report){
   if(!report || !report.emps.length){
     $('pyCompSummary').innerHTML='<span class="muted">No overlapping employee/day data found between this file and the tracker.</span>';
-    $('pyCompActionsWrap').classList.add('hide'); $('pyCompDetail').innerHTML='';
+    $('pyCompActionsWrap').classList.add('hide'); $('pyCompGapsWrap').classList.add('hide'); $('pyCompDetail').innerHTML='';
     return;
   }
   var gap=Math.round((report.grandPy-report.grandDash)*100)/100;
@@ -911,6 +922,11 @@ function renderPaylocityCompare(report){
     ? report.actions.map(function(a){ var why = a.status==='mispunch'?' — missed clock-in/out':(a.status==='missing'?' — no Paylocity record at all':'');
         return '<li><b>'+esc(a.who)+', '+esc(fmtShortDate(a.dISO))+' → '+a.need.toFixed(2)+' hrs paid</b> <span class="muted" style="font-size:12px">(currently '+a.have.toFixed(2)+why+')</span></li>'; }).join('')
     : '<li style="list-style:none;margin-left:-30px">✨ Nothing to fix — Paylocity matches the tracker for every day in this file.</li>';
+  if(report.trackerGaps.length){
+    $('pyCompGapsWrap').classList.remove('hide');
+    $('pyCompGaps').innerHTML = report.trackerGaps.map(function(g){
+      return '<li><b>'+esc(g.who)+', '+esc(fmtShortDate(g.dISO))+'</b> <span class="muted" style="font-size:12px">— Paylocity shows '+g.have.toFixed(2)+'h, nothing logged here yet</span></li>'; }).join('');
+  } else { $('pyCompGapsWrap').classList.add('hide'); $('pyCompGaps').innerHTML=''; }
   $('pyCompDetail').innerHTML = report.emps.map(function(emp){
     var gapE=Math.round((emp.pyTotal-emp.dashTotal)*100)/100;
     return '<div class="pcEmp"><div class="pcEmpHead"><span>'+esc(emp.who)+'</span><span>Tracker '+emp.dashTotal.toFixed(2)+'h &nbsp;·&nbsp; Paylocity '+emp.pyTotal.toFixed(2)+'h &nbsp;·&nbsp; <span class="pcGap'+(gapE!==0?' bad':'')+'">'+(gapE>=0?'+':'')+gapE.toFixed(2)+'h</span></span></div>'
@@ -920,6 +936,7 @@ function renderPaylocityCompare(report){
         var diffDisp, diffCls, chip;
         if(r.status==='match'){ diffDisp='match'; diffCls='pcDiff good'; chip='<span class="pcChip good">OK</span>'; }
         else if(r.status==='lunch'){ diffDisp=((r.pHrs-r.dHrs)>=0?'+':'')+(r.pHrs-r.dHrs).toFixed(2); diffCls='pcDiff good'; chip='<span class="pcChip good">Lunch differential</span>'; }
+        else if(r.status==='tracker_missing'){ diffDisp='+'+r.pHrs.toFixed(2); diffCls='pcDiff'; chip='<span class="pcChip" style="background:#3a2e12;color:#f4d79a">Tracker needs updating</span>'; }
         else { var d=(r.pHrs==null?0:r.pHrs)-r.dHrs; diffDisp=(d>=0?'+':'')+d.toFixed(2); diffCls='pcDiff bad';
           chip = r.status==='mispunch' ? '<span class="pcChip bad">Missed clock-in/out</span>' : r.status==='missing' ? '<span class="pcChip bad">No Paylocity record</span>' : '<span class="pcChip bad">Needs correction</span>'; }
         return '<tr><td>'+esc(fmtShortDate(r.dISO))+'</td><td class="r">'+r.dHrs.toFixed(2)+'</td><td class="r">'+pDisp+'</td><td class="r '+diffCls+'">'+diffDisp+'</td><td style="font-size:12px">'+chip+(r.notes?' <span class="muted">'+esc(r.notes)+'</span>':'')+'</td></tr>';
@@ -935,15 +952,21 @@ function printPaylocityCompare(){
     +'h1{font-size:20px;margin:0 0 4px}.sub{color:#667;font-size:12.5px;margin-bottom:16px}'
     +'.actions{border:1.5px solid #DC4A26;border-radius:10px;padding:10px 16px;margin:14px 0 22px}'
     +'.actions h2{font-size:13px;margin:0 0 6px}.actions ol{margin:0;padding-left:20px;font-size:13px;line-height:1.9}'
+    +'.gaps{border:1.5px solid #B45309;border-radius:10px;padding:10px 16px;margin:14px 0 22px}'
+    +'.gaps h2{font-size:13px;margin:0 0 6px}.gaps ol{margin:0;padding-left:20px;font-size:13px;line-height:1.9}'
     +'.emp{border:1px solid #ddd;border-radius:10px;margin-bottom:12px;overflow:hidden;page-break-inside:avoid}'
     +'.emphead{background:#f4f4f4;padding:7px 10px;font-weight:700;font-size:13px;display:flex;justify-content:space-between}'
     +'table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:5px 8px;text-align:left;border-bottom:1px solid #eee}th.r,td.r{text-align:right}'
-    +'.bad{color:#b91c1c;font-weight:700}.good{color:#0e7c4f}'
+    +'.bad{color:#b91c1c;font-weight:700}.good{color:#0e7c4f}.warn{color:#B45309;font-weight:700}'
     +'</style></head><body>'
     +'<h1>Paylocity Reconciliation</h1><div class="sub">Tracker '+report.grandDash.toFixed(2)+'h · Paylocity '+report.grandPy.toFixed(2)+'h · Gap '+(gap>=0?'+':'')+gap.toFixed(2)+'h · Printed '+esc(new Date().toLocaleString())+'</div>';
   if(report.actions.length){
     html+='<div class="actions"><h2>Paylocity needs these corrections</h2><ol>'+report.actions.map(function(a){
       return '<li><b>'+esc(a.who)+', '+esc(fmtShortDate(a.dISO))+' → '+a.need.toFixed(2)+' hrs paid</b> (currently '+a.have.toFixed(2)+')</li>'; }).join('')+'</ol></div>';
+  }
+  if(report.trackerGaps.length){
+    html+='<div class="gaps"><h2>This Tracker needs updating (Paylocity already has these — nothing to fix there)</h2><ol>'+report.trackerGaps.map(function(g){
+      return '<li><b>'+esc(g.who)+', '+esc(fmtShortDate(g.dISO))+'</b> — Paylocity shows '+g.have.toFixed(2)+'h, nothing logged here yet</li>'; }).join('')+'</ol></div>';
   }
   html+=report.emps.map(function(emp){
     var gapE=Math.round((emp.pyTotal-emp.dashTotal)*100)/100;
@@ -953,8 +976,9 @@ function printPaylocityCompare(){
         var pDisp=r.pHrs==null?'—':r.pHrs.toFixed(2);
         var d=(r.pHrs==null?0:r.pHrs)-r.dHrs; var isFlag=(r.status==='mispunch'||r.status==='missing'||r.status==='diff');
         var diffDisp=r.status==='match'?'match':(d>=0?'+':'')+d.toFixed(2);
-        var note=r.status==='lunch'?'Lunch differential':(r.status==='mispunch'?'Missed clock-in/out':(r.status==='missing'?'No Paylocity record':(r.notes||'')));
-        return '<tr><td>'+esc(fmtShortDate(r.dISO))+'</td><td class="r">'+r.dHrs.toFixed(2)+'</td><td class="r">'+pDisp+'</td><td class="r '+(isFlag?'bad':'good')+'">'+esc(diffDisp)+'</td><td>'+esc(note)+'</td></tr>';
+        var note=r.status==='lunch'?'Lunch differential':(r.status==='mispunch'?'Missed clock-in/out':(r.status==='missing'?'No Paylocity record':(r.status==='tracker_missing'?'Tracker needs updating':(r.notes||''))));
+        var cls=r.status==='tracker_missing'?'warn':(isFlag?'bad':'good');
+        return '<tr><td>'+esc(fmtShortDate(r.dISO))+'</td><td class="r">'+r.dHrs.toFixed(2)+'</td><td class="r">'+pDisp+'</td><td class="r '+cls+'">'+esc(diffDisp)+'</td><td>'+esc(note)+'</td></tr>';
       }).join('')+'</tbody></table></div>';
   }).join('');
   html+='</body></html>';
