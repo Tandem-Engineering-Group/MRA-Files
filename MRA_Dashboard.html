@@ -4062,6 +4062,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.79", date:"2026-09-01", title:"🐛 Fixed: Unassigned Tasks list kept showing already-finished Fleetio work as \"not on the board yet\"", items:[
+    "Real bug, confirmed live on SMC J1542 #1374 (Left Axle Front Rim) — Doug closed it 8/31, fully assigned and done, but the ⚠ Unassigned Tasks panel kept listing it under \"🔧 Fleetio — not on the board yet,\" as if nobody had touched it. Root cause: that panel's Fleetio section only treated a STILL-OPEN matching task as \"already handled\" — a done one didn't count, so any warranty-style issue that stays open in Fleetio after the board work is finished kept resurfacing there forever, looking exactly like a lost assignment. Fixed: any existing task for that issue — open or done — now takes it off this list. (The bay-card 🔧 pill and the Fleetio-tab issue list are unchanged and still deliberately show a done task if Fleetio itself still shows the issue open, per the 8/28 fix for the reverse problem — that's a different, correct signal; this fix is specifically about the 'needs a crew' list, which shouldn't claim assigned/done work is unassigned.)" ] },
   { rev:"37.78", date:"2026-09-01", title:"🐛 Fixed for real: reopening a Fleetio issue no longer silently wipes a done assignment", items:[
     "Real, repeating bug on SMC J1542, caught live: for a warranty-repair issue that's done and assigned on the board but still shows open in Fleetio itself, the ➕ button never went away — clicking it again (even by accident) silently reopened the task AND wiped its assignee back to blank, with zero warning. Happened to 4 different tasks the same day. Fixed: reopening a completed task now shows a confirmation first (\"this already has a completed task, assigned to X — reopen it?\") instead of firing silently, so a stray click can't erase real, finished work anymore. The 4 wiped assignments on SMC J1542 were restored directly." ] },
   { rev:"37.77", date:"2026-09-01", title:"🗑 Staff on Leave: delete option now in the calendar view too", items:[
@@ -21145,8 +21147,8 @@ function unassignedTasks(){
   { const flByJob={};
     ((D.fleetio&&D.fleetio.issues)||[]).forEach(it=>{ if(typeof SHOW_TRACTOR!=='undefined' && !SHOW_TRACTOR && /tractor/i.test(it.asset||'')) return;
       const k=((String(it.jobNum||'').match(/\d{3,}/)||[])[0]); if(k){ (flByJob[k]=flByJob[k]||[]).push(it); } });
-    const tasked=new Set();   // only a still-OPEN matching task suppresses -- a Done one might not mean Fleetio itself was closed
-    (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m && !t.done) tasked.add(m[1]); }));
+    const tasked=new Set();   // ANY matching task (open OR done) suppresses -- it's already on the board; use the Fleetio tab to reopen if new work is needed
+    (D.jobs||[]).forEach(j=>(j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) tasked.add(m[1]); }));
     const seen=new Set();
     (D.jobs||[]).forEach(j=>{ if(j.category==='leave'||(j.status||'').toLowerCase()==='shipped') return;
       if(String(j.row||'').indexOf('orphan:')===0 || j.category==='pipeline') return;
