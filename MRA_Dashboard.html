@@ -2843,6 +2843,7 @@
           <select id="lvLane"><option value="">— auto (match by name) —</option><option>Sal</option><option>Wrap Team</option><option>Electricians</option><option>Doug</option><option>Josh</option><option>Jeff</option></select></div>
         <div id="lvMsg" style="font-size:12px; min-height:16px"></div>
         <div class="addbtns">
+          <button class="btn-ghost" id="lvDeleteBtn" style="display:none;color:var(--red);border-color:var(--red)" onclick="lvModalDelete()" title="Delete this leave entry">🗑 Delete</button>
           <button class="btn-ghost" onclick="closeLeave()">Cancel</button>
           <button class="btn-primary" id="lvSubmit" onclick="submitLeave()">Add</button>
         </div>
@@ -4061,6 +4062,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.77", date:"2026-09-01", title:"🗑 Staff on Leave: delete option now in the calendar view too", items:[
+    "The 📅 calendar view could only edit a leave entry, not delete one — the ✎ Edit leave popup now has a 🗑 Delete button too (shows only when editing an existing entry, not when adding a new one), same confirm-then-delete as the List view already had. Also fixed a real duplicate: Brandon Choy had two overlapping 9/3–9/4 leave entries because one had its start date typo'd as 1997 instead of 2026 — removed the bad one." ] },
   { rev:"37.76", date:"2026-09-01", title:"🔒 Due Diligence: real Sterling Heights site visit update", items:[
     "Item G1 (zoning verification) updated — Tony escalated from email to an actual in-person meeting: a site visit with the City's Building Official, Tom Caporuscio, was scheduled for 9/1 at 9:30 AM specifically to walk the building and discuss MRA's planned changes. The two original open questions (door widening, outdoor storage) still don't have written answers yet — flagged as the next thing to chase." ] },
   { rev:"37.75", date:"2026-08-31", title:"🐛 Fixed: reopening a Fleetio issue no longer auto-assigns the old assignee", items:[
@@ -9161,6 +9164,7 @@ function openLeave(){ if(!ensureAuth("add a leave entry")) return; _lvRow=null; 
   { const r=document.getElementById('lvReason'); if(r) r.value=''; }
   { const L=document.getElementById('lvLane'); if(L) L.value=''; } window._lvReasonOrig='';
   document.getElementById('lvMsg').textContent=''; const b=document.getElementById('lvSubmit'); b.disabled=false; b.textContent='Add';
+  { const d=document.getElementById('lvDeleteBtn'); if(d) d.style.display='none'; }
   document.getElementById('leaveModal').classList.add('show'); document.getElementById('lvName').focus(); }
 // notesRaw convention on leave rows: "<reason> [lane:Sal]" — the lane token routes the highlight onto a crew card.
 function _lvParse(nr){ const s=String(nr||''); const m=s.match(/\[lane:([^\]]+)\]/i);
@@ -9184,9 +9188,23 @@ function openLeaveEdit(row){ if(!ensureAuth("edit a leave entry")) return;
     const r=document.getElementById('lvReason'); if(r) r.value=pr.reason||'';
     const L=document.getElementById('lvLane'); if(L) L.value=[...L.options].some(o=>o.value===pr.lane)?pr.lane:''; }
   document.getElementById('lvMsg').textContent=''; const b=document.getElementById('lvSubmit'); b.disabled=false; b.textContent='Save';
+  { const d=document.getElementById('lvDeleteBtn'); if(d) d.style.display=''; }
   document.getElementById('leaveModal').classList.add('show'); }
 function closeLeave(e){ if(!e || e.target.id==='leaveModal' || e.target.classList.contains('modal-close'))
   document.getElementById('leaveModal').classList.remove('show'); }
+// Delete straight from the edit modal (Rich, 2026-09-01: calendar chips could only edit, not delete --
+// a real duplicate leave entry with no way to remove it from the calendar view itself). Mirrors
+// delLeaveBtn's own confirm+write+local-update, then closes the modal and re-renders on success.
+function lvModalDelete(){ if(!_lvRow) return; if(!ensureAuth("delete a leave entry")) return;
+  const j=window._lvJob||((window.MRA_DATA||{}).jobs||[]).find(x=>x.row===_lvRow); const who=j?(j.project||'').replace(/\s*[–-]\s*APL.*$/i,''):'';
+  if(!confirm("Delete this leave entry?\n\n"+who)) return;
+  const row=_lvRow;
+  const payload={ action:"deleteJob", row:row, project:(j&&j.project)||"", pin:CLOSE_PIN, user:CURRENT_USER };
+  shopWrite(payload).then(()=>{
+    const D=window.MRA_DATA||{}; if(D.jobs) D.jobs=D.jobs.filter(x=>x.row!==row);
+    closeLeave(); oApply(); lvRerender();
+  }).catch(()=>alert("Couldn't reach the service — try again."));
+}
 function submitLeave(){
   const name=document.getElementById('lvName').value.trim();
   const start=document.getElementById('lvStart').value, end=document.getElementById('lvEnd').value;
