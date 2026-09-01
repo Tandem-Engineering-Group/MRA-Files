@@ -4062,6 +4062,8 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.78", date:"2026-09-01", title:"🐛 Fixed for real: reopening a Fleetio issue no longer silently wipes a done assignment", items:[
+    "Real, repeating bug on SMC J1542, caught live: for a warranty-repair issue that's done and assigned on the board but still shows open in Fleetio itself, the ➕ button never went away — clicking it again (even by accident) silently reopened the task AND wiped its assignee back to blank, with zero warning. Happened to 4 different tasks the same day. Fixed: reopening a completed task now shows a confirmation first (\"this already has a completed task, assigned to X — reopen it?\") instead of firing silently, so a stray click can't erase real, finished work anymore. The 4 wiped assignments on SMC J1542 were restored directly." ] },
   { rev:"37.77", date:"2026-09-01", title:"🗑 Staff on Leave: delete option now in the calendar view too", items:[
     "The 📅 calendar view could only edit a leave entry, not delete one — the ✎ Edit leave popup now has a 🗑 Delete button too (shows only when editing an existing entry, not when adding a new one), same confirm-then-delete as the List view already had. Also fixed a real duplicate: Brandon Choy had two overlapping 9/3–9/4 leave entries because one had its start date typo'd as 1997 instead of 2026 — removed the bad one." ] },
   { rev:"37.76", date:"2026-09-01", title:"🔒 Due Diligence: real Sterling Heights site visit update", items:[
@@ -8221,8 +8223,17 @@ function addFleetioTask(row,num,who){
   // re-assigned to whoever had it last time instead of leaving it blank like a real new-task add does
   // (Rich: "it changes it as assigned to Doug without me assigning it"). Now always blank unless a
   // specific `who` is actually passed in, matching the brand-new-task path below exactly.
+  // 🐛 FIXED 2026-09-01 (3rd pass) -- the reopen above was firing SILENTLY on every click, with no
+  // guard at all. For an issue that's still open in Fleetio but already done+assigned on the board
+  // (very real for warranty-repair issues -- the board's own work finishes long before Fleetio itself
+  // marks the ticket resolved), the ➕ button keeps showing, and a repeat/accidental click on it wiped
+  // a real completed assignment back to blank -- same job, same button, happened four separate times
+  // in one day (Rich: "we keep doing this again and again and again"). Reopening a DONE task is a real,
+  // different action from adding a fresh one -- it should never happen from a stray click with zero
+  // feedback, so it's now confirmed first, telling you exactly what's already there before touching it.
   const existing=(j.tasks||[]).find(x=>x.t===task);
   if(existing && existing.done){
+    if(!confirm('This issue already has a COMPLETED task'+(existing.who?(' — assigned to '+existing.who):'')+'.\n\nReopen it? It will need to be reassigned (Fleetio still shows this issue open, but the work here is already marked done).')) return;
     const payload={ action:"editTask", project:j.project, taskOld:task, task:task,
       assigned:(who||""), status:"Open", milestone:existing.ml||"", comments:existing.cm||("Fleetio issue #"+num),
       due:due||(existing.due||""), pin:CLOSE_PIN, user:CURRENT_USER };
