@@ -502,8 +502,20 @@ twice, and got rightly chewed out) and only ONE copy of the flow is enabled (Ric
   text → ⚡ dynamic content → pick **RunDone** under Variables (must become a token pill); (2) right box →
   delete the text → **fx** → `false` → Add (pill); (3) verify in Code view: line 7 = `@variables('RunDone')`,
   line 8 = `false`/`@false`, no quotes, no space; (4) Save → Run. Terminate stays on the True side (correct).
-  ⚠️ As of writing, Rich had the steps but had NOT yet confirmed applying them — check run history / Code view
-  before assuming this is done. **LESSON (Rich's words: "read the program before you make an assumption"):**
+  **✅ APPLIED + SAVED BY RICH 9:44 PM 2026-09-01** — Code view confirmed `"@variables('RunDone')"` /
+  `"@false"` before Save; Save accepted the cross-branch variable reference with no validation error (the
+  designer's ⚡ dynamic-content pane shows NOTHING for this Condition because `Initialize variable` lives in
+  the sibling branch — that's exactly why a word got typed there on 8/28; the fx expression works regardless).
+  First attempt produced `"@'RunDone'"` (just the quoted name) — always re-check Code view for the
+  `variables(` wrapper. Two runs already in flight at save time (9:36/9:41 PM) still ran the OLD definition.
+  **Still not proven** until a run-history entry shows Failed / `auto cancel` on a real hang.
+  **⏭ Recommended same night (Rich had the steps; not confirmed applied):** the Delay branch makes EVERY
+  healthy run sit at exactly 10:00 (Power Automate won't close a run until both parallel branches finish),
+  permanently eating 2 of the 3 parallelism slots — Rich: "it's always stuck on this delay stage." Fix = add
+  a **Terminate (Status: Succeeded)** as the very LAST action of the main chain, right under `Set variable`
+  → healthy runs close in ~1-2 min (Delay shows Cancelled inside the run — correct), stuck runs never reach it
+  so the 10-min Condition still kills them. Check whether run durations dropped from 10:00 to ~1-2 min to know
+  if he did it. **LESSON (Rich's words: "read the program before you make an assumption"):**
   when a Power Automate step misbehaves, get the **Code view** screenshot FIRST. Parameters view shows a
   typed word and a real variable token nearly identically; Code view does not lie. Never diagnose a Condition
   from the Parameters/Run-results view alone again.
