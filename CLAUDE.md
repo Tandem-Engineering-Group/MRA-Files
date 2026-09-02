@@ -1,5 +1,57 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ ROOT-CAUSED 2026-09-01 late (rev 37.80) — "my assignments keep coming back unassigned" was an AUTO-CLOSE, not lost assignments
+
+Rich, night before a 5-day vacation, after a full day of re-assigning the same Parking-Lot Fleetio tasks (SMC J1542
++ others): "they keep coming back unassigned... you said you fixed it... causes a cluster fuck with the team because
+they don't see them on the board assigned to them." Every earlier fix that day (37.73 reopen-instead-of-duplicate,
+37.75 reopen-lands-unassigned, 37.78 confirm-before-reopen, 37.79 Unassigned-finder) treated symptoms. **Read the
+live data before answering this time** — that's what found it:
+- **The tasks were never unassigned. They were being marked DONE.** Live `data.js`: every 🔧 task on SMC J1542 still
+  had its assignee (Doug/Sal), but ALL 14 were `st=Done` — 10 of them `cl=2026-09-01`, i.e. closed that same day —
+  while all 12 of their Fleetio issues were STILL OPEN in Fleetio. Board-wide: **39 done-but-Fleetio-open tasks on
+  11 jobs, ~25 closed 8/31–9/1**, incl. tasks assigned to **Electricians / Wrap Team (external, no login — can't
+  close anything)** and two rows **created unassigned and closed the same day** (FM Global #1399 id 740, ABB #1143
+  id 743). No human does that. A Done task (a) drops out of the crew columns → "the team doesn't see it", (b) drops
+  out of the card's task list, and (c) under the 8/28 rule ("a Done task no longer suppresses the pill") the card
+  re-drew the Fleetio issue as a bare ➕ row with no name → "it came back unassigned" → Rich re-added it → churn.
+- **The writer: the Fleetio→board auto-close** (rev 3.8, 2026-06-17; `renderFloor`, the block right after
+  `_fleetioTasked`): for every OPEN 🔧 task whose issue number is NOT in `D.fleetio.issues`, it `shopWrite`s a close
+  and marks it Done — on any signed-in editor's render, guarded only by `issues.length>0`. "Not in the feed" ≠
+  "resolved": (1) `Export-Data.ps1` pulls `issues?q[state_eq]=open` with cursor pagination — a failed page = a
+  partial list; (2) an issue in any non-`open` Fleetio state vanishes from it; (3) **the pill's green ✓
+  (`fioResolveBtn`) removes the issue from `D.fleetio.issues` locally and `fioApplyResolved` keeps hiding it for up
+  to 6h (`mra_fio_resolved_v1`) whether or not Fleetio actually took the resolve** — so one tap of a green check that
+  LOOKS like "mark done" made the next render auto-close (and WRITE) that task. Couldn't prove which of the three
+  fired on 9/1 (no server log), doesn't matter — all three feed the same block.
+- **FIXES SHIPPED (rev 37.80):** (1) `const FLEETIO_AUTOCLOSE_ENABLED=false` (next to `FLEETIO_AUTOCLOSED`) gates the
+  block — closing a task is a human action again. Re-enable ONLY on a POSITIVE resolved signal from the export
+  (e.g. an exported list of recently-resolved issue numbers), never on absence. (2) Bay card: `fl` split into `fl`
+  (no task at all → ➕ rows, unchanged) and `flDone` (newest DONE row per issue #, Fleetio still open → muted
+  strikethrough line "done on board · Doug · 9/1 · still open in Fleetio" with **↻** reopen (→ `addFleetioTask`,
+  confirm-gated) and the green ✓). Pill reads "🔧 N done · Fleetio open" when only done ones remain. Keeps Rich's
+  8/28 "if Fleetio shows it, show it" WITHOUT impersonating unassigned work. (3) `addFleetioTask` matches the
+  existing row by ISSUE NUMBER (`🔧\s*#NNN(\D|$)`) — open row wins, else newest done row — and builds the task text
+  whitespace-normalized; the reopen payload carries `_id` and `case 'editTask'` now passes it as `__id` so
+  `_findId` targets that exact row (dup-safe). **Gotcha behind the #1374/#1375 recurring duplicates:** those two
+  Fleetio titles have a TRAILING SPACE (`'Left Axle Front Rim '`, `'Missing Access Door '` — 9 open issues do), so
+  the old exact-text `x.t===task` never matched the trimmed row already on the board → a fresh duplicate every ➕.
+  (4) `queueAllFleetio` `have` set counts ANY row (open or done) so bulk-add can't mass-reopen. Verified headless
+  against the live data: SMC expanded card = 12 ↻ rows / 0 ➕ rows / crew groups intact; Unassigned finder lists 0
+  SMC Fleetio items; `addFleetioTask(smc,'1375')` → confirm → `editTask` on `_id 761`; fresh issue → `addTask`;
+  0 page errors.
+- **⏳ DATA REPAIR — PENDING RICH'S GO ("reopen them"):** `scratchpad/reopen-plan.json` = 34 rows (newest done row
+  per issue where Fleetio is still open and no open row exists). Recommended scope = the **26 closed 8/31–9/1**
+  (the auto-close event); the 8 closed 8/6–8/28 may be legitimately finished — leave unless he says otherwise.
+  Mechanism = `mergeById` on "MRA Shop Tasks" with `{"field_5":"Open","field_7":""}` (the app's own `reopenTask`
+  op already clears Closed with `''`, so the flow accepts it). `build_from_lists` sets `done` if Status matches
+  done|complete **OR Closed is non-empty** — so clearing `field_7` is REQUIRED, Status alone won't reopen it.
+  Verify by polling `listsAsOf` past the write and re-checking `st`/`cl`/`done`.
+- **LESSONS (Rich, verbatim, twice tonight): "read the program before you make an assumption" / "hold yourself
+  accountable."** Both the watchdog fiasco (below) and this were solved in minutes once the actual code/data was
+  read instead of reasoned about. When Rich says something "keeps coming back," pull live `data.js`, dump the
+  rows (who/st/done/op/cl/_id) and grep every writer of that field BEFORE proposing anything.
+
 ## ✅ FIXED 2026-08-06 (rev 37.0) — Fleetio watchdog "Add to board + assign" button did nothing
 
 Rich, from a real Fleetio issue popup (#1280, Siemens DBX J1110-92 steps): "I'm hitting assign to board, but

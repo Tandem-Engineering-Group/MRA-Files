@@ -4062,6 +4062,12 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.80", date:"2026-09-01", title:"🐛 FOUND IT: assigned Fleetio tasks were being auto-marked Done — the real reason assignments kept \"disappearing\"", items:[
+    "Root cause, from the live data: on SMC J1542 every 🔧 task Rich assigned was STILL assigned — but all 14 had been marked Done (most today), while every one of their issues was still open in Fleetio. Same on 10 other jobs: 39 tasks, ~25 closed in one day, including tasks assigned to external crews who can't even log in, and two created unassigned and closed the same day. Nobody clicked those. An old auto-close (June, rev 3.8) was marking a task Done — and writing it — the moment its issue number was missing from the Fleetio feed. \"Missing from the feed\" isn't \"resolved\": a partial page, an issue in a non-open Fleetio state, or the pill's green ✓ hiding the issue on that device for 6 hours all look the same to it. A Done task drops out of the crew columns and the card's task list, and the card then re-draws the Fleetio issue as a ➕ row with no name — which is exactly what read as \"it came back unassigned\".",
+    "Fixed: the auto-close is OFF. Closing a task is a human action again (the ✓ on a task, or the pill's green ✓ which asks for Fleetio's note).",
+    "Fixed: a Fleetio issue that's already DONE on the board but still open in Fleetio no longer shows as a ➕ \"add me\" row. It shows as a muted line — \"✓ … done on board · Doug · 9/1 · still open in Fleetio\" — with ↻ to reopen that same task (asks first) and ✓ to resolve it in Fleetio. So it stays visible (8/28 ask) without impersonating unassigned work.",
+    "Fixed: the #1374 / #1375 duplicates. Their Fleetio titles carry a trailing space (\"Missing Access Door \"), which defeated the exact-text check, so ➕ kept creating a fresh copy instead of reopening the existing row. Matching is now by issue number, whitespace-normalized, and a reopen targets the exact row by id — it can't hit a same-named neighbour.",
+    "Fixed: ➕ Queue all treats any existing row (open or done) as already on the board, so it can never mass-reopen finished work." ] },
   { rev:"37.79", date:"2026-09-01", title:"🐛 Fixed: Unassigned Tasks list kept showing already-finished Fleetio work as \"not on the board yet\"", items:[
     "Real bug, confirmed live on SMC J1542 #1374 (Left Axle Front Rim) — Doug closed it 8/31, fully assigned and done, but the ⚠ Unassigned Tasks panel kept listing it under \"🔧 Fleetio — not on the board yet,\" as if nobody had touched it. Root cause: that panel's Fleetio section only treated a STILL-OPEN matching task as \"already handled\" — a done one didn't count, so any warranty-style issue that stays open in Fleetio after the board work is finished kept resurfacing there forever, looking exactly like a lost assignment. Fixed: any existing task for that issue — open or done — now takes it off this list. (The bay-card 🔧 pill and the Fleetio-tab issue list are unchanged and still deliberately show a done task if Fleetio itself still shows the issue open, per the 8/28 fix for the reverse problem — that's a different, correct signal; this fix is specifically about the 'needs a crew' list, which shouldn't claim assigned/done work is unassigned.)" ] },
   { rev:"37.78", date:"2026-09-01", title:"🐛 Fixed for real: reopening a Fleetio issue no longer silently wipes a done assignment", items:[
@@ -6536,6 +6542,14 @@ let CURRENT_USER = "";      // current signed-in person's name (display + attrib
 // them (so they don't visually "bounce" back to open before data.js catches up).
 let CLOSED_LOCAL = new Set(); try{ CLOSED_LOCAL = new Set(JSON.parse(localStorage.getItem('mra_closed')||'[]')); }catch(e){}
 const FLEETIO_AUTOCLOSED = new Set();   // Fleetio-derived tasks auto-closed this session (fire-once guard)
+// ⛔ 2026-09-01: the Fleetio→board AUTO-CLOSE is OFF. It marked a 🔧 task Done (and WROTE it to SharePoint) the
+// moment its issue number was missing from D.fleetio.issues -- but "missing from the feed" is not "resolved":
+// a partial page, a non-open Fleetio state, or the pill's green ✓ hiding the issue locally for 6h (_fioResMap)
+// whether or not Fleetio actually took the resolve, all look identical to it. Caught live: 39 assigned tasks on
+// 11 jobs marked Done (25 in one day; several assigned to external crews who can't log in) while every one of
+// their issues was still open in Fleetio. Closing a task is a human action now. Flip only with a POSITIVE
+// "resolved in Fleetio" signal from the export, never on absence.
+const FLEETIO_AUTOCLOSE_ENABLED = false;
 function closedKey(p,t){ return (p||'')+''+(t||''); }
 function rememberClosed(p,t){ CLOSED_LOCAL.add(closedKey(p,t)); try{ localStorage.setItem('mra_closed', JSON.stringify([...CLOSED_LOCAL])); }catch(e){} }
 function isPendingClosed(p,t){ return t && CLOSED_LOCAL.has(closedKey(p,t)); }
@@ -8042,7 +8056,7 @@ function _listOpsRaw(p){
   switch(a){
     case 'closeTask':        return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Done',Closed:today})];
     case 'addTask':          return [O('create','ShopTasks',null,{Task:p.task,Project:p.project,JobNum:p.jobNum,Bay:p.bay,Assigned:p.assigned,Opened:today,Status:'Open',Milestone:p.milestone,Comments:p.comments,Due:(p.due||undefined)})];
-    case 'editTask':         return [O('update','ShopTasks',{Project:p.project,Task:p.taskOld},{Task:p.task,Assigned:p.assigned,Status:p.status,Milestone:p.milestone,Comments:p.comments,Due:(p.due||undefined),Closed:(_doneStatus(p.status)?today:'')})];
+    case 'editTask':         return [O('update','ShopTasks',Object.assign({Project:p.project,Task:p.taskOld},(p._id!=null&&p._id!==''?{__id:p._id}:{})),{Task:p.task,Assigned:p.assigned,Status:p.status,Milestone:p.milestone,Comments:p.comments,Due:(p.due||undefined),Closed:(_doneStatus(p.status)?today:'')})];
     case 'deleteTask':       return [O('delete','ShopTasks',{Project:p.project,Task:p.task})];
     case 'reopenTask':       return [O('update','ShopTasks',{Project:p.project,Task:p.task},{Status:'Open',Closed:''})];
     case 'addJob':           return [O('create','Jobs',null,{Project:p.project,Client:p.client,JobNum:p.jobNum,Bay:p.bay,Start:p.start,Finish:p.completion,Status:p.status,Notes:p.notes,PM:p.pm})];
@@ -8209,7 +8223,10 @@ function addFleetioTask(row,num,who){
   if(!ensureAuth("add a Fleetio issue as a task", ()=>addFleetioTask(row,num,who))) return;
   const D=window.MRA_DATA||{}; const j=(D.jobs||[]).find(x=>x.row===row); if(!j){ return; }
   const it=(((D.fleetio&&D.fleetio.issues)||[]).find(x=>String(x.num)===String(num)));
-  const task="🔧 #"+num+" "+((it&&it.summary)||("Issue "+num));
+  // Whitespace-normalized: Fleetio titles can carry a trailing space ("Missing Access Door ") and that alone
+  // defeated an exact-text match against the row already on the board -> a fresh duplicate every ➕ (9/1).
+  const _sum=String((it&&it.summary)||'').replace(/\s+/g,' ').trim();
+  const task="🔧 #"+num+" "+(_sum||("Issue "+num));
   const tISO=D.todayISO||localISO(Date.now());
   const due=(j.completionISO&&j.completionISO>=tISO)?j.completionISO:"";   // default due = the unit's departure date
   // 🐛 FIXED 2026-08-31 -- if a Fleetio issue was closed once and then reopens (real, common case: a
@@ -8233,10 +8250,14 @@ function addFleetioTask(row,num,who){
   // in one day (Rich: "we keep doing this again and again and again"). Reopening a DONE task is a real,
   // different action from adding a fresh one -- it should never happen from a stray click with zero
   // feedback, so it's now confirmed first, telling you exactly what's already there before touching it.
-  const existing=(j.tasks||[]).find(x=>x.t===task);
+  // Match the existing row by ISSUE NUMBER, not exact text (titles get edited in Fleetio and carry stray
+  // whitespace). An OPEN row wins; otherwise the newest DONE row (highest _id) is the one to reopen.
+  const _numRe=new RegExp('🔧\\s*#'+String(num).replace(/\D/g,'')+'(\\D|$)');
+  const _hits=(j.tasks||[]).filter(x=>_numRe.test(x.t||''));
+  const existing=_hits.find(x=>!x.done) || _hits.filter(x=>x.done).sort((a,b)=>(Number(b._id)||0)-(Number(a._id)||0))[0] || null;
   if(existing && existing.done){
     if(!confirm('This issue already has a COMPLETED task'+(existing.who?(' — assigned to '+existing.who):'')+'.\n\nReopen it? It will need to be reassigned (Fleetio still shows this issue open, but the work here is already marked done).')) return;
-    const payload={ action:"editTask", project:j.project, taskOld:task, task:task,
+    const payload={ action:"editTask", project:j.project, taskOld:existing.t, task:existing.t, _id:existing._id,
       assigned:(who||""), status:"Open", milestone:existing.ml||"", comments:existing.cm||("Fleetio issue #"+num),
       due:due||(existing.due||""), pin:CLOSE_PIN, user:CURRENT_USER };
     shopWrite(payload).then(()=>{
@@ -8265,7 +8286,7 @@ function queueAllFleetio(rowRef){
   const mine=((D.fleetio&&D.fleetio.issues)||[]).filter(i=>{
     if(njob(i.jobNum)&&njob(i.jobNum)===njob(j.jobNum)) return true;
     const m=String(i.asset||'').toUpperCase().match(/\d{3,5}/g); return !!(m&&njob(j.jobNum)&&m.indexOf(njob(j.jobNum))>=0); });
-  const have=new Set(); (j.tasks||[]).forEach(t=>{ if(t.done) return; const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) have.add(m[1]); });   // a Done task doesn't block re-queuing if Fleetio still shows it open
+  const have=new Set(); (j.tasks||[]).forEach(t=>{ const m=(t.t||'').match(/🔧\s*#(\d+)/); if(m) have.add(m[1]); });   // ANY existing row (open or done) counts as on the board -- bulk-add must never mass-reopen finished work; reopen one at a time via ↻ on the card
   const todo=mine.filter(i=>!have.has(String(i.num)));
   if(!todo.length){ alert("All of this unit's open issues are already on the board."); return; }
   if(!confirm('Add '+todo.length+' Fleetio issue'+(todo.length===1?'':'s')+' on '+(j.project||j.jobNum)+' as Shop Tasks?\n\nAssign crews afterwards — they land unassigned.')) return;
@@ -11643,7 +11664,8 @@ function renderFloor(D){
   // Fleetio -> board close sync: when a tracked Fleetio task's issue is no longer open in
   // Fleetio, close it here too. Guarded: only when the feed is healthy (issues present) and
   // someone is signed in — so a transient empty feed never mass-closes tasks.
-  if(D.fleetio && ((D.fleetio.issues||[]).length>0) && CLOSE_PIN){
+  // ⛔ Disabled 2026-09-01 (see FLEETIO_AUTOCLOSE_ENABLED) -- this block silently marked real assigned work Done.
+  if(FLEETIO_AUTOCLOSE_ENABLED && D.fleetio && ((D.fleetio.issues||[]).length>0) && CLOSE_PIN){
     const openNums=new Set((D.fleetio.issues||[]).map(i=>String(i.num)));
     const d2=new Date(), cd2=(d2.getMonth()+1)+"/"+d2.getDate()+"/"+d2.getFullYear();
     jobs.forEach(j=>{ let ch=false; (j.tasks||[]).forEach(t=>{
@@ -11768,7 +11790,14 @@ function renderFloor(D){
     // Normal view: open by default (tasks visible up top); wall view: collapsed (count-only).
     const jOpen = (WALL||defColl) ? expandedJobs.has(j.row) : !collapsedJobs.has(j.row);
     const _trk=new Set((j.tasks||[]).filter(t=>!t.done).map(t=>((t.t||'').match(/🔧\s*#(\d+)/)||[])[1]).filter(Boolean));
-    const fl=(jobIsSub(j)&&_subHasVisibleMain(j,jobs))?[]:fleetioFor(j).filter(it=>!_trk.has(String(it.num)) && !_fleetioTasked.has(String(it.num)));  // hide issues already a STILL-OPEN task on THIS or ANY job; a Done task no longer suppresses (Fleetio might still show it open); 🧩 sub-jobs skip Fleetio only while a visible main sibling is still around to carry it
+    // Issues whose board task is DONE (newest row per issue #) -- still open in Fleetio, so they DO stay visible
+    // (Rich 8/28: "if it's showing in Fleetio, it needs to show on the board") but as a muted "✓ done on board ·
+    // who · date" line with ↻ reopen, NOT as a ➕ row that reads like an unassigned task (9/1: that ➕ row is what
+    // he kept re-adding, and what the crew read as "my assignment disappeared").
+    const _trkDone={}; (j.tasks||[]).forEach(t=>{ if(!t.done) return; const m=(t.t||'').match(/🔧\s*#(\d+)/); if(!m) return; const k=m[1]; if(!_trkDone[k] || (Number(t._id)||0)>(Number(_trkDone[k]._id)||0)) _trkDone[k]=t; });
+    const _flAll=(jobIsSub(j)&&_subHasVisibleMain(j,jobs))?[]:fleetioFor(j).filter(it=>!_trk.has(String(it.num)) && !_fleetioTasked.has(String(it.num)));  // hide issues already a STILL-OPEN task on THIS or ANY job; 🧩 sub-jobs skip Fleetio only while a visible main sibling is still around to carry it
+    const fl=_flAll.filter(it=>!_trkDone[String(it.num)]);        // genuinely not on the board yet -> ➕ rows
+    const flDone=_flAll.filter(it=>!!_trkDone[String(it.num)]);   // done here, still open in Fleetio -> muted rows
     const pj=(WALL||jobIsSub(j))?[]:_projTasksForJob(j);   // 📋 schedule work linked to this job (J# first, name fallback)
     // Open-task count pill. WALL/TV: a plain count (tasks live in the Open Tasks by Assignee
     // panel below, so the TV stays compact). NORMAL view: a clickable "N tasks ▸" that
@@ -11778,6 +11807,7 @@ function renderFloor(D){
       else pills+=`<span class="pill task clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Show / hide this trailer's open tasks">${j.openCount} task${j.openCount>1?"s":""} ${jOpen?"▾":"▸"}</span>`;
     }
     if(fl.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="Live Fleetio maintenance issues for this trailer — expand to assign (➕)">🔧 ${fl.length} Fleetio ${jOpen?"▾":"▸"}</span>`;
+    else if(flDone.length) pills+=`<span class="pill clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" style="opacity:.7" title="${flDone.length} Fleetio issue${flDone.length===1?'':'s'} already done on the board but still open in Fleetio — expand to see, ↻ to reopen, ✓ to resolve in Fleetio">🔧 ${flDone.length} done · Fleetio open ${jOpen?"▾":"▸"}</span>`;
     if(pj.length) pills+=`<span class="pill fleet clickable${jOpen?" open":""}" onclick="toggleJob(${j.row})" title="PROJECT-schedule tasks linked to this job (matched by job # / name) — crew-assigned, next 2 weeks or overdue. Expand to see them; ⚒ breaks one into shop tasks.">📋 ${pj.length} schedule ${jOpen?"▾":"▸"}</span>`;
     { const _un=(j.tasks||[]).filter(t=>!t.done && !((typeof shopWho==='function'?(shopWho(t)||''):(t.who||''))).trim()).length; if(_un>0) pills+=`<span class="pill unas clickable" onclick="event.stopPropagation();openUnassigned()" title="${_un} open task${_un>1?'s':''} on this job with no crew assigned — tap to see &amp; assign">⚠ ${_un} unassigned</span>`; }
     let tl="";
@@ -11813,6 +11843,14 @@ function renderFloor(D){
           return `<div class="taskline fleet" title="${escA((it.detail||it.summary||"").slice(0,300))}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Add as an assignable Shop Task">➕</span>${FLEETIO_WRITE_URL?`<span class="fladd" style="color:#22c55e" onclick="fioResolveBtn('${escA(String(it.num))}')" title="Resolve this issue in Fleetio — asks for the short note Fleetio requires">✓</span>`:''}🔧 ${esc(it.summary||("Issue #"+it.num))}${ov}${bill}${fioArrow('issue',it.num)}</div>${fioDetHtml(it.num)}${fioDocsHtml(it.num)}`;
         }).join("")+`</div>`;
       }
+      if(flDone.length){
+        tl+=`<div class="tasklist fleetlist">`+flDone.map(it=>{
+          const t=_trkDone[String(it.num)]||{};
+          const who=t.who?esc(String(t.who)):'unassigned';
+          const cl=t.cl?esc(fmtMD(t.cl)):'';
+          return `<div class="taskline fleet" style="opacity:.72" title="${escA('Already DONE on the board'+(t.who?' — '+t.who:'')+(t.cl?' — closed '+t.cl:'')+'. Fleetio still shows this issue open. ↻ reopens this same task (asks first). ✓ resolves it in Fleetio.')}"><span class="fladd" onclick="addFleetioTask(${j.row},'${escA(String(it.num))}')" title="Reopen this task on the board (asks first — it will need a crew again)">↻</span>${FLEETIO_WRITE_URL?`<span class="fladd" style="color:#22c55e" onclick="fioResolveBtn('${escA(String(it.num))}')" title="Resolve this issue in Fleetio — asks for the short note Fleetio requires">✓</span>`:''}🔧 <s style="opacity:.8">${esc(it.summary||("Issue #"+it.num))}</s> <span style="color:var(--faint);font-size:10px">done on board · ${who}${cl?' · '+cl:''} · still open in Fleetio</span>${fioArrow('issue',it.num)}</div>`;
+        }).join("")+`</div>`;
+      }
       if(pj.length){
         tl+=`<div class="tasklist fleetlist">`+pj.map(x=>{
           const brk=x.handle?`<span class="fladd" onclick="event.stopPropagation();ptbOpen('${escJsAttr(x.proj)}','${escJsAttr(x.handle)}')" title="⚒ Break this schedule line into real shop tasks on this trailer — each becomes its own closable task; closing the last one flags this line 🟡 for the PM to verify (needs code)">⚒</span>`:'';
@@ -11831,7 +11869,7 @@ function renderFloor(D){
     const jc=c.state==="done"?" done":"";
     // Normal view: a caret right by the job name collapses/expands just that job's tasks,
     // so a single job (e.g. WFCU in Bay 5 Front) can be shrunk on its own.
-    const jcaret = (!WALL && (j.openCount>0 || fl.length || pj.length))
+    const jcaret = (!WALL && (j.openCount>0 || fl.length || flDone.length || pj.length))
       ? `<span class="job-collapse" onclick="toggleJob(${j.row})" title="Collapse / expand this job">${jOpen?'▾':'▸'}</span>` : '';
     const _cdt=(j.startISO||j.completionISO)?`${fmtMD(j.startISO)} → ${fmtMD(j.completionISO)}`:'';
     const _sub=(String(j.bay||'').match(/^Bay\s*\d+\s*(Front|Middle|Back)/i)||[])[1]||'';
