@@ -478,6 +478,36 @@ pattern (a parallel watchdog branch off the trigger, ending in Terminate) — bu
   goes stale again, check whether it self-recovered within ~10-15 min (watchdog working, root cause
   still there) vs. sat stale for real (watchdog itself failed somehow) before re-diagnosing from scratch.
 
+**❌ 2026-09-01 — THE 8/28 WATCHDOG BELOW DOES NOT KILL STUCK RUNS. CAUGHT ON CAMERA. NOT MICROSOFT'S FAULT — MINE.**
+Rich, leaving on a 5-day vacation the next morning: "why isn't our cancel program working? ... That's on you.
+You can't keep blaming everyone else." He was right. Evidence (his screenshots, 9:15 PM): flow "MRA Lists to
+JSON v4", a run started 6:57 PM still **Running at 2h18m**, and inside it the watchdog branch had fully
+completed at 7:43:43 PM — `Delay` 10m ✓, `Condition` 0.1s ✓, `Terminate` **Skipped**
+(`ActionBranchingConditionNotSatisfied`), False side 0 actions. So at its own 10-minute mark the Condition
+(`RunDone is equal to false`) evaluated **false** — it concluded the run was already done — on a run that then
+hung two more hours. The kill switch asked "am I stuck?" and got the wrong answer. Meanwhile healthy runs in
+the same history were closing at exactly queue-wait + 10:00 (46:29, 48:12, 53:14, 58:14, 1:03, 1:08 — durations
+climbing because the stuck run was eating one of the 3 parallelism slots, leaving zero slack vs the 5-min
+recurrence). Degree of Parallelism was ALREADY 3 (Rich raised it 8/31 — don't tell him to do it again; I did,
+twice, and got rightly chewed out) and only ONE copy of the flow is enabled (Rich confirmed) — both ruled out.
+- **Two candidate causes, both untested as of writing (Rich checking before he leaves):** (1) **most likely** —
+  the Condition's right-hand value was typed as the text `false`, not the boolean; Power Automate's `equals(false,
+  'false')` is false forever, so the True/Terminate branch can NEVER run, on any run. Fix = click into that
+  value box → fx/Expression tab → `false` → Add (must render as an expression pill). (2) the `Set variable
+  RunDone = true` isn't actually the LAST action of the main chain, so a hang in whatever sits below it is
+  invisible to the watchdog (the 8/28 note's own line-517 caveat). Fix = drag Set variable to the very bottom.
+- **Why 8/28 looked "verified" when it wasn't:** it was only checked by watching healthy runs come back
+  Succeeded — which they do identically whether the Condition works or is permanently false. The ONLY test that
+  proves a watchdog works is a run that actually hangs (or a deliberately stalled test run) getting killed at
+  ~10 min. That was never done. **Rule going forward: do not call this watchdog fixed until a run-history entry
+  shows a run killed by it (Failed, Code `auto cancel`) — not before.**
+- **⚠️ I ALSO GAVE RICH A WRONG INSTRUCTION TONIGHT AND HAD TO RETRACT IT:** told him to add a Terminate(Failed)
+  to the empty False side. Under the real design that side is the HEALTHY path — it would have marked every good
+  run Failed at 10 min (the exact 8/26 bug again). Retracted within minutes. If a future session sees a
+  Terminate on BOTH sides of that Condition, the False-side one is the mistake — remove it.
+- The GitHub `pipeline-watchdog.yml` re-alert interval was tightened 60 → 30 min the same night (both branches)
+  since Rich is the sole recipient and away for 5 days.
+
 **✅ FOUND + FIXED 2026-08-28 — the watchdog above was firing on EVERY run, not just hung ones (this is
 the real explanation for the huge "Failed" run-history backlog Rich found spanning 8/26-8/28, and very
 likely a contributing factor in some of the "recurrence" entries above too, in hindsight).** Rich sent a
