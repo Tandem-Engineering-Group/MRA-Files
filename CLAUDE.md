@@ -517,8 +517,19 @@ twice, and got rightly chewed out) and only ONE copy of the flow is enabled (Ric
   stuck runs never reach Terminate 1, so the 10-min Condition → Terminate(Failed) still kills them. **Final
   flow shape as of 2026-09-01:** Recurrence (parallelism 3) → [main chain … Set variable RunDone=true →
   Terminate 1 Succeeded] ‖ [Delay 10m → If `@variables('RunDone')` equals `@false` → Terminate Failed
-  "auto cancel" / else nothing]. Expect run-history durations ~1-2 min Succeeded; a Failed/auto-cancel entry =
-  the watchdog doing its job on a real hang (root cause of the hangs themselves still unknown — see below). **LESSON (Rich's words: "read the program before you make an assumption"):**
+  "auto cancel" / else nothing].
+  **✅ CONFIRMED WORKING 9:56 PM, first run after the save: `00:01:34 Succeeded`** — against `00:10:01` for
+  every single run before it (9:21/9:26/9:31/9:36/9:41/9:46/9:51 all exactly 10:01). Board `listsAsOf` also
+  confirmed advancing on the normal ~5-min cadence right after. All 3 parallelism slots are free again instead
+  of 2 being permanently occupied by runs doing nothing — that was the mechanism that turned a single hiccup
+  into a multi-hour backlog, and it's gone.
+  **⚠️ STILL UNPROVEN: the kill switch itself.** Nothing has hung since the Condition was fixed, so the
+  `Terminate (Failed, "auto cancel")` path has never actually executed. Do NOT call the watchdog verified
+  until a run-history entry shows **Failed / auto cancel**. And the ROOT CAUSE of why a step hangs at all is
+  still unknown — everything done 9/1 makes a hang self-clear in ~10 min instead of hours; it does not stop
+  hangs from happening. The stuck-blob-lease theory (partner-owned Azure access) is still untried, and the
+  Microsoft support ticket was drafted but not confirmed filed.
+  **LESSON (Rich's words: "read the program before you make an assumption"):**
   when a Power Automate step misbehaves, get the **Code view** screenshot FIRST. Parameters view shows a
   typed word and a real variable token nearly identically; Code view does not lie. Never diagnose a Condition
   from the Parameters/Run-results view alone again.
