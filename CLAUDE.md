@@ -490,12 +490,23 @@ the same history were closing at exactly queue-wait + 10:00 (46:29, 48:12, 53:14
 climbing because the stuck run was eating one of the 3 parallelism slots, leaving zero slack vs the 5-min
 recurrence). Degree of Parallelism was ALREADY 3 (Rich raised it 8/31 — don't tell him to do it again; I did,
 twice, and got rightly chewed out) and only ONE copy of the flow is enabled (Rich confirmed) — both ruled out.
-- **Two candidate causes, both untested as of writing (Rich checking before he leaves):** (1) **most likely** —
-  the Condition's right-hand value was typed as the text `false`, not the boolean; Power Automate's `equals(false,
-  'false')` is false forever, so the True/Terminate branch can NEVER run, on any run. Fix = click into that
-  value box → fx/Expression tab → `false` → Add (must render as an expression pill). (2) the `Set variable
-  RunDone = true` isn't actually the LAST action of the main chain, so a hang in whatever sits below it is
-  invisible to the watchdog (the 8/28 note's own line-517 caveat). Fix = drag Set variable to the very bottom.
+- **✅ ROOT CAUSE CONFIRMED BY READING THE ACTUAL PROGRAM (Rich sent the Condition's Code view, 9:34 PM):**
+  ```
+  "equals": [ "RunDone", "False " ]
+  ```
+  **Both operands are plain typed text.** The left is the literal word `RunDone`, NOT `@variables('RunDone')` —
+  the variable was never being read at all. The right is the word `False` with a trailing space. So the
+  watchdog has asked "does the text 'RunDone' equal the text 'False '?" on every run since 8/28 — never true —
+  and has never once been capable of terminating anything. The `Set variable` placement theory was moot.
+  **Fix given to Rich (exact clicks, new designer, Condition → Parameters tab):** (1) left box → delete the
+  text → ⚡ dynamic content → pick **RunDone** under Variables (must become a token pill); (2) right box →
+  delete the text → **fx** → `false` → Add (pill); (3) verify in Code view: line 7 = `@variables('RunDone')`,
+  line 8 = `false`/`@false`, no quotes, no space; (4) Save → Run. Terminate stays on the True side (correct).
+  ⚠️ As of writing, Rich had the steps but had NOT yet confirmed applying them — check run history / Code view
+  before assuming this is done. **LESSON (Rich's words: "read the program before you make an assumption"):**
+  when a Power Automate step misbehaves, get the **Code view** screenshot FIRST. Parameters view shows a
+  typed word and a real variable token nearly identically; Code view does not lie. Never diagnose a Condition
+  from the Parameters/Run-results view alone again.
 - **Why 8/28 looked "verified" when it wasn't:** it was only checked by watching healthy runs come back
   Succeeded — which they do identically whether the Condition works or is permanently false. The ONLY test that
   proves a watchdog works is a run that actually hangs (or a deliberately stalled test run) getting killed at
