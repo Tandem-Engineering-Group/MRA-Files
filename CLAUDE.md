@@ -40,13 +40,17 @@ live data before answering this time** — that's what found it:
   against the live data: SMC expanded card = 12 ↻ rows / 0 ➕ rows / crew groups intact; Unassigned finder lists 0
   SMC Fleetio items; `addFleetioTask(smc,'1375')` → confirm → `editTask` on `_id 761`; fresh issue → `addTask`;
   0 page errors.
-- **⏳ DATA REPAIR — PENDING RICH'S GO ("reopen them"):** `scratchpad/reopen-plan.json` = 34 rows (newest done row
-  per issue where Fleetio is still open and no open row exists). Recommended scope = the **26 closed 8/31–9/1**
-  (the auto-close event); the 8 closed 8/6–8/28 may be legitimately finished — leave unless he says otherwise.
-  Mechanism = `mergeById` on "MRA Shop Tasks" with `{"field_5":"Open","field_7":""}` (the app's own `reopenTask`
-  op already clears Closed with `''`, so the flow accepts it). `build_from_lists` sets `done` if Status matches
-  done|complete **OR Closed is non-empty** — so clearing `field_7` is REQUIRED, Status alone won't reopen it.
-  Verify by polling `listsAsOf` past the write and re-checking `st`/`cl`/`done`.
+- **✅ DATA REPAIR DONE 10:25 PM — all 34 reopened, VERIFIED 34/34 in the 02:27:45Z export.** Rich's next message
+  ("Like the SWC job… all these were assigned as well… go through all the jobs") named SWC IL #907 — one of the
+  8 "older" closes (8/22) — as not done, so scope was ALL 34, not just the 26 from 8/31–9/1. Two test writes first
+  (id 729 with `"field_7":""`, id 761 with `"field_7":null`) — **BOTH cleared the Closed date** (verified st=Open,
+  cl=None, done=False before the batch), then 32 more via `scratchpad/reopen_batch.py` at 1.5s spacing, all 202,
+  all landed. Mechanism: `mergeById` on "MRA Shop Tasks" `{"field_5":"Open","field_7":""}`. `build_from_lists`
+  sets `done` if Status matches done|complete **OR Closed is non-empty** — clearing `field_7` is REQUIRED. Per job:
+  SMC 12 · FM Global J1410 6 · SWC IL 3 · SWC NY1 3 · Cisco Pod 2 · Siemens DBX 2 · General 2 · Post ADLM/Trumpf/
+  Mammo Mandy/Ferguson 1 each. Any that were genuinely finished get re-closed by one human ✓ — nothing lost.
+  The older SWC IL rows whose issues are NO LONGER open in Fleetio (#1085, #1071, #1070…, 20 of them) were left
+  Done — those closes may well have been the auto-close working as designed; no evidence either way.
 - **LESSONS (Rich, verbatim, twice tonight): "read the program before you make an assumption" / "hold yourself
   accountable."** Both the watchdog fiasco (below) and this were solved in minutes once the actual code/data was
   read instead of reasoned about. When Rich says something "keeps coming back," pull live `data.js`, dump the
