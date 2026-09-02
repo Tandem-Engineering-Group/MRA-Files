@@ -509,13 +509,16 @@ twice, and got rightly chewed out) and only ONE copy of the flow is enabled (Ric
   First attempt produced `"@'RunDone'"` (just the quoted name) — always re-check Code view for the
   `variables(` wrapper. Two runs already in flight at save time (9:36/9:41 PM) still ran the OLD definition.
   **Still not proven** until a run-history entry shows Failed / `auto cancel` on a real hang.
-  **⏭ Recommended same night (Rich had the steps; not confirmed applied):** the Delay branch makes EVERY
-  healthy run sit at exactly 10:00 (Power Automate won't close a run until both parallel branches finish),
-  permanently eating 2 of the 3 parallelism slots — Rich: "it's always stuck on this delay stage." Fix = add
-  a **Terminate (Status: Succeeded)** as the very LAST action of the main chain, right under `Set variable`
-  → healthy runs close in ~1-2 min (Delay shows Cancelled inside the run — correct), stuck runs never reach it
-  so the 10-min Condition still kills them. Check whether run durations dropped from 10:00 to ~1-2 min to know
-  if he did it. **LESSON (Rich's words: "read the program before you make an assumption"):**
+  **✅ ALSO APPLIED 9:50 PM — `Terminate 1` (Status: Succeeded) added as the LAST action of the main chain**
+  (screenshot: Create blob (V2) → HTTP → Mark run done → Set variable → **Terminate 1**). Reason: the Delay
+  branch made EVERY healthy run sit at exactly 10:00 (Power Automate won't close a run until both parallel
+  branches finish), permanently eating 2 of the 3 parallelism slots — Rich: "it's always stuck on this delay
+  stage." Now healthy runs close in ~1-2 min (Delay shows Cancelled inside the run — correct, main chain won);
+  stuck runs never reach Terminate 1, so the 10-min Condition → Terminate(Failed) still kills them. **Final
+  flow shape as of 2026-09-01:** Recurrence (parallelism 3) → [main chain … Set variable RunDone=true →
+  Terminate 1 Succeeded] ‖ [Delay 10m → If `@variables('RunDone')` equals `@false` → Terminate Failed
+  "auto cancel" / else nothing]. Expect run-history durations ~1-2 min Succeeded; a Failed/auto-cancel entry =
+  the watchdog doing its job on a real hang (root cause of the hangs themselves still unknown — see below). **LESSON (Rich's words: "read the program before you make an assumption"):**
   when a Power Automate step misbehaves, get the **Code view** screenshot FIRST. Parameters view shows a
   typed word and a real variable token nearly identically; Code view does not lie. Never diagnose a Condition
   from the Parameters/Run-results view alone again.
