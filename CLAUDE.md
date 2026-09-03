@@ -507,10 +507,19 @@ with NO human action. What the evidence showed while it was down:
   healthy). First Lists dispatch again: 10:55:55Z.
 - **Rules out for THIS episode:** stuck blob lease (leases don't self-heal after 2h; reads of the same container
   kept working), hung action (never started), watchdog Condition (fixed 9/1, and irrelevant when nothing runs).
-- **NOT confirmed (Rich away, no PA access from chat):** whether PA showed the flow as throttled/suspended or
-  simply skipped triggers. Ask Rich to look at run history 4:36–6:55 AM when he's back: zero runs = trigger
-  skipped (PA platform); runs in "Waiting" = concurrency slots wedged; a "flow suspended / exceeded limits" banner
-  = quota. This is the strongest support-ticket evidence yet: a trigger that silently stops for 2+ hours.
+- **✅ CONFIRMED BY RICH'S RUN-HISTORY SCREENSHOT (6:53 AM, from vacation): ZERO runs after 4:35 AM.** The
+  trigger simply did not fire for 2h18m, then resumed on its own at 6:55. Not Waiting, not wedged — absent.
+  Strongest support-ticket line yet: *"Recurrence trigger stopped firing entirely for 2h18m (Sep 3, 4:35–6:55 AM
+  ET); no runs in history; resumed with no change made."*
+- **✅✅ THE 10-MIN KILL SWITCH IS NOW PROVEN (first time ever):** same screenshot shows **4 runs Failed at exactly
+  00:10:00–00:10:04** (4:00, 4:05, 4:10, 4:15 AM) = hung runs killed by the Condition→Terminate fixed 9/1. Before
+  that fix each would have sat for hours. So: kill switch works; `Terminate 1` (end-of-chain Succeeded) also seen
+  working (4:30 run = 01:40). ⚠️ BUT several "Succeeded" runs in the degradation window ran 10:01, not ~1:40
+  (3:50, 3:55, 4:20, 4:25, 4:35) — either the main chain genuinely took ~10 min during the slowdown (RunDone
+  flipped true right around Delay expiry) or Terminate 1 didn't end the run early on those. Unresolved; if 10:01
+  Succeeded runs show up OUTSIDE a slowdown, open one and check Terminate 1's status + Get-items durations.
+  Shape of the whole episode 3:50→6:55: slow runs → 4 hangs (killed) → 2 slow → trigger dead 2h18m → self-heal.
+  Textbook Microsoft-side service degradation; nothing in the flow/lists/blob explains it.
 - **THE GITHUB WATCHDOG ITSELF IS LATE:** `pipeline-watchdog.yml` is `cron */10` but GitHub actually ran it at
   10:48Z, 05:54Z, 01:11Z, 23:17Z, 21:02Z, 18:08Z… — **every 2–5 HOURS**. GitHub throttles `schedule:` heavily on
   this repo (22,000+ export runs). So the "20-min stale" alert reached Rich at **132 min**. Don't trust `schedule:`
