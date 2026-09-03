@@ -519,7 +519,23 @@ with NO human action. What the evidence showed while it was down:
   flipped true right around Delay expiry) or Terminate 1 didn't end the run early on those. Unresolved; if 10:01
   Succeeded runs show up OUTSIDE a slowdown, open one and check Terminate 1's status + Get-items durations.
   Shape of the whole episode 3:50→6:55: slow runs → 4 hangs (killed) → 2 slow → trigger dead 2h18m → self-heal.
-  Textbook Microsoft-side service degradation; nothing in the flow/lists/blob explains it.
+- **Rich's 3rd screenshot (the 4:15 Failed run, opened): `Get Project Tasks` (SharePoint Get items, ~734 rows,
+  normally 39-47s) was the hung step — still spinning at 10 min, everything below it never started, `Delay 10m ✓
+  → Condition → Terminated`.** Same action family as every historical hang; blew through its own PT5M timeout
+  again. **Working theory for the trigger going dead (fits every fact, NOT proven):** Microsoft **Power Platform
+  request-limit throttling**. An M365-seeded license = ~6,000 requests/24h per user; this flow at a 5-min cadence
+  = ~19 actions + paginated SharePoint reads (~16 pages) ≈ 35 requests/run × 288 runs ≈ 10,000/day, plus every
+  other flow on Rich's plan. Four back-to-back hangs (connector retries count) tipped it; Microsoft's documented
+  response is to slow/skip THAT flow's trigger for a period, then resume — exactly 4:35→6:55. The shuttle flow
+  (tiny) kept firing. Proof would be a "flow exceeded request limits" banner/email or Analytics → action usage.
+- **✅ MITIGATION APPLIED BY RICH 7:10 AM 9/3, from the airport: Recurrence Interval 5 → 15 minutes.** Cuts this
+  flow's request volume ~⅔ (≈3,400/day). Cost: cross-device board latency up to ~15 min + export (the editing
+  device still updates instantly). **Reliability over speed for the 5 unattended days; he may set it back to 5
+  or 10 when home — if he does and the trigger goes dead again, that's the confirmation of the throttling theory.**
+  Also asked him to Share the flow with one co-owner (Doug/partner/Tim) as the only possible human backstop
+  while he's offline — not confirmed done.
+- Nothing else changed. Kill switch (Condition→Terminate Failed), `Terminate 1`, and `@variables('RunDone')`
+  Condition all proven working in these screenshots — leave them alone.
 - **THE GITHUB WATCHDOG ITSELF IS LATE:** `pipeline-watchdog.yml` is `cron */10` but GitHub actually ran it at
   10:48Z, 05:54Z, 01:11Z, 23:17Z, 21:02Z, 18:08Z… — **every 2–5 HOURS**. GitHub throttles `schedule:` heavily on
   this repo (22,000+ export runs). So the "20-min stale" alert reached Rich at **132 min**. Don't trust `schedule:`
