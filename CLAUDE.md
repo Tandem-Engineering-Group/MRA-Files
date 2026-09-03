@@ -522,6 +522,11 @@ with NO human action. What the evidence showed while it was down:
   blob in the private `pipeline` container with lease status + runs a write probe; `break_leases=yes` breaks a
   LOCKED lease on `lists.json`/`lists-run-state.json`. This is the check nobody with Azure access ever ran; it can
   now be run from chat in ~1 min the next time `listsAsOf` freezes. Run it FIRST next time, before theorizing.
+  **First run 11:02Z 9/3 (baseline, ~6 min after the flow self-recovered): `lists.json` and `lists-run-state.json`
+  both `leaseStatus unlocked / leaseState available`, write probe OK.** So the stuck-lease theory is now
+  TESTABLE and was NEGATIVE for this episode. If it's ever `locked` while `listsAsOf` is frozen, re-run with
+  `break_leases=yes` — that is the whole remediation, no partner needed. (Leaves a harmless
+  `pipeline/lease-check-probe.txt` behind each run.)
 
 The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the Lists in Nm" = the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
