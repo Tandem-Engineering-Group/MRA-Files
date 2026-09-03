@@ -495,6 +495,34 @@ Guidance for Claude when working in this repository.
 
 ## ⚠️ RECURRING "DATA PIPELINE STALLED" ISSUE — READ BEFORE TOUCHING POWER AUTOMATE (do not re-suggest fixes already applied)
 
+**2026-09-03 06:55 AM (22nd recurrence, first morning of Rich's vacation) — a DIFFERENT KIND of stall, with hard
+evidence, and it self-healed.** `listsAsOf` froze at 08:36:55Z (4:36 AM) and resumed at 10:55:52Z (6:55 AM) — 2h19m —
+with NO human action. What the evidence showed while it was down:
+- **`pipeline/lists-run-state.json` (the flow's own "Mark run started" file, captured by the GitHub watchdog's
+  log): `startedAt 08:36:56Z, status done`.** The flow's FIRST action never executed for 2h19m — so this was NOT a
+  hung run (the 10-min kill switch has nothing to kill when a run never starts). Either the Recurrence trigger
+  stopped firing, or runs never left "Waiting". Power Automate–side.
+- **`export.yml` run history corroborates it:** the Lists flow's end-of-run `repository_dispatch` stopped at
+  08:36:57Z; every dispatch after that was the workbook shuttle's :00/:15/:30/:45 heartbeat (a different flow,
+  healthy). First Lists dispatch again: 10:55:55Z.
+- **Rules out for THIS episode:** stuck blob lease (leases don't self-heal after 2h; reads of the same container
+  kept working), hung action (never started), watchdog Condition (fixed 9/1, and irrelevant when nothing runs).
+- **NOT confirmed (Rich away, no PA access from chat):** whether PA showed the flow as throttled/suspended or
+  simply skipped triggers. Ask Rich to look at run history 4:36–6:55 AM when he's back: zero runs = trigger
+  skipped (PA platform); runs in "Waiting" = concurrency slots wedged; a "flow suspended / exceeded limits" banner
+  = quota. This is the strongest support-ticket evidence yet: a trigger that silently stops for 2+ hours.
+- **THE GITHUB WATCHDOG ITSELF IS LATE:** `pipeline-watchdog.yml` is `cron */10` but GitHub actually ran it at
+  10:48Z, 05:54Z, 01:11Z, 23:17Z, 21:02Z, 18:08Z… — **every 2–5 HOURS**. GitHub throttles `schedule:` heavily on
+  this repo (22,000+ export runs). So the "20-min stale" alert reached Rich at **132 min**. Don't trust `schedule:`
+  for anything time-sensitive here. Better home for the check: the `export.yml` job itself (it runs reliably every
+  ~5–15 min via repository_dispatch from the shuttle even when the Lists flow is dead — exactly the case that
+  matters) — add the staleness/email step there. NOT done yet.
+- **NEW TOOL: `.github/workflows/blob-lease-check.yml`** (on BOTH branches, `workflow_dispatch` from the DEFAULT
+  branch ref — a workflow that only exists on a feature branch 404s on dispatch). Read-only by default: lists every
+  blob in the private `pipeline` container with lease status + runs a write probe; `break_leases=yes` breaks a
+  LOCKED lease on `lists.json`/`lists-run-state.json`. This is the check nobody with Azure access ever ran; it can
+  now be run from chat in ~1 min the next time `listsAsOf` freezes. Run it FIRST next time, before theorizing.
+
 The board banner "⚠ DATA PIPELINE STALLED — the board hasn't synced from the Lists in Nm" = the
 **"MRA Lists to JSON"** flow has a stuck/hung run. **This has recurred repeatedly (not a one-off) and
 Rich is done being told to re-apply the same fix — check this section before saying anything about it.**
