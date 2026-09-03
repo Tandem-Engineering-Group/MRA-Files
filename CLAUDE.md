@@ -528,7 +528,9 @@ with NO human action. What the evidence showed while it was down:
   other flow on Rich's plan. Four back-to-back hangs (connector retries count) tipped it; Microsoft's documented
   response is to slow/skip THAT flow's trigger for a period, then resume — exactly 4:35→6:55. The shuttle flow
   (tiny) kept firing. Proof would be a "flow exceeded request limits" banner/email or Analytics → action usage.
-- **✅ MITIGATION APPLIED BY RICH 7:10 AM 9/3, from the airport: Recurrence Interval 5 → 15 minutes.** Cuts this
+- **✅ MITIGATION APPLIED BY RICH 7:10 AM 9/3, from the airport: Recurrence Interval 5 → 15 minutes. CONFIRMED
+  LIVE: `listsAsOf` 11:10:53Z → (nothing at :15/:20) → 11:25:53Z — exactly 15 min. The flow is on the new cadence.**
+  Cuts this
   flow's request volume ~⅔ (≈3,400/day). Cost: cross-device board latency up to ~15 min + export (the editing
   device still updates instantly). **Reliability over speed for the 5 unattended days; he may set it back to 5
   or 10 when home — if he does and the trigger goes dead again, that's the confirmation of the throttling theory.**
