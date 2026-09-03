@@ -1,0 +1,61 @@
+name: Pipeline blob lease check
+
+# One-shot diagnostic for the recurring "MRA Lists to JSON" stall (see CLAUDE.md, RECURRING section).
+# Nobody with a chat seat has Azure Portal access (Azure is partner-owned), but the GitHub runner holds
+# AZURE_STORAGE_KEY -- so this reads the lease/lock state of every blob in the private `pipeline`
+# container (the ones the Power Automate flow writes: lists.json, lists-run-state.json) and, only when
+# asked, breaks a lease that is clearly stuck. A leased blob rejects writes (412 LeaseIdMissing) while
+# reads keep working -- exactly the "export still runs, listsAsOf frozen" signature.
+
+on:
+  workflow_dispatch:
+    inputs:
+      break_leases:
+        description: "Break any ACTIVE lease found on pipeline/lists.json or pipeline/lists-run-state.json (yes/no)"
+        default: "no"
+        required: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show lease state of every blob in the pipeline container
+        shell: bash
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+          BREAK: ${{ inputs.break_leases }}
+        run: |
+          set -e
+          echo "UTC now: $(date -u +%FT%TZ)"
+          az storage blob list --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name pipeline --only-show-errors \
+            --query "[].{name:name, size:properties.contentLength, modified:properties.lastModified, leaseStatus:properties.lease.status, leaseState:properties.lease.state, leaseDuration:properties.lease.duration}" \
+            -o table
+          echo
+          for B in lists.json lists-run-state.json; do
+            echo "=== $B ==="
+            az storage blob show --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+              --container-name pipeline --name "$B" --only-show-errors \
+              --query "{modified:properties.lastModified, leaseStatus:properties.lease.status, leaseState:properties.lease.state, leaseDuration:properties.lease.duration, etag:properties.etag}" -o json || echo "(blob not found)"
+          done
+          echo
+          if [ "$BREAK" = "yes" ]; then
+            for B in lists.json lists-run-state.json; do
+              ST=$(az storage blob show --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --container-name pipeline --name "$B" --only-show-errors --query "properties.lease.status" -o tsv 2>/dev/null || echo "")
+              if [ "$ST" = "locked" ]; then
+                echo ">>> $B is LOCKED -- breaking the lease now (break period 0 = immediate)"
+                az storage blob lease break --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+                  --container-name pipeline --blob-name "$B" --lease-break-period 0 --only-show-errors
+                az storage blob show --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" --container-name pipeline --name "$B" --only-show-errors --query "properties.lease" -o json
+              else
+                echo "$B: lease status '$ST' -- nothing to break"
+              fi
+            done
+          else
+            echo "(read-only run; re-run with break_leases=yes to break a locked lease)"
+          fi
+          # Write probe: can THIS key write a tiny blob right now? (proves the account accepts writes at all)
+          echo "probe $(date -u +%FT%TZ)" > probe.txt
+          az storage blob upload --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name pipeline --name lease-check-probe.txt --file probe.txt --overwrite --only-show-errors \
+            && echo "WRITE PROBE: OK (container accepts writes)" || echo "WRITE PROBE: FAILED (container/account rejecting writes)"
