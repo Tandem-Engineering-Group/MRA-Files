@@ -1,5 +1,29 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-09-09 (3rd issue) — the red "DATA PIPELINE STALLED" banner was a FALSE ALARM (rev 37.81)
+
+Rich, mid-session: **"board stalled but i dont see a json issue??"** — with a screenshot of the full-width red
+banner at 27m AND a Power Automate run history where **every single run was Succeeded**. He was right: there was
+no issue. Live check at the time: `listsAsOf` 11:42:53Z vs 11:45:31Z = **2.6 min fresh**; `export.yml` succeeding
+every ~12-15 min; nothing wrong anywhere.
+- **ROOT CAUSE: a threshold that never got updated when the cadence changed.** `_staleCheck()`'s comment literally
+  read *"pipeline normally refreshes every 2-3 min"* and fired at **>20 min**. But the Recurrence has been at
+  **15 min since 9/3** (Rich's throttling mitigation from vacation week). A perfectly healthy board therefore sits
+  15 min + export lag (~1.5 min) ≈ **17 min** stale as a matter of course — 3 minutes under the alarm — so routine
+  jitter tripped a red banner telling him to go cancel stuck runs that did not exist. Classic own-goal: I changed
+  the cadence and left the alarm calibrated for the old one.
+- **FIX (live, byte-verified):** threshold **20 → 35 min** (two missed 15-min cycles) in BOTH places that carried
+  20 — the in-app banner (`_staleCheck`, `MRA_Dashboard.html`) and `pipeline-watchdog.yml`'s
+  `STALE_THRESHOLD_MIN` (pushed to the default branch too, since `schedule:` only reads from there). A real stall
+  still surfaces fast — the 9/3 outage ran 2h19m. **Both numbers must move together if the Recurrence changes again.**
+- **⚠️ SEPARATE, STILL OPEN — `Terminate 1` has REGRESSED.** In that same run history **every run is exactly
+  00:10:01**. On 9/1, right after `Terminate 1` (end-of-chain, Status Succeeded) was added, a healthy run closed in
+  **00:01:34**. So the main chain is no longer ending the run early and every run again burns the full 10-minute
+  Delay branch. It does NOT hurt board freshness (lists.json is written ~2 min in, well before the run closes), so
+  it's not urgent — but it means 2 of the 3 parallelism slots sit occupied doing nothing, which is exactly the
+  condition that turned single hiccups into multi-hour backlogs before. Next time in that flow: confirm
+  `Terminate 1` is still the LAST action of the main chain and check its status inside a completed run.
+
 ## ✅ FIXED 2026-09-09 (2nd issue, same day) — Paylocity import SILENTLY DISCARDED every row with no cost center
 
 Rich: "Sal Junior and Sal Senior. I just imported the paylocity, and they show time for 9/1, 9/2, 9/3, and 9/4,
@@ -26,12 +50,22 @@ but it's not uploading as shown." **Read the live data + the code before answeri
 - Verified headless (`scratchpad/py_salfix_test.mjs`) with his real numbers: Sal Sr 9/1 10.75→10.25 split
   3.50+6.75 (exact), 9/2 10.75→10.25 split 5.00+5.25 (exact), 9/3 11.13→10.63 (exact), 9/4 unsplittable → alerted;
   Sal Jr 9/1+9/2 → confirm dialog naming both; "✓ Imported 5 entries · 3 foreman days auto-split"; 0 page errors.
-- **⏳ OPEN — DATA REPAIR NOT DONE, waiting on Rich:** the duplicate 8/31 rows above (7 rows: Sal Jr 465 or 476,
-  and one full Sal Sr set of 5) are still live, showing both men at 20.64h instead of 10.32h on 8/31. **Did not
-  touch them** — real payroll data, and `deleteTime` was confirmed NOT built in the "MRA Time Write" flow
-  (2026-08-04 entry below), so `_removeEntryEverywhere`'s delete POST is accepted (202) and does nothing. Options
-  to put to Rich: build the `deleteTime` branch (Get items by EntryID → Delete item, same shape as `editTime`) and
-  verify with the safe-throwaway-entry test, or `editTime` the duplicates to 0 hours as a stopgap.
+- **✅ `deleteTime` IS BUILT AND WORKS — the 2026-08-04 note below is STALE, do not trust it.** Verified 2026-09-09
+  with the documented safe-throwaway pattern: added `claudedeltest1788953911` (0.01h, "ZZ Test QA Ignore"), watched
+  it land as SP id 513 in the 11:40Z export, POSTed `{"action":"deleteTime","id":"<EntryID>"}` → **GONE in the
+  11:45Z export.** Rich (or whoever) built the branch at some point after 8/04. Matching key is `EntryID`, not the
+  SharePoint row `ID`. `time.json` re-exports **every 5 minutes** (Last-Modified lands on :00/:05/:10…), so a
+  write is verifiable within ~5 min — poll it, don't trust the 202.
+- **✅ DATA REPAIR DONE 2026-09-09, VERIFIED (Rich: "pls fix"):** both Sals showed **20.64h on 8/31 = one day
+  entered twice**. Deleted 6 rows by `EntryID` — Sal Jr's later duplicate (`tmtimhqe2ome`, SP 476) and Sal Sr's
+  EARLIER auto-split set (`tmtimfjiz7qe`/`tmtimfjiykx0`/`tmtimfjix1bqi`/`tmtimfjiz1u8w`/`tmtimfjj0ryq`, SP 466-470).
+  Kept the NEWER Sal Sr set (SP 471-475) deliberately: `submitAutoSplit`'s re-run path is *meant* to replace the
+  prior split with a fresh one ("based on today's current numbers") — **both sets only existed because
+  `_removeEntryEverywhere`'s delete was a silent no-op at the time**, so the newer split is the intended state.
+  Confirmed in the 11:50Z export: 12 rows → 6, `{'Sal Jr': 10.32, 'Sal Sr': 10.32}`.
+- **⚠️ ROOT CAUSE OF THE DUPLICATES, worth remembering:** an auto-split re-run tried to clear the old rows, the
+  delete failed silently, and the fresh split was added on top — so **every foreman auto-split re-run done while
+  deleteTime was broken doubled that day's hours.** Worth a sweep if other inflated foreman days turn up.
 - ⚠️ **The 8/31 duplicates were NOT created by the import** (those rows carry `task:'Auto-split (foreman)'` and
   `Source:dashboard` = the manual form's auto-split path, run twice). Separate question for Rich; don't conflate.
 - **PDF gotcha for future sessions:** this container has **no `pdftotext` and no working `pypdf`** (`cryptography`
