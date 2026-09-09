@@ -650,6 +650,23 @@ function buildPaylocityPreview(rows){
     var hours=lunchDeducted ? Math.round((rawHours-0.5)*100)/100 : rawHours;
     matched.push({ who:who, dateISO:dateISO, job:job, jobNum:jn, hours:hours, rawHours:rawHours, lunchDeducted:lunchDeducted, task:'', notes:r.note||'', action:r.action });
   });
+  // ONE lunch per DAY, not per row (2026-09-09). When Paylocity reports a day as several rows (two cost
+  // centers, a split shift), no single row is over 8, so the per-row rule above deducted nothing -- yet
+  // the same day in the Compare report (which sums the day first) came out 0.5 lower, and a tracker
+  // entry Rich had split by hand never matched. Same rule, applied once to the day's raw total; the
+  // half hour comes off the largest row so the day's splits still add up exactly.
+  (function(){
+    var byDay={};
+    matched.forEach(function(m){ if(LEAVEMAP[(m.action||'').toLowerCase().trim()]) return; var k=m.who+'|'+m.dateISO; (byDay[k]=byDay[k]||[]).push(m); });
+    Object.keys(byDay).forEach(function(k){
+      var rs=byDay[k]; if(rs.length<2) return;
+      if(rs.some(function(m){ return m.lunchDeducted; })) return;          // one row already carried the day's lunch
+      var rawSum=rs.reduce(function(a,m){ return a+m.rawHours; },0);
+      if(!(rawSum>8)) return;
+      var big=rs.slice().sort(function(a,b){ return b.rawHours-a.rawHours; })[0];
+      big.hours=Math.round((big.rawHours-0.5)*100)/100; big.lunchDeducted=true; big.dayLunch=true;
+    });
+  })();
   PY_ALL_ROWS=matched; PY_ZERO_SKIPPED=zeroSkipped; PY_UNMATCHED=unmatchedNames; PY_PUNCH_ISSUES=punchIssues;
   // Default the date range to just the NEWEST day in this file -- Rich pulls this PDF daily and mainly
   // cares about the latest day each time; widening the range is an explicit, visible choice, not the
@@ -676,30 +693,47 @@ function applyPaylocityFilter(){
   // matching on job too meant every one of those already-assigned rows failed to be recognized as
   // "already on record" on the next import and got offered again as a fresh duplicate -- the exact bug
   // Rich caught (2026-08-21: "we've already assigned jobs to all the old data").
+  // Compare at the DAY level, both sides summed (2026-09-09). Rich splits one Paylocity day across jobs
+  // by hand (Kayla Roe 9/3: 6.02 + 4 on file vs Paylocity's 10.02) -- the old per-entry exact match saw
+  // two "wrong" numbers and flagged a discrepancy that didn't exist ("it's actually the same, it's just
+  // broken off twice"). Paylocity can split a day too (two cost centers). So: the tracker's entries for
+  // the day, summed, vs Paylocity's rows for the day, summed. Equal = already on record. A 0.4-0.6 gap
+  // is the lunch differential (Rich, 9/1: "that's correct, not an error") -- also on record, counted
+  // separately so it's visible. Anything else with something on file = held for review, one line per day.
   var exactSeen={};
-  var accepted=[], changed=[], dupSkipped=0;
+  var accepted=[], changed=[], dupSkipped=0, lunchSkipped=0;
+  var pyDay={};   // person|date -> { rows:[pdf rows], net: summed net-of-lunch hours }
   inRange.forEach(function(r){
     var empId=EMPIDS[r.who]||'';
     var pdKey=empId+'|'+r.dateISO;
-    var fp=pdKey+'|'+r.hours;
+    var fp=pdKey+'|'+r.hours+'|'+(r.job||'');
     if(exactSeen[fp]){ dupSkipped++; return; }   // same pdf row appearing twice inside this one import
-    var existingForDay=byPersonDate[pdKey]||[];
-    var exactMatch=existingForDay.some(function(e){ return e.hours===r.hours; });
-    if(exactMatch){ exactSeen[fp]=1; dupSkipped++; return; }
-    if(existingForDay.length){
-      // Something's already on file for this person+date, just with different hours -- could be a
-      // genuine Paylocity correction, or a second distinct entry that happens to share the date. Never
-      // silently import OR silently drop it; surface it for Rich to decide, same as opening the row.
-      changed.push(Object.assign({}, r, { oldEntries:existingForDay }));
-      return;
-    }
     exactSeen[fp]=1;
-    accepted.push(r);
+    var d=(pyDay[pdKey]=pyDay[pdKey]||{rows:[], net:0}); d.rows.push(r); d.net+=r.hours;
+  });
+  Object.keys(pyDay).forEach(function(pdKey){
+    var d=pyDay[pdKey]; d.net=Math.round(d.net*100)/100;
+    var existingForDay=byPersonDate[pdKey]||[];
+    if(!existingForDay.length){ d.rows.forEach(function(r){ accepted.push(r); }); return; }
+    var onFile=Math.round(existingForDay.reduce(function(a,e){ return a+(+e.hours||0); },0)*100)/100;
+    var gap=Math.abs(onFile-d.net);
+    if(gap<=0.011){ dupSkipped+=d.rows.length; return; }               // same day total, however either side split it
+    if(gap>=0.4 && gap<=0.6){ lunchSkipped+=d.rows.length; return; }   // the half-hour lunch differential -- not a discrepancy
+    // Something's on file for this person+date and the day totals genuinely differ -- could be a real
+    // Paylocity correction, or hours missing on one side. Never silently import OR silently drop it;
+    // surface it (one line per day) for Rich to decide.
+    var first=d.rows[0];
+    changed.push(Object.assign({}, first, {
+      hours:d.net,
+      rawHours:Math.round(d.rows.reduce(function(a,r){ return a+r.rawHours; },0)*100)/100,
+      lunchDeducted:d.rows.some(function(r){ return r.lunchDeducted; }),
+      oldEntries:existingForDay, onFile:onFile, pyRows:d.rows.length }));
   });
   PY_PENDING=accepted; PY_CHANGED=changed;
   var unmatchedList=Object.keys(PY_UNMATCHED||{}).map(function(k){ return k.replace(/^\d+\s/,''); });
   var bits=[accepted.length+' row'+(accepted.length===1?'':'s')+' ready to import'];
   if(dupSkipped) bits.push(dupSkipped+' already on record (skipped)');
+  if(lunchSkipped) bits.push(lunchSkipped+' on record within the ½-hr lunch differential (skipped)');
   if(changed.length) bits.push(changed.length+' with a different hour count than what\'s on file (see below)');
   if(outOfRange) bits.push(outOfRange+' outside the selected date range');
   if(PY_ZERO_SKIPPED) bits.push(PY_ZERO_SKIPPED+' zero-hour punch correction'+(PY_ZERO_SKIPPED===1?'':'s')+' (skipped)');
@@ -711,7 +745,7 @@ function applyPaylocityFilter(){
   // behavior when never split); "+ Split" divides that same fixed total across more jobs.
   $('paylocityRows').innerHTML = accepted.length ? accepted.map(function(e,i){
     var refHtml = e.lunchDeducted
-      ? 'Paylocity: '+e.hours+'h <span class="muted">(−.5 lunch, said '+e.rawHours+'h)</span>'
+      ? 'Paylocity: '+e.hours+'h <span class="muted">(−.5 lunch'+(e.dayLunch?' for the day':'')+', said '+e.rawHours+'h)</span>'
       : 'Paylocity: '+e.hours+'h';
     // Editable note (Rich, 2026-08-21: "I want the ability to write the note, like tap plates,
     // cleaning, pedestal... as I'm importing") -- prefilled with whatever Paylocity's own "Employee
@@ -729,9 +763,10 @@ function applyPaylocityFilter(){
     chWrap.classList.remove('hide');
     $('paylocityChangedRows').innerHTML = changed.map(function(r,i){
       var single=r.oldEntries.length===1;
-      var oldTxt=r.oldEntries.map(function(e){return e.hours;}).join(', ');
+      var oldTxt=r.oldEntries.map(function(e){return e.hours;}).join(' + ')+(r.oldEntries.length>1?' = '+r.onFile:'');
+      var newTxt=String(r.hours)+(r.pyRows>1?' <span class="muted">('+r.pyRows+' rows)</span>':'');
       var chk=single ? '<input type="checkbox" class="pyChangeChk" data-idx="'+i+'">' : '<span class="muted" title="More than one existing entry this day -- edit by hand instead">multiple</span>';
-      return '<tr><td>'+chk+'</td><td>'+esc(fmtShortDate(r.dateISO))+'</td><td>'+esc(r.who)+'</td><td class="r">'+esc(oldTxt)+'</td><td class="r">'+r.hours+'</td></tr>';
+      return '<tr><td>'+chk+'</td><td>'+esc(fmtShortDate(r.dateISO))+'</td><td>'+esc(r.who)+'</td><td class="r">'+esc(oldTxt)+'</td><td class="r">'+newTxt+'</td></tr>';
     }).join('');
   } else { chWrap.classList.add('hide'); $('paylocityChangedRows').innerHTML=''; }
   // Incomplete punches (forgot to clock in/out) -- flagged, never silently dropped or guessed at.

@@ -1,5 +1,30 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-09-09 — Time Tracking Paylocity import: a day split across jobs was flagged as a discrepancy
+
+Rich (back from vacation, screenshot of the Import modal): Kayla Roe 9/3 showed under "⚠ Different hours than
+what's already on file — ON FILE 6.02, 4 · PAYLOCITY NOW SAYS 10.02" with the checkbox disabled ("multiple").
+Rich: "It's actually the same. It's just broken off twice." He's right — 6.02 + 4 = 10.02. `applyPaylocityFilter`
+(`time/index.html`) decided "already on record" only when ONE existing entry's hours exactly equalled the
+Paylocity row's hours; anything else with entries on file went to the review table. Every day he'd split by hand
+across jobs (the "+ Split to another job" feature he asked for on 8/24!) was guaranteed to be re-flagged forever.
+- **Fix: compare at the DAY level, both sides summed.** Tracker entries for person+date summed vs Paylocity's rows
+  for that person+date summed (net of lunch). Equal (±0.01) → on record. Gap 0.4–0.6 → the lunch differential
+  (Rich 9/1: "that's correct, not an error") → on record, counted separately in the summary line ("N on record
+  within the ½-hr lunch differential"). Anything else with something on file → ONE review line per day, showing
+  "6.02 + 4 = 10.02" vs the Paylocity day total (and "(2 rows)" when Paylocity itself split the day). The
+  single-entry checkbox → update path (`confirmPaylocityImport`, `oldEntries[0]`/`hours`) is unchanged.
+- **Also fixed while in there — one lunch per DAY, not per row** (`buildPaylocityPreview`): a day Paylocity reports
+  as two rows (two cost centers) where neither row is >8 deducted no lunch, while the Compare report (which sums the
+  day first) deducted 0.5 → the two features disagreed by half an hour on the same day. Now the −.5 applies once to
+  the day's raw total, off the largest row (`dayLunch:true`, card note reads "−.5 lunch for the day").
+- Verified headless (`scratchpad/py_import_test.mjs`): Kayla split 6.02+4 vs 10.02 → on record; Sal 10.75 on file vs
+  10.25 net → lunch differential, on record; Brian 8 vs 9 → review (single, checkbox); Kayla 9/4 6.02+4 vs 11 →
+  review ("multiple", shows "6.02 + 4 = 10.02"); Julian two rows 6 + 4.52 → 5.5 + 4.52 accepted; 0 page errors.
+  `buildPaylocityCompareReport` already summed both sides per day — untouched, now consistent with the import.
+- The **Incomplete punches** rows in the same screenshot (Brian 9/1–9/2, Julian 9/2–9/3, Sal Sr 9/1) are the feature
+  working as designed (real MCI/MCO mispunches; Rich types the hours) — not a bug, not changed.
+
 ## ✅ ROOT-CAUSED 2026-09-01 late (rev 37.80) — "my assignments keep coming back unassigned" was an AUTO-CLOSE, not lost assignments
 
 Rich, night before a 5-day vacation, after a full day of re-assigning the same Parking-Lot Fleetio tasks (SMC J1542
