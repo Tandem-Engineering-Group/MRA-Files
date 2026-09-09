@@ -1,5 +1,45 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-09-09 (2nd issue, same day) — Paylocity import SILENTLY DISCARDED every row with no cost center
+
+Rich: "Sal Junior and Sal Senior. I just imported the paylocity, and they show time for 9/1, 9/2, 9/3, and 9/4,
+but it's not uploading as shown." **Read the live data + the code before answering (again the thing that found it).**
+- **Live `time.json` proof:** Sal Sr (id 672) and Sal Jr (id 860) have **NOTHING on 9/1–9/4**. Both have exactly
+  **20.64h on 8/31** — which is `10.32 × 2`, i.e. **one day's hours entered TWICE** (Sal Jr: two 10.32 rows on job
+  1558, SP ids 465+476; Sal Sr: two complete sets of 5 auto-split rows, SP ids 466-470 and 471-475, each set
+  totalling 10.32). `10.32` = his real Paylocity 8/31 of `10.82` minus the ½-hr lunch.
+- **ROOT CAUSE (read from the code, `confirmPaylocityImport`):** the accepted-rows loop was
+  `var job=…value.trim(); if(!job) return;` — **a row with real hours but no job was thrown away, silently.**
+  Paylocity reports **CC2 = "Unknown" on every Sanchez row** (verified in his actual PDF: 672's 8/24–9/3 rows all
+  read `CC 1 210 · CC 2 Unknown · CC 3 Unknown`), so `_pyJobFromCC2` returns `''`, the dropdown sits on
+  "— pick a job —", and every one of their rows was discarded on Import. Worse: when EVERY row was blank-job,
+  `if(!acceptedEntries.length && …) return;` fired **before any message**, so the Import button appeared to do
+  literally nothing. That is exactly the reported symptom.
+- **FIXES SHIPPED (`time/index.html`, live + byte-verified):** (1) an **auto-split foreman** (`AUTO_SPLIT`,
+  Sal Sr by default) with a blank job now gets the SAME proportional split across the crew's jobs that the manual
+  entry form gives him — queued and computed **when the queue reaches it**, so crew rows imported from the same
+  file are already on the books to divide across; (2) anyone else with hours but no job (Sal Jr — he is NOT a
+  foreman) is **listed by name + date in a confirm dialog** ("OK = import everything else and leave these for you
+  to assign") instead of vanishing; (3) a foreman day with **no crew hours to divide across** is named in an alert,
+  not dropped; (4) the split math now lives ONCE in **`_pyForemanSplit(who,date,total)`**, shared by
+  `submitAutoSplit` and the import (was duplicated).
+- Verified headless (`scratchpad/py_salfix_test.mjs`) with his real numbers: Sal Sr 9/1 10.75→10.25 split
+  3.50+6.75 (exact), 9/2 10.75→10.25 split 5.00+5.25 (exact), 9/3 11.13→10.63 (exact), 9/4 unsplittable → alerted;
+  Sal Jr 9/1+9/2 → confirm dialog naming both; "✓ Imported 5 entries · 3 foreman days auto-split"; 0 page errors.
+- **⏳ OPEN — DATA REPAIR NOT DONE, waiting on Rich:** the duplicate 8/31 rows above (7 rows: Sal Jr 465 or 476,
+  and one full Sal Sr set of 5) are still live, showing both men at 20.64h instead of 10.32h on 8/31. **Did not
+  touch them** — real payroll data, and `deleteTime` was confirmed NOT built in the "MRA Time Write" flow
+  (2026-08-04 entry below), so `_removeEntryEverywhere`'s delete POST is accepted (202) and does nothing. Options
+  to put to Rich: build the `deleteTime` branch (Get items by EntryID → Delete item, same shape as `editTime`) and
+  verify with the safe-throwaway-entry test, or `editTime` the duplicates to 0 hours as a stopgap.
+- ⚠️ **The 8/31 duplicates were NOT created by the import** (those rows carry `task:'Auto-split (foreman)'` and
+  `Source:dashboard` = the manual form's auto-split path, run twice). Separate question for Rich; don't conflate.
+- **PDF gotcha for future sessions:** this container has **no `pdftotext` and no working `pypdf`** (`cryptography`
+  native module is broken), and the page's own pdf.js **cannot load in the sandbox** (CDN unreachable → the real
+  file-input path dies with "Could not load the PDF reader"). So you cannot parse a real Paylocity PDF headlessly
+  here — drive `buildPaylocityPreview(rows)` with row objects shaped like `parsePaylocityTokens` output instead,
+  using real numbers read off Rich's screenshots.
+
 ## ✅ FIXED 2026-09-09 — Time Tracking Paylocity import: a day split across jobs was flagged as a discrepancy
 
 Rich (back from vacation, screenshot of the Import modal): Kayla Roe 9/3 showed under "⚠ Different hours than
