@@ -1,5 +1,54 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ SHIPPED 2026-09-09 (late) — Sales & Planning is ONE page · Park hides work · 📦 Archive · Washtenaw phantom date (revs 37.85–37.86)
+
+- **📈 Sales & Planning merged back into one page (37.86).** Rich: "not sure why you made 2 tabs, its kinda confusing."
+  The PM/VP toggle (`SP_MODE`, rev 36.26) is GONE. Layout top→bottom: summary band (5 tiles + a **pipeline mix by stage /
+  by market** strip, reusing `.pmt-stack`) → 👥 PM LOAD → 📊 Program + Pipeline Timeline (Al's dated 🔮 prospects +
+  committed, unchanged) → **📋 Sales Pipeline — Active Opportunities** (Gino's Salesforce table, `_vpTableHtml()`,
+  `#vpPanel`). **The two halves are linked by account name** (`_spMatchOpp` / `_spSchedMap`: normalized prefix match,
+  else unique first-meaningful-word match — "BMMG - Otava #1" ↔ "BMMG - Bichsel…", "Ferguson Industry" ↔ "Ferguson";
+  ambiguous = no match on purpose). Each table row shows **📅 Al's dates + his %** (→ `spEditP`) or **➕ Schedule**
+  (`spScheduleOpp(i)` → `spAdd(pre)` with `SP_FORM.pre` = name/vehicle/prob/notes pre-filled from Salesforce). Filter
+  chips `VP_FILTER` all/hot/sched/unsched re-render ONLY `#vpPanel` (`setVpFilter`) so the page doesn't jump. Prospect
+  bars' sub-line carries "Salesforce: <stage> <prob>%". Verified headless vs live data: all 7 of Al's bars matched
+  their Gino account (BMMG/Ferguson/Gather AI/ABB/Baxter/KION/iXplore), 17 ➕ Schedule, print carries the table.
+- **Gino's report refreshed to 9/9 (24 open, was 17 on 8/18).** 7 new (Mack Studios, CACI, Philips, 110 The Expert
+  Hub, Rush, Jack Morton, WCC), 0 dropped, Ferguson + BMMG → Contract Negotiation. **HOW TO REFRESH NEXT TIME:** the
+  container has no openpyxl by default → `pip install -q openpyxl` works. Parse the xlsx (header row = the one whose
+  col B is "Opportunity Owner"; rows until "Total"), emit compact JSON with keys `owner/account/opp/stage/prob/years/
+  vehicle/staff/market` (prob int, years as string, blanks ''), replace `const VP_PIPELINE_DEFAULT=[…];` and the
+  `asOf` in `VP_PIPELINE_DEFAULT_META`, diff against the old constant for the CHANGELOG (new / dropped / changed), bump
+  rev, deploy. Tile is now **EXPECTED WINS (WEIGHTED)** = Σ prob over ALL open opps (18.5) — several are tour
+  extensions, so don't call it "new builds".
+- **Stale-upload trap FIXED:** `_vpSource()` now returns the NEWER of (this device's uploaded copy, baked-in default) by
+  `_vpAsOfKey(asOf)`. Before, a device that uploaded the 8/18 report kept 17 rows forever even after the dashboard
+  shipped 24. An upload with no parseable "as of" is still trusted as-is. Upload is STILL per-device (localStorage);
+  syncing it to everyone would need a shared write like prospects have — not asked for.
+- **⏸ Park now hides a project's work from the crew (37.85).** Park was only a reporting flag (dimmed Gantt, At-Risk).
+  One gate `_projHidden(nameOrProj)` (parked||archived) now guards `_pjRebuild` (bay cards + crew columns),
+  `unassignedTasks`, `myWorkFor`, `buildDeficiencyHtml`, `buildPMReportHtml`, `buildExecReportHtml`. Deliberately NOT
+  guarded: Projects tab, Gantt, Progress, Production Meeting, `doneRecent`, `myProjects` (so it can be found + un-parked).
+- **📦 Archive (37.85) — `Archived` is a Yes/No column = BOOLEAN write, NOT the string 'Yes'.** Parked/NonOfficial are
+  TEXT columns holding 'Yes'; Rich created Archived as Yes/No. `{Archived:'Yes'}` returned 202 and was SILENTLY DROPPED
+  (a full export cycle later still empty); `{Archived:true}` landed first try. Proven by dumping raw
+  `pipeline/lists.json` (`'Archived': [(735, True)]`, string attempts on 734/745 wrote nothing). `case
+  'setProjectArchived'` writes `!!p.value` (un-archive = `false`, not ''). `build_from_lists.py` `P_ARCHIVED` →
+  `project.archived` (pushed to BOTH branches). `projArchived(p)` returns true first if `p.archived`; existing
+  🗄 Show archived toggle handles it. `_archColumnLive()` gates the button until the export publishes the field.
+  **JFSD - Replacement Stools archived 9/9 (all 12 task rows, verified `archived=True` in the 18:12Z export).**
+  ⚠ Empty Yes/No columns are ABSENT from lists.json until some row has a value — "field not present" ≠ "column missing".
+- **NEW DIAGNOSTIC `.github/workflows/list-columns.yml`** (both branches; dispatch from the DEFAULT branch ref): dumps a
+  list's real field names + non-empty values from `pipeline/lists.json` (inputs `list_key`, `filter`). Use it BEFORE
+  guessing at a column's internal name or type. Read-only.
+- **🗓 "Fleetio MRA: 8/4/08" on Washtenaw J1543 = the description-text scan, now REMOVED.** `fioReturns()` uses ONLY the
+  Fleetio `backMRA`/`leaveMRA` fields. The old fallback fired on "can bring back to MRA when needed" and read the
+  unrelated "08/04-08/08" coverage window as M/D/YY → 2008. Audit: 32 issues had real fields, exactly 1 was scraped
+  and it was garbage. Bay cards whose unit matches Fleetio (`_vin`) but has no dates now say "🗓 No MRA return date in
+  Fleetio" (Rich: "dont scan, etc, need to only use these"). `_parseReturnDate` kept but unused by this path.
+- Al got a note (Finance dollars + Park/Archive behavior) — written in chat, Rich sends it.
+
+
 ## ✅ FIXED 2026-09-09 (3rd issue) — the red "DATA PIPELINE STALLED" banner was a FALSE ALARM (rev 37.81)
 
 Rich, mid-session: **"board stalled but i dont see a json issue??"** — with a screenshot of the full-width red
