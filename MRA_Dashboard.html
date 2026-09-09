@@ -8188,7 +8188,14 @@ function _listOpsRaw(p){
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'setProjectNonOfficial': return taskOps('update','ProjectTasks',_projTaskRows(p.project),{NonOfficial:(p.value?'Yes':'')});   // #2: flag/unflag every task of the project
     case 'setProjectParked':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{Parked:(p.value?'Yes':'')});        // ⏸ park/unpark: freeze the project (isolated single-column write — safe before the Parked column exists)
-    case 'setProjectArchived':    return taskOps('update','ProjectTasks',_projTaskRows(p.project),{Archived:(p.value?'Yes':'')});      // 📦 archive/un-archive: file the project away (same isolated single-column write as Parked)
+    // 📦 archive/un-archive. ⚠️ **BOOLEAN, not the string 'Yes'** — unlike Parked/NonOfficial, which are
+    // TEXT columns holding 'Yes'. Rich created Archived as a Yes/No column, and proven the hard way
+    // 2026-09-09: writing {Archived:'Yes'} returned 202 and was silently dropped (a full export cycle
+    // later the field was still empty); {Archived:true} landed on the first try. Confirmed by dumping
+    // the raw pipeline/lists.json — `'Archived': [(735, True)]` while the two string attempts on rows
+    // 734 and 745 wrote nothing. Un-archive sends boolean false, NOT '' (an empty string is the same
+    // wrong-type write that failed). If a future flag column is added, check its type first.
+    case 'setProjectArchived':    return taskOps('update','ProjectTasks',_projTaskRows(p.project),{Archived:!!p.value});
     case 'setJobOrd':        { const set={Ord:p.ord}; if(p.bay!=null) set.Bay=p.bay; return [O('update','Jobs',{Project:p.project,__id:p._id},set)]; }   // drag-reorder on a bay card (Ord = JobOrd Number column; no-ops until it exists)
     case 'setTaskFiles':     return [O('update','ShopTasks',{Project:p.project,Task:p.task,__id:p._id},{Files:JSON.stringify(p.files||[])})];   // attachments (isolated single-column write — safe before the Files column exists)
     case 'setProjectJobNum':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{JobNum:(p.jobNum||'')});   // #6: stamp the project's Job # on every task (isolated)
