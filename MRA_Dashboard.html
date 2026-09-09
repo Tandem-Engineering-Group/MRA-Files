@@ -3823,7 +3823,7 @@ const GENERAL_HELP = `
     <p><i>The MY WORK tab currently shows for the group that uses it — the PMs, design team and shop crew (Megan, Al, Luciana, Brandon, Mark, Sarah, Sal, Jeff, Josh, Doug &amp; Stephanie), plus Rich. Ask Rich to add anyone else.</i></p></div>
 
   <div class="hsec"><h4>②ᶠ 💰 FINANCE — hours &amp; cost reporting</h4>
-    <p>A <span class="k">FINANCE</span> tab sits in the main tab bar, limited to <b>Rich, Kyle Maynard, Al Karloff &amp; Megan Fraser</b> — it's hidden entirely for everyone else, and doesn't unlock with the shared manager PIN (it needs a real Microsoft sign-in as one of those accounts). Two levels: <b>Rich &amp; Kyle see dollars</b> ($/hr, labor cost); <b>Al &amp; Megan see hours only</b>, with a note on the tab saying so. The whole tab is <b>read-only</b> for everyone — it reports on hours, nothing on it edits anything. Dollar access is enforced by the pay-rates flow itself (it checks who's signed in), so it can't be opened up from the dashboard alone.</p>
+    <p>A <span class="k">FINANCE</span> tab sits in the main tab bar, limited to <b>Rich, Kyle Maynard, Al Karloff &amp; Megan Fraser</b> — it's hidden entirely for everyone else, and doesn't unlock with the shared manager PIN (it needs a real Microsoft sign-in as one of those accounts). All four see <b>hours and dollars</b> ($/hr, labor cost). The whole tab is <b>read-only</b> for everyone — it reports on hours, nothing on it edits anything. Dollar access is enforced twice: this list, and the pay-rates flow's own approved-email list (it checks who's signed in). <b>Both have to include a person</b> — adding someone here alone gets them hours, not dollars.</p>
     <p>It's a real reporting page, not a place to enter time — that still happens on the separate <span class="k">🧾 Time entry &amp; full reports</span> link. No mode toggle — <b>every tile, chart, and list always shows $ and hours together</b>. Pick a date range (This week / Last week / Last 2 weeks / This month / All time, or <span class="k">Custom range…</span> for your own From/To dates — either side can be left blank for open-ended), then read: Total/Regular/Overtime tiles, employees, jobs charged, a weekly bar chart, and ranked <b>By job</b> / <b>By person</b> lists.</p>
     <p>Regular/Overtime hours show up even before pay rates are set up (they show alone until then). First time pay rates are configured, it'll ask once for the pay-rates source (saved on that device only, never in this file) — same source and same overtime math as the Detailed Cost report, so By job + By person dollars always add up to the same grand total as each other and as the Cost report. This one-time-per-device step is deliberate, not a bug — the underlying file goes to every device including the anonymous shop-floor screens, so the rates address can't safely be baked in unless the rates flow itself checks who's actually signed in; that server-side check is in progress (see the rev 37.62 changelog note) and will remove this step entirely once it's switched on.</p>
     <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart) — not a new report, the same trusted one, opened directly right here (no more switching to Time Tracking first). <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p>
@@ -4062,6 +4062,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.84", date:"2026-09-09", title:"💰 Al &amp; Megan now see dollars on the Finance tab too", items:[
+    "Rich: \"yeah lets let them see dollars.\" Dashboard side done — they're on the pay-rates list now, so $/hr and labor cost show for them the same as for Rich and Kyle. Still read-only, and still only the Finance tab.",
+    "⚠️ Needs the matching change in the <b>pay-rates Power Automate flow</b> as well — that flow checks the signed-in account itself, which is what makes its address safe to hardcode. Until their two emails are added to its approved list, they'll see hours with a quiet \"dollar figures aren't switched on for your sign-in\" note rather than any error.",
+    "Also cleaned up the failure message: only Rich and Kyle now get the raw red diagnostic (with Retry / Re-enter URL), since they're the two who can actually act on it. Anyone else just gets the calm hours-only note — a red access error someone can do nothing about reads as the tab being broken." ] },
   { rev:"37.83", date:"2026-09-09", title:"💰 Finance tab opened to Al Karloff &amp; Megan Fraser — hours only, read-only", items:[
     "Rich: \"can we give Al and Megan view only access to the finance tab? just that one.\" Done — and only that one: the Finance tab has its own allowlist that ignores roles entirely (which is why Al being an Admin and Megan an Editor never got them in), so adding them there touches nothing else. <b>Due Diligence is a completely separate list and is unchanged</b> — still Rich, Tony, John Renaud and Doug McLean.",
     "The tab is <b>read-only by construction</b> — a date-range picker, charts and drill-downs, with no edit or save controls anywhere on it, so there was nothing extra to lock down.",
@@ -6713,13 +6717,19 @@ function mwTabAllowed(){
 // The tab itself is READ-ONLY by construction (range picker + charts + drill-downs; zero writes, no
 // shopWrite/ensureAuth anywhere in renderFinance), so "view only" needs no extra edit gating.
 // ⚠️ DOLLARS ARE ENFORCED SERVER-SIDE, NOT HERE: the pay-rates Power Automate flow checks the
-// signed-in Microsoft identity itself (that's why its URL is safe to hardcode). So adding someone
-// here CANNOT leak cost — the flow rejects them regardless. FINANCE_RATES_EMAILS just mirrors that
-// flow's own allowlist so the UI can say "hours only, by design" instead of firing a doomed request
-// and printing a red "could not verify your access" error at someone who was never meant to see $.
-// To actually give someone dollars, Rich must add them inside the rates flow's Condition too.
+// signed-in Microsoft identity itself (that's why its URL is safe to hardcode). So this list CANNOT
+// grant cost on its own — it mirrors that flow's allowlist so the UI knows whether to even ask.
+// **Both must match.** Rich 2026-09-09: "yeah lets let them see dollars" — Al + Megan added here AND
+// given to Rich as GUI steps for the rates flow's own Condition. If a name is added here but not in
+// the flow, nothing leaks; that person just can't get rates (handled gracefully, see FINANCE_RATES_DIAG).
 const FINANCE_EMAILS = ['rmiller@gomra.com','kmaynard@gomra.com','akarloff@gomra.com','megan.fraser@gomra.com'];
-const FINANCE_RATES_EMAILS = ['rmiller@gomra.com','kmaynard@gomra.com'];
+const FINANCE_RATES_EMAILS = ['rmiller@gomra.com','kmaynard@gomra.com','akarloff@gomra.com','megan.fraser@gomra.com'];
+// Who sees the RAW diagnostic when a rates fetch fails ("signed in as X, which isn't on the approved
+// list", token errors, Retry/Re-enter-URL buttons). Deliberately just the two who own this plumbing
+// and can act on it — for anyone else a failure falls back to the calm "hours only" note, since a red
+// access error they can do nothing about reads as the tab being broken. This also means the dashboard
+// and the flow can be updated in either order without anyone seeing a scary intermediate state.
+const FINANCE_RATES_DIAG = ['rmiller@gomra.com','kmaynard@gomra.com'];
 function financeTabAllowed(){
   if(typeof SSO==='undefined' || !SSO.active() || !SSO.ready || SSO.failed || !SSO.user) return false;
   return FINANCE_EMAILS.indexOf(SSO.email())>=0;
@@ -6727,6 +6737,10 @@ function financeTabAllowed(){
 function financeRatesAllowed(){
   if(typeof SSO==='undefined' || !SSO.active() || !SSO.ready || SSO.failed || !SSO.user) return false;
   return FINANCE_RATES_EMAILS.indexOf(SSO.email())>=0;
+}
+function financeRatesDiag(){
+  if(typeof SSO==='undefined' || !SSO.active() || !SSO.ready || SSO.failed || !SSO.user) return false;
+  return FINANCE_RATES_DIAG.indexOf(SSO.email())>=0;
 }
 
 /* ---------- FINANCE view: real charts, not the Time Tracking entry kiosk ----------
@@ -7018,10 +7032,12 @@ function renderFinance(force){
       const idMsg = identity ? ('Signed in as <b>'+esc(identity)+'</b>, which isn’t on the approved pay-rates list.')
         : (tokenErr ? ('Your sign-in couldn’t be renewed (<code>'+esc(tokenErr)+'</code>) — click Sign out, then sign in again.')
           : 'No sign-in detected — you may need to sign in again.');
-      // Someone with hours-only access (Al/Megan) isn't a failure state — say so plainly instead of
-      // showing them a red "could not verify your access" they can do nothing about.
-      document.getElementById('finRatesMsg').innerHTML = haveCost ? '' : (!financeRatesAllowed()
-        ? '<span style="color:var(--muted)">Showing <b>hours only</b> — dollar figures on this tab are limited to Rich and Kyle.</span>'
+      // No cost to show isn't automatically a failure worth alarming about: only the two who own this
+      // plumbing get the raw diagnostic + Retry. For anyone else it reads as the tab being broken, so
+      // they get the calm hours-only note (also covers the window where the dashboard lists someone
+      // the rates flow hasn't been updated for yet).
+      document.getElementById('finRatesMsg').innerHTML = haveCost ? '' : (!financeRatesDiag()
+        ? '<span style="color:var(--muted)">Showing <b>hours only</b> — dollar figures aren’t switched on for your sign-in.</span>'
         : (secure
           ? '<span style="color:var(--red)">Could not verify your access for pay rates. '+idMsg+'</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
           : '<button class="expandbtn" onclick="financeSetupRates()">🔑 Set up pay rates</button> to see $ alongside hours everywhere on this tab — one-time, saved on this device only.'));
@@ -7084,9 +7100,11 @@ function renderFinance(force){
     _finGetRates((rates, err, secure, identity, tokenErr)=>{
       if(err){
         const idMsg = identity ? (' Signed in as <b>'+esc(identity)+'</b>.') : (tokenErr ? (' Your sign-in couldn’t be renewed (<code>'+esc(tokenErr)+'</code>).') : '');
-        document.getElementById('finRatesMsg').innerHTML = secure
-          ? '<span style="color:var(--red)">Could not verify your access ('+esc(err.message)+').'+idMsg+' Make sure you’re signed in as you or Kyle, then</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
-          : '<span style="color:var(--red)">Could not load pay rates ('+esc(err.message)+').</span> <button class="expandbtn" onclick="renderFinance()">Retry</button> <button class="expandbtn" onclick="financeResetRates()">Re-enter URL</button>';
+        document.getElementById('finRatesMsg').innerHTML = !financeRatesDiag()
+          ? '<span style="color:var(--muted)">Showing <b>hours only</b> — dollar figures aren’t switched on for your sign-in.</span>'
+          : (secure
+            ? '<span style="color:var(--red)">Could not verify your access ('+esc(err.message)+').'+idMsg+' Check the pay-rates flow’s approved-email list, then</span> <button class="expandbtn" onclick="renderFinance()">Retry</button>'
+            : '<span style="color:var(--red)">Could not load pay rates ('+esc(err.message)+').</span> <button class="expandbtn" onclick="renderFinance()">Retry</button> <button class="expandbtn" onclick="financeResetRates()">Re-enter URL</button>');
       }
       finish(rates, secure, identity, tokenErr);
     });
@@ -7175,9 +7193,9 @@ function renderProjectCost(){
         }).join('') + '</div>';
     }
     body.innerHTML='<div class="kpis" style="grid-template-columns:repeat(4,1fr)">'+tiles+'</div>'
-      +(!haveCost && detailRows.length ? (financeRatesAllowed()
+      +(!haveCost && detailRows.length ? (financeRatesDiag()
           ? '<button class="expandbtn" style="margin-top:10px" onclick="financeSetupRates()">🔑 Set up pay rates</button>'
-          : '<div class="fin-nochart" style="margin-top:10px">Hours only — dollar figures are limited to Rich and Kyle.</div>') : '')
+          : '<div class="fin-nochart" style="margin-top:10px">Hours only — dollar figures aren’t switched on for your sign-in.</div>') : '')
       +trendHtml;
   }
 
