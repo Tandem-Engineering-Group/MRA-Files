@@ -3812,7 +3812,7 @@ const GENERAL_HELP = `
     <p><b>⚙ Customize:</b> at the bottom, pin any project with <span class="k">➕ Follow</span> and it shows up on your page (health, milestones, past-due count) even if it isn't assigned to you — handy for watching a job that isn't strictly yours. (Saved on your device.)</p>
     <p>The <b>daily email</b> everyone gets is this exact page — a link to your live My Work (<span class="k">?mywork=Your Name</span>) that always opens fresh. <b>Rich (admin)</b> gets a <b>View person</b> picker to open anyone's page.</p>
     <p><b>🖨 Print</b> (top-right of the page) opens a clean one-page version and pops the print / Save-as-PDF dialog. In the <b>🧠 My Command</b> block (Rich only), <span class="k">🕒 Last scanned</span> shows the <b>real time</b> the brief was last published in Eastern time plus how long ago (e.g. “28 min ago”), and flags <span class="k">⚠</span> if an auto-scan looks like it stalled.</p>
-    <p><b>🔔 Needs your follow-up (Rich only)</b> groups the three things you'd otherwise check in three different spots — right at the top, always open: <b>🔴 Waiting on you</b> (mail — <span class="k">📧 Open email</span> opens the full thread in Outlook, <span class="k">✉ Reply</span> sends with the ready draft, <span class="k">✓ Not for me</span> hides it), <b>💬 Teams messages</b> (a chat where the last word was someone else's — <span class="k">💬 Open chat</span> jumps to the real conversation, some cards show a short <b>history</b> of the messages leading up to it), and <b>✅ Your tasks</b> (your synced checklist — check one off, 💤 snooze to tomorrow, or add a new one at the bottom). All three share the same rule: an item <b>stays listed until you close it</b> — mail/Teams via <span class="k">✓ Not for me</span> (hidden items stay hidden through re-scans, recoverable via the <span class="k">“N hidden · show”</span> link, each with ↩ Restore), tasks via the checkbox. Reference-only sections (appointments, inbound, FYI, project brief, the Fleetio watchdog) live separately below — nothing to action there.</p>
+    <p><b>🔔 Needs your follow-up (Rich only)</b> groups the three things you'd otherwise check in three different spots — right at the top, always open: <b>🔴 Waiting on you</b> (mail — <span class="k">📧 Open email</span> opens the full thread in Outlook, <span class="k">✉ Reply</span> sends with the ready draft, <span class="k">✓ Not for me</span> hides it), <b>💬 Teams messages</b> (a chat where the last word was someone else's — <span class="k">💬 Open chat</span> jumps to the real conversation, some cards show a short <b>history</b> of the messages leading up to it), and <b>✅ Your tasks</b> (your synced checklist — check one off, 💤 snooze to tomorrow, or add a new one at the bottom). All three share the same rule: an item <b>stays listed until you close it</b> — mail/Teams via <span class="k">✓ Not for me</span> (hidden items stay hidden through re-scans, recoverable via the <span class="k">“N hidden · show”</span> link, each with ↩ Restore), tasks via the checkbox. When the Teams list has piled up, <span class="k">✓ Clear all N</span> in that section's header clears the whole thing in one tap (it asks first, and <span class="k">↩ Restore all</span> under the list undoes it). Reference-only sections (appointments, inbound, FYI, project brief, the Fleetio watchdog) live separately below — nothing to action there.</p>
     <p><b>✨ Claude reply assistant (Rich only):</b> in any reply composer — the ✉ Reply on a Waiting item, or the new <span class="k">✍️ Reply</span> button on a <b>📥 File-mail</b> card — tap <span class="k">✨ Draft it for me</span> and Claude writes a first reply from the email, or type how to change the draft (“shorter,” “add the lead time,” “say we ship Friday”) and hit <span class="k">✏️ Tweak the draft</span>. The new wording drops straight into the box in a few seconds; edit it and <b>Send</b>. (Needs the one-time Claude reply flow connected — until then it uses the slower back-on-refresh channel.)</p>
     <p><b>Layout picker (Rich only):</b> a small <span class="k">⊞ Widgets · 📑 Tabs · ☰ Classic</span> switcher sits next to 🖨 Print. All three show the exact same data and buttons — nothing is removed either way, and your device remembers which you picked:</p>
     <ul>
@@ -4062,6 +4062,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.82", date:"2026-09-09", title:"💬 Teams messages: ✓ Clear all — empty the whole list in one tap", items:[
+    "Rich had 27 Teams messages stacked up on My Work and ✓ Not for me is one tap each. New <b>✓ Clear all N</b> button in that section's header hides all of them at once. It asks first (naming the count, so a stray tap can't wipe two dozen items), and it's fully reversible — a new <b>↩ Restore all</b> link sits next to the “N hidden · show” link under the list and puts every one of them straight back.",
+    "Same mechanism as the per-message button underneath: hidden on this device only, and it stays hidden through the 4x/day re-scans rather than reappearing." ] },
   { rev:"37.81", date:"2026-09-09", title:"🔧 Fixed: red \"DATA PIPELINE STALLED\" banner was crying wolf on a perfectly healthy board", items:[
     "Rich: \"board stalled but i dont see a json issue??\" — he was right, there was no issue. Every run of the MRA Lists to JSON flow was Succeeded, and the board was 2 minutes fresh by the time I looked. The banner's own threshold was still 20 minutes, set back when that flow ran every 2–5 minutes. It's been on a 15-minute Recurrence since 9/3 (the throttling mitigation from vacation week), so a completely healthy board normally sits 15 minutes plus about 90 seconds of export lag behind — just under the line, and any small bit of timing jitter tripped a full-width red alarm telling him to go cancel stuck runs that didn't exist.",
     "Threshold raised to 35 minutes — two missed 15-minute cycles — in both the in-app banner and the GitHub email watchdog, which had the same 20. A real stall still surfaces quickly (the 9/3 outage ran 2h19m); the normal cadence no longer sets it off. If the flow's interval is ever changed again, both numbers move with it." ] },
@@ -16752,9 +16755,11 @@ function _mcBuild(){
         +x.history.map(function(h){ return '<div style="font-size:12px;margin:3px 0"><b>'+esc(h.who||'')+':</b> '+esc(h.text||'')+' <span class="meta" style="font-size:10px">'+esc(_mcWhen(h.when||''))+'</span></div>'; }).join('')
         +'</div>'):'';
       return '<div class="row" style="display:block'+(isDm?';opacity:.55':'')+'"><div style="min-width:0"><div class="lead">'+esc(x.who||'')+(x.chat?(' <span class="badge grey">'+esc(x.chat)+'</span>'):'')+open+'</div><div class="meta">'+esc(_mcWhen(x.when||''))+'</div><div style="font-size:13px;margin:4px 0">'+esc(x.snippet||'')+'</div>'+hist+'<div style="display:flex;gap:8px;flex-wrap:wrap">'+dz+'</div></div></div>'; }).join('');
-  var tfoot=_tHidN?('<div style="margin-top:8px;font-size:12px;color:var(--muted)"><a onclick="mcToggleShowDismissed()" style="cursor:pointer;text-decoration:underline">'+(_MC_SHOW_DISMISSED?('▲ hide '+_tHidN+' dismissed'):('▾ '+_tHidN+' hidden · show')) +'</a></div>'):'';
-  var tmh='<div id="mwsec-cmdtm" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"><h2>💬 Teams messages <span class="count">'+_tVisN+'</span></h2>'
-    +'<div style="font-size:12px;color:var(--muted);margin:-2px 0 8px">Stays here until you tap <b>✓ Not for me</b> — same as 🔴 Waiting on you, so nothing slips through.</div>'
+  var tfoot=_tHidN?('<div style="margin-top:8px;font-size:12px;color:var(--muted)"><a onclick="mcToggleShowDismissed()" style="cursor:pointer;text-decoration:underline">'+(_MC_SHOW_DISMISSED?('▲ hide '+_tHidN+' dismissed'):('▾ '+_tHidN+' hidden · show')) +'</a> &nbsp;·&nbsp; <a onclick="mcRestoreAllTeams()" style="cursor:pointer;text-decoration:underline" title="Put all '+_tHidN+' hidden Teams messages back in your list">↩ Restore all '+_tHidN+'</a></div>'):'';
+  // ✓ Clear all — only offered when there's actually something visible to clear (Rich had 27 stacked up).
+  var tclr=_tVisN?(' <button class="mc-btn" style="float:right;font-weight:600" onclick="mcClearAllTeams()" title="Hide all '+_tVisN+' of these at once — same as tapping ✓ Not for me on each. Reversible with ↩ Restore all.">✓ Clear all '+_tVisN+'</button>'):'';
+  var tmh='<div id="mwsec-cmdtm" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"><h2>💬 Teams messages <span class="count">'+_tVisN+'</span>'+tclr+'</h2>'
+    +'<div style="font-size:12px;color:var(--muted);margin:-2px 0 8px">Stays here until you tap <b>✓ Not for me</b> — same as 🔴 Waiting on you, so nothing slips through. <b>✓ Clear all</b> up top clears the whole list in one tap.</div>'
     +((_tVisN||(_MC_SHOW_DISMISSED&&_tHidN))?trows:'<div class="empty">No new Teams messages in the brief.</div>')+tfoot
     +'</div>';
   // 📋 Project brief
@@ -22209,6 +22214,25 @@ function _mcRerenderMC(){ try{ var v=document.getElementById('myworkView'); if(v
 function mcDismissWaitKey(k){ if(!k) return; var a=_mcDismissed(); if(a.indexOf(k)<0){ a.push(k); _mcSaveDismissed(a); } _mcRerenderMC(); }
 function mcRestoreWaitKey(k){ var a=_mcDismissed().filter(function(x){ return x!==k; }); _mcSaveDismissed(a); _mcRerenderMC(); }
 function mcToggleShowDismissed(){ _MC_SHOW_DISMISSED=!_MC_SHOW_DISMISSED; _mcRerenderMC(); }
+// 💬 Bulk clear / restore for the Teams messages panel (Rich 2026-09-09: "can i get a bulk clear all teams
+// messages" — he had 27 stacked up and ✓ Not for me is one tap each). Same dismiss list as the per-row
+// button, so it's per-device, survives re-scans, and is fully reversible via ↩ Restore all. Confirm names
+// the count first, since one stray tap would otherwise hide two dozen items at once.
+function mcClearAllTeams(){
+  var A=(typeof _MC_AGENT!=='undefined'&&_MC_AGENT)?_MC_AGENT:{};
+  var msgs=A.teamsMsgs||[]; var dm=_mcDismissed(); var add=[];
+  msgs.forEach(function(x){ var k=_mcTeamKey(x); if(dm.indexOf(k)<0 && add.indexOf(k)<0) add.push(k); });
+  if(!add.length){ alert('Nothing to clear — every Teams message is already hidden.'); return; }
+  if(!confirm('Clear all '+add.length+' Teams message'+(add.length===1?'':'s')+' from your list?\n\nThis only hides them on this device. "↩ Restore all" under the list brings them right back.')) return;
+  _mcSaveDismissed(dm.concat(add)); _mcRerenderMC();
+}
+function mcRestoreAllTeams(){
+  var A=(typeof _MC_AGENT!=='undefined'&&_MC_AGENT)?_MC_AGENT:{};
+  var msgs=A.teamsMsgs||[]; var keys={};
+  msgs.forEach(function(x){ keys[_mcTeamKey(x)]=1; });
+  _mcSaveDismissed(_mcDismissed().filter(function(k){ return !keys[k]; }));
+  _mcRerenderMC();
+}
 // 📥 File project mail — group inbox emails by project; one tap files each into its Outlook folder (nested under
 // the PM) via the "MRA Email Filer" flow (Move email V2, routed by project). Filed ids are remembered so a filed
 // email doesn't reappear on the next scan. MAIL_FILE_URL is set once the flow is built.
