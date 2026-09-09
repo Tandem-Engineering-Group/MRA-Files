@@ -50,6 +50,7 @@ P_STATUS,P_PM,P_MILE,P_COMMENTS   = 'field_9','field_10','field_11','field_12'
 P_PRED,P_SUB                      = 'field_13','field_14'
 P_NONOFF                          = 'NonOfficial'   # per-task flag ('Yes'); a project is 'non-official' if ANY of its tasks carry it
 P_PARKED                          = 'Parked'        # per-task flag ('Yes'); a project is 'parked' (frozen/on hold) if ANY of its tasks carry it
+P_ARCHIVED                        = 'Archived'      # per-task flag ('Yes'); a project is manually 'archived' (filed away) if ANY of its tasks carry it
 P_PROJJOB                         = 'JobNum'        # #6: explicit project Job # stamped on tasks (editor-set); aggregated to project.jobNum
 # users: Title=Name
 U_CODE,U_ROLE,U_ACTIVE    = 'field_1','field_2','field_3'
@@ -303,10 +304,12 @@ def main():
         if not name:
             continue
         p_task   = ff(it, 'Title')
+        is_meeting = '\U0001F5D3' in (p_task or '')[:3]   # 🗓 meeting marker rides the task title — informational, excluded from project stats
         p_phase  = ff(it, P_PHASE)
         p_type   = ff(it, P_TYPE)                        # 'TaskType' col (the empty display-only 'Type' col has an unusable internal name)
         p_nonoff = is_yes(ff(it, P_NONOFF))             # non-official-project flag on the task
         p_parked = is_yes(ff(it, P_PARKED))             # parked/frozen-project flag on the task
+        p_arch   = is_yes(ff(it, P_ARCHIVED))          # 📦 manually-archived-project flag on the task
         p_projjob = ff(it, P_PROJJOB)                   # explicit project Job # (editor-set)
         p_status = ff(it, P_STATUS) or 'Not Started'   # mirror Export-Data: blank → Not Started
         p_pm     = ff(it, P_PM)
@@ -323,42 +326,44 @@ def main():
         o = pmap.get(name)
         if o is None:
             o = {'name': name, 'pm': '', 'minStart': None, 'maxFinish': None,
-                 'taskCount': 0, 'doneCount': 0, 'pctSum': 0, 'nonOfficial': False, 'parked': False, 'jobNum': '',
+                 'taskCount': 0, 'doneCount': 0, 'pctSum': 0, 'nonOfficial': False, 'parked': False, 'archived': False, 'jobNum': '',
                  'milestones': [], 'tasks': []}
             pmap[name] = o
         if p_nonoff:
             o['nonOfficial'] = True      # #2: any task flagged → the whole project is non-official
         if p_parked:
             o['parked'] = True           # ⏸ any task flagged → the whole project is parked (frozen / on hold)
+        if p_arch:
+            o['archived'] = True         # 📦 any task flagged → the whole project is archived (filed away)
         if p_projjob and not o['jobNum']:
             o['jobNum'] = p_projjob      # #6: first task's explicit Job # → the project's Job #
-        o['taskCount'] += 1
-        if p_status == 'Completed':
-            o['doneCount'] += 1
-        tp = 0
-        if p_status == 'Completed':
-            tp = 100
-        else:
-            m = re.search(r'(\d{1,3})\s*%', p_status)
-            if m:
-                tp = max(0, min(100, int(m.group(1))))
-        o['pctSum'] += tp
         if p_pm and not o['pm']:
             o['pm'] = p_pm
-        if s_iso and (o['minStart'] is None or s_iso < o['minStart']):
-            o['minStart'] = s_iso
-        if f_iso and (o['maxFinish'] is None or f_iso > o['maxFinish']):
-            o['maxFinish'] = f_iso
-        if p_mile == 'Yes':
-            md = f_iso or s_iso
-            if md:
-                o['milestones'].append({'name': p_task, 'dateISO': md, 'owner': p_assign,
-                                        'status': p_status, 'phase': p_phase,
-                                        'done': p_status == 'Completed'})
-        if p_assign and p_status != 'Completed':
-            o['tasks']  # noqa
-            team_tasks.append({'assignee': p_assign, 'project': name, 'task': p_task,
-                               'dueISO': f_iso or s_iso, 'status': p_status})
+        if not is_meeting:   # 🗓 meetings excluded from counts / % / dates / milestones / team-load so a recurring series never skews the project
+            o['taskCount'] += 1
+            if p_status == 'Completed':
+                o['doneCount'] += 1
+            tp = 0
+            if p_status == 'Completed':
+                tp = 100
+            else:
+                m = re.search(r'(\d{1,3})\s*%', p_status)
+                if m:
+                    tp = max(0, min(100, int(m.group(1))))
+            o['pctSum'] += tp
+            if s_iso and (o['minStart'] is None or s_iso < o['minStart']):
+                o['minStart'] = s_iso
+            if f_iso and (o['maxFinish'] is None or f_iso > o['maxFinish']):
+                o['maxFinish'] = f_iso
+            if p_mile == 'Yes':
+                md = f_iso or s_iso
+                if md:
+                    o['milestones'].append({'name': p_task, 'dateISO': md, 'owner': p_assign,
+                                            'status': p_status, 'phase': p_phase,
+                                            'done': p_status == 'Completed'})
+            if p_assign and p_status != 'Completed':
+                team_tasks.append({'assignee': p_assign, 'project': name, 'task': p_task,
+                                   'dueISO': f_iso or s_iso, 'status': p_status})
         o['tasks'].append({'id': p_taskid, '_id': it.get('ID') or it.get('id'), 't': p_task,
                            'phase': p_phase, 'type': p_type, 'who': p_assign,
                            'startISO': s_iso, 'finISO': f_iso, 'dur': p_dur, 'st': p_status,
@@ -371,7 +376,7 @@ def main():
         projects.append({'name': o['name'], 'pm': o['pm'],
                          'startISO': o['minStart'], 'finishISO': o['maxFinish'],
                          'taskCount': o['taskCount'], 'doneCount': o['doneCount'], 'pct': pct,
-                         'nonOfficial': o['nonOfficial'], 'parked': o['parked'], 'jobNum': o['jobNum'],
+                         'nonOfficial': o['nonOfficial'], 'parked': o['parked'], 'archived': o['archived'], 'jobNum': o['jobNum'],
                          'milestones': o['milestones'], 'tasks': o['tasks']})
 
     # --- Users: include every ACTIVE person so they all show in Manage Logins. Anyone with a
