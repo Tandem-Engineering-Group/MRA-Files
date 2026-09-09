@@ -2973,6 +2973,7 @@
         <button class="btn-ghost" id="peJobBtn" onclick="setProjectJobNumBtn()" title="Set this project's Job # — shows as 'Jxxxx · Project Name' on the Gantt, the detailed view, and the task editors">🔖 Job #</button>
         <button class="btn-ghost" id="peNonOffBtn" onclick="toggleProjNonOfficial()" title="Flag this as a NON-OFFICIAL project — informal work on someone's plate (e.g. JFSD Trailer Weight). It still shows on the Gantt, Progress and PM Load, just tagged so everyone knows it isn't a formal job.">🏷 Non-official</button>
         <button class="btn-ghost" id="peParkBtn" onclick="toggleProjParked()" title="⏸ PARK this project — freeze / put it on hold. It stays on the Gantt (dimmed, tagged ⏸) but stops counting as At-Risk and drops out of Needs Attention. Task statuses are untouched, so un-parking restores it exactly. There's a '⏸ Hide parked' toggle on the Gantt toolbar too.">⏸ Park</button>
+        <button class="btn-ghost" id="peArchBtn" onclick="toggleProjArchived()" title="📦 ARCHIVE this project — file it away. Everything ⏸ Park does (its tasks come off crew columns, bay cards, the unassigned finder, My Work and the daily emails) PLUS the project drops off the Projects tab and Gantt until you turn on '📦 Show archived'. Nothing is deleted or marked complete — full history stays and it un-archives in one click.">📦 Archive</button>
         <button class="btn-ghost" onclick="openAssigneeStd()" title="Standardize assignee names — merge variants (e.g. MasterWraps → Wrap Team) across every project + shop task; flags typos / unknown names">👥 Assignees</button>
         <button class="btn-ghost" onclick="projShiftAllBtn()" title="⏩ Slide the WHOLE schedule — move every task's start AND finish by the same number of days (e.g. +10 to push the project 10 days later because it slipped). Each task keeps its old due struck through.">⏩ Shift schedule</button>
         <button class="btn-ghost" onclick="peOpenDetail()" title="Open this project's full-screen Gantt (detailed view)">⛶ Gantt view</button>
@@ -3551,7 +3552,13 @@ function projDoneISO(p){ if(!p) return null; const D=window.MRA_DATA||{}; const 
     if(ds.length) return ds[ds.length-1];
   }
   return null; }
-function projArchived(p){ const d=projDoneISO(p); if(!d) return false; const a=daysAgo(d); return a!=null && a>PROJ_ARCHIVE_DAYS; }
+// 📦 Manual archive rides the SAME predicate every list already consults, so one flag drops the
+// project off the Projects tab / Gantt / Progress / KPIs / Production Meeting and the existing
+// "🗄 Show archived" toggle brings it back — no second toggle, no parallel plumbing. Rich 2026-09-09:
+// "i need a archive option. for jfsd. i want that to be archived." Auto-archive (wrapped + 8 days)
+// is unchanged; this just adds "or somebody filed it by hand."
+function projArchived(p){ if(p && p.archived) return true;
+  const d=projDoneISO(p); if(!d) return false; const a=daysAgo(d); return a!=null && a>PROJ_ARCHIVE_DAYS; }
 // PROJECTS split view: 'sched' (Gantt + Progress + Needs Attention) · 'ana' (loads/milestones/workload/health/capacity) · 'all'
 let PROJ_VIEWMODE='sched'; try{ const _pv=localStorage.getItem('mra_projview'); if(_pv) PROJ_VIEWMODE=_pv; }catch(e){}
 function setProjView(v){ PROJ_VIEWMODE=(v==='ana'||v==='all')?v:'sched';
@@ -3956,7 +3963,7 @@ const GENERAL_HELP = `
     <p>On the <span class="k">PROJECTS</span> tab, click <span class="k">📄 Build Schedule</span>, pick one of your projects and a <b>style</b> (① Corporate · ② Timeline · ③ Bold). It opens a print-ready schedule — hit <b>Save as PDF</b> in the new tab. Pick one of three detail levels under <b>Include</b>: <span class="k">Milestones &amp; hard dates</span>, <span class="k">+ Tasks</span> (milestones plus every parent task), or <span class="k">+ All tasks &amp; subtasks</span>. Tick <span class="k">Hide completed items</span> to leave anything marked Complete off the schedule.</p></div>
 
   <div class="hsec"><h4>⑯ ✎ Edit Project Tasks (PROJECTS tab)</h4>
-    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor. In that detail view, <b>drag a task bar to reschedule</b> it — the <b>middle</b> to move it, the <b>left/right end</b> to change start/finish. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown filters the list to one person/crew (e.g. <i>Sarah Williams</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent with a <b>▾/▸</b> caret — make one right in the task form with the <span class="k">Subtask of</span> dropdown. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b>, and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the header). Everything <b>saves to the SharePoint Lists</b>, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything already complete so you can scroll just what's left (remembered per device; it also applies to the FLOOR's <span class="k">Show closed</span> and the Build Schedule).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the PM for the project across all its tasks and the floor job. <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text; <span class="k">Type</span> is a real <b>dropdown</b> (with <b>➕ Other…</b>); <span class="k">🏷 Non-official</span> flags a project as informal work (a 🏷 on its name and a muted amber wash across its Gantt row); <span class="k">⏸ Park</span> <b>freezes a project</b> (on hold): it stays on the Gantt but dimmed and tagged ⏸ and <b>stops counting as At-Risk / Needs Attention</b> (un-parking restores it exactly); <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt; and a task <b>requires both a Start and a Finish date</b> (a single-date milestone is fine). The editor header, the project picker and the detailed-view title show the project's <b>Job #</b> — <b>"J1557 · Project Name"</b> — when it's linked to a trailer.</p></div>
+    <p><b>On any Gantt:</b> click a project's <b>bar</b> to open a full-screen <b>detailed view</b> of that project (every task as its own dated bar, sorted by date, colored by status, ◆ milestones; <b>completed tasks show a ✓ in a green bar and in-progress tasks fill to their % complete</b>); click its <b>name</b> on the left to open the editor. In that detail view, <b>drag a task bar to reschedule</b> it — the <b>middle</b> to move it, the <b>left/right end</b> to change start/finish. <br>Click <span class="k">✎ Edit Project Tasks</span> (or any project in <b>Project Progress</b>) to open that project's tasks in a popup, <b>grouped by phase</b> and <b>sorted by date (year-aware)</b>. Click a phase header to expand/collapse it (or <span class="k">⊟ Collapse all</span> / <span class="k">⊞ Expand all</span>); milestone rows are shaded gold. The <span class="k">👥 assignee</span> dropdown filters the list to one person/crew (e.g. <i>Sarah Williams</i>, <i>MRA Design</i>) — great for reassigning all of someone's tasks. <b>Subtasks</b> sit indented under their parent with a <b>▾/▸</b> caret — make one right in the task form with the <span class="k">Subtask of</span> dropdown. Add, <span class="k">✎</span> edit, <span class="k">✓</span> complete, <span class="k">↩</span> reopen or <span class="k">🗑</span> delete tasks, set a <b>Predecessor</b>, and record <b>Est. Days / Est. Hours</b> and a <b>Budget ($)</b> per task (they total up per project in the header). Everything <b>saves to the SharePoint Lists</b>, and your change shows instantly. Use <span class="k">✓ Hide completed</span> to drop everything already complete so you can scroll just what's left (remembered per device; it also applies to the FLOOR's <span class="k">Show closed</span> and the Build Schedule).<br><span class="k">✎ Rename</span> renames the whole project everywhere (its tasks, the Gantt/Progress and the matching floor job). <span class="k">👤 Set PM</span> sets the PM for the project across all its tasks and the floor job. <span class="k">👥 Assignees</span> opens <b>Standardize Assignees</b>: merge variant spellings into one canonical name (e.g. <i>MasterWraps → Wrap Team</i>) across every project + shop task, with a count per name and a ⚠ flag on typos/unknown names. A <span class="k">🔎 Find task</span> box filters the list by text; <span class="k">Type</span> is a real <b>dropdown</b> (with <b>➕ Other…</b>); <span class="k">🏷 Non-official</span> flags a project as informal work (a 🏷 on its name and a muted amber wash across its Gantt row); <span class="k">⏸ Park</span> <b>freezes a project</b> (on hold): <b>its tasks come off the crew's screens</b> — bay cards, the crew columns, the ⚠ unassigned finder, My Work, the 6 AM daily emails and the PM / deficiency / exec reports — while the project itself <b>stays on the Gantt</b>, dimmed and tagged ⏸, and <b>stops counting as At-Risk / Needs Attention</b> (nothing is deleted or marked complete; un-parking restores it exactly). <span class="k">📦 Archive</span> is the stronger version for a project you're <b>filing away</b> rather than pausing: everything Park does, plus it drops off the Projects tab and Gantt until you turn on <span class="k">🗄 Show archived</span> — same place wrapped projects auto-file to after 8 days. One click un-archives it; <span class="k">📅 % to Today</span> sets a task's % to the elapsed Start→Finish %; <span class="k">⛶ Gantt view</span> jumps to the detailed Gantt; and a task <b>requires both a Start and a Finish date</b> (a single-date milestone is fine). The editor header, the project picker and the detailed-view title show the project's <b>Job #</b> — <b>"J1557 · Project Name"</b> — when it's linked to a trailer.</p></div>
 
   <div class="hsec"><h4>⑯ᵃ ⇄ Bulk Edits — change many tasks at once (PROJECTS tab)</h4>
     <p>Don't open tasks one at a time. Click <span class="k">⇄ Bulk Edits</span> on the PROJECTS toolbar to change <b>assignee</b>, <b>phase</b>, <b>type</b>, <b>status</b> — or <b>📅 bump Start &amp; Finish dates by ± N days</b> — across a batch of tasks (grouped by phase with indented tasks; a phase header's checkbox grabs the whole phase):</p>
@@ -4062,6 +4069,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.85", date:"2026-09-09", title:"⏸ Park now actually takes a project off the crew's screens · new 📦 Archive", items:[
+    "Rich, looking at J1526 JFSD - Replacement Stools sitting in Park with its tasks still on people's dashboards: \"the project is in Park mode. These should not show up on anyone's dash.\" He'd pressed ⏸ Park and reasonably expected it to go quiet. <b>Park was only ever a reporting flag</b> — it dimmed the Gantt bar and stopped the project counting as At-Risk, and none of the code that puts project tasks in front of people ever looked at it. Fixed: a parked project's tasks now drop off <b>bay cards, the crew columns, the ⚠ unassigned finder, My Work, the 6 AM daily emails, the deficiency list, the PM report and the exec report</b>.",
+    "It deliberately <b>stays visible on the Projects tab, the Gantt and Project Progress</b> (dimmed, tagged ⏸) — that's where you go to find it and un-park it, so hiding it there would be a trap. Nothing is deleted, nothing is marked complete, and un-parking restores it exactly.",
+    "New <b>📦 Archive</b> button next to ⏸ Park, for a project you're filing away rather than pausing — everything Park does, <b>plus</b> the project drops off the Projects tab and Gantt until you turn on the existing <b>🗄 Show archived</b>. It reuses the same archive plumbing that already auto-files wrapped projects after 8 days, so there's no second toggle to learn. Un-archives in one click, full history intact.",
+    "⚠️ Archive needs a one-time <b>Archived</b> column on the MRA Project Tasks list — the same one-minute step as Parked and Non-official. Until it's there the button says so plainly and refuses to write, rather than accepting the click and silently losing it." ] },
   { rev:"37.84", date:"2026-09-09", title:"💰 Al &amp; Megan now see dollars on the Finance tab too", items:[
     "Rich: \"yeah lets let them see dollars.\" Dashboard side done — they're on the pay-rates list now, so $/hr and labor cost show for them the same as for Rich and Kyle. Still read-only, and still only the Finance tab.",
     "⚠️ Needs the matching change in the <b>pay-rates Power Automate flow</b> as well — that flow checks the signed-in account itself, which is what makes its address safe to hardcode. Until their two emails are added to its approved list, they'll see hours with a quiet \"dollar figures aren't switched on for your sign-in\" note rather than any error.",
@@ -8176,6 +8188,7 @@ function _listOpsRaw(p){
     case 'reopenProjectTask':return [O('update','ProjectTasks',{Project:p.project,Task:p.task,__id:p._id},{Status:'In Progress'})];
     case 'setProjectNonOfficial': return taskOps('update','ProjectTasks',_projTaskRows(p.project),{NonOfficial:(p.value?'Yes':'')});   // #2: flag/unflag every task of the project
     case 'setProjectParked':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{Parked:(p.value?'Yes':'')});        // ⏸ park/unpark: freeze the project (isolated single-column write — safe before the Parked column exists)
+    case 'setProjectArchived':    return taskOps('update','ProjectTasks',_projTaskRows(p.project),{Archived:(p.value?'Yes':'')});      // 📦 archive/un-archive: file the project away (same isolated single-column write as Parked)
     case 'setJobOrd':        { const set={Ord:p.ord}; if(p.bay!=null) set.Bay=p.bay; return [O('update','Jobs',{Project:p.project,__id:p._id},set)]; }   // drag-reorder on a bay card (Ord = JobOrd Number column; no-ops until it exists)
     case 'setTaskFiles':     return [O('update','ShopTasks',{Project:p.project,Task:p.task,__id:p._id},{Files:JSON.stringify(p.files||[])})];   // attachments (isolated single-column write — safe before the Files column exists)
     case 'setProjectJobNum':      return taskOps('update','ProjectTasks',_projTaskRows(p.project),{JobNum:(p.jobNum||'')});   // #6: stamp the project's Job # on every task (isolated)
@@ -8205,7 +8218,7 @@ function _listOpsRaw(p){
 const _LF = {
   Jobs:         { list:"MRA Jobs",          cols:{Project:"Title",Bay:"field_1",Client:"field_2",JobNum:"field_3",Start:"field_4",Finish:"field_5",Status:"field_6",PM:"field_7",Notes:"field_8",Ord:"JobOrd"} },   /* JobOrd = UI-added Number column (drag-reorder on bay cards) */
   ShopTasks:    { list:"MRA Shop Tasks",    cols:{Task:"Title",Project:"field_1",JobNum:"field_2",Bay:"field_3",Assigned:"field_4",Status:"field_5",Opened:"field_6",Closed:"field_7",Comments:"field_9",Due:"Due",Files:"Files"} },   /* Files = UI-added multiline col (attachment JSON; isolated setTaskFiles op only). field_8 is a Number column (always 0.0) — NOT milestone; don't write it. "Due" = a Date column added 2026-06-30 (its own internal name, not field_N) — only written when a due date is set. */
-  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"TaskType",JobNum:"JobNum",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial",Parked:"Parked"} },   /* 'Type' + 'NonOfficial' + 'Parked' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
+  ProjectTasks: { list:"MRA Project Tasks", cols:{Task:"Title",Project:"field_1",TaskID:"field_2",Phase:"field_3",Type:"TaskType",JobNum:"JobNum",Assigned:"field_5",Start:"field_6",Finish:"field_7",Status:"field_9",PM:"field_10",Milestone:"field_11",Comments:"field_12",Sub:"field_14",NonOfficial:"NonOfficial",Parked:"Parked",Archived:"Archived"} },   /* 'Type' + 'NonOfficial' + 'Parked' are UI-added columns whose internal name = their display name (like 'Due'); the original field_4 slot never existed (writes to it were rejected). field_8/Duration is a Number col; field_13 (Predecessor)+field_2 (TaskID) not written. Match by item _id (dup-safe) else {Project, Task name}. */
   Users:        { list:"MRA Users",         cols:{Name:"Title",Code:"field_1",Role:"field_2",Active:"field_3"} },
   Holidays:     { list:"MRA Holidays",      cols:{Name:"Title",Date:"field_1",Country:"field_2"} }
 };
@@ -8528,6 +8541,10 @@ const PENDING_PARK_KEY='mra_pending_park_v1';   // ⏸ park flags: same optimist
 function ppkLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_PARK_KEY)||'{}'); }catch(e){ return {}; } }
 function ppkSave(o){ try{ localStorage.setItem(PENDING_PARK_KEY, JSON.stringify(o)); }catch(e){} }
 function pendPark(name,val){ const o=ppkLoad(); o[name]={val:!!val, ts:Date.now()}; ppkSave(o); }
+const PENDING_ARCH_KEY='mra_pending_arch_v1';   // 📦 archive flags: same optimistic-hold pattern as park
+function parLoad(){ try{ return JSON.parse(localStorage.getItem(PENDING_ARCH_KEY)||'{}'); }catch(e){ return {}; } }
+function parSave(o){ try{ localStorage.setItem(PENDING_ARCH_KEY, JSON.stringify(o)); }catch(e){} }
+function pendArch(name,val){ const o=parLoad(); o[name]={val:!!val, ts:Date.now()}; parSave(o); }
 // ---- Pending re-writes: an edit made to a row that has no item id yet (just added, not synced back).
 // The text-filter UPDATE can't reliably hit it, so we queue the change and re-fire it BY ID once the
 // row appears in a fresh export with its id. Self-prunes on success or after the 12h TTL.
@@ -8601,6 +8618,14 @@ function mergePending(D){
       if(!!p.parked === !!e.val){ delete pk[nm]; ch=true; continue; }
       p.parked=!!e.val; }
     if(ch) ppkSave(pk); }
+  // Pending 📦 archive flags — identical hold for archive/un-archive toggles.
+  { const ar=parLoad(); let ch=false; const t=Date.now();
+    for(const nm in ar){ const e=ar[nm];
+      if(t-(e.ts||0) > PENDING_TTL){ delete ar[nm]; ch=true; continue; }
+      const p=(D.projects||[]).find(x=>x.name===nm); if(!p) continue;
+      if(!!p.archived === !!e.val){ delete ar[nm]; ch=true; continue; }
+      p.archived=!!e.val; }
+    if(ch) parSave(ar); }
   const a=pendLoad(); if(!a.length) return;
   const now=Date.now(), keep=[];
   for(const e of a){
@@ -9717,13 +9742,68 @@ function toggleProjParked(){
   pendPark(name, val);   // hold the flag on-screen through polls/exports until data.js reflects it
   if(typeof shopWrite==='function') shopWrite({ action:'setProjectParked', project:name, value:(val?1:0), pin:CLOSE_PIN, user:CURRENT_USER });
   if(typeof markPending==='function') markPending();
-  renderProjTaskList(); syncParkBtn();
+  renderProjTaskList(); syncParkBtn(); syncArchBtn();
   if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(typeof GFS!=='undefined'&&GFS&&typeof renderGanttFS==='function') renderGanttFS(); }
+}
+// ⏸ Does this project's work belong in front of the crew right now? Rich 2026-09-09, looking at
+// J1526 JFSD - Replacement Stools sitting Parked with its tasks still on people's dashboards: "the
+// project is in Park mode. These should not show up on anyone's dash." He'd pressed ⏸ Park and
+// reasonably expected it to go quiet — but Park was only ever a REPORTING flag (dim the Gantt bar,
+// stop counting At-Risk), and none of the collectors that put project tasks in front of people ever
+// looked at it. This is the one gate they all consult now. Takes a project NAME (what every collector
+// has on hand) and falls back to the project object's own flag.
+// Deliberately NOT applied on the Projects tab, the Gantt, Project Progress or the Production
+// Meeting — that's where a parked project has to stay visible so it can be found and un-parked.
+function _projHidden(nameOrProj){
+  try{
+    const p=(typeof nameOrProj==='string')
+      ? ((window.MRA_DATA||{}).projects||[]).find(x=>x.name===nameOrProj)
+      : nameOrProj;
+    if(!p) return false;
+    return !!p.parked || !!p.archived;   // archived implies parked-level suppression too
+  }catch(e){ return false; }
 }
 function syncParkBtn(){ const b=document.getElementById('peParkBtn'); if(!b) return;
   const p=oProj(peCurrentProject()); const on=!!(p&&p.parked);
   b.textContent=on?'⏸ Parked ✓':'⏸ Park';
   b.style.borderColor=on?'rgba(129,140,248,.75)':''; b.style.color=on?'#a5b4fc':''; }
+// 📦 ARCHIVE — everything Park does, plus the project drops off the Projects tab / Gantt / Progress /
+// Production Meeting until "📦 Show archived" is on. Rich 2026-09-09, on J1526 JFSD - Replacement
+// Stools: "i need a archive option. for jfsd. i want that to be archived." Park is for a freeze that
+// resumes; this is for filing something away. Nothing is deleted or marked complete — history intact,
+// and it un-archives in one click.
+// ⚠️ Needs a one-time **Archived** column on the MRA Project Tasks list (exactly like Parked and
+// NonOfficial before it). Until it exists the write is silently accepted and dropped by SharePoint —
+// which is the failure mode that has burned Rich repeatedly (a 202 that does nothing) — so the button
+// REFUSES to pretend: _archColumnLive() checks whether the export is actually publishing the field,
+// and if it isn't, it says so with the steps instead of writing.
+function _archColumnLive(){
+  try{ const ps=((window.MRA_DATA||{}).projects||[]);
+    return ps.length>0 && ps.some(p=>typeof p.archived!=='undefined');
+  }catch(e){ return false; }
+}
+function toggleProjArchived(){
+  const name=peCurrentProject(); if(!name || name==='__new__'){ alert('Pick a project first.'); return; }
+  if(typeof ensureAuth==='function' && !ensureAuth('archive / un-archive a project')) return;
+  if(!_archColumnLive()){
+    alert('📦 Archive isn’t switched on yet.\n\nIt needs a one-time "Archived" column on the MRA Project Tasks list — the same one-minute step you did for Parked and Non-official. Rich has the exact clicks in the chat.\n\nNothing was changed. Until then, ⏸ Park already takes a project’s tasks off the crew’s screens.');
+    return;
+  }
+  const p=oProj(name); const now=!!(p&&p.archived); const val=!now;
+  if(!confirm((val?'ARCHIVE':'UN-ARCHIVE')+' "'+name+'"?\n\n'+(val
+    ? 'Archived = filed away: its tasks come off the crew columns, bay cards, the unassigned finder, My Work and the daily emails, AND the project drops off the Projects tab / Gantt until you turn on "📦 Show archived".\n\nNothing is deleted and nothing is marked complete — the full history stays, and you can un-archive it in one click.'
+    : 'It comes back to normal — back on the Projects tab and the Gantt, and its open tasks return to the crew views.'))) return;
+  if(p) p.archived=val;
+  pendArch(name, val);   // hold the flag on-screen through polls/exports until data.js reflects it
+  if(typeof shopWrite==='function') shopWrite({ action:'setProjectArchived', project:name, value:(val?1:0), pin:CLOSE_PIN, user:CURRENT_USER });
+  if(typeof markPending==='function') markPending();
+  renderProjTaskList(); syncArchBtn();
+  if(window.MRA_DATA){ renderProjects(window.MRA_DATA); if(typeof GFS!=='undefined'&&GFS&&typeof renderGanttFS==='function') renderGanttFS(); }
+}
+function syncArchBtn(){ const b=document.getElementById('peArchBtn'); if(!b) return;
+  const p=oProj(peCurrentProject()); const on=!!(p&&p.archived);
+  b.textContent=on?'📦 Archived ✓':'📦 Archive';
+  b.style.borderColor=on?'rgba(148,163,184,.75)':''; b.style.color=on?'#cbd5e1':''; }
 // #6 — set an explicit Job # for the whole project (overrides the auto-match). Stamps every task's
 // JobNum column (isolated write — safe even before that column exists). Shows as "Jxxxx · Project".
 function setProjectJobNumBtn(){
@@ -10057,7 +10137,7 @@ function projStatusBadge(t){
 function renderProjTaskList(){
   const name=peCurrentProject(), p=oProj(name);
   const pmBtn=document.getElementById('pePMBtn'); if(pmBtn) pmBtn.textContent=(p&&p.pm)?('👤 PM: '+p.pm):'👤 Set PM';
-  syncNonOffBtn(); syncParkBtn(); syncJobBtn();
+  syncNonOffBtn(); syncParkBtn(); syncArchBtn(); syncJobBtn();
   { const fb=document.getElementById('peFilesBtn'); if(fb){ const nfp=(p?_projFiles(p).length:0); fb.textContent='📎 Files'+(nfp?(' ('+nfp+')'):''); } }
   const list=document.getElementById('peList'), cnt=document.getElementById('peCount');
   const tasks=(p&&p.tasks)||[];
@@ -16135,7 +16215,7 @@ function buildPMReportHtml(pmQ, days){
   // whole-word match: 'al' must hit 'Al Karloff' but NOT 'Brandon Kosal' / 'Sal' (substring bug — ABB leaked into Al's report)
   const pmMatch=v=>{ if(!q) return false; const sv=String(v||'').toLowerCase();
     return sv===q || sv.startsWith(q+' ') || sv.split(/[\s\/]+/).some(w=>w===q); };
-  const projs=(D.projects||[]).filter(p=>pmMatch(p.pm));
+  const projs=(D.projects||[]).filter(p=>pmMatch(p.pm) && !_projHidden(p));   // ⏸ parked / 📦 archived stay off the PM report
   const pmName=(projs[0]&&projs[0].pm)||pmQ;
   const jobs=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0 && j.category!=='pipeline' && (pmMatch(j.pm) || projs.some(p=>String(p.name).toLowerCase()===String(j.project||'').toLowerCase())));
   // health overview (same engine as the Production Meeting)
@@ -16202,7 +16282,7 @@ function buildExecReportHtml(days){
   const liveJobs=(D.jobs||[]).filter(j=>j.category!=='leave' && String(j.row||'').indexOf('orphan:')!==0 && j.category!=='pipeline');
   const floorJobs=liveJobs.filter(j=>(j.status||'').toLowerCase()!=='shipped');
   // ---- portfolio ----
-  const projs=(D.projects||[]);   // include non-official (🏷) so the owner sees the full portfolio
+  const projs=(D.projects||[]).filter(p=>!_projHidden(p));   // include non-official (🏷) so the owner sees the full portfolio; ⏸ parked / 📦 archived are out
   const pNm=p=>((p&&p.nonOfficial)?'\u{1F3F7} ':'')+esc((p&&p.name)||'');   // 🏷 marks informal / non-official projects
   const hRows=projs.filter(p=>projStatus(p,todayISO)!=='done' && !p.parked).map(p=>{
     const h=projHealth(p,todayISO); const b=_pmtBehindBits(p,todayISO); return {state:h.state, h:h, p:p, b:b};
@@ -16535,7 +16615,8 @@ function myWorkFor(name){
     (j.tasks||[]).forEach(t=>{ if(t.done||(typeof isSnzRep==='function'&&isSnzRep(t))) return;
       if(_whoMatch(t.who,mn)){ const fm=String(t.t||'').match(/🔧\s*#(\d+)/);
         items.push({t:cleanTask(t.t,false), where:(j.project||'')+(j.jobNum?(' '+j.jobNum):''), due:t.due||null, due0:_taskDue0(t.cm), kind:'shop', proj:j.project, raw:t.t, files:t.files||null, cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), fnum:fm?fm[1]:null, nav:{k:'shop',row:j.row,proj:j.project,raw:t.t}}); } }); });
-  (D.projects||[]).forEach(p=>{ const ts=p.tasks||[]; ts.forEach((t,i)=>{ if(/yes/i.test(t.ml||'')) return;
+  (D.projects||[]).forEach(p=>{ if(_projHidden(p)) return;   // ⏸ parked / 📦 archived — off My Work + the daily email
+    const ts=p.tasks||[]; ts.forEach((t,i)=>{ if(/yes/i.test(t.ml||'')) return;
       if(isDoneT(t) || projIsPendingVerify(t)) return;   // pending-verify shows in its own section
       if(_whoMatch(t.who,mn)){ let parent=''; if(t.sub){ for(let k=i-1;k>=0;k--){ if(!ts[k].sub){ parent=ts[k].t||''; break; } } }
         items.push({t:String(t.t||''), where:p.name, due:t.finISO||null, due0:_taskDue0(t.cm), st0:t.startISO||null, kind:'proj', cm:_mwCleanCm(t.cm), by:_taskBy(t.cm), phase:(t.phase||'').trim(), ptype:(t.type||'').trim(), parent:parent, files:t.files||null, nav:{k:'proj',proj:p.name,h:projTaskHandle(t)}}); } }); });
@@ -16548,10 +16629,11 @@ function myWorkFor(name){
   const iAmAdmin=(typeof VERIFY_ADMINS!=='undefined')&&VERIFY_ADMINS.some(n=>_whoMatch(n,name)||(typeof _verifyNameMatch==='function'&&_verifyNameMatch(n,name)));
   // --- 🟡 pending verification: mine (I marked ready) + awaiting my sign-off (I'm the PM/admin) ---
   const pendingMine=[], awaitingMe=[];
-  (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{ if(!projIsPendingVerify(t)) return;
+  (D.projects||[]).forEach(p=>{ if(_projHidden(p)) return;   // ⏸ parked / 📦 archived — no sign-off nags either
+    (p.tasks||[]).forEach(t=>{ if(!projIsPendingVerify(t)) return;
       const h=(typeof projTaskHandle==='function')?projTaskHandle(t):String(t.id||t.t||'');
       if(_whoMatch(t.who,mn)) pendingMine.push({t:String(t.t||''), where:p.name, pm:p.pm||'', handle:h, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim()});
-      if(pmMatch(p.pm)||iAmAdmin) awaitingMe.push({t:String(t.t||''), where:p.name, who:t.who||'', due:t.finISO||t.startISO||'', handle:h, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim()}); }));
+      if(pmMatch(p.pm)||iAmAdmin) awaitingMe.push({t:String(t.t||''), where:p.name, who:t.who||'', due:t.finISO||t.startISO||'', handle:h, kind:'proj', cm:_mwCleanCm(t.cm), phase:(t.phase||'').trim()}); }); });
   awaitingMe.sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')));
   // --- ✅ completed in the last 7 days (mine) ---
   const doneRecent=[];
@@ -17561,6 +17643,7 @@ function buildDeficiencyHtml(pmQ){
   const byPM={};
   (D.projects||[]).forEach(p=>{
     if(!pmMatch(p.pm)) return;
+    if(_projHidden(p)) return;   // ⏸ parked / 📦 archived — a frozen project isn't a "deficiency" to chase
     const pm=(p.pm||'').trim()||'— NO PM SET —';
     const od=[], nod=[];
     (p.tasks||[]).forEach(t=>{ if(isDoneT(t)) return;
@@ -21229,7 +21312,8 @@ function unassignedTasks(){
     const lim=localISO(Date.parse(today)+14*86400000);
     const isShop=w=>{ const ps=String(w||'').split('/').map(x=>x.trim().toLowerCase()).filter(Boolean);
       return ps.length>0 && ps.every(x=>x==='mra shop'); };   // "MRA Shop / Sal" = picked up → not unassigned
-    (D.projects||[]).forEach(p=>(p.tasks||[]).forEach(t=>{
+    (D.projects||[]).forEach(p=>{ if(_projHidden(p)) return;   // ⏸ parked / 📦 archived — not "unassigned work"
+      (p.tasks||[]).forEach(t=>{
       if(t.done===true || /complete/i.test(String(t.st||''))) return;
       if(!isShop(t.who)) return;
       if(/yes/i.test(String(t.ml||''))) return;                       // milestones aren't work items
@@ -21238,7 +21322,7 @@ function unassignedTasks(){
       if(!handle) return;                                             // not writable yet — next sync
       let par=''; if(t.sub){ const ts=p.tasks||[]; const ix=ts.indexOf(t); for(let k2=ix-1;k2>=0;k2--){ if(!ts[k2].sub){ par=ts[k2].t||''; break; } } }
       out.push({proj:p.name, jobNum:'', bay:'', raw:t.t, disp:t.t, due:t.finISO||'', st0:t.startISO||'', kind:'proj', handle:handle,
-        ph:(t.phase||'').trim(), par:par, cm:String(t.cm||'').trim()}); })); }
+        ph:(t.phase||'').trim(), par:par, cm:String(t.cm||'').trim()}); }); }); }
   // \u{1F527} OPEN FLEETIO ISSUES not yet actioned — a new maintenance issue coming in from Fleetio shows on
   // its trailer's bay card as a 🔧 pill until someone queues it; surface those here too so they don't slip by.
   { const flByJob={};
@@ -21313,6 +21397,7 @@ function _pjRebuild(){
     const lim=localISO(Date.parse(today)+14*86400000);
     const CRW=/\bsal\b|wrap|electr|doug|josh|jeff|maintenance|mra\s*shop|vendor/i;
     (D.projects||[]).forEach(p=>{
+      if(_projHidden(p)) return;                     // ⏸ parked / 📦 archived — off the bay cards + crew columns
       const rows=[];
       (p.tasks||[]).forEach(t=>{
         if(t.done===true||/complete/i.test(String(t.st||''))) return;
