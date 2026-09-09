@@ -4062,6 +4062,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.81", date:"2026-09-09", title:"🔧 Fixed: red \"DATA PIPELINE STALLED\" banner was crying wolf on a perfectly healthy board", items:[
+    "Rich: \"board stalled but i dont see a json issue??\" — he was right, there was no issue. Every run of the MRA Lists to JSON flow was Succeeded, and the board was 2 minutes fresh by the time I looked. The banner's own threshold was still 20 minutes, set back when that flow ran every 2–5 minutes. It's been on a 15-minute Recurrence since 9/3 (the throttling mitigation from vacation week), so a completely healthy board normally sits 15 minutes plus about 90 seconds of export lag behind — just under the line, and any small bit of timing jitter tripped a full-width red alarm telling him to go cancel stuck runs that didn't exist.",
+    "Threshold raised to 35 minutes — two missed 15-minute cycles — in both the in-app banner and the GitHub email watchdog, which had the same 20. A real stall still surfaces quickly (the 9/3 outage ran 2h19m); the normal cadence no longer sets it off. If the flow's interval is ever changed again, both numbers move with it." ] },
   { rev:"37.80", date:"2026-09-01", title:"🐛 FOUND IT: assigned Fleetio tasks were being auto-marked Done — the real reason assignments kept \"disappearing\"", items:[
     "Root cause, from the live data: on SMC J1542 every 🔧 task Rich assigned was STILL assigned — but all 14 had been marked Done (most today), while every one of their issues was still open in Fleetio. Same on 10 other jobs: 39 tasks, ~25 closed in one day, including tasks assigned to external crews who can't even log in, and two created unassigned and closed the same day. Nobody clicked those. An old auto-close (June, rev 3.8) was marking a task Done — and writing it — the moment its issue number was missing from the Fleetio feed. \"Missing from the feed\" isn't \"resolved\": a partial page, an issue in a non-open Fleetio state, or the pill's green ✓ hiding the issue on that device for 6 hours all look the same to it. A Done task drops out of the crew columns and the card's task list, and the card then re-draws the Fleetio issue as a ➕ row with no name — which is exactly what read as \"it came back unassigned\".",
     "Fixed: the auto-close is OFF. Closing a task is a human action again (the ✓ on a task, or the pill's green ✓ which asks for Fleetio's note).",
@@ -21464,7 +21467,15 @@ function _staleCheck(D){
     var la=D&&D.listsAsOf; if(!la){ if(el) el.style.display='none'; return; }
     if(window._staleSnooze && Date.now()<window._staleSnooze){ if(el) el.style.display='none'; return; }
     var mins=Math.floor((Date.now()-Date.parse(la))/60000);
-    if(!(mins>20)){ if(el) el.style.display='none'; return; }   // pipeline normally refreshes every 2-3 min; matches the GitHub email watchdog's 20-min threshold (was 40 — twice as long as intended, so the banner sat silent well past the point Rich expected a warning)
+    // 🔧 2026-09-09: threshold 20 → 35 min. The old 20 assumed the "MRA Lists to JSON" Recurrence was
+    // every 2-5 min. Rich moved it to **15 min** on 9/3 (throttling mitigation, see CLAUDE.md), so a
+    // perfectly healthy board is routinely 15 min + export lag (~1.5 min) stale — barely under 20, and
+    // any jitter tripped a RED "PIPELINE STALLED" banner telling him to go restart a flow where every
+    // run was Succeeded. Rich, 2026-09-09: "board stalled but i dont see a json issue??" — correct,
+    // there was no issue. 35 min = two missed 15-min cycles, so a REAL stall still shows up fast
+    // (the 9/3 outage ran 2h19m) without crying wolf on the normal cadence.
+    // ⚠️ If the Recurrence interval is ever changed again, change this with it.
+    if(!(mins>35)){ if(el) el.style.display='none'; return; }
     if(!el){ el=document.createElement('div'); el.id='staleAlarm';
       el.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;background:#b91c1c;color:#fff;font-weight:800;text-align:center;padding:10px 16px;font-size:13.5px;box-shadow:0 3px 12px #0008;cursor:pointer;letter-spacing:.2px';
       el.onclick=function(){ el.style.display='none'; window._staleSnooze=Date.now()+15*60000; };
