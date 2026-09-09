@@ -1019,6 +1019,33 @@ function printPaylocityCompare(){
   html+='</body></html>';
   w.document.open(); w.document.write(html); w.document.close();
 }
+/* Divide an auto-split foreman's daily total across whatever real job hours the REST of the crew
+   logged that same date, proportional to each job's share. Returns [{job,jobNum,hours}] summing
+   exactly to `total`, or null when nobody else logged job hours that day (nothing to divide across).
+   ONE copy of this math, shared by the manual entry form (submitAutoSplit) and the Paylocity import. */
+function _pyForemanSplit(who, date, total){
+  if(!(total>0)) return null;
+  var buckets={};
+  (activeEntries()||[]).forEach(function(e){
+    if(e.who===who || e.dateISO!==date) return;
+    if(fPayType(e)!=='Work') return;
+    var code=fCode(e)||('_'+e.job);
+    if(!buckets[code]) buckets[code]={hours:0, job:e.job};
+    buckets[code].hours+=(e.hours||0);
+    if(String(e.job||'').length>String(buckets[code].job||'').length) buckets[code].job=e.job;   // keep the fullest label seen
+  });
+  var codes=Object.keys(buckets);
+  var dayTotal=codes.reduce(function(s,c){ return s+buckets[c].hours; },0);
+  if(!codes.length || dayTotal<=0) return null;
+  var made=codes.map(function(c){ return {code:c, job:buckets[c].job, hours:Math.round(total*(buckets[c].hours/dayTotal)*4)/4}; });
+  var running=made.reduce(function(s,m){ return s+m.hours; },0);
+  var drift=Math.round((total-running)*100)/100;
+  if(Math.abs(drift)>=0.01){ made.sort(function(a,b){ return b.hours-a.hours; }); made[0].hours=Math.round((made[0].hours+drift)*100)/100; }
+  return made.filter(function(m){ return m.hours>0; }).map(function(m){
+    var jn=''; var mm=String(m.job||'').match(/^\s*(J?\d{3,6})\b/i); if(mm) jn=mm[1];
+    return { job:m.job, jobNum:jn, hours:m.hours };
+  });
+}
 function confirmPaylocityImport(){
   // Only rows Rich explicitly checked get their hours updated -- unchecked "changed" rows are left
   // alone entirely (neither imported nor touched), same as if they were never shown.
@@ -1071,26 +1098,65 @@ function confirmPaylocityImport(){
   // punch times in buildPaylocityPreview) -- splitting just divides that fixed number across jobs,
   // defaulting to one split with the full amount on the already-matched job (identical result to the
   // old single-job behavior when never split). A row blanked out entirely is skipped, same as before.
-  var acceptedEntries=[];
+  var acceptedEntries=[], needJob=[];
   PY_PENDING.forEach(function(r,idx){
-    var splits=[];
+    var splits=[], blankJobHours=0;
     _pySplitInputs('acc',idx).forEach(function(row){
       var hrs=parseFloat(row.querySelector('.pyPunchHours').value); if(!(hrs>0)) return;
-      var job=row.querySelector('.pyPunchJob').value.trim(); if(!job) return;
+      var job=row.querySelector('.pyPunchJob').value.trim();
+      // 🐛 FIXED 2026-09-09 -- a row with real hours but no job used to hit `if(!job) return;` and be
+      // DISCARDED, with no warning anywhere. Paylocity's CC2 is "Unknown" on plenty of real rows (all
+      // of Sal Sr's and Sal Jr's, every day), so `_pyJobFromCC2` returns '' and the dropdown lands on
+      // "— pick a job —" -- meaning Import silently imported NOTHING for them, and when EVERY row was
+      // blank-job the function returned before even showing a message, so the button appeared to do
+      // nothing at all. Rich, 2026-09-09: "they show time for 9/1, 9/2, 9/3, 9/4 but it's not
+      // uploading as shown." Hours are never dropped on the floor now -- an auto-split foreman gets
+      // the same treatment the manual form gives him, and anyone else is reported by name and date.
+      if(!job){ blankJobHours=Math.round((blankJobHours+hrs)*100)/100; return; }
       var jn=''; var m=job.match(/^\s*(J?\d{3,6})\b/i); if(m) jn=m[1];
       splits.push({ job:job, jobNum:jn, hours:Math.round(hrs*100)/100 });
     });
     splits.forEach(function(s){
       acceptedEntries.push({ who:r.who, dateISO:r.dateISO, job:s.job, jobNum:s.jobNum, hours:s.hours, task:r.task, notes:r.notes });
     });
+    if(blankJobHours>0){
+      if(AUTO_SPLIT[r.who]){
+        // Sal Sr and anyone else flagged as an auto-split foreman: no job on the punch is EXPECTED
+        // (he isn't on one job). Queued, not computed here -- the split runs when the queue reaches it,
+        // so the crew rows imported from this same file are already on the books to divide across.
+        acceptedEntries.push({ __autoSplit:true, who:r.who, dateISO:r.dateISO, hours:blankJobHours });
+      } else {
+        needJob.push({ who:r.who, dateISO:r.dateISO, hours:blankJobHours });
+      }
+    }
   });
-  if(!acceptedEntries.length && !checkedUpdates.length && !manualEntries.length) return;
+  if(needJob.length){
+    var lines=needJob.slice(0,12).map(function(x){ return '  • '+fmtShortDate(x.dateISO)+'  '+x.who+'  '+x.hours+'h'; }).join('\n');
+    var more=needJob.length>12?('\n  …and '+(needJob.length-12)+' more'):'';
+    var goOn=acceptedEntries.length||checkedUpdates.length||manualEntries.length;
+    if(!confirm('These '+needJob.length+' row'+(needJob.length===1?'':'s')+' still need a job picked — Paylocity had no cost center on them:\n\n'+lines+more
+        +'\n\n'+(goOn?'OK = import everything else now and leave these for you to assign.\nCancel = go back and pick their jobs first.'
+                     :'There is nothing else to import.\n\nOK = close this message so you can pick their jobs.\nCancel = same thing.'))) return;
+    if(!goOn) return;
+  }
+  if(!acceptedEntries.length && !checkedUpdates.length && !manualEntries.length){ alert('Nothing to import — every row is either already on record or still needs a job.'); return; }
   var btn=$('paylocityConfirmBtn'); btn.disabled=true; btn.textContent='Importing…';
   var addQueue=acceptedEntries.concat(manualEntries), updQueue=checkedUpdates.slice(), done=0, total=addQueue.length+updQueue.length;
+  var autoSplitDone=0, autoSplitFailed=[];
   (function step(){
     if(addQueue.length){
       var r=addQueue.shift();
+      if(r.__autoSplit){
+        // Same proportional math as the manual form's auto-split, computed NOW so it sees every crew
+        // row this import already wrote. No crew hours that day = nothing to divide across, so it's
+        // reported at the end instead of vanishing.
+        var made=_pyForemanSplit(r.who, r.dateISO, r.hours);
+        if(!made || !made.length){ autoSplitFailed.push(r); }
+        else { made.forEach(function(m){ addQueue.push({ who:r.who, dateISO:r.dateISO, job:m.job, jobNum:m.jobNum, hours:m.hours, task:'Auto-split (foreman)', notes:'', auto:true }); }); autoSplitDone++; total+=made.length; }
+        setTimeout(step, 0); return;
+      }
       var e={ id:uid(), who:r.who, dateISO:r.dateISO, job:r.job, jobNum:r.jobNum, hours:r.hours, task:r.task, notes:r.notes, ts:new Date().toISOString() };
+      if(r.auto) e.auto=true;
       ENTS.push(e); lset(LS.ents, ENTS);
       if(SHARED) SHARED.push(Object.assign({}, e, { empId:(EMPIDS[e.who]||''), payType:fPayType(e), shared:true }));
       if(TIME_WRITE_URL){ try{ fetch(TIME_WRITE_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(Object.assign({action:'addTime',empId:(EMPIDS[e.who]||''),code:fCode(e),payType:fPayType(e)}, e))}); }catch(_){}}
@@ -1110,7 +1176,17 @@ function confirmPaylocityImport(){
       setTimeout(step, 220);
       return;
     }
-    var m=$('paylocityMsg'); m.textContent='✓ Imported '+total+' entr'+(total===1?'y':'ies'); m.classList.remove('hide');
+    var m=$('paylocityMsg');
+    m.textContent='✓ Imported '+done+' entr'+(done===1?'y':'ies')+(autoSplitDone?(' · '+autoSplitDone+' foreman day'+(autoSplitDone===1?'':'s')+' auto-split'):'');
+    m.classList.remove('hide');
+    if(autoSplitFailed.length){
+      // Never silent: a foreman day that couldn't be split (no crew job hours on the books for that
+      // date) is named out loud so Rich can add the crew's hours first, or log him on a job by hand.
+      alert('Imported '+done+' entr'+(done===1?'y':'ies')+'.\n\nCouldn\'t auto-split '+autoSplitFailed.length+' foreman day'+(autoSplitFailed.length===1?'':'s')
+        +' — no crew job hours are on the books for '+(autoSplitFailed.length===1?'that date':'those dates')+' yet:\n\n'
+        +autoSplitFailed.map(function(x){ return '  • '+fmtShortDate(x.dateISO)+'  '+x.who+'  '+x.hours+'h'; }).join('\n')
+        +'\n\nAdd the crew\'s hours for those days, then re-run this import — or enter him on a single job by hand.');
+    }
     btn.textContent='Import'; btn.disabled=false; PY_PENDING=[]; PY_CHANGED=[]; PY_PUNCH_ISSUES=[]; PY_PUNCH_INRANGE=[];
     renderTracking(); renderMyDay();
     setTimeout(function(){ closePaylocityModal(); m.classList.add('hide'); }, 1400);
@@ -1131,30 +1207,18 @@ function _removeEntryEverywhere(id){
    badge them and a re-run knows which rows are safe to replace. */
 function submitAutoSplit(who,date,totalHours){
   if(!(totalHours>0)){ alert('Enter '+who+'\'s total hours for the day.'); $('fHours').focus(); return; }
-  var buckets={};
-  activeEntries().forEach(function(e){
-    if(e.who===who || e.dateISO!==date) return;
-    if(fPayType(e)!=='Work') return;
-    var code=fCode(e)||('_'+e.job);
-    if(!buckets[code]) buckets[code]={hours:0, job:e.job};
-    buckets[code].hours+=(e.hours||0);
-    if(String(e.job||'').length>String(buckets[code].job||'').length) buckets[code].job=e.job; // keep the fullest label seen for this job
-  });
-  var codes=Object.keys(buckets);
-  var dayTotal=codes.reduce(function(s,c){return s+buckets[c].hours;},0);
-  if(!codes.length || dayTotal<=0){ alert('No one else has logged job hours for '+isoToMDY(date)+' yet — add the crew\'s entries first, or type a specific job above to log '+who+' on it manually.'); return; }
+  // Same math the Paylocity import uses -- one copy, in _pyForemanSplit.
+  if(!_pyForemanSplit(who,date,totalHours)){ alert('No one else has logged job hours for '+isoToMDY(date)+' yet — add the crew\'s entries first, or type a specific job above to log '+who+' on it manually.'); return; }
   var prior=activeEntries().filter(function(e){ return e.who===who && e.dateISO===date && e.auto; });
   if(prior.length){
     if(!confirm(who+' already has an auto-split for '+isoToMDY(date)+' ('+prior.length+' job'+(prior.length===1?'':'s')+'). Replace it with a fresh split based on today\'s current numbers?')) return;
     prior.forEach(function(e){ _removeEntryEverywhere(e.id); });
   }
-  var made=codes.map(function(c){ return {code:c, job:buckets[c].job, hours:Math.round(totalHours*(buckets[c].hours/dayTotal)*4)/4}; });
-  var running=made.reduce(function(s,m){return s+m.hours;},0);
-  var drift=Math.round((totalHours-running)*100)/100;
-  if(Math.abs(drift)>=0.01){ made.sort(function(a,b){return b.hours-a.hours;}); made[0].hours=Math.round((made[0].hours+drift)*100)/100; }
+  // Recomputed AFTER the prior auto-split rows are cleared, so a re-run splits on today's real numbers.
+  var made=_pyForemanSplit(who,date,totalHours)||[];
   var n=0;
-  made.filter(function(m){return m.hours>0;}).forEach(function(m){
-    var jn=''; var mm=String(m.job||'').match(/^\s*(J?\d{3,6})\b/i); if(mm) jn=mm[1];
+  made.forEach(function(m){
+    var jn=m.jobNum||'';
     var e={ id:uid(), who:who, dateISO:date, job:m.job, jobNum:jn, hours:m.hours, task:'Auto-split (foreman)', notes:'', auto:true, ts:new Date().toISOString() };
     ENTS.push(e); lset(LS.ents, ENTS);
     if(SHARED) SHARED.push(Object.assign({}, e, { empId:(EMPIDS[e.who]||''), payType:fPayType(e), shared:true }));
