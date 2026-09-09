@@ -1,0 +1,76 @@
+name: List column names (diagnostic)
+
+# One-shot diagnostic: dump the ACTUAL field/internal names present on a row of a SharePoint list, as
+# the pipeline sees them. Built 2026-09-09 because a write to a newly-added "Archived" column on MRA
+# Project Tasks was accepted (202) and silently dropped, and the display name in the SharePoint UI is
+# NOT necessarily the internal name a write has to target (that mismatch is invisible from the UI).
+# Guessing at this has burned Rich repeatedly, so read it instead of theorising.
+# Reads pipeline/lists.json (written by the "MRA Lists to JSON" flow) with the storage key the runner
+# already holds. Read-only — prints names and a sample value, never writes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      list_key:
+        description: "Which list to inspect (substring of the key in lists.json, e.g. Project)"
+        default: "Project"
+        required: false
+      filter:
+        description: "Only show field names containing this text (blank = show all)"
+        default: "arch"
+        required: false
+
+jobs:
+  columns:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump field names from pipeline/lists.json
+        shell: bash
+        env:
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+          LIST_KEY: ${{ inputs.list_key }}
+          FILTER: ${{ inputs.filter }}
+        run: |
+          set -e
+          az storage blob download --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
+            --container-name pipeline --name lists.json --file lists.json --only-show-errors >/dev/null
+          ls -la lists.json
+          python3 <<'PYEOF'
+          import json, os, collections
+          want = (os.environ.get('LIST_KEY') or 'Project').lower()
+          filt = (os.environ.get('FILTER') or '').lower()
+          data = json.load(open('lists.json'))
+          keys = list(data.keys()) if isinstance(data, dict) else []
+          print("top-level keys in lists.json:", keys)
+          for k in keys:
+              if want not in k.lower():
+                  continue
+              rows = data[k]
+              if not isinstance(rows, list) or not rows:
+                  print(f"\n[{k}] not a non-empty list — skipping")
+                  continue
+              print(f"\n=== {k}: {len(rows)} rows ===")
+              # union of field names across a sample, so a field that's blank on row 0 still shows
+              names = collections.Counter()
+              for r in rows[:400]:
+                  if isinstance(r, dict):
+                      names.update(r.keys())
+              shown = sorted(n for n in names if (not filt or filt in n.lower()))
+              if filt:
+                  print(f"field names containing {filt!r}: {shown or '(NONE FOUND)'}")
+              else:
+                  print(f"all {len(names)} field names: {sorted(names)}")
+              # show every non-empty value for the matched fields, with the row id
+              for n in shown:
+                  vals = [(r.get('ID') or r.get('Id'), r.get(n)) for r in rows
+                          if isinstance(r, dict) and r.get(n) not in (None, '')]
+                  print(f"  {n!r}: {len(vals)} rows non-empty -> {vals[:12]}")
+              # and confirm the known-good flags for comparison
+              for n in ('Parked','NonOfficial'):
+                  if n in names:
+                      vals=[(r.get('ID') or r.get('Id'), r.get(n)) for r in rows
+                            if isinstance(r, dict) and r.get(n) not in (None,'')]
+                      print(f"  [control] {n!r}: present, {len(vals)} rows non-empty -> {vals[:6]}")
+                  else:
+                      print(f"  [control] {n!r}: FIELD NOT PRESENT AT ALL")
+          PYEOF

@@ -12018,7 +12018,13 @@ function renderFloor(D){
     return `<div class="job${jc}" id="floorjob-${j.row}" ondragover="jobTileDragOver(event)" ondrop="jobTileDrop(event,${typeof j.row==='number'?j.row:`'${escJsAttr(String(j.row))}'`})">${_mini}<div class="jt-full"><div class="pj">${jcaret}<span class="jname" onclick="jobEdit(event,${j.row})" title="Click to edit this job (needs code)">${esc(j.project)}${j.jobNum?` <span class="jnum-t">${esc(j.jobNum)}</span>`:''}</span> ${kindTag(j)}<span class="editjob" onclick="openEditJob(${j.row})" title="Move bay · edit dates & notes (needs code)">✎ edit</span>${(typeof j.row==='number')?`<span class="jgrip" draggable="true" ondragstart="jobDragStart(event,${j.row})" ondragend="jobDragEnd()" title="Drag onto a BAY to move this trailer there — or onto ANOTHER TRAILER'S card to slot it above (re-orders the list; needs code)">⠿</span>`:''}</div>`+
       `${(()=>{const _fr=jobIsSub(j)?null:_fioRange(_fioRetForJob(j.jobNum));
         if(WALL) return `<div class="pills">${_fr?`<span class="pill" title="Fleetio Back to MRA → Leaving MRA">🗓 ${esc(_fr)}</span>`:''}${pills}</div>`;   // 📺 compact: no client/PM line, MRA folds into the pill row
-        return `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div>${_fr?`<div class="jfio" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(_fr)}</div>`:''}${_vin?`<div class="jvin" title="Matched via Fleetio">${esc(_vin.label)}${esc(_vin.val)}</div>`:''}<div class="pills">${pills}</div>`;})()}${tl}</div></div>`;};
+        // No dates in Fleetio's fields → say so plainly instead of showing nothing (Rich 2026-09-09:
+        // "if nothing is in the return to mra date fields can we write 'no mra return date in fleetio'").
+        // Only on cards whose trailer actually MATCHES a Fleetio unit (_vin proves the match) — on an
+        // unmatched job we'd be asserting something about a unit Fleetio doesn't even track.
+        const _noMra = (!_fr && _vin && !jobIsSub(j))
+          ? `<div class="jfio" style="opacity:.6;font-style:italic" title="Fleetio's Back to MRA Date / Leaving MRA Date fields are both empty on this unit's open issue. Fill them in Fleetio and the real dates show here — the board never guesses a date from the description.">🗓 No MRA return date in Fleetio</div>` : '';
+        return `<div class="mt">${esc(j.client)}${j.pm?" · "+esc(j.pm):""}</div>${_fr?`<div class="jfio" title="From the Fleetio issue — Back to MRA → Leaving MRA">🗓 Fleetio MRA: ${esc(_fr)}</div>`:_noMra}${_vin?`<div class="jvin" title="Matched via Fleetio">${esc(_vin.label)}${esc(_vin.val)}</div>`:''}<div class="pills">${pills}</div>`;})()}${tl}</div></div>`;};
 
   // build one bay card.  opts: {expandAll, scroll, showBay, fixedSt:[txt,cls], headCount}
   const bayCard=(bay,rawList,opts={})=>{
@@ -15082,20 +15088,33 @@ function _normFieldDate(v, curY){
 }
 // Units a Fleetio issue flags as coming back to MRA. PREFERS the structured custom fields
 // (Back to MRA Date / Leaving MRA Date); falls back to parsing the description text. Earliest first.
+// 🗓 Units Fleetio says are coming back to MRA. **ONLY the structured custom fields** (Back to MRA
+// Date / Leaving MRA Date) — never the description text.
+// Rich 2026-09-09: "fleetio mra date on washtenaw ??? where is the 8/08 date coming from. fleetio has
+// no date for back to mra ??" then "if nothing is in the return to mra date fields ... dont scan, etc,
+// need to only use these." He was right and the old prose fallback was indefensible. Worked example,
+// issue #1250 (54 Thruway Washtenaw J1543), whose Back-to-MRA field is EMPTY:
+//   • the trigger regex only looked for the words "back to MRA", so it fired on the sentence
+//     "Has events 08/01 & 08/08 but can bring back to MRA **when needed**" — a hedge, the opposite
+//     of a commitment;
+//   • _parseReturnDate then took the next date-ish token after "MRA", which was the unrelated
+//     coverage window "08/04-08/08" (Norwood Henderson APL cover), and read it as M/D/YY →
+//     year "08" → +2000 → **2008-08-04**, rendered "🗓 Fleetio MRA: 8/4/08" as if Fleetio had said it.
+// Audit at the time: 32 issues had a real field (all fine), exactly 1 was scraped (this one), and it
+// was garbage — so the fallback's entire live contribution was one wrong date sorting to the TOP of
+// Coming Back (the list sorts earliest-first). `_parseReturnDate` is now unused by this path and kept
+// only so nothing else that may call it breaks. No field = no date, and the card says so out loud.
 function fioReturns(F, todayISO){
   const iss=(F&&F.issues)||[]; const curY=+((todayISO||'2026').slice(0,4))||2026;
-  const trig=/\b(returning to mra|coming back to mra|(?:due )?back to mra|back at mra|(?:back for )?storage at mra|back to storage at mra)\b/i;
   const out=[];
   iss.forEach(i=>{
-    const hasField = i.backMRA && String(i.backMRA).trim();
-    const t=((i.detail||'')+' '+(i.summary||''));
-    if(!hasField && !trig.test(t)) return;
-    let a, endISO=null, endText='';
-    if(hasField){ a=_normFieldDate(i.backMRA, curY);
-      if(i.leaveMRA && String(i.leaveMRA).trim()){ const l=_normFieldDate(i.leaveMRA, curY); endISO=l.iso; endText=l.text; } }
-    else { a=_parseReturnDate(t, curY); }
+    if(!(i.backMRA && String(i.backMRA).trim())) return;   // no Back-to-MRA field = not a return. Full stop.
+    const a=_normFieldDate(i.backMRA, curY);
+    if(!a.iso) return;                                     // field present but unparseable — don't invent one
+    let endISO=null, endText='';
+    if(i.leaveMRA && String(i.leaveMRA).trim()){ const l=_normFieldDate(i.leaveMRA, curY); endISO=l.iso; endText=l.text; }
     out.push({num:i.num, asset:i.asset||'', jobNum:i.jobNum||'', raw:(i.detail||i.summary||''),
-      dateISO:a.iso, dateText:a.text, endISO, endText, src:(hasField?'field':'text')});
+      dateISO:a.iso, dateText:a.text, endISO, endText, src:'field'});
   });
   out.sort((a,b)=>(a.dateISO||'9999-99-99').localeCompare(b.dateISO||'9999-99-99'));
   return out;
