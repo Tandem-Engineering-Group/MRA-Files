@@ -29,6 +29,9 @@ associated and tracked." Hard constraint: **"everything that's shown there today
   **"Off Site Parts Due Date"**, then fill it on each off-site parts issue. Export picks it up on its next run
   (`offSiteDue` key present in data.js proves the export path even while empty). No dashboard change needed after that.
 - Also fixed the ③ᵇ help text, which still advertised the description-text scan removed 9/9.
+- **👥 Brandon Kosal → `editor` (37.88).** Was `viewer` since 8/5; Rich 9/10: "needs edit access to projects." He's the PM on
+  bioMérieux Trailer Refresh, so he gets the same role as Megan/Niko (both `ROLE_BY_EMAIL` bkosal@gomra.com and
+  `ROLE_BY_NAME`). NOT added to `MYWORK_EMAILS/NAMES` — not asked; the other PMs are in it, offer it if he wants My Work.
 
 ## ✅ SHIPPED 2026-09-09 (late) — Sales & Planning is ONE page · Park hides work · 📦 Archive · Washtenaw phantom date (revs 37.85–37.86)
 
