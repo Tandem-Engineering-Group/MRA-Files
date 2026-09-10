@@ -833,7 +833,7 @@ if (Test-Path $FleetioTokenFile) {
         # Fleetio checkbox custom fields come back as the literal STRING "false"/"true" (confirmed via a
         # real API dump), not a real JSON boolean -- so a plain [bool] cast is wrong (PowerShell treats
         # any non-empty string, including the word "false", as truthy). Compare explicitly instead.
-        # 📦 Off-site parts (2026-09-10): Fleetio ISSUE custom fields for units that are NOT coming to MRA but that we are
+        # Off-site parts (2026-09-10): Fleetio ISSUE custom fields for units that are NOT coming to MRA but that we are
         # building parts for. Rich created **Off Site Reason** + **Off Site Location** (text); the DATE is the issue's own
         # built-in due_date. A dedicated Off Site Parts Due Date field is also read in case one is ever added. Keys are
         # Fleetio's snake_cased labels; each lookup tries the exact key, then a tolerant pattern, so a reworded label still lands.
