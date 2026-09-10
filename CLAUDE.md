@@ -5,10 +5,17 @@
 Rich (who first asked this in claude.ai CHAT by mistake, then pasted the thread here): a unit we build parts for but that
 never comes to MRA has no Back-to-MRA date, so it never showed on the meeting view — "if someone is off, it's not
 associated and tracked." Hard constraint: **"everything that's shown there today cannot change."**
-- **Mechanism:** a new Fleetio **Date** custom field on ISSUES, **"Off Site Parts Due Date"** → `Export-Data.ps1` emits
-  `offSiteDue` on each issue (`Get-FleetOffSiteDue`: exact key `off_site_parts_due_date`, else any key matching
-  `^off_?site.*due`) → `fioReturns()` RULE 2 pushes `{…, src:'offsite', offSite:true}` for issues with that date and NO
-  Back-to-MRA date (RULE 1 unchanged; **Back-to-MRA wins** on the same issue). One list, consumers choose:
+- **⚠ CORRECTED SAME DAY (37.89): the real Fleetio fields are `Off Site Reason` + `Off Site Location` (TEXT custom fields
+  on Issues, Rich had already made them) — there is NO date custom field. The DATE is the issue's own built-in Fleetio
+  `due_date`.** `Export-Data.ps1` (`Get-FleetCF $cf exactKey regex`) emits per issue: `offSiteReason` (`off_site_reason` /
+  `^off_?site.*reason`), `offSiteLoc` (`off_site_location` / `^off_?site.*loc`), `dueDate` (`FleetD10 $i.due_date`), plus
+  `offSiteDue` (`off_site_parts_due_date`) in case a dedicated date field is ever added. `fioReturns()` RULE 2: an issue is
+  off-site when Reason OR Location OR offSiteDue is non-empty; its date = offSiteDue, else dueDate; **a plain Due Date with
+  no Reason/Location is NOT off-site** (regular issues all have due dates — verified they don't leak). An off-site issue
+  with NO date is returned with `dateISO:null`, skipped by every dated consumer, and `_mtgData` raises it under ⚡ Decisions
+  as `kind:'fiodue'` "Set a Fleetio Due Date" (click → opens the issue in Fleetio); FLEETIO panel badge "📦 off-site · no
+  due date". Entries carry `offReason`/`offLoc`, shown on the meeting card's 📦 line and the FLEETIO panel meta.
+  RULE 1 unchanged; **Back-to-MRA wins** on the same issue. One list, consumers choose:
   - **SHOW it:** 🗓 Meeting view col 1 (`_mtgData`: state `'offsite'`, window = due ≤30d or any overdue while the issue is
     open; interleaved with `soon` by date, overdue floats to top; never `'here'`; a real return on the same unit replaces
     the placeholder), the FLEETIO ↩️ Coming Back panel (📦 parts due badge), `printMeeting`, bay cards / lot cards /
@@ -25,9 +32,9 @@ associated and tracked." Hard constraint: **"everything that's shown there today
   both-fields issue → field wins, print carries OFF-SITE PARTS. Use this harness for ANY change to that list.
 - **Export-Data.ps1 drift FIXED:** the working branch copy was 78 lines BEHIND the default branch (GPS fallback commits
   landed on default only). Working copy is now = default + this change. Keep them identical from here.
-- **Rich's one-time Fleetio step (given in chat, numbered):** Settings → Custom Fields → Issues → add **Date** field
-  **"Off Site Parts Due Date"**, then fill it on each off-site parts issue. Export picks it up on its next run
-  (`offSiteDue` key present in data.js proves the export path even while empty). No dashboard change needed after that.
+- **How Stephanie uses it (note given in chat):** on the off-site parts issue fill **Off Site Reason** (+ Location) and set
+  the issue's **Due Date**; leave Back to MRA Date blank. Export picks it up within ~15 min. Verify the export path by
+  checking data.js issues carry `offSiteReason`/`offSiteLoc`/`dueDate` keys (e.g. #1434 dueDate 2026-09-25).
 - Also fixed the ③ᵇ help text, which still advertised the description-text scan removed 9/9.
 - **👥 Brandon Kosal → `editor` (37.88).** Was `viewer` since 8/5; Rich 9/10: "needs edit access to projects." He's the PM on
   bioMérieux Trailer Refresh, so he gets the same role as Megan/Niko (both `ROLE_BY_EMAIL` bkosal@gomra.com and
