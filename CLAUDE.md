@@ -1,5 +1,35 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ SHIPPED 2026-09-10 — 📦 Off-site parts on the Maintenance Meeting via a new Fleetio field (rev 37.87)
+
+Rich (who first asked this in claude.ai CHAT by mistake, then pasted the thread here): a unit we build parts for but that
+never comes to MRA has no Back-to-MRA date, so it never showed on the meeting view — "if someone is off, it's not
+associated and tracked." Hard constraint: **"everything that's shown there today cannot change."**
+- **Mechanism:** a new Fleetio **Date** custom field on ISSUES, **"Off Site Parts Due Date"** → `Export-Data.ps1` emits
+  `offSiteDue` on each issue (`Get-FleetOffSiteDue`: exact key `off_site_parts_due_date`, else any key matching
+  `^off_?site.*due`) → `fioReturns()` RULE 2 pushes `{…, src:'offsite', offSite:true}` for issues with that date and NO
+  Back-to-MRA date (RULE 1 unchanged; **Back-to-MRA wins** on the same issue). One list, consumers choose:
+  - **SHOW it:** 🗓 Meeting view col 1 (`_mtgData`: state `'offsite'`, window = due ≤30d or any overdue while the issue is
+    open; interleaved with `soon` by date, overdue floats to top; never `'here'`; a real return on the same unit replaces
+    the placeholder), the FLEETIO ↩️ Coming Back panel (📦 parts due badge), `printMeeting`, bay cards / lot cards /
+    What's-Next label via `_fioRetLabel/_fioRetIcon/_fioRetTitle` → "📦 Off-site parts due:" never "🗓 Fleetio MRA:".
+  - **SKIP it (unit isn't arriving):** `_pipeData` (capacity strip), `renderReturnAlarm` (floor banner), `_ynData` inbound
+    push. `_fioRetForJob` + `_ynData.retByJob` are two-pass: real returns claim a job first, off-site only fills a job with none.
+  - **Toggle:** `MTG_SHOW_OFFSITE` (localStorage `mra_mtg_offsite`), button `#mtgOffTog` in the col-1 `<h4>`. Stamp adds
+    "· N off-site parts" only when N>0.
+- **Proof of "nothing changed":** `scratchpad/offsite_test.mjs` renders the OLD live page and the NEW page against the same
+  live data.js and diffs `#mtgBack`, stamp, `#fReturns`+count (31), `_pipeData`, `#returnAlarm`, `_ynData` hash, every
+  `.jfio`, and `fioReturns` output — **all identical**. Then injects 4 synthetic issues: off-site cards appear with the
+  right chips, existing cards byte-identical after normalizing the `mtgAssignBoard(event,N)` index (it shifts when rows
+  are inserted above — same array, still correct), toggle-off restores the exact old HTML, pipeline/alarm unchanged,
+  both-fields issue → field wins, print carries OFF-SITE PARTS. Use this harness for ANY change to that list.
+- **Export-Data.ps1 drift FIXED:** the working branch copy was 78 lines BEHIND the default branch (GPS fallback commits
+  landed on default only). Working copy is now = default + this change. Keep them identical from here.
+- **Rich's one-time Fleetio step (given in chat, numbered):** Settings → Custom Fields → Issues → add **Date** field
+  **"Off Site Parts Due Date"**, then fill it on each off-site parts issue. Export picks it up on its next run
+  (`offSiteDue` key present in data.js proves the export path even while empty). No dashboard change needed after that.
+- Also fixed the ③ᵇ help text, which still advertised the description-text scan removed 9/9.
+
 ## ✅ SHIPPED 2026-09-09 (late) — Sales & Planning is ONE page · Park hides work · 📦 Archive · Washtenaw phantom date (revs 37.85–37.86)
 
 - **📈 Sales & Planning merged back into one page (37.86).** Rich: "not sure why you made 2 tabs, its kinda confusing."
