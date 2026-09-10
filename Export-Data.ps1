@@ -833,14 +833,15 @@ if (Test-Path $FleetioTokenFile) {
         # Fleetio checkbox custom fields come back as the literal STRING "false"/"true" (confirmed via a
         # real API dump), not a real JSON boolean -- so a plain [bool] cast is wrong (PowerShell treats
         # any non-empty string, including the word "false", as truthy). Compare explicitly instead.
-        # 📦 Off-site parts (2026-09-10): a Date custom field on the Fleetio ISSUE for units that are NOT coming to MRA but
-        # that we are building parts for. Exact key first (Fleetio snake_cases the label: "Off Site Parts Due Date" ->
-        # off_site_parts_due_date), then any key that looks like off_site*due so a slightly different label still lands.
-        function Get-FleetOffSiteDue($cf) {
+        # 📦 Off-site parts (2026-09-10): Fleetio ISSUE custom fields for units that are NOT coming to MRA but that we are
+        # building parts for. Rich created **Off Site Reason** + **Off Site Location** (text); the DATE is the issue's own
+        # built-in due_date. A dedicated Off Site Parts Due Date field is also read in case one is ever added. Keys are
+        # Fleetio's snake_cased labels; each lookup tries the exact key, then a tolerant pattern, so a reworded label still lands.
+        function Get-FleetCF($cf, $exact, $rx) {
             if (-not $cf) { return '' }
-            $p = $cf.PSObject.Properties['off_site_parts_due_date']
+            $p = $cf.PSObject.Properties[$exact]
             if ($p) { return [string]$p.Value }
-            $p = $cf.PSObject.Properties | Where-Object { $_.Name -match '^off_?site.*due' } | Select-Object -First 1
+            $p = $cf.PSObject.Properties | Where-Object { $_.Name -match $rx } | Select-Object -First 1
             if ($p) { return [string]$p.Value } else { return '' }
         }
         function Get-FleetCheckbox($v) { if ($v -is [bool]) { return $v }
@@ -917,7 +918,10 @@ if (Test-Path $FleetioTokenFile) {
                 detail = $det; reporter = (Get-FleetReporter $i); assignees = (Get-FleetAssignees $i)
                 backMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.back_to_mra_date } else { '' })
                 leaveMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.leaving_mra_date } else { '' })
-                offSiteDue = $(if ($i.custom_fields) { Get-FleetOffSiteDue $i.custom_fields } else { '' })
+                offSiteDue = (Get-FleetCF $i.custom_fields 'off_site_parts_due_date' '^off_?site.*due')
+                offSiteReason = (Get-FleetCF $i.custom_fields 'off_site_reason' '^off_?site.*reason')
+                offSiteLoc = (Get-FleetCF $i.custom_fields 'off_site_location' '^off_?site.*loc')
+                dueDate = (FleetD10 $i.due_date)
                 billable = $(if ($i.custom_fields) { Get-FleetCheckbox $i.custom_fields.billable_check_if_yes_ } else { $false })
                 docs = (Get-FleetDocs $i $fhead)
             })
