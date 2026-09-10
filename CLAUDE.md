@@ -1,5 +1,31 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ FIXED 2026-09-10 — Paylocity import: auto-split foreman ran in raw report order, not "crew hours first"
+
+Rich, mid-import, confused rather than angry (screenshot: "Couldn't auto-split 1 foreman day — no crew job
+hours are on the books for 9/9 yet: Sal Sr 10.12h" — with Kayla Roe/Sal Jr/Julian Sampson's own 9/9 rows sitting
+right there, visibly filled in, in the review list behind the alert). He was right to be confused — the crew's
+hours WERE in this same import, and the message was telling him they weren't.
+- **Root cause:** `confirmPaylocityImport()`'s `addQueue` was `acceptedEntries.concat(manualEntries)` — a plain
+  FIFO queue built in whatever order `PY_PENDING` happened to list rows, which follows the raw Paylocity report's
+  own row order (`buildPaylocityPreview`→`applyPaylocityFilter`, insertion order, untouched since). An auto-split
+  foreman's `{__autoSplit:true,...}` marker sits interleaved with everyone else's rows at whatever position his
+  own report row landed. `_pyForemanSplit()` calls `activeEntries()` (`ENTS`/`SHARED`, read live, synchronously)
+  to find "the rest of the crew's" job hours for that date — but the queue processes ONE row per 220ms tick, and
+  a real crew row is only pushed into `ENTS` when ITS turn comes up. If Sal Sr's marker landed ahead of Kayla's/
+  Sal Jr's/Julian's rows in the report (exactly what happened 9/9), his split evaluates BEFORE their hours are on
+  the books — genuinely, correctly seeing nothing, and reporting it — even though those same rows are sitting
+  a few ticks later in the very import Rich is watching. The code comment already said the design NEEDED "the
+  crew rows imported from this same file... already on the books" — nothing enforced that ordering existed.
+- **Fixed:** `addQueue` now partitions `acceptedEntries` — every real/manual entry queued and committed FIRST,
+  every `__autoSplit` marker (any foreman, any date) queued LAST — so by the time one is dequeued, this entire
+  file's crew hours are already in `ENTS`/`SHARED` regardless of the report's own row order. A date with
+  genuinely nobody else logged still correctly reports the honest failure by name.
+- Verified headless (`scratchpad/py_order_test.mjs`, against a live copy of `time/index.html`): the exact reported
+  bug order (foreman's row first) now succeeds — 10.12h splits 7.87/2.25 across the crew's two jobs, `autoSplitDone:1`,
+  zero alerts; the order that already worked (crew first) is byte-identical in outcome; a foreman alone that day
+  still fails with the honest alert naming him. 0 page errors, all 3 cases pass.
+
 ## ✅ SHIPPED 2026-09-10 — 📦 Off-site parts on the Maintenance Meeting via a new Fleetio field (rev 37.87)
 
 Rich (who first asked this in claude.ai CHAT by mistake, then pasted the thread here): a unit we build parts for but that
