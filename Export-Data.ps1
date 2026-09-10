@@ -905,6 +905,20 @@ if (Test-Path $FleetioTokenFile) {
             return ,@($docs)
         }
 
+        # Who/when an issue was marked resolved in Fleetio -- tolerant, since the exact field names
+        # aren't confirmed against a live account (no API creds in the session that wrote this).
+        function Get-FleetResolvedBy($obj) {
+            foreach ($p in @('resolved_by_name','resolved_by_full_name')) { if ($obj.$p) { return ([string]$obj.$p).Trim() } }
+            foreach ($p in @('resolved_by','resolved_contact')) { $c = $obj.$p; if ($c -and $c.name) { return ([string]$c.name).Trim() } }
+            return ''
+        }
+        function Get-FleetResolutionNote($obj) {
+            foreach ($p in @('resolution_note','resolved_note','resolution_comment','close_note','resolve_note')) {
+                if ($obj.$p) { return ([string]$obj.$p).Trim() }
+            }
+            return ''
+        }
+
         $fIssues = New-Object System.Collections.ArrayList
         foreach ($i in (Get-FleetioAll 'issues?q%5Bstate_eq%5D=open' $fhead)) {
             $pr = ''
@@ -926,6 +940,29 @@ if (Test-Path $FleetioTokenFile) {
                 docs = (Get-FleetDocs $i $fhead)
             })
         }
+
+        # Resolved-issues feed (2026-09-10): a POSITIVE "Fleetio actually resolved this" signal, so the
+        # dashboard can safely auto-close the matching board task -- unlike the OLD auto-close (disabled
+        # 2026-09-01, see MRA_Dashboard.html FLEETIO_AUTOCLOSE_ENABLED) which guessed from an issue simply
+        # being ABSENT from the open list. Bounded to the last 60 days so this stays small; a board task
+        # older than that would already be long since closed by a human anyway. Wrapped in its own
+        # try/catch so a bad field name here can never break the open-issues/WO/service fetch below.
+        $fResolved = New-Object System.Collections.ArrayList
+        try {
+            $resolvedSince = $now.AddDays(-60).ToString('yyyy-MM-dd')
+            foreach ($i in (Get-FleetioAll "issues?q%5Bstate_eq%5D=resolved&q%5Bresolved_at_gteq%5D=$resolvedSince" $fhead)) {
+                [void]$fResolved.Add([PSCustomObject]@{
+                    id = $i.id; num = (([string]$i.number) -replace '^#','')
+                    summary = $(if ($i.summary) { $i.summary } else { $i.name })
+                    asset = $i.vehicle_name; jobNum = (Get-FleetJob $i.vehicle_name)
+                    resolvedISO = (FleetD10 $i.resolved_at)
+                    resolvedBy = (Get-FleetResolvedBy $i)
+                    note = (Get-FleetResolutionNote $i)
+                })
+            }
+            Write-Output "  -> Fleetio: $($fResolved.Count) issues resolved since $resolvedSince"
+        } catch { Write-Output "  -> Fleetio resolved-issues fetch failed (non-fatal, auto-close just won't fire this cycle): $($_.Exception.Message)" }
+
         $fWos = New-Object System.Collections.ArrayList
         foreach ($w in (Get-FleetioAll 'work_orders?q%5Bstate_eq%5D=active' $fhead)) {
             $woLines = ''
@@ -1025,7 +1062,7 @@ if (Test-Path $FleetioTokenFile) {
         $allDocs = @($fIssues | ForEach-Object { $_.docs } | Where-Object { $_ })
         $fleetio = [PSCustomObject]@{
             generatedText = $now.ToString('ddd MMM d, yyyy  h:mm tt')
-            issues = @($fIssues); workOrders = @($fWos); service = @($fSvc); locations = $fLoc; fleet = @($fleetRoster)
+            issues = @($fIssues); resolvedIssues = @($fResolved); workOrders = @($fWos); service = @($fSvc); locations = $fLoc; fleet = @($fleetRoster)
         }
         $issAssigned = (@($fIssues | Where-Object { @($_.assignees).Count -gt 0 })).Count
         Write-Output "  -> Fleetio attachments: $($allDocs.Count) across $((@($fIssues | Where-Object { @($_.docs).Count -gt 0 })).Count) issues"
