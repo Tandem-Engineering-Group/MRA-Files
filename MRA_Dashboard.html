@@ -1031,6 +1031,16 @@
   #pendChip:hover{background:#3a2d15}
   @media print{ #pendChip{display:none !important} }
   body.wall #pendChip{display:none !important}
+  #fioAutoBanner{position:fixed;right:14px;bottom:14px;z-index:9998;display:none;background:#0f2a2a;border:1px solid rgba(45,212,191,.6);
+    color:#5eead4;font-size:12px;font-weight:700;border-radius:999px;padding:7px 13px;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.45)}
+  #fioAutoBanner:hover{background:#153838}
+  @media print{ #fioAutoBanner{display:none !important} }
+  body.wall #fioAutoBanner{display:none !important}
+  #fioStaleBanner{position:fixed;right:14px;bottom:54px;z-index:9998;display:none;background:#2a2113;border:1px solid rgba(245,158,11,.6);
+    color:#fcd34d;font-size:12px;font-weight:700;border-radius:999px;padding:7px 13px;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.45)}
+  #fioStaleBanner:hover{background:#3a2d15}
+  @media print{ #fioStaleBanner{display:none !important} }
+  body.wall #fioStaleBanner{display:none !important}
   footer{margin-top:22px; text-align:center; color:var(--faint); font-size:11px; border-top:1px solid var(--line); padding-top:16px}
   .footlogo{height:80px; width:auto; display:block; margin:2px auto 12px}
   .hidden{display:none !important}
@@ -1912,6 +1922,12 @@
 
   <!-- ⏳ Edits waiting to sync (the per-device by-id retry queue) — tap to sign in & send now -->
   <div id="pendChip" onclick="pendChipClick()"></div>
+
+  <!-- 🔧 Fleetio auto-closed a task for you — tap to see which / clear -->
+  <div id="fioAutoBanner" onclick="fioAutoBannerClick()"></div>
+
+  <!-- ⚠ Board tasks that look resolved in Fleetio but aren't confirmed yet (absence, not proof) — flag only, no auto-close -->
+  <div id="fioStaleBanner" onclick="fioStaleBannerClick()"></div>
 
   <!-- Shared assignee suggestions (crews + every name already on a task) for the Assigned-to write-in boxes -->
   <datalist id="asgNames"></datalist>
@@ -4025,7 +4041,7 @@ const GENERAL_HELP = `
     <p>On the Projects Gantt, <b>click any project bar</b> (or its name) to jump straight into that project's task editor.</p></div>
 
   <div class="hsec"><h4>㉒ 🔧 Fleetio issues on a bay card (FLOOR)</h4>
-    <p>A trailer's open Fleetio issues show right on its bay card — a <span class="k">🔧 N Fleetio</span> pill; click to expand them. Only the <b>trailer's</b> issues appear (tractor issues stay on the FLEETIO tab). Hit <span class="k">➕</span> on an issue to turn it into an assignable Shop Task; when it's resolved in Fleetio it <b>auto-closes</b> here. Once an issue is a task on one job, it <b>won't also show as unassigned</b> on a sibling entry that just shares the job number.</p></div>
+    <p>A trailer's open Fleetio issues show right on its bay card — a <span class="k">🔧 N Fleetio</span> pill; click to expand them. Only the <b>trailer's</b> issues appear (tractor issues stay on the FLEETIO tab). Hit <span class="k">➕</span> on an issue to turn it into an assignable Shop Task; when it's resolved in Fleetio it <b>auto-closes</b> here (rev 37.90 — you're always told: watch for the teal <span class="k">🔧 Fleetio closed N for you</span> chip, bottom-right). Once an issue is a task on one job, it <b>won't also show as unassigned</b> on a sibling entry that just shares the job number.</p></div>
 
   <div class="hsec"><h4>㉓ 🗺 Unit Map &amp; GPS</h4>
     <p>The <span class="k">ASSETS</span> and <span class="k">FLEETIO</span> tabs each show a <b>live map</b> of where the units are — GPS from <b>Samsara</b>. A small map sits at the top; hit <span class="k">⛶ Expand map</span> to pop it full-screen. Pins are colored by location: <b style="color:#e04826">orange = at the MRA facility</b>, <b style="color:#2f6fe0">blue = elsewhere in Michigan</b>, grey = out of state; units that pack together <b>cluster</b> into a number. Equipment is placed at the location of the unit(s) on its job.</p>
@@ -4088,6 +4104,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.90", date:"2026-09-10", title:"🔧 Fleetio resolving an issue now flags — and will soon auto-close — its board task", items:[
+    "Rich found FM Global J1410's \"#1410 Evidence of Burning\" still open on the board days after Stephanie resolved it in Fleetio — checked the whole board the same way and found 11 more (J1410 x7 total, SMC J1542 x4, AWS Revamp x1). Those 12 need to be closed by hand for now (✓ on each) — this environment couldn't push the write itself this session.",
+    "Two new pieces, so this stops happening quietly. <b>Right now:</b> an amber <b>⚠ N Fleetio tasks may be resolved — verify</b> chip (bottom-right) lists any open 🔧 task whose issue isn't in Fleetio's current open list — tap it to see exactly which. This is a FLAG only, nothing auto-closes off it, because \"not in the open list\" alone isn't proof (that's exactly the bug that made the old auto-close wrongly close 39+ genuinely-open tasks on 2026-09-01) — check each in Fleetio, then close it here.",
+    "<b>Going forward, once proven:</b> <code>Export-Data.ps1</code> now also fetches Fleetio's real <b>resolved</b> issues (last 60 days) as a positive signal — a task whose issue shows up THERE (not just missing from the open list) closes itself automatically, and a teal 🔧 chip lists exactly what it closed and who resolved it in Fleetio, so you're always told, never surprised by a task quietly vanishing.",
+    "⚠ The auto-close half is unproven until the next export cycle confirms Fleetio's real field names (resolved_by/resolved_at) came back as expected — watch for the teal chip to start firing on its own over the next few days. The amber flag chip works today, off data already on the board." ] },
   { rev:"37.89", date:"2026-09-10", title:"📦 Off-site parts: wired to the Fleetio fields that actually exist — Off Site Reason / Location + the issue's Due Date", items:[
     "Rich had already created the Fleetio fields when 37.87 shipped, and they're not a date field: <b>Off Site Reason</b> and <b>Off Site Location</b> (text), with the issue's built-in <b>Due Date</b> carrying the date. The board now matches that. An issue counts as off-site parts when Reason or Location is filled; it sits on the Meeting view and the FLEETIO Coming Back list <b>on its Due Date</b>, and the 📦 line shows the reason and location (\"📦 Off-site parts due: 9/25/26 · Training week · Schaeffler\").",
     "An off-site issue with <b>no Due Date</b> can't be placed on the calendar, so instead of vanishing it shows under <b>⚡ Decisions needed</b> as \"Set a Fleetio Due Date\" — tap it to open the issue in Fleetio. The FLEETIO list shows it with a grey <b>📦 off-site · no due date</b> badge. Back to MRA still wins if an issue has both. Nothing on today's meeting view changed (re-verified old vs new against the same data)." ] },
@@ -6519,6 +6540,95 @@ function fioApplyResolved(D){ // hide issues this device just resolved; self-pru
     D.fleetio.issues=F.issues.filter(i=>!(m[String(i.num)]));
     if(dirty) localStorage.setItem(FIO_RES_KEY,JSON.stringify(m));
   }catch(e){}
+}
+/* ---------- 🔧 Fleetio → board auto-close, take 2 (2026-09-10) ----------
+   The FIRST auto-close (FLEETIO_AUTOCLOSE_ENABLED, disabled 2026-09-01) guessed "resolved" from an issue
+   simply being ABSENT from the open-issues feed — a partial export, a non-open-but-not-resolved state, or
+   this device's own 6h resolve-hide flag could all produce that same absence, and it silently closed 39+
+   genuinely-open tasks. Never re-enable that block on absence alone.
+   This one only fires on a POSITIVE signal: D.fleetio.resolvedIssues, a real "state=resolved" fetch built
+   in Export-Data.ps1 (2026-09-10). And it never closes silently — every auto-close is written to a
+   localStorage notice list + the 🔧 banner (#fioAutoBanner) so Rich SEES it happened, per his ask
+   ("auto close or flag me at least ... tell me hey Fleetio closed this"). */
+const FIO_RESOLVED_AUTOCLOSE = true;   // kill switch if this ever needs to go quiet again
+const FIO_AUTOCLOSED_SESSION = new Set();   // this tab only — stops re-POSTing the same close every ~30s poll while the write is still in flight
+const FIO_AUTOCLOSE_NOTICE_KEY = 'mra_fio_autoclose_notices_v1';
+function _fioAutoNoticesLoad(){ try{ return JSON.parse(localStorage.getItem(FIO_AUTOCLOSE_NOTICE_KEY)||'[]')||[]; }catch(e){ return []; } }
+function _fioAutoNoticesSave(arr){ try{ localStorage.setItem(FIO_AUTOCLOSE_NOTICE_KEY, JSON.stringify(arr)); }catch(e){} }
+function _fioAutoCloseNotice(j,t,r){
+  try{
+    const arr=_fioAutoNoticesLoad(), key=j.project+'#'+r.num;
+    if(!arr.some(x=>x.key===key)){
+      arr.unshift({key:key, job:j.project, task:t.t, num:r.num, resolvedBy:r.resolvedBy||'', resolvedISO:r.resolvedISO||'', note:r.note||'', at:Date.now()});
+      _fioAutoNoticesSave(arr.slice(0,50));
+    }
+  }catch(e){}
+  renderFioAutoBanner();
+}
+function renderFioAutoBanner(){
+  const el=document.getElementById('fioAutoBanner'); if(!el) return;
+  const arr=_fioAutoNoticesLoad();
+  if(!arr.length || (typeof WALL!=='undefined' && WALL)){ el.style.display='none'; return; }
+  el.style.display='';
+  el.textContent=`🔧 Fleetio closed ${arr.length} task${arr.length===1?'':'s'} for you — tap to see`;
+  el.title='Fleetio marked these issues resolved, so the board auto-closed their matching tasks. Tap to review + clear this list.';
+}
+function fioAutoBannerClick(){
+  const arr=_fioAutoNoticesLoad(); if(!arr.length) return;
+  const lines=arr.map(x=>'• '+x.job+' — '+x.task+(x.resolvedBy?(' (resolved by '+x.resolvedBy+(x.resolvedISO?' on '+x.resolvedISO:'')+')'):''));
+  if(confirm('Hey — Fleetio marked these resolved, so the board closed them automatically:\n\n'+lines.join('\n')+'\n\nOK = clear this list (they stay closed either way; use ↻ reopen on the task if one of these is wrong).')){
+    _fioAutoNoticesSave([]); renderFioAutoBanner();
+  }
+}
+// Called once per renderFloor(D) pass — cross-checks every open "🔧 #NNN" board task against the
+// positively-resolved list and closes + flags any match. Gated on a signed-in editor (CLOSE_PIN) exactly
+// like every other board write; never fires on an anonymous shop-floor TV.
+function _fioAutoCloseResolved(D, jobs){
+  if(!FIO_RESOLVED_AUTOCLOSE || !CLOSE_PIN) return;
+  const resList=(D.fleetio&&D.fleetio.resolvedIssues)||[]; if(!resList.length) return;
+  const resByNum={}; resList.forEach(r=>{ resByNum[String(r.num)]=r; });
+  const d=new Date(), cd=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();
+  jobs.forEach(j=>{ let ch=false; (j.tasks||[]).forEach(t=>{
+    if(t.done) return; const m=(t.t||'').match(/🔧\s*#(\d+)/); if(!m) return;
+    const r=resByNum[m[1]]; if(!r) return;
+    const key=j.project+'#'+m[1]; if(FIO_AUTOCLOSED_SESSION.has(key)) return;
+    FIO_AUTOCLOSED_SESSION.add(key);
+    shopWrite({project:j.project, task:t.t, closedDate:cd, pin:CLOSE_PIN, user:'Fleetio (auto-closed)'});
+    t.done=true; t.st='Done'; t.cl=localISO(Date.now()); ch=true;
+    _fioAutoCloseNotice(j, t, r);
+  }); if(ch) oRecompute(j); });
+}
+/* ---------- ⚠ "may be closed in Fleetio" flag (2026-09-10) ----------
+   Rich, same session: "at least flag the ones so i know which ones" — while resolvedIssues is still
+   waiting on the next export cycle (needs Export-Data.ps1's new fetch + real Fleetio creds to run), this
+   works TODAY off data already on the board: an open 🔧 #NNN task whose issue is no longer in the current
+   open-issues feed. That absence alone is NOT proof of resolution (see FLEETIO_AUTOCLOSE_ENABLED's
+   history) — so this NEVER writes or closes anything, it only surfaces a list for a human to check +
+   close by hand. Read-only, always recomputed live (no localStorage — it's a live condition, not an event). */
+function _fioMaybeStaleList(D, jobs){
+  const openNums=new Set(((D.fleetio&&D.fleetio.issues)||[]).map(i=>String(i.num)));
+  const out=[];
+  jobs.forEach(j=>(j.tasks||[]).forEach(t=>{
+    if(t.done) return; const m=(t.t||'').match(/🔧\s*#(\d+)/); if(!m) return;
+    if(!openNums.has(m[1])) out.push({job:j.project, bay:j.bay, task:t.t, num:m[1]});
+  }));
+  return out;
+}
+function renderFioStaleBanner(D, jobs){
+  const el=document.getElementById('fioStaleBanner'); if(!el) return;
+  if(typeof WALL!=='undefined' && WALL){ el.style.display='none'; return; }
+  const list=_fioMaybeStaleList(D, jobs);
+  if(!list.length){ el.style.display='none'; return; }
+  window._fioStaleList=list;   // for the click handler — avoid recomputing / stale closure
+  el.style.display='';
+  el.textContent=`⚠ ${list.length} Fleetio task${list.length===1?'':'s'} may be resolved — verify`;
+  el.title="These 🔧 tasks aren't in Fleetio's current open-issues list, which USUALLY means someone resolved them there — but absence alone isn't proof (could be a stale export too), so this only flags them; nothing auto-closes. Tap to see the list, check each in Fleetio, then close it here.";
+}
+function fioStaleBannerClick(){
+  const list=window._fioStaleList||[];
+  if(!list.length) return;
+  const lines=list.map(x=>'• '+x.job+' ('+(x.bay||'')+') — '+x.task);
+  alert('Not in Fleetio\'s current open-issues list (check each before closing — absence isn\'t proof):\n\n'+lines.join('\n'));
 }
 function fioResolveBtn(num){
   if(!FLEETIO_WRITE_URL){ alert('Resolve-from-the-board is not switched on yet (the Fleetio write flow is pending) — use ↗ Open in Fleetio.'); return; }
@@ -11857,6 +11967,8 @@ function renderFloor(D){
       }
     }); if(ch) oRecompute(j); });
   }
+  // ✅ REPLACEMENT that's actually safe (2026-09-10) — see _fioAutoCloseResolved's own comment above.
+  try{ _fioAutoCloseResolved(D, jobs); }catch(e){}
   jobs.forEach(j=>{ if(MIDDLE_BAYS.indexOf(j.bay)>=0) j.category='bay'; });   // FL3: a trailer parked in a middle bay counts as in a real bay
   const bayJobs=jobs.filter(j=>j.category==="bay");
   const pipeJobs=jobs.filter(j=>j.category==="pipeline");
@@ -21814,6 +21926,8 @@ function renderAll(){
   if(!D){ document.getElementById('refreshInfo').textContent="data.js not found — run Export-Data.ps1"; return; }
   try{ _staleCheck(D); }catch(_){}
   fioApplyResolved(D);   // drop issues this device resolved in Fleetio until the export confirms
+  try{ renderFioAutoBanner(); }catch(_){}   // 🔧 keep the "Fleetio closed N for you" chip current on every poll, not just when a new one fires
+  try{ renderFioStaleBanner(D, D.jobs||[]); }catch(_){}   // ⚠ live "may be resolved in Fleetio, please verify" flag — recomputed every poll
   const _wsnap=snapWallScroll();
   renderFloor(D); renderCrewSched(D); renderProjects(D); renderFleetio(D); renderFleet();
   eotmSetup();
