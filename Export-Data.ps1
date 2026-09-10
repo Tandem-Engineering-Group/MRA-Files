@@ -833,6 +833,16 @@ if (Test-Path $FleetioTokenFile) {
         # Fleetio checkbox custom fields come back as the literal STRING "false"/"true" (confirmed via a
         # real API dump), not a real JSON boolean -- so a plain [bool] cast is wrong (PowerShell treats
         # any non-empty string, including the word "false", as truthy). Compare explicitly instead.
+        # 📦 Off-site parts (2026-09-10): a Date custom field on the Fleetio ISSUE for units that are NOT coming to MRA but
+        # that we are building parts for. Exact key first (Fleetio snake_cases the label: "Off Site Parts Due Date" ->
+        # off_site_parts_due_date), then any key that looks like off_site*due so a slightly different label still lands.
+        function Get-FleetOffSiteDue($cf) {
+            if (-not $cf) { return '' }
+            $p = $cf.PSObject.Properties['off_site_parts_due_date']
+            if ($p) { return [string]$p.Value }
+            $p = $cf.PSObject.Properties | Where-Object { $_.Name -match '^off_?site.*due' } | Select-Object -First 1
+            if ($p) { return [string]$p.Value } else { return '' }
+        }
         function Get-FleetCheckbox($v) { if ($v -is [bool]) { return $v }
             $s = ([string]$v).Trim().ToLower(); return ($s -eq 'true' -or $s -eq 'yes' -or $s -eq '1') }
         # Pull the assignee name(s) off an issue/work order, whatever field Fleetio uses.
@@ -907,6 +917,7 @@ if (Test-Path $FleetioTokenFile) {
                 detail = $det; reporter = (Get-FleetReporter $i); assignees = (Get-FleetAssignees $i)
                 backMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.back_to_mra_date } else { '' })
                 leaveMRA = $(if ($i.custom_fields) { [string]$i.custom_fields.leaving_mra_date } else { '' })
+                offSiteDue = $(if ($i.custom_fields) { Get-FleetOffSiteDue $i.custom_fields } else { '' })
                 billable = $(if ($i.custom_fields) { Get-FleetCheckbox $i.custom_fields.billable_check_if_yes_ } else { $false })
                 docs = (Get-FleetDocs $i $fhead)
             })
