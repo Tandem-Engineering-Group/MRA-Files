@@ -1141,7 +1141,18 @@ function confirmPaylocityImport(){
   }
   if(!acceptedEntries.length && !checkedUpdates.length && !manualEntries.length){ alert('Nothing to import — every row is either already on record or still needs a job.'); return; }
   var btn=$('paylocityConfirmBtn'); btn.disabled=true; btn.textContent='Importing…';
-  var addQueue=acceptedEntries.concat(manualEntries), updQueue=checkedUpdates.slice(), done=0, total=addQueue.length+updQueue.length;
+  // 🐛 FIXED 2026-09-10 -- an auto-split foreman marker was interleaved into acceptedEntries in
+  // whatever order Paylocity's own report happened to list that row (Rich, real case: Sal Sr's 9/9
+  // marker sat AHEAD of Kayla/Sal Jr/Julian's 9/9 rows in the report, so it got dequeued and evaluated
+  // BEFORE their hours were pushed into ENTS -- _pyForemanSplit's activeEntries() genuinely saw nothing
+  // for that date yet, and reported exactly that, even though the crew's rows were visibly right there
+  // in the same import). The design comment always said this needs the crew rows "already on the
+  // books" -- nothing enforced it. Now every real/manual entry is queued and committed FIRST; every
+  // __autoSplit marker (any foreman, any date) is queued LAST, so by the time one is dequeued, this
+  // entire file's crew hours are already in ENTS/SHARED regardless of the report's original row order.
+  var addQueue=acceptedEntries.filter(function(r){ return !r.__autoSplit; }).concat(manualEntries)
+    .concat(acceptedEntries.filter(function(r){ return r.__autoSplit; }));
+  var updQueue=checkedUpdates.slice(), done=0, total=addQueue.length+updQueue.length;
   var autoSplitDone=0, autoSplitFailed=[];
   (function step(){
     if(addQueue.length){
