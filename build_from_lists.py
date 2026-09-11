@@ -50,7 +50,7 @@ P_STATUS,P_PM,P_MILE,P_COMMENTS   = 'field_9','field_10','field_11','field_12'
 P_PRED,P_SUB                      = 'field_13','field_14'
 P_NONOFF                          = 'NonOfficial'   # per-task flag ('Yes'); a project is 'non-official' if ANY of its tasks carry it
 P_PARKED                          = 'Parked'        # per-task flag ('Yes'); a project is 'parked' (frozen/on hold) if ANY of its tasks carry it
-P_ARCHIVED                        = 'Archived'      # per-task flag ('Yes'); a project is manually 'archived' (filed away) if ANY of its tasks carry it
+P_ARCHIVED                        = 'Archived'      # per-task flag (Yes/No bool); a project is 'archived' only when a MAJORITY of its rows carry it -- see the note at the count below
 P_PROJJOB                         = 'JobNum'        # #6: explicit project Job # stamped on tasks (editor-set); aggregated to project.jobNum
 # users: Title=Name
 U_CODE,U_ROLE,U_ACTIVE    = 'field_1','field_2','field_3'
@@ -327,14 +327,23 @@ def main():
         if o is None:
             o = {'name': name, 'pm': '', 'minStart': None, 'maxFinish': None,
                  'taskCount': 0, 'doneCount': 0, 'pctSum': 0, 'nonOfficial': False, 'parked': False, 'archived': False, 'jobNum': '',
+                 'archTrue': 0, 'archRows': 0,
                  'milestones': [], 'tasks': []}
             pmap[name] = o
         if p_nonoff:
             o['nonOfficial'] = True      # #2: any task flagged → the whole project is non-official
         if p_parked:
             o['parked'] = True           # ⏸ any task flagged → the whole project is parked (frozen / on hold)
+        # 📦 Archived is decided AFTER the loop, by MAJORITY of rows -- not "any row", unlike Parked/NonOfficial.
+        # 2026-09-11: 'Archived' is a Yes/No (boolean) column whose SharePoint DEFAULT VALUE was Yes, so every
+        # task row created after 9/9 was BORN archived, and under the old any-row rule one new task filed away
+        # a live 236-task project (Trumpf; SMC [xHamilton] and SWC MMOT - Hawaii too). The 📦 Archive button
+        # writes the flag on EVERY row of a project, so a real archive is always a majority (12/12, 7/7); a
+        # stray born-archived row (5/236, 1/40, 3/90) never is. A task added to an already-archived project
+        # (one No among many Yes) leaves it archived. Column default has to be fixed to No in SharePoint too.
+        o['archRows'] += 1
         if p_arch:
-            o['archived'] = True         # 📦 any task flagged → the whole project is archived (filed away)
+            o['archTrue'] += 1
         if p_projjob and not o['jobNum']:
             o['jobNum'] = p_projjob      # #6: first task's explicit Job # → the project's Job #
         if p_pm and not o['pm']:
@@ -376,7 +385,9 @@ def main():
         projects.append({'name': o['name'], 'pm': o['pm'],
                          'startISO': o['minStart'], 'finishISO': o['maxFinish'],
                          'taskCount': o['taskCount'], 'doneCount': o['doneCount'], 'pct': pct,
-                         'nonOfficial': o['nonOfficial'], 'parked': o['parked'], 'archived': o['archived'], 'jobNum': o['jobNum'],
+                         'nonOfficial': o['nonOfficial'], 'parked': o['parked'],
+                         'archived': (o['archTrue'] > 0 and o['archTrue'] * 2 > o['archRows']),   # strict majority, see loop note
+                         'jobNum': o['jobNum'],
                          'milestones': o['milestones'], 'tasks': o['tasks']})
 
     # --- Users: include every ACTIVE person so they all show in Manage Logins. Anyone with a
