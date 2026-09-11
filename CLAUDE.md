@@ -37,14 +37,18 @@ vanished from context once already on 9/10 and cost Rich a chunk of an evening r
 - **💵 THE COST NUMBERS (Rich assembled these verbally 9/10 — nowhere else in writing, don't lose them):**
   **Oakland J1420** — 250 hrs electrician on the original scope miss + 24 hrs sent back to the field on bad info =
   **274 electrician hrs ≈ $35,620 @ ~$130/hr** (that rate is Rich's "or whatever" figure — confirm before quoting it
-  again); plus **16 hrs OT** (Sal called in Saturday with his son) + **120–180 hrs** (Sal + crew, same Saturday) +
-  **10 hrs & $550** for a TV swap in the field today whose damage was the CUSTOMER's, absorbed by MRA. ⚠ Unverified
-  whether the 16 OT hrs are separate from or inside the 120–180 — flagged to Rich to resolve before a controller adds
-  them up. **AWS J1217** — ~**56 hrs** of unplanned fabrication + **2 extra days in the bay**, which pushed the next
+  again); plus **32 hrs OT** — the Saturday call-in was Sal, his son, Doug and Rich at 8 hrs each — plus **10 hrs &
+  $550** for a TV swap in the field whose damage was the CUSTOMER's, absorbed by MRA. **Oakland shop hours = 42.**
+  ⚠ **CORRECTED 9/10 late:** an earlier "120–180 hrs" figure was wrong and double-counted the same Saturday; the
+  flag raised about it caught a real error before it reached a controller. Don't reintroduce it.
+  **AWS J1217** — ~**56 hrs** of unplanned fabrication + **2 extra days in the bay**, which pushed the next
   job and moved its overtime onto a different P&L. Rich's own opening guess was "at least $25K" for Oakland — his
-  evidence actually supports $35K+ before a single shop hour is priced.
-  **⚠️ Rich can't price the shop hours — he has no burdened labor rates.** That gap IS decision 3; the standing
-  guidance given to him was to present HOURS and let finance price them live rather than guess a rate in the room.
+  evidence supports $35K+ on the subcontract line alone, before shop labor.
+  **💰 SHOP RATES — Rich HAS them, Claude does not and should not.** `time/index.html` states plainly that rates are
+  never stored in the file or this repo; they come from an identity-gated Power Automate flow (`RATES_URL_DEFAULT`)
+  and the **💰 Cost report** button only renders for `SSO.email()==='rmiller@gomra.com'`. It already computes
+  rate × regular + rate × 1.5 × OT. So the answer to "what did the shop hours cost" is **Rich runs that report** —
+  never guess a rate, and don't try to pull employee pay data around the identity gate.
 - **🔑 THE CORE FINDING (clarified 9/10 late — this is the strongest single piece of evidence):** BOTH jobs failed
   the exact same way, ~2.5 weeks apart, via two different account people. **The client was booked on site on PACK
   DAY.** Oakland ≈ a Thursday 2.5 weeks ago; AWS = Tuesday 9/8, its actual ship day. Pack day is NOT slack — it's
