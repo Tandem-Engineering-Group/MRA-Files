@@ -65,6 +65,16 @@ each individual task or under the documents or both."*
   Toolbar `<select>` lists each owner + count (busiest first, Unassigned last), ✕ chip clears, persisted per device
   (`mra_propdd_who`). The % bar labels itself "— <name> only" when filtered so the number can't be misread.
   ⚠ If a future change adds another render path here, route it through `propddVisibleItems()` or the filter leaks.
+- **📁 ATTACH FROM THE REPO, not just a link (37.98).** Rich: *"we can upload docs as we have 5 uploaded already.
+  so better to just put them here maybe."* He's right — the deal PDFs are committed under **`duediligence/`** and
+  served from the same host as the board (`deploy.yml` uploads the whole folder), so a quote belongs there rather
+  than behind a SharePoint link only some people can open. **`PROPDD_REPO_FILES`** lists that folder; each item's
+  attach row leads with a **picker** built from it (label auto-fills on pick; already-attached files are filtered
+  out of that item's list), with the paste-a-link box kept beside it.
+  **⚠ TO ADD A DOCUMENT: commit the file to `duediligence/` + add ONE line to `PROPDD_REPO_FILES`.** That's the
+  whole procedure — it then appears in every item's picker and, once attached, in 📎 Documents. There is still **no
+  browser upload** (that needs its own Power Automate flow, HTTP trigger → Create file, the MRA Safety Upload
+  shape) — don't build a button that looks like it uploads and doesn't.
 
 ## 📋 2026-09-11 — Rich's management meeting (Tony/John/Gino/Doug): 4 decisions, 2 of which are dashboard work
 
