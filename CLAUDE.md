@@ -45,9 +45,29 @@ vanished from context once already on 9/10 and cost Rich a chunk of an evening r
   evidence actually supports $35K+ before a single shop hour is priced.
   **⚠️ Rich can't price the shop hours — he has no burdened labor rates.** That gap IS decision 3; the standing
   guidance given to him was to present HOURS and let finance price them live rather than guess a rate in the room.
+- **🔑 THE CORE FINDING (clarified 9/10 late — this is the strongest single piece of evidence):** BOTH jobs failed
+  the exact same way, ~2.5 weeks apart, via two different account people. **The client was booked on site on PACK
+  DAY.** Oakland ≈ a Thursday 2.5 weeks ago; AWS = Tuesday 9/8, its actual ship day. Pack day is NOT slack — it's
+  when the **load plan** is built with the driver (how equipment gets tied down so it can't shift in transit).
+  Scope changes land instead (AWS: client-equipment insulation, extra shelving Sal had to fabricate, wiring for new
+  iPads, six new jacks for the expandables) → the load plan never gets its day → missed ship → the NEXT trailer
+  loses that bay 3–4 days → Saturday call-in on THAT job. Cost travels across jobs; it isn't one job's overrun.
+  **The resulting ask is cheap, concrete and decidable: "pack day is not a change day."** One instance is bad luck;
+  twice is a missing rule — that's the framing to lead with.
+- **Also folded into the ask (9/10):** markup isn't just the two trades — it's **every pass-through**. Example that
+  week: logistics quoted a **$400 carpet clean at the vendor's rate**, before Doug moved the trailer in and out,
+  Sal moved equipment, and the bay sat. Cost-recovery argument, not a margin argument — far harder to argue with
+  than a benchmark. ⚠ Note John ALREADY proposed the routing fix himself (Doug McLean reviews language, John
+  reviews pricing, before anything goes to a client) — so that half is the easiest yes available; go collect it.
 - **Meeting format changed** (9/10 late): Tony and John aren't coming in, so it's a **Teams screen-share**, not a
-  printed handout. The artifact was rebuilt for that — big type, four short sections, few words, detail below the
-  fold. Talking points were given in chat, not on the page (Rich's standing preference).
+  printed handout. The artifact was rebuilt for that — big type, few words, a 5-beat "same sequence" chain, detail
+  below the fold. Talking points were given in chat, not on the page (Rich's standing preference).
+- **⚠️ COUNSEL GIVEN, worth holding to if this comes up again:** Rich's own read is that it all traces to
+  leadership/ownership ("nobody's in charge"). That diagnosis is fair but is the ONE framing that sinks the
+  meeting — Tony is the owner, he hears it as a personal indictment, and "better leadership" can't be approved on
+  a call. The version that keeps the force and stays actionable: **no named owner for the handoffs between
+  functions.** Same for individuals — the failures are described, the people are deliberately NOT named, here or on
+  the page. Rich knows who they are. Say a name out loud if asked; never put it where it can be screenshotted.
 - **⚠️ DELIBERATELY NOT IN THIS FILE:** Rich's candid read on ownership/leadership (and on Tony specifically). This
   repo is company-visible, so that stayed in chat and out of the artifact. If a future session needs to know why he's
   pushing this hard: ask him, don't assume, and don't write it here.
