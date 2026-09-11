@@ -1,5 +1,62 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ SHIPPED 2026-09-11 — 🧑‍💼 AE on every unit list · 🔧 Fleetio auto-close now catches hand-typed issue #s (revs 37.93–37.95)
+
+- **Where the AE comes from:** Stephanie labelled every active Fleetio asset **`AE - <name>`** (Issues/Vehicles
+  *labels*, not a custom field) and asked whether the board could use it. `Export-Data.ps1` `Get-FleetAE $v.labels`
+  (regex `^AE\s*[-:]\s*(.+)$`, first match wins) publishes it as **`fleetio.fleet[].ae`** — **133 of 139 units carry
+  one**. ⚠ Verified the real payload shape with the read-only `fleetio-issue-dump.yml` diagnostic BEFORE writing the
+  extractor; don't guess Fleetio field names, that mistake already cost a cycle on `resolved_by_name`.
+- **Shown on (all five, same value everywhere):** ASSETS tab **AE column** (after Job/Tour, searchable, 37.93) ·
+  **bay + parking-lot cards** on FLOOR and FLOOR DETAIL, plus the compact `jt-mini` card (37.94) · the 🗓 **Maintenance
+  Meeting** coming-back cards AND parking-lot cards AND `printMeeting` · the FLEETIO **↩️ Coming Back** panel ·
+  **🚦 What's Next** (all 37.95). Rich: *"it needs to show everywhere we list it."*
+- **Two lookups, deliberately:** `_jobAE(j)` (job-keyed — reuses **`_jobFleetRec`**, the SAME match the VIN and
+  "Fleetio MRA" lines already use, so the AE only appears where a real job⇄unit match exists and 🧩 sub-jobs follow
+  their main job) and **`_fioAEForAsset(assetName)`** (unit-keyed — exact fleet name, else leading unit number, like
+  `_mtgGps`) for the meeting/Coming-Back lists that never see a board job. **Never guessed from a job or client name.**
+- ⚠️ **DATA, not code: some jobs have the AE's name sitting in the PM field.** FM Global J1410 and Trumpf J1563 both
+  render "· Dionne Mance" (PM line) *and* "🧑‍💼 AE: Dionne Mance". The board is reporting both fields honestly — the
+  job records need fixing so the floor knows who the actual project manager is. Told Rich; not changed by me.
+
+### 🔧 Three resolved Fleetio issues had been open on the board since JULY — matcher was too strict
+- Found while verifying the auto-close: **#963 Trailer Wall Bowing** and **#1026 Screws in Floor Channel** (Generator
+  Swap 9639) and **#623 Mud Flaps** (SENO Medical) were all resolved in Fleetio in July and still open on the board.
+  Cause: they were typed by hand as **`#963 - TRAILER WALL BOWING`**, not the board's own **`🔧 #963 …`** format, and
+  BOTH the auto-close and the ⚠ stale-flag banner matched only `/🔧\s*#(\d+)/`.
+- **Fix — shared `_fioTaskIssueNum(taskText, issueByNum)`** used by `_fioAutoCloseResolved` and `_fioMaybeStaleList`:
+  the 🔧 form is trusted outright (the board wrote it); a **bare `#NNN` is only trusted when the task wording and the
+  Fleetio issue's own summary are the same work** — normalize both (lowercase, non-alnum→space), strip the `#NNN`,
+  require one to contain the other, summary ≥4 chars. So a PO / part / bay number starting with `#` can never close a
+  task. Verified: matches all 3 real cases, rejects same-number-with-unrelated-wording, an unrelated PO reference, and
+  an unknown issue number; board sweep would close exactly those 3 and nothing else.
+- **The auto-close is PROVEN in the field now** — two more closed themselves 9/11 with the `[fio-auto:09/11/2026]`
+  comment tag (#1428 Replace Tires on FM Global, #1365 DOT Inspection on SMC). All 12 of the original stale batch are
+  closed. Remember the tag is how you tell a machine close from a human one, from any device, in History.
+
+## ✅ SHIPPED 2026-09-11 — 🔒 Due Diligence tab: what-changed highlighting · real % complete · attach quotes (rev 37.96)
+
+Rich, on the 37900 Mound Road tab: *"when I add or change notes, can we kinda highlight it so people know what has
+been updated… or maybe have a percentage complete instead of in progress. I don't know. Something. It's just not very
+professional."* and separately *"I want to be able to attach the quote somewhere. I'm not sure if that should be under
+each individual task or under the documents or both."*
+- **What changed:** `propddSet()` stamps **`up` + `upBy`** on every field change (via `_propddWho()` → SSO name, else
+  CURRENT_USER) — no extra step for the user. `_propddFresh()` = edited within **`PROPDD_FRESH_DAYS`=7**; fresh items
+  render tinted with a left accent + an **✏️ chip** ("2d ago · Rich"), the detail carries a "Last updated … by …"
+  line, collapsed rows now preview the item's **notes** (were only visible expanded), and the header shows
+  "N updated in the last 7 days". **The chip expires on its own** — deliberately, so the page shows *movement*
+  rather than accumulating a permanent wall of flags.
+- **% complete:** `propddPct()` — Done = 100 by definition; In Progress shows a percentage **only if someone set one**
+  (0/25/50/75/90 picker → badge reads "In Progress · 50%"); unset = no claim, never an invented number. Header bar
+  rolls it up across all items (Done full + In-Progress at its own %), so the headline number can't drift stale.
+- **Attachments:** `propddAttach()` / `propddDetach()` store `{label,url,at,by}` in `st[id].files`; **`_propddDocsList()`
+  now includes them**, so attaching once on an item ALSO lists it under 📎 Documents — that's the answer to Rich's
+  "item or documents": *both*, filed once. ⚠️ **Link-based only** (SharePoint/OneDrive/any shared link) — a real
+  file-upload button would need its own Power Automate flow (HTTP trigger → Create file, the MRA Safety Upload shape).
+  **Not built, and nothing in the UI pretends to upload.** Offer Rich the numbered flow steps if he wants real uploads.
+- Same synced store as everything else on this tab (`duediligence.json` via the "MRA Due Diligence Write" flow), so
+  all of it reaches Rich / Tony / John Renaud / Doug McLean on the next sync.
+
 ## 📋 2026-09-11 — Rich's management meeting (Tony/John/Gino/Doug): 4 decisions, 2 of which are dashboard work
 
 Context a future session needs, because this thread lives in EMAIL + a separate claude.ai chat, not here — it
