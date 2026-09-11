@@ -279,89 +279,41 @@ jobs:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
-      # 37900 Mound Rd due-diligence reference docs (Rich + Tony only view links to these from the
-      # 🔒 Due Diligence tab -- static, no-cache like everything else here in case they're ever replaced).
-      - name: Upload due-diligence reference (C of O requirements)
-        if: ${{ hashFiles('duediligence/Sterling-Heights-CofO-Requirements.pdf') != '' }}
+      # 37900 Mound Rd due-diligence reference docs, linked from the 🔒 Due Diligence tab.
+      # ONE loop over the whole folder instead of a step per file (was 5 hardcoded steps) -- Rich adds
+      # documents to this deal regularly (quotes, proposals, reports), and every one of them used to need
+      # a workflow edit. Now: commit the file to duediligence/ and add a line to PROPDD_REPO_FILES in the
+      # dashboard; nothing here changes. Content type is set per extension so a PDF opens in the browser
+      # (the #page=N deep links depend on that) rather than downloading as octet-stream.
+      # NOTE: this only uploads/overwrites what is in the repo -- it never deletes other blobs under that
+      # prefix, so anything uploaded straight to storage by a flow survives every deploy.
+      - name: Upload due-diligence reference documents (whole folder)
+        if: ${{ hashFiles('duediligence/*') != '' }}
         run: |
-            az storage blob upload \
-              --account-name mrashopdash \
-              --container-name '$web' \
-              --name 'duediligence/Sterling-Heights-CofO-Requirements.pdf' \
-              --file 'duediligence/Sterling-Heights-CofO-Requirements.pdf' \
-              --content-type 'application/pdf' \
-              --content-cache-control 'no-cache, must-revalidate' \
-              --overwrite \
-              --auth-mode key \
-              --only-show-errors
-        env:
-          AZURE_STORAGE_ACCOUNT: mrashopdash
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-
-      - name: Upload due-diligence reference (listing flyer)
-        if: ${{ hashFiles('duediligence/37900-Mound-Rd-Listing-Flyer.pdf') != '' }}
-        run: |
-            az storage blob upload \
-              --account-name mrashopdash \
-              --container-name '$web' \
-              --name 'duediligence/37900-Mound-Rd-Listing-Flyer.pdf' \
-              --file 'duediligence/37900-Mound-Rd-Listing-Flyer.pdf' \
-              --content-type 'application/pdf' \
-              --content-cache-control 'no-cache, must-revalidate' \
-              --overwrite \
-              --auth-mode key \
-              --only-show-errors
-        env:
-          AZURE_STORAGE_ACCOUNT: mrashopdash
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-
-      - name: Upload due-diligence reference (Phase I ESA cover letter)
-        if: ${{ hashFiles('duediligence/Phase-I-ESA-Cover-Letter.pdf') != '' }}
-        run: |
-            az storage blob upload \
-              --account-name mrashopdash \
-              --container-name '$web' \
-              --name 'duediligence/Phase-I-ESA-Cover-Letter.pdf' \
-              --file 'duediligence/Phase-I-ESA-Cover-Letter.pdf' \
-              --content-type 'application/pdf' \
-              --content-cache-control 'no-cache, must-revalidate' \
-              --overwrite \
-              --auth-mode key \
-              --only-show-errors
-        env:
-          AZURE_STORAGE_ACCOUNT: mrashopdash
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-
-      - name: Upload due-diligence reference (ALTA survey)
-        if: ${{ hashFiles('duediligence/ALTA-Survey-2024.pdf') != '' }}
-        run: |
-            az storage blob upload \
-              --account-name mrashopdash \
-              --container-name '$web' \
-              --name 'duediligence/ALTA-Survey-2024.pdf' \
-              --file 'duediligence/ALTA-Survey-2024.pdf' \
-              --content-type 'application/pdf' \
-              --content-cache-control 'no-cache, must-revalidate' \
-              --overwrite \
-              --auth-mode key \
-              --only-show-errors
-        env:
-          AZURE_STORAGE_ACCOUNT: mrashopdash
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-
-      - name: Upload due-diligence reference (Phase II ESA)
-        if: ${{ hashFiles('duediligence/Phase-II-ESA-2024.pdf') != '' }}
-        run: |
-            az storage blob upload \
-              --account-name mrashopdash \
-              --container-name '$web' \
-              --name 'duediligence/Phase-II-ESA-2024.pdf' \
-              --file 'duediligence/Phase-II-ESA-2024.pdf' \
-              --content-type 'application/pdf' \
-              --content-cache-control 'no-cache, must-revalidate' \
-              --overwrite \
-              --auth-mode key \
-              --only-show-errors
+            shopt -s nullglob
+            for f in duediligence/*; do
+              name=$(basename "$f")
+              case "${name,,}" in
+                *.pdf)  ct='application/pdf' ;;
+                *.docx) ct='application/vnd.openxmlformats-officedocument.wordprocessingml.document' ;;
+                *.xlsx) ct='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ;;
+                *.doc)  ct='application/msword' ;;
+                *.png)  ct='image/png' ;;
+                *.jpg|*.jpeg) ct='image/jpeg' ;;
+                *)      ct='application/octet-stream' ;;
+              esac
+              echo "uploading duediligence/$name ($ct)"
+              az storage blob upload \
+                --account-name mrashopdash \
+                --container-name '$web' \
+                --name "duediligence/$name" \
+                --file "$f" \
+                --content-type "$ct" \
+                --content-cache-control 'no-cache, must-revalidate' \
+                --overwrite \
+                --auth-mode key \
+                --only-show-errors
+            done
         env:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
