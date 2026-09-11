@@ -56,6 +56,15 @@ each individual task or under the documents or both."*
   **Not built, and nothing in the UI pretends to upload.** Offer Rich the numbered flow steps if he wants real uploads.
 - Same synced store as everything else on this tab (`duediligence.json` via the "MRA Due Diligence Write" flow), so
   all of it reaches Rich / Tony / John Renaud / Doug McLean on the next sync.
+- **👤 OWNER PICKER (37.97, same session):** Rich: *"maybe a sort by owner or select tool to see only owners items."*
+  `PROPDD_WHO` + **`propddVisibleItems()`** — EVERY render path (all 3 variant tabs, the category tiles, the stats
+  roll-up, the print builder) now goes through it instead of `propddAllItems()`, so one picker narrows the whole page
+  rather than just the table. **`_propddOwnerOf()` = effective owner** — typed `assignee` if present, else the seed's
+  `owner` — because that's exactly what the Owner column already displays; filtering on `assignee` alone (what the
+  pre-existing *Group by: Person* chips do) dumps every un-assigned item into "Unassigned" and hides the real list.
+  Toolbar `<select>` lists each owner + count (busiest first, Unassigned last), ✕ chip clears, persisted per device
+  (`mra_propdd_who`). The % bar labels itself "— <name> only" when filtered so the number can't be misread.
+  ⚠ If a future change adds another render path here, route it through `propddVisibleItems()` or the filter leaks.
 
 ## 📋 2026-09-11 — Rich's management meeting (Tony/John/Gino/Doug): 4 decisions, 2 of which are dashboard work
 
