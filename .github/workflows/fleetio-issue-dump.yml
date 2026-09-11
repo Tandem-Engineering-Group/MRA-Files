@@ -11,12 +11,68 @@ on:
   workflow_dispatch:
     inputs:
       issue_number:
-        description: "Fleetio issue NUMBER (the # shown on the issue, e.g. 1435) -- not the internal id"
+        description: "Fleetio issue NUMBER (the # shown on the issue, e.g. 1435) -- not the internal id. Leave blank to skip."
         default: "1435"
+        required: false
+      vehicle_search:
+        description: "Dump a VEHICLE instead: any text from its name, e.g. 0237. Blank = skip the vehicle dump."
+        default: ""
         required: false
 
 jobs:
+  vehicle:
+    if: inputs.vehicle_search != ''
+    runs-on: windows-latest
+    steps:
+      - name: Fetch and print a vehicle's raw JSON (index record AND detail)
+        shell: pwsh
+        env:
+          FLEETIO_API_KEY:       ${{ secrets.FLEETIO_API_KEY }}
+          FLEETIO_ACCOUNT_TOKEN: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
+          VEHICLE_SEARCH:        ${{ inputs.vehicle_search }}
+        run: |
+          if (-not $env:FLEETIO_API_KEY -or -not $env:FLEETIO_ACCOUNT_TOKEN) {
+            Write-Error "FLEETIO_API_KEY / FLEETIO_ACCOUNT_TOKEN secrets are not set."; exit 1
+          }
+          $headers = @{ 'Authorization' = "Token $($env:FLEETIO_API_KEY.Trim())"; 'Account-Token' = $env:FLEETIO_ACCOUNT_TOKEN.Trim(); 'Accept' = 'application/json' }
+
+          # /vehicles is CURSOR paginated (records + next_cursor), not page-numbered.
+          $found = $null; $cursor = $null; $guard = 0
+          do {
+            $guard++
+            $url = "https://secure.fleetio.com/api/v1/vehicles?per_page=100"
+            if ($cursor) { $url += "&start_cursor=$([uri]::EscapeDataString([string]$cursor))" }
+            $resp = Invoke-WebRequest -Uri $url -Headers $headers -UseBasicParsing -Method GET -TimeoutSec 30
+            $obj = $resp.Content | ConvertFrom-Json
+            $recs = if ($null -ne $obj.records) { $obj.records } else { @($obj) }
+            $found = $recs | Where-Object { [string]$_.name -like "*$($env:VEHICLE_SEARCH)*" } | Select-Object -First 1
+            $cursor = if ($null -ne $obj.records) { $obj.next_cursor } else { $null }
+          } while (-not $found -and $cursor -and $guard -lt 25)
+
+          if (-not $found) { Write-Error "No vehicle name contains '$($env:VEHICLE_SEARCH)'."; exit 1 }
+
+          Write-Host "=== INDEX record (id=$($found.id)) : $($found.name) ==="
+          $found | ConvertTo-Json -Depth 8
+          Write-Host "`n=== INDEX field names ==="
+          $found.PSObject.Properties.Name | Sort-Object | ForEach-Object { Write-Host $_ }
+
+          Write-Host "`n=== DETAIL record (GET /vehicles/$($found.id)) ==="
+          $d = Invoke-WebRequest -Uri "https://secure.fleetio.com/api/v1/vehicles/$($found.id)" -Headers $headers -UseBasicParsing -Method GET -TimeoutSec 30
+          $dobj = $d.Content | ConvertFrom-Json
+          $dobj | ConvertTo-Json -Depth 8
+          Write-Host "`n=== DETAIL field names ==="
+          $dobj.PSObject.Properties.Name | Sort-Object | ForEach-Object { Write-Host $_ }
+
+          Write-Host "`n=== Anything label-ish, on either ==="
+          foreach ($pair in @(@('INDEX',$found), @('DETAIL',$dobj))) {
+            $which = $pair[0]; $o = $pair[1]
+            $o.PSObject.Properties | Where-Object { $_.Name -match 'label|tag|custom' } | ForEach-Object {
+              Write-Host "[$which] $($_.Name) = $($_.Value | ConvertTo-Json -Compress -Depth 6)"
+            }
+          }
+
   dump:
+    if: inputs.issue_number != ''
     runs-on: windows-latest
     steps:
       - name: Fetch and print the issue's raw JSON
