@@ -844,6 +844,21 @@ if (Test-Path $FleetioTokenFile) {
             $p = $cf.PSObject.Properties | Where-Object { $_.Name -match $rx } | Select-Object -First 1
             if ($p) { return [string]$p.Value } else { return '' }
         }
+        # Primary Account Executive, read off the vehicle's Fleetio LABELS. Stephanie tags every active
+        # asset with a label named "AE - <person>" (2026-09-11). Verified against the real payload before
+        # writing this: labels is present on BOTH the vehicles index record and the detail record, shaped
+        # [{id,name}] -- so the roster pull already has it and needs no extra API call. A vehicle can carry
+        # several labels, so scan them all and take the AE one; everything else is ignored.
+        function Get-FleetAE($labels) {
+            if (-not $labels) { return '' }
+            foreach ($l in @($labels)) {
+                $n = ''
+                if ($l -is [string]) { $n = $l } elseif ($l.name) { $n = [string]$l.name }
+                $n = ([string]$n).Trim()
+                if ($n -match '^AE\s*[-:]\s*(.+)$') { return $matches[1].Trim() }
+            }
+            return ''
+        }
         function Get-FleetCheckbox($v) { if ($v -is [bool]) { return $v }
             $s = ([string]$v).Trim().ToLower(); return ($s -eq 'true' -or $s -eq 'yes' -or $s -eq '1') }
         # Pull the assignee name(s) off an issue/work order, whatever field Fleetio uses.
@@ -1051,6 +1066,7 @@ if (Test-Path $FleetioTokenFile) {
                     mi = $(if ($null -ne $v.primary_meter_value) { [string]$v.primary_meter_value } else { '' }); mu = [string]$v.primary_meter_unit
                     oi = [int]$v.issues_count; ow = [int]$v.work_orders_count; os = [int]$v.service_reminders_count
                     plate = [string]$v.license_plate; rs = [string]$v.registration_state; vin = [string]$v.vin
+                    ae = (Get-FleetAE $v.labels)
                     comp = $comp
                 }
             }
