@@ -1,0 +1,58 @@
+name: Dump a Fleetio issue (diagnostic)
+
+# One-shot diagnostic: fetch ONE Fleetio issue by number and print its full raw JSON to the job log.
+# Built 2026-09-11 because Export-Data.ps1's guessed field names for "who resolved it" / "resolution
+# note" (resolved_by_name, resolution_note, etc.) all came back empty against a real resolved issue
+# (#1435, confirmed by Rich's own screenshot: Resolved By = Stephanie Pearce, resolved via a linked
+# Service Entry) -- guessing again would just repeat the same mistake. Read the real field names
+# instead of guessing them. Read-only: GET only, no writes, no board/data.js changes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Fleetio issue NUMBER (the # shown on the issue, e.g. 1435) -- not the internal id"
+        default: "1435"
+        required: false
+
+jobs:
+  dump:
+    runs-on: windows-latest
+    steps:
+      - name: Fetch and print the issue's raw JSON
+        shell: pwsh
+        env:
+          FLEETIO_API_KEY:       ${{ secrets.FLEETIO_API_KEY }}
+          FLEETIO_ACCOUNT_TOKEN: ${{ secrets.FLEETIO_ACCOUNT_TOKEN }}
+          ISSUE_NUMBER:          ${{ inputs.issue_number }}
+        run: |
+          if (-not $env:FLEETIO_API_KEY -or -not $env:FLEETIO_ACCOUNT_TOKEN) {
+            Write-Error "FLEETIO_API_KEY / FLEETIO_ACCOUNT_TOKEN secrets are not set."; exit 1
+          }
+          $headers = @{ 'Authorization' = "Token $($env:FLEETIO_API_KEY.Trim())"; 'Account-Token' = $env:FLEETIO_ACCOUNT_TOKEN.Trim(); 'Accept' = 'application/json' }
+
+          # The issue detail endpoint is keyed by internal id, not the display number -- look it up first
+          # via the same state-filtered list search the export already uses, matching on .number.
+          $found = $null
+          foreach ($state in @('resolved','open')) {
+            $page = 1
+            do {
+              $url = "https://secure.fleetio.com/api/v1/issues?q%5Bstate_eq%5D=$state&per_page=100&page=$page"
+              $resp = Invoke-WebRequest -Uri $url -Headers $headers -UseBasicParsing -Method GET -TimeoutSec 30
+              $tp = $resp.Headers['X-Pagination-Total-Pages']; if ($tp -is [array]) { $tp = $tp[0] }
+              $items = $resp.Content | ConvertFrom-Json
+              $found = $items | Where-Object { ([string]$_.number).TrimStart('#') -eq $env:ISSUE_NUMBER } | Select-Object -First 1
+              if ($found) { break }
+              $page++
+            } while ($tp -and $page -le [int]$tp -and $page -le 25)
+            if ($found) { break }
+          }
+          if (-not $found) { Write-Error "Issue #$($env:ISSUE_NUMBER) not found in open or resolved state (checked up to 25 pages each)."; exit 1 }
+
+          Write-Host "=== Full raw issue JSON (id=$($found.id), number=$($found.number)) ==="
+          $detail = Invoke-WebRequest -Uri "https://secure.fleetio.com/api/v1/issues/$($found.id)" -Headers $headers -UseBasicParsing -Method GET -TimeoutSec 30
+          $obj = $detail.Content | ConvertFrom-Json
+          $obj | ConvertTo-Json -Depth 8
+
+          Write-Host "`n=== Field names only (top level) ==="
+          $obj.PSObject.Properties.Name | Sort-Object | ForEach-Object { Write-Host $_ }
