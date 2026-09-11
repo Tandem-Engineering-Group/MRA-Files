@@ -19936,6 +19936,78 @@ const PROPDD_REPO_FILES=[
   {label:'Painting proposal — Accurate Industrial (9/2/26)', url:'duediligence/Accurate-Painting-Proposal-2026-09-02.docx'},
   {label:'Structural assessment proposal — TEG OU-260606',   url:'duediligence/TEG-Structural-Assessment-Proposal-OU-260606.pdf'}
 ];
+// ---- 📤 Upload a document straight from the page (Rich 2026-09-11: "let us do the upload file thing").
+// Writes into the SAME place the committed documents live -- the $web container's duediligence/ folder --
+// so an uploaded quote is reachable at exactly the same kind of URL as the five that shipped with the page,
+// and the deploy's folder loop never deletes it (it only uploads/overwrites what is in the repo).
+// ⚠️ PROPDD_UPLOAD_URL is the "MRA Due Diligence Upload" Power Automate flow (HTTP trigger -> Create blob
+// (V2)). While it is EMPTY the 📤 button does not render at all -- the picker and paste-a-link still work.
+// Do not ship a button that looks like it uploads and doesn't; fill this in once the flow exists.
+const PROPDD_UPLOAD_URL='';
+const PROPDD_UPLOAD_MAXMB=15;   // base64 inflates ~33%, and the flow's HTTP trigger has its own ceiling
+// Uploaded documents register here (in the same synced store as everything else) so they show up in the
+// attach picker on EVERY item, not just the one they were uploaded from.
+function _propddDocsAll(){
+  const st=_propddState(); const extra=(st.__docs||[]);
+  const seen={}; const out=[];
+  PROPDD_REPO_FILES.concat(extra).forEach(function(f){
+    if(!f||!f.url||seen[f.url]) return; seen[f.url]=1; out.push(f);
+  });
+  return out;
+}
+function _propddSafeName(n){
+  return String(n||'document').replace(/^.*[\\/]/,'').replace(/[^A-Za-z0-9._-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,120) || 'document';
+}
+function propddPickUpload(id){ const inp=document.getElementById('propddUp_'+id); if(inp) inp.click(); }
+function propddUploadFile(id, inputEl){
+  const f=inputEl && inputEl.files && inputEl.files[0]; if(!f) return;
+  inputEl.value='';
+  if(f.size > PROPDD_UPLOAD_MAXMB*1024*1024){
+    alert('That file is '+(f.size/1048576).toFixed(1)+' MB — the upload path tops out around '+PROPDD_UPLOAD_MAXMB+' MB.\n\nSend it to Rich instead and it gets committed with the other documents, no size limit.');
+    return;
+  }
+  const name=_propddSafeName(f.name);
+  const url='duediligence/'+name;
+  const st0=_propddState();
+  const dup=(st0.__docs||[]).concat(PROPDD_REPO_FILES).filter(function(d){ return d.url===url; })[0];
+  if(dup && !confirm('A document called "'+name+'" is already on file.\n\nOK = upload this one over it (the old version is replaced for everyone). Cancel = rename the file first and try again.')) return;
+  const btn=document.getElementById('propddUpBtn_'+id); if(btn){ btn.textContent='\u23F3 Uploading…'; btn.disabled=true; }
+  const rdr=new FileReader();
+  rdr.onload=function(){
+    const b64=String(rdr.result||'').split(',')[1]||'';
+    try{
+      fetch(PROPDD_UPLOAD_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},
+        body:JSON.stringify({pin:(typeof CLOSE_PIN!=='undefined'&&CLOSE_PIN)||'1974', user:_propddWho(),
+          fileName:name, mime:(f.type||'application/octet-stream'), fileB64:b64})});
+    }catch(e){ alert('Upload could not be sent: '+e); if(btn){ btn.textContent='\uD83D\uDCE4 Upload'; btn.disabled=false; } return; }
+    // A no-cors POST tells us nothing, so CONFIRM it for real: the file lands on this same host, so poll
+    // for it. Only record the attachment once the file actually answers -- never claim an upload worked
+    // on the strength of a request we cannot read the response to.
+    const label=(f.name||name).replace(/\.[A-Za-z0-9]+$/,'');
+    let tries=0;
+    (function poll(){
+      tries++;
+      fetch(url+'?t='+Date.now(),{method:'HEAD',cache:'no-store'}).then(function(r){
+        if(r && r.ok){
+          const st=_propddState(); st[id]=st[id]||{};
+          st[id].files=(st[id].files||[]).filter(function(x){ return x.url!==url; })
+            .concat([{label:label, url:url, at:Date.now(), by:_propddWho()}]);
+          st.__docs=(st.__docs||[]).filter(function(d){ return d.url!==url; }).concat([{label:label, url:url, at:Date.now(), by:_propddWho()}]);
+          st[id].up=Date.now(); st[id].upBy=_propddWho();
+          _propddSave(st); renderPropDD();
+          return;
+        }
+        throw 0;
+      }).catch(function(){
+        if(tries<30){ setTimeout(poll, 3000); return; }   // ~90s
+        if(btn){ btn.textContent='\uD83D\uDCE4 Upload'; btn.disabled=false; }
+        alert('The file was sent but hasn\'t appeared on the site after 90 seconds.\n\nIt may still be landing — reopen this item shortly and check. If it never shows, the "MRA Due Diligence Upload" flow needs a look (its run history will say why).');
+      });
+    })();
+  };
+  rdr.onerror=function(){ if(btn){ btn.textContent='\uD83D\uDCE4 Upload'; btn.disabled=false; } alert('Could not read that file.'); };
+  rdr.readAsDataURL(f);
+}
 // ---- 👤 Owner filter (Rich 2026-09-11: "maybe a sort by owner or select tool to see only owners items")
 // "Owner" = whoever the item actually sits with: the typed Assigned-to if there is one, otherwise the
 // suggested owner -- exactly what the Owner column already displays, so the picker matches what you see.
@@ -20129,7 +20201,7 @@ function _propddDetailHtml(i,s){
             +'</div>'; }).join('')
         : '<div style="font-size:11.5px;color:var(--faint);margin-bottom:5px">Nothing attached yet.</div>';
       const already={}; files.forEach(function(f){ already[String(f.url).split('#')[0]]=1; });
-      const pickable=PROPDD_REPO_FILES.filter(function(f){ return !already[f.url]; });
+      const pickable=_propddDocsAll().filter(function(f){ return !already[f.url]; });
       fh+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
         +'<select id="propddAttS_'+i.id+'" onclick="event.stopPropagation()" title="Documents already in the deal folder on this site. To add a new one (a quote, a report), send it to Rich to commit into the duediligence folder and it appears here." style="flex:2;min-width:200px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--txt)">'
           +'<option value="">\uD83D\uDCC1 Pick a document on file…</option>'
@@ -20140,6 +20212,10 @@ function _propddDetailHtml(i,s){
         +'<input id="propddAtt_'+i.id+'" onclick="event.stopPropagation()" placeholder="paste a link…" style="flex:1;min-width:140px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
         +'<input id="propddAttL_'+i.id+'" onclick="event.stopPropagation()" placeholder="Label (e.g. Roof quote — ABC Roofing)" style="flex:1;min-width:150px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
         +'<button onclick="event.stopPropagation();propddAttach(\''+i.id+'\')" title="Attach this link to the item — it also appears under \uD83D\uDCCE Documents at the top" style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:6px;border:1px solid var(--brand);background:transparent;color:var(--brand);cursor:pointer">\uD83D\uDCCE Attach</button>'
+        +(PROPDD_UPLOAD_URL
+          ? ('<input type="file" id="propddUp_'+i.id+'" style="display:none" onchange="propddUploadFile(\''+i.id+'\',this)">'
+             +'<button id="propddUpBtn_'+i.id+'" onclick="event.stopPropagation();propddPickUpload(\''+i.id+'\')" title="Upload a document from this device — it is put on file with the others (max '+PROPDD_UPLOAD_MAXMB+' MB) and attached here once it actually lands" style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:6px;border:1px solid var(--green,#22c55e);background:transparent;color:var(--green,#22c55e);cursor:pointer">\uD83D\uDCE4 Upload</button>')
+          : '')
         +'</div></div>';
       return fh;
     })()
