@@ -4108,6 +4108,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.97", date:"2026-09-11", title:"🔒 Due Diligence: 👤 pick an owner and see only their items", items:[
+    "Rich: “maybe a sort by owner or select tool to see only owner’s items.” There’s now an <b>owner picker</b> in the toolbar listing everyone with items and how many they have — pick a name and the whole page narrows to just their list. <b>✕</b> puts everyone back, and your choice is remembered on your device.",
+    "It filters <b>everything at once</b> — all three tabs, the category tiles, the printed copy, and the <b>% complete</b> bar (which then reads “— Doug McLean only”), so you can hand someone their own list or check how far along it is without counting rows by hand.",
+    "“Owner” means whoever the item <b>actually sits with</b>: the typed <b>Assigned to</b> if there is one, otherwise the suggested owner — the same thing the Owner column already shows, so the picker matches what you’re looking at. The existing <b>Group by: Person</b> chips on tab ① still work and now narrow within whoever you’ve picked." ] },
   { rev:"37.96", date:"2026-09-11", title:"🔒 Due Diligence: see what changed, a real % complete, and attach quotes to an item", items:[
     "Rich: “when I add or change notes, can we highlight it so people know what has been updated… it’s just not very professional.” Every edit now records <b>who made it and when</b> — automatically, nothing extra to fill in. Anything touched in the <b>last 7 days</b> is <b>tinted blue with an ✏️ chip</b> saying how long ago and by whom, the item’s notes now show right on its row instead of only when you expand it, and the header carries a <b>“N updated in the last 7 days”</b> count. The chip clears itself after a week, so the page shows movement rather than a permanent wall of flags.",
     "<b>A real % complete</b> across the top: one bar and one number rolled up from the items themselves — Done counts fully, In Progress counts whatever percentage you set on it, so it can’t drift out of date. Any In&nbsp;Progress item can carry its own percentage (0 / 25 / 50 / 75 / 90) and its badge then reads <b>“In Progress · 50%”</b>. Leave it blank and it just says In Progress — the page never invents a number nobody set.",
@@ -19910,6 +19914,25 @@ function propddAllItems(){
   const custom=(st.__custom||[]).map(applyOverride);
   return seed.concat(custom);
 }
+// ---- 👤 Owner filter (Rich 2026-09-11: "maybe a sort by owner or select tool to see only owners items")
+// "Owner" = whoever the item actually sits with: the typed Assigned-to if there is one, otherwise the
+// suggested owner -- exactly what the Owner column already displays, so the picker matches what you see.
+// Applies to ALL THREE tabs and to the progress bar, so picking a name answers "how far along is THEIR list".
+let PROPDD_WHO='';
+try{ PROPDD_WHO=localStorage.getItem('mra_propdd_who')||''; }catch(e){}
+function _propddOwnerOf(i,st){ const s=(st||_propddState())[i.id]||{}; return ((s.assignee||'').trim()) || (i.owner||'').trim() || 'Unassigned'; }
+function propddOwnerCounts(){
+  const st=_propddState(); const m={};
+  propddAllItems().forEach(function(i){ const o=_propddOwnerOf(i,st); m[o]=(m[o]||0)+1; });
+  return m;
+}
+function propddSetWho(v){ PROPDD_WHO=v||''; try{ localStorage.setItem('mra_propdd_who',PROPDD_WHO); }catch(e){} PROPDD_TABLE_FILTER=null; renderPropDD(); }
+// Every render path goes through this instead of propddAllItems() so one picker filters the whole tab.
+function propddVisibleItems(){
+  const all=propddAllItems(); if(!PROPDD_WHO) return all;
+  const st=_propddState();
+  return all.filter(function(i){ return _propddOwnerOf(i,st)===PROPDD_WHO; });
+}
 // Rich (2026-08-28): "just needs to be easier to find if we're gonna be adding stuff here" -- a top-right
 // dropdown listing every reference doc linked from any item, deduped by URL, so a new PDF added to any
 // future item shows up here automatically without a separate list to maintain.
@@ -20021,7 +20044,7 @@ function propddStatusBadgeColor(s){ return s==='Done'?'green':(s==='In Progress'
 function _propddStats(){
   const st=_propddState(); const byCat={}; PROPDD_CATS.forEach(c=>byCat[c.key]={total:0,done:0,inprog:0,open:0});
   let total=0,done=0,inprog=0,open=0;
-  propddAllItems().forEach(i=>{ const k=propddCatKey(i.cat); const s=(st[i.id]&&st[i.id].status)||'Open';
+  propddVisibleItems().forEach(i=>{ const k=propddCatKey(i.cat); const s=(st[i.id]&&st[i.id].status)||'Open';
     byCat[k].total++; total++;
     if(s==='Done'){byCat[k].done++;done++;} else if(s==='In Progress'){byCat[k].inprog++;inprog++;} else {byCat[k].open++;open++;} });
   return {byCat,total,done,inprog,open};
@@ -20140,13 +20163,14 @@ function renderPropDD(){
       +'<b>📎 Documents</b> (top-right of the toolbar) — every reference PDF linked from any item below, all in one place. Items with a linked document also show a 🔗 link right in their own expanded detail.<br>'
       +'<b>📎 Attach a quote or document</b> — expand any item and paste a link (SharePoint, OneDrive, or any shared link) with a label. It stays on that item AND appears in the 📎 Documents list up top, so it is filed once and findable in both places.<br>'
       +'<b>✏️ What changed</b> — every edit stamps who made it and when. Anything touched in the last week is tinted blue with an ✏️ chip, and the count sits next to the progress bar up top, so you can see at a glance what moved since you last looked. The chip clears itself after a week.<br>'
+      +'<b>👤 Owner picker</b> (in the toolbar) — pick a name to see <b>only that person\'s items</b>. It uses whoever the item actually sits with (the typed Assigned-to if there is one, otherwise the suggested owner), and it filters all three tabs, the print, and the % complete bar — so you can hand someone their own list, or check how far along it is. ✕ clears it.<br>'
       +'<b>% complete</b> — set a percentage on any In Progress item and its badge reads "In Progress · 50%". The bar at the top is the real roll-up: Done counts fully, In Progress counts whatever percentage you set on it.'
       +'</div>';
   }
   // Real progress, computed from the items themselves — a Done item counts fully, an In-Progress item
   // counts whatever % was set on it (nothing if none was), so the number can't drift out of date.
   h+=(function(){
-    const st=_propddState(); const all=propddAllItems();
+    const st=_propddState(); const all=propddVisibleItems();
     let done=0, prog=0, open=0, pctSum=0, fresh=0;
     all.forEach(function(i){ const s2=st[i.id]||{}; const stt=s2.status||'Open';
       if(_propddFresh(s2)) fresh++;
@@ -20159,6 +20183,7 @@ function renderPropDD(){
     return '<div style="margin-bottom:16px">'
       +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:5px">'
         +'<div style="font-size:12.5px;color:var(--muted)"><b style="color:var(--txt);font-size:15px">'+overall+'% complete</b>'
+          +(PROPDD_WHO?(' <span style="color:var(--brand);font-weight:700">— '+esc(PROPDD_WHO)+' only</span>'):'')
           +' &nbsp;·&nbsp; '+done+' done · '+prog+' in progress · '+open+' not started &nbsp;·&nbsp; '+all.length+' items</div>'
         +(fresh?('<div style="font-size:12px;color:#93c5fd;font-weight:700" title="Items changed in the last '+PROPDD_FRESH_DAYS+' days — they are tinted blue in the list below and carry an \u270F\uFE0F chip">\u270F\uFE0F '+fresh+' updated in the last '+PROPDD_FRESH_DAYS+' days</div>'):'')
       +'</div>'
@@ -20179,6 +20204,19 @@ function renderPropDD(){
       ? docs.map(function(d){ return '<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="display:block;padding:7px 8px;border-radius:6px;color:var(--txt);text-decoration:none;font-size:13px;font-weight:600" onmouseover="this.style.background=\'var(--panel)\'" onmouseout="this.style.background=\'\'">🔗 '+esc(d.label)+'</a>'; }).join('')
       : '<div class="muted" style="font-size:12px;padding:4px">No reference documents linked yet.</div>'; })()
     +'</div></details>'
+    +(function(){
+      const counts=propddOwnerCounts();
+      const names=Object.keys(counts).sort(function(a,b){
+        if(a==='Unassigned') return 1; if(b==='Unassigned') return -1;
+        return counts[b]-counts[a] || a.localeCompare(b); });
+      const tot=propddAllItems().length;
+      return '<select onchange="propddSetWho(this.value)" title="Show only the items that sit with one person — their typed Assigned-to if there is one, otherwise the suggested owner. Filters all three tabs, the print, and the % complete bar up top, so you can see how far along just their list is." '
+        +'style="padding:6px 12px;border-radius:8px;border:1px solid '+(PROPDD_WHO?'var(--brand)':'var(--line)')+';background:'+(PROPDD_WHO?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_WHO?'#fff':'var(--txt)')+';font-weight:700;font-size:12.5px;cursor:pointer;max-width:230px">'
+        +'<option value="">\uD83D\uDC65 Everyone ('+tot+')</option>'
+        +names.map(function(n){ return '<option value="'+esc(n)+'" '+(PROPDD_WHO===n?'selected':'')+'>\uD83D\uDC64 '+esc(n)+' ('+counts[n]+')</option>'; }).join('')
+        +'</select>';
+    })()
+    +(PROPDD_WHO?('<button onclick="propddSetWho(\'\')" title="Back to everyone\'s items" style="padding:6px 10px;border-radius:8px;border:1px solid var(--brand);background:transparent;color:var(--brand);font-weight:700;font-size:12.5px;cursor:pointer">\u2715 '+esc(PROPDD_WHO)+'</button>'):'')
     +'<button onclick="propddToggleAdd()" title="Add a brand-new item that isn\'t already on this list" style="padding:6px 14px;border-radius:8px;border:1px solid '+(PROPDD_ADD_OPEN?'var(--brand)':'var(--line)')+';background:'+(PROPDD_ADD_OPEN?'var(--brand)':'var(--panel2)')+';color:'+(PROPDD_ADD_OPEN?'#fff':'var(--txt)')+';font-weight:700;font-size:12.5px;cursor:pointer">➕ Add item</button>'
     +'<button onclick="propddPrint()" title="Open a clean, print-ready version of the tab you\'re currently on in a new tab (then Print → Save as PDF)" style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-weight:700;font-size:12.5px;cursor:pointer">🖨 Print this view</button>'
     +'</div>'
@@ -20212,7 +20250,7 @@ function _propddRenderA(stats){
     const people=propddPeopleList();
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">';
     people.forEach(function(p){
-      const items=propddAllItems().filter(function(i){ return ((st[i.id]&&st[i.id].assignee||'').trim()||'Unassigned')===p; });
+      const items=propddVisibleItems().filter(function(i){ return ((st[i.id]&&st[i.id].assignee||'').trim()||'Unassigned')===p; });
       const openN=items.filter(function(i){ return (st[i.id]&&st[i.id].status||'Open')!=='Done'; }).length;
       const active=PROPDD_TABLE_FILTER===p; const isUn=p==='Unassigned';
       h+='<div onclick="propddSetTableFilter(\''+esc(p).replace(/'/g,"\\'")+'\')" style="cursor:pointer;border:1px solid '+(active?'var(--brand)':'var(--line)')+';border-left:4px solid '+(isUn?'var(--muted)':(openN>0?'var(--amber)':'var(--green)'))+';border-radius:8px;padding:10px 12px;background:var(--panel2)">'
@@ -20223,7 +20261,7 @@ function _propddRenderA(stats){
     if(people.length<=1 || (people.length===2 && people.indexOf('Unassigned')>=0)) h+='<div style="color:var(--muted);font-size:12px;margin:-8px 0 16px">No one\'s been tagged yet — expand an item below and fill in "Assigned to" to start grouping by person.</div>';
   }
   if(PROPDD_TABLE_FILTER) h+='<div style="margin-bottom:10px"><button onclick="propddSetTableFilter(\''+PROPDD_TABLE_FILTER.replace(/'/g,"\\'")+'\')" style="font-size:12px;padding:3px 10px;border-radius:14px;border:1px solid var(--brand);background:transparent;color:var(--brand);cursor:pointer">✕ clear filter</button></div>';
-  const items=propddAllItems().filter(function(i){
+  const items=propddVisibleItems().filter(function(i){
     if(!PROPDD_TABLE_FILTER) return true;
     if(PROPDD_GROUP_A==='cat') return propddCatKey(i.cat)===PROPDD_TABLE_FILTER;
     return ((st[i.id]&&st[i.id].assignee||'').trim()||'Unassigned')===PROPDD_TABLE_FILTER;
@@ -20268,7 +20306,7 @@ function _propddRenderB(stats){
   h+='</div>';
   if(PROPDD_B_OPEN){
     const meta=PROPDD_CATS.find(function(c){ return c.key===PROPDD_B_OPEN; });
-    const items=propddAllItems().filter(function(i){ return propddCatKey(i.cat)===PROPDD_B_OPEN; });
+    const items=propddVisibleItems().filter(function(i){ return propddCatKey(i.cat)===PROPDD_B_OPEN; });
     const st=_propddState();
     h+='<div style="font-weight:800;font-size:15px;margin-bottom:10px">'+meta.icon+' '+esc(meta.label)+'</div>';
     items.forEach(function(i){ const s=st[i.id]||{}; const status=s.status||'Open'; const exp=PROPDD_EXPANDED.has(i.id);
@@ -20295,7 +20333,7 @@ function _propddRenderC(stats){
   h+='</div>';
   const st=_propddState();
   PROPDD_CATS.forEach(function(c){
-    const items=propddAllItems().filter(function(i){ return propddCatKey(i.cat)===c.key; });
+    const items=propddVisibleItems().filter(function(i){ return propddCatKey(i.cat)===c.key; });
     h+='<div style="font-weight:800;font-size:14px;margin:18px 0 8px;color:'+c.color+'">'+c.icon+' '+esc(c.label)+'</div><ul style="margin:0;padding-left:0;list-style:none">';
     items.forEach(function(i){ const s=st[i.id]||{}; const status=s.status||'Open';
       const dot = status==='Done'?'#22c55e':(status==='In Progress'?'#3b82f6':'#f59e0b');
@@ -20336,19 +20374,19 @@ function _propddPrintDoc(variant){
     body+='<div style="margin-bottom:16px">'+PROPDD_CATS.map(function(c){ const s=stats.byCat[c.key]; const openN=s.open+s.inprog;
       return '<div class="tile"><div style="font-size:11px;color:#667">'+c.icon+' '+esc(c.label)+'</div><div style="font-size:18px;font-weight:800">'+openN+' / '+s.total+'</div></div>'; }).join('')+'</div>';
     body+='<table><thead><tr><th>Item</th><th>Category</th><th>Owner</th><th>Status</th></tr></thead><tbody>'
-      +propddAllItems().map(function(i){ const s=st[i.id]||{}; const status=s.status||'Open'; const meta=propddCatMeta(i.cat);
+      +propddVisibleItems().map(function(i){ const s=st[i.id]||{}; const status=s.status||'Open'; const meta=propddCatMeta(i.cat);
         return '<tr><td><b>'+esc(i.t)+'</b><div class="desc">'+esc(i.d)+'</div><div class="meta">Source: '+esc(i.src)+' · '+esc(i.conf)+(s.notes?' · Notes: '+esc(s.notes):'')+(s.resolution?' · Resolution: '+esc(s.resolution):'')+(i.doc&&i.doc.url?' · <a href="'+esc(location.origin+'/'+i.doc.url)+'" target="_blank">🔗 '+esc(i.doc.label)+'</a>':'')+'</div></td>'
           +'<td>'+meta.icon+' '+esc(meta.label)+'</td><td>'+esc(i.owner)+(s.assignee?'<br><i>'+esc(s.assignee)+'</i>':'')+'</td><td>'+_propddPillHtml(status)+'</td></tr>'; }).join('')
       +'</tbody></table>';
   } else if(variant==='B'){
-    PROPDD_CATS.forEach(function(c){ const items=propddAllItems().filter(function(i){ return propddCatKey(i.cat)===c.key; }); const s=stats.byCat[c.key];
+    PROPDD_CATS.forEach(function(c){ const items=propddVisibleItems().filter(function(i){ return propddCatKey(i.cat)===c.key; }); const s=stats.byCat[c.key];
       body+='<div class="cathead">'+c.icon+' '+esc(c.label)+' — '+(s.open+s.inprog)+' open of '+s.total+'</div>';
       items.forEach(function(i){ const st2=st[i.id]||{}; const status=st2.status||'Open';
         body+='<div class="item"><b>'+esc(i.t)+'</b>'+_propddPillHtml(status)+'<div class="desc">'+esc(i.d)+'</div>'
           +'<div class="meta">Owner: '+esc(i.owner)+(st2.assignee?' <i>('+esc(st2.assignee)+')</i>':'')+' · Source: '+esc(i.src)+' · '+esc(i.conf)+(st2.notes?' · Notes: '+esc(st2.notes):'')+(st2.resolution?' · Resolution: '+esc(st2.resolution):'')+'</div></div>'; }); });
   } else {
     body+='<div style="font-size:13px;line-height:1.7;margin-bottom:16px">37900 Mound Road is a 3.58-acre M-1 light-industrial parcel with two buildings, purchased August 2024 by RDB Industrial Drive LLC and S&amp;S Holdings of Southwest Florida LLC. The property has a confirmed history of soil/groundwater metals contamination dating to 2009, reconfirmed by a 2024 Phase I/II ESA. The 2024 owners filed new environmental liability paperwork and a joint Due Care Plan, acknowledged by EGLE with no issues raised. Two recorded legal instruments (1972, 2011) are referenced everywhere but included nowhere in this document set.</div>';
-    PROPDD_CATS.forEach(function(c){ const items=propddAllItems().filter(function(i){ return propddCatKey(i.cat)===c.key; });
+    PROPDD_CATS.forEach(function(c){ const items=propddVisibleItems().filter(function(i){ return propddCatKey(i.cat)===c.key; });
       body+='<div class="cathead">'+c.icon+' '+esc(c.label)+'</div>';
       items.forEach(function(i){ const st2=st[i.id]||{}; const status=st2.status||'Open';
         body+='<div class="item"><b>'+esc(i.t)+'</b> — '+esc(st2.assignee||i.owner)+' '+_propddPillHtml(status)+'</div>'; }); });
