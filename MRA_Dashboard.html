@@ -4108,6 +4108,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.96", date:"2026-09-11", title:"🔒 Due Diligence: see what changed, a real % complete, and attach quotes to an item", items:[
+    "Rich: “when I add or change notes, can we highlight it so people know what has been updated… it’s just not very professional.” Every edit now records <b>who made it and when</b> — automatically, nothing extra to fill in. Anything touched in the <b>last 7 days</b> is <b>tinted blue with an ✏️ chip</b> saying how long ago and by whom, the item’s notes now show right on its row instead of only when you expand it, and the header carries a <b>“N updated in the last 7 days”</b> count. The chip clears itself after a week, so the page shows movement rather than a permanent wall of flags.",
+    "<b>A real % complete</b> across the top: one bar and one number rolled up from the items themselves — Done counts fully, In Progress counts whatever percentage you set on it, so it can’t drift out of date. Any In&nbsp;Progress item can carry its own percentage (0 / 25 / 50 / 75 / 90) and its badge then reads <b>“In Progress · 50%”</b>. Leave it blank and it just says In Progress — the page never invents a number nobody set.",
+    "<b>📎 Attach a quote or document to any item.</b> Expand an item and paste a link (SharePoint, OneDrive, or any shared link) with a label — it stays on that item <b>and</b> automatically appears in the <b>📎 Documents</b> list at the top, so it’s filed once and findable in both places (Rich asked whether it belonged on the item or under Documents — this is both). Each attachment shows who added it and when, and ✕ removes the link from the item without touching the file itself." ] },
   { rev:"37.95", date:"2026-09-11", title:"🧑‍💼 The AE now shows on every unit list · 🔧 3 more resolved Fleetio tasks caught", items:[
     "Rich: “it needs to show everywhere we list it.” The <b>AE</b> is now on the 🗓 <b>Maintenance Meeting</b> (both the Coming-back cards and the Parking-Lot cards, and its print), the FLEETIO <b>↩️ Coming Back</b> panel, and <b>🚦 What’s Next</b> — alongside the ASSETS tab and the shop-floor bay cards it already shipped on. Same source everywhere: the unit’s <b>“AE - name” label in Fleetio</b>, matched by asset or by job, so it only shows on a unit Fleetio actually knows.",
     "<b>Three resolved Fleetio issues had been sitting open on the board for months</b> — #963 Trailer Wall Bowing and #1026 Screws in Floor Channel (Generator Swap 9639) and #623 Mud Flaps (SENO Medical), all resolved in Fleetio back in July. They were missed because they were typed by hand as <b>“#963 - …”</b> instead of the <b>🔧 #963</b> format the ➕ button writes, and the auto-close only recognised the 🔧 form. It now also reads the plain <b>#NNN</b> form — but <b>only</b> when the task wording and the Fleetio issue’s own summary are the same work, so a purchase order, part or bay number that happens to start with # can never trigger a close." ] },
@@ -19849,7 +19853,50 @@ const PROPDD_ITEMS=[
 {id:'j3',cat:'J. MRA Fit & Capital Budget',t:'Assemble the final go/no-go package before due diligence expires',d:'Before the contingency runs out, leadership should have in hand: final environmental/building/roof reports, zoning + C of O requirements, final title/survey review, post-purchase tax estimate, insurance quote, appraisal, renovation budget, 5-year capital forecast, operating-cost forecast, financing summary, and a written list of unresolved risks — then make an explicit Proceed / Renegotiate / Extend / Terminate call.',owner:'MRA Leadership (Rich)',src:"Tony's due-diligence checklist §24",conf:'Not started'},
 {id:'j4',cat:'J. MRA Fit & Capital Budget',t:'Commission an overall layout — offices, shop floor, and full site plan',d:'A real, drawn-up layout of how MRA will actually use the whole property once acquired: offices, shop floor, and the overall site plan — not just confirming the listing’s numbers against MRA’s needs (see J1), an actual plan to build toward.',owner:'Rich Miller',src:'Rich Miller — direct instruction, 8/31/26',conf:'Real action item — not yet started'},
 ];
-function propddSet(id,field,val){ const st=_propddState(); st[id]=st[id]||{}; st[id][field]=val; _propddSave(st); }
+// Rich 2026-09-11: "when I add or change notes, can we kinda highlight it so people know what has been
+// updated... it's just not very professional." Every edit now stamps WHO and WHEN on that item, which
+// drives the 🆕 chip + tinted row below. Nothing to remember to fill in — it rides the save you already do.
+function _propddWho(){
+  try{ if(typeof ssoEnforcing==='function' && ssoEnforcing() && typeof SSO!=='undefined' && SSO && SSO.user && SSO.name()) return SSO.name(); }catch(e){}
+  return (typeof CURRENT_USER!=='undefined' && CURRENT_USER) ? CURRENT_USER : '';
+}
+function propddSet(id,field,val){ const st=_propddState(); st[id]=st[id]||{}; st[id][field]=val;
+  if(field!=='up' && field!=='upBy'){ st[id].up=Date.now(); st[id].upBy=_propddWho(); }
+  _propddSave(st); }
+// An item counts as "recently updated" for a week after its last edit.
+const PROPDD_FRESH_DAYS=7;
+function _propddFresh(s){ return !!(s && s.up && (Date.now()-s.up) < PROPDD_FRESH_DAYS*86400000); }
+function _propddAgo(ms){
+  if(!ms) return ''; const d=Math.floor((Date.now()-ms)/86400000);
+  if(d<=0){ const h=Math.floor((Date.now()-ms)/3600000); return h<1?'just now':(h+'h ago'); }
+  return d===1?'yesterday':(d+'d ago');
+}
+function _propddUpdChip(s){
+  if(!_propddFresh(s)) return '';
+  return '<span title="Changed in the last '+PROPDD_FRESH_DAYS+' days'+(s.upBy?(' by '+String(s.upBy).replace(/"/g,'')):'')+' — this chip clears itself after a week" '
+    +'style="background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;white-space:nowrap">'
+    +'\u270F\uFE0F '+esc(_propddAgo(s.up))+(s.upBy?(' · '+esc(String(s.upBy).split(' ')[0])):'')+'</span>';
+}
+function _propddUpdLine(s){
+  if(!s || !s.up) return '';
+  const dt=new Date(s.up);
+  return '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">\u270F\uFE0F Last updated '
+    +esc(fmtMDY(localISO(s.up)))+' '+esc(dt.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}))
+    +(s.upBy?(' by <b>'+esc(s.upBy)+'</b>'):'')+'</div>';
+}
+// % complete. A Done item is 100 by definition; an In-Progress item shows whatever percentage was set
+// on it (Rich's "percentage complete instead of in progress"), and nothing at all until someone sets one —
+// an unset item reads as no claim rather than a made-up number.
+function propddPct(s){
+  const status=(s&&s.status)||'Open';
+  if(status==='Done') return 100;
+  if(status==='In Progress' && s && s.pct!=null && s.pct!=='') return Math.max(0,Math.min(100,parseInt(s.pct,10)||0));
+  return null;
+}
+function propddStatusText(s){
+  const status=(s&&s.status)||'Open'; const p=propddPct(s);
+  return (status==='In Progress' && p!=null) ? (status+' · '+p+'%') : status;
+}
 // Edit/delete a SEED item (from PROPDD_ITEMS above): title/description edits are stored as overrides in the
 // same per-item synced state object as status/assignee/notes (st[id].t / st[id].d), merged over the seed at
 // display time by propddAllItems() below -- deletes are a soft `deleted` flag (keeps history, avoids mutating
@@ -19871,15 +19918,41 @@ function propddAllItems(){
 // six times over. The dropdown is "here's every actual file," one row per file, no page jump (opens
 // at page 1) -- the page-specific jump lives on each item's own inline 🔗 link instead.
 function _propddDocsList(){
-  const seen={}; const out=[];
+  const seen={}; const out=[]; const st=_propddState();
   propddAllItems().forEach(function(i){
-    if(!(i.doc && i.doc.url)) return;
-    const base=i.doc.url.split('#')[0];
-    if(seen[base]) return;
-    seen[base]=1;
-    out.push({label:i.doc.label.split(' — ')[0], url:base});
+    if(i.doc && i.doc.url){
+      const base=i.doc.url.split('#')[0];
+      if(!seen[base]){ seen[base]=1; out.push({label:i.doc.label.split(' — ')[0], url:base}); }
+    }
+    // Anything attached to an item (a quote, a proposal, an emailed PDF) shows up here too — Rich asked
+    // whether attachments belong on the item or under Documents; the answer is attach once on the item
+    // and this list picks it up, so it's in both places without being filed twice.
+    ((st[i.id]&&st[i.id].files)||[]).forEach(function(f){
+      if(!f || !f.url) return; const base=String(f.url).split('#')[0];
+      if(seen[base]) return; seen[base]=1;
+      out.push({label:(f.label||f.url), url:f.url, item:i.t});
+    });
   });
   return out;
+}
+// Attach a link (a quote, proposal, emailed PDF, SharePoint/OneDrive file) to one item. Stored in the
+// same synced per-item state as everything else, so it reaches everyone with access on the next sync.
+function propddAttach(id){
+  const u=document.getElementById('propddAtt_'+id), l=document.getElementById('propddAttL_'+id);
+  const url=((u&&u.value)||'').trim(); if(!url){ alert('Paste the link to the document first.'); if(u) u.focus(); return; }
+  if(!/^https?:\/\//i.test(url) && !/^duediligence\//i.test(url)){ alert('That doesn\'t look like a link — paste the full https:// address of the file (SharePoint / OneDrive / a shared link).'); u.focus(); return; }
+  const st=_propddState(); st[id]=st[id]||{}; st[id].files=(st[id].files||[]).slice();
+  st[id].files.push({label:((l&&l.value)||'').trim()||url.split('/').pop().split('?')[0]||'Attachment', url:url, at:Date.now(), by:_propddWho()});
+  st[id].up=Date.now(); st[id].upBy=_propddWho();
+  _propddSave(st); renderPropDD();
+}
+function propddDetach(id,idx){
+  const st=_propddState(); const arr=(st[id]&&st[id].files)||[];
+  if(!arr[idx]) return;
+  if(!confirm('Remove the attachment "'+(arr[idx].label||arr[idx].url)+'" from this item? (It only removes the link here — it does not delete the file itself.)')) return;
+  st[id].files=arr.filter(function(_,n){ return n!==idx; });
+  st[id].up=Date.now(); st[id].upBy=_propddWho();
+  _propddSave(st); renderPropDD();
 }
 function propddDeleteItem(id){
   if(!confirm('Delete this due-diligence item for good? It disappears for both Rich and Tony once this syncs — not just hidden.')) return;
@@ -19989,10 +20062,34 @@ function _propddDetailHtml(i,s){
     +'<textarea onclick="event.stopPropagation()" oninput="propddSet(\''+i.id+'\',\'d\',this.value)" placeholder="Description…" style="width:100%;box-sizing:border-box;font-size:13px;margin-bottom:8px;min-height:56px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);font-family:inherit;resize:vertical">'+esc(i.d)+'</textarea>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Suggested owner: <b>'+esc(i.owner)+'</b> &nbsp;|&nbsp; Source: '+esc(i.src)+' &nbsp;|&nbsp; <i>'+esc(i.conf)+'</i></div>'
     +(i.doc&&i.doc.url?('<div style="margin-bottom:8px"><a href="'+esc(i.doc.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:12px;color:var(--brand);text-decoration:none;font-weight:700">🔗 '+esc(i.doc.label)+'</a></div>'):'')
+    +_propddUpdLine(s)
+    +(function(){
+      const files=(s.files||[]);
+      let fh='<div style="margin-bottom:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">'
+        +'<div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">\uD83D\uDCCE Attachments — quotes, proposals, reports</div>';
+      fh+= files.length
+        ? files.map(function(f,n){ return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:3px">'
+            +'<a href="'+esc(f.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="flex:1;font-size:12px;color:var(--brand);text-decoration:none;font-weight:700">\uD83D\uDD17 '+esc(f.label||f.url)+'</a>'
+            +(f.by?('<span style="font-size:10.5px;color:var(--faint)">'+esc(f.by)+(f.at?(' · '+esc(fmtMDY(localISO(f.at)))):'')+'</span>'):'')
+            +'<span onclick="event.stopPropagation();propddDetach(\''+i.id+'\','+n+')" title="Remove this link from the item (does not delete the file)" style="cursor:pointer;color:var(--muted);font-weight:700;padding:0 4px">\u2715</span>'
+            +'</div>'; }).join('')
+        : '<div style="font-size:11.5px;color:var(--faint);margin-bottom:5px">Nothing attached yet.</div>';
+      fh+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
+        +'<input id="propddAtt_'+i.id+'" onclick="event.stopPropagation()" placeholder="Paste a link to the quote / document…" style="flex:2;min-width:180px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
+        +'<input id="propddAttL_'+i.id+'" onclick="event.stopPropagation()" placeholder="Label (e.g. Roof quote — ABC Roofing)" style="flex:1;min-width:150px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
+        +'<button onclick="event.stopPropagation();propddAttach(\''+i.id+'\')" title="Attach this link to the item — it also appears under \uD83D\uDCCE Documents at the top" style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:6px;border:1px solid var(--brand);background:transparent;color:var(--brand);cursor:pointer">\uD83D\uDCCE Attach</button>'
+        +'</div></div>';
+      return fh;
+    })()
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     +'<select onclick="event.stopPropagation()" onchange="event.stopPropagation();propddSet(\''+i.id+'\',\'status\',this.value);renderPropDD()" style="font-size:12px;padding:3px 6px;border-radius:6px">'
     +['Open','In Progress','Done'].map(o=>'<option '+(status===o?'selected':'')+'>'+o+'</option>').join('')
     +'</select>'
+    +(status==='In Progress'
+      ? ('<select onclick="event.stopPropagation()" onchange="event.stopPropagation();propddSet(\''+i.id+'\',\'pct\',this.value);renderPropDD()" title="How far along this item actually is — shows on the badge as \'In Progress · 50%\'. Leave it blank rather than guessing." style="font-size:12px;padding:3px 6px;border-radius:6px">'
+         +['','0','25','50','75','90'].map(function(o){ return '<option value="'+o+'" '+((String(s.pct==null?'':s.pct)===o)?'selected':'')+'>'+(o===''?'% done…':(o+'%'))+'</option>'; }).join('')
+         +'</select>')
+      : '')
     +'<input onclick="event.stopPropagation()" list="propddNames" placeholder="Assigned to…" value="'+esc(s.assignee||'')+'" oninput="propddSet(\''+i.id+'\',\'assignee\',this.value)" style="flex:1;min-width:120px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
     +'<input onclick="event.stopPropagation()" placeholder="Notes…" value="'+esc(s.notes||'')+'" oninput="propddSet(\''+i.id+'\',\'notes\',this.value)" style="flex:2;min-width:160px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
     +'<select onclick="event.stopPropagation()" onchange="event.stopPropagation();propddSet(\''+i.id+'\',\'resolution\',this.value);renderPropDD()" title="How you\'re asking the seller to resolve this, once you know" style="font-size:12px;padding:3px 6px;border-radius:6px;color:'+(resolution?'var(--txt)':'var(--muted)')+'">'
@@ -20040,9 +20137,36 @@ function renderPropDD(){
       +'<b>Group by: Category / Person</b> (on tab ①) — switch between organizing by issue type or by whoever you\'ve actually assigned. Type a name into any item\'s "Assigned to" box first, then flip to Person to see everyone\'s workload grouped together.<br>'
       +'<b>Click any item</b> to expand it — edit its title/description right in place, set status/assignee/notes/resolution, or 🗑 delete it if it doesn\'t apply. Assignee remembers every name you\'ve typed so it\'s a pick-list after the first time.<br>'
       +'<b>➕ Add item</b> — for anything not already on the list. Pick a category, give it a title, and optionally a suggested owner/assignee up front.<br>'
-      +'<b>📎 Documents</b> (top-right of the toolbar) — every reference PDF linked from any item below, all in one place. Items with a linked document also show a 🔗 link right in their own expanded detail.'
+      +'<b>📎 Documents</b> (top-right of the toolbar) — every reference PDF linked from any item below, all in one place. Items with a linked document also show a 🔗 link right in their own expanded detail.<br>'
+      +'<b>📎 Attach a quote or document</b> — expand any item and paste a link (SharePoint, OneDrive, or any shared link) with a label. It stays on that item AND appears in the 📎 Documents list up top, so it is filed once and findable in both places.<br>'
+      +'<b>✏️ What changed</b> — every edit stamps who made it and when. Anything touched in the last week is tinted blue with an ✏️ chip, and the count sits next to the progress bar up top, so you can see at a glance what moved since you last looked. The chip clears itself after a week.<br>'
+      +'<b>% complete</b> — set a percentage on any In Progress item and its badge reads "In Progress · 50%". The bar at the top is the real roll-up: Done counts fully, In Progress counts whatever percentage you set on it.'
       +'</div>';
   }
+  // Real progress, computed from the items themselves — a Done item counts fully, an In-Progress item
+  // counts whatever % was set on it (nothing if none was), so the number can't drift out of date.
+  h+=(function(){
+    const st=_propddState(); const all=propddAllItems();
+    let done=0, prog=0, open=0, pctSum=0, fresh=0;
+    all.forEach(function(i){ const s2=st[i.id]||{}; const stt=s2.status||'Open';
+      if(_propddFresh(s2)) fresh++;
+      if(stt==='Done'){ done++; pctSum+=100; }
+      else if(stt==='In Progress'){ prog++; pctSum+=(propddPct(s2)||0); }
+      else open++; });
+    const total=all.length||1;
+    const overall=Math.round(pctSum/total);
+    const donePct=Math.round(done/total*100), progPct=Math.round(pctSum/total)-donePct;
+    return '<div style="margin-bottom:16px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:5px">'
+        +'<div style="font-size:12.5px;color:var(--muted)"><b style="color:var(--txt);font-size:15px">'+overall+'% complete</b>'
+          +' &nbsp;·&nbsp; '+done+' done · '+prog+' in progress · '+open+' not started &nbsp;·&nbsp; '+all.length+' items</div>'
+        +(fresh?('<div style="font-size:12px;color:#93c5fd;font-weight:700" title="Items changed in the last '+PROPDD_FRESH_DAYS+' days — they are tinted blue in the list below and carry an \u270F\uFE0F chip">\u270F\uFE0F '+fresh+' updated in the last '+PROPDD_FRESH_DAYS+' days</div>'):'')
+      +'</div>'
+      +'<div style="display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--panel2);border:1px solid var(--line)">'
+        +'<div title="'+done+' done" style="width:'+Math.max(0,donePct)+'%;background:#22c55e"></div>'
+        +'<div title="part-done credit from in-progress items" style="width:'+Math.max(0,progPct)+'%;background:#3b82f6"></div>'
+      +'</div></div>';
+  })();
   h+='<div style="display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:10px;flex-wrap:wrap">'
     +[['A','① Scorecard + Register','A clickable summary by category, plus a full sortable-feeling list below — click a row to expand its detail.'],
       ['B','② Category Tiles','Five big tiles, one per category — click one to drill into just its items; everything else stays collapsed.'],
@@ -20115,12 +20239,17 @@ function _propddRenderA(stats){
     const ownerCell=PROPDD_GROUP_A==='person'
       ? (s.assignee?esc(s.assignee):'<i style="color:var(--muted)">Unassigned</i>')
       : (s.assignee?('<b>'+esc(s.assignee)+'</b> <span style="color:var(--faint);font-size:10.5px">(sugg. '+esc(i.owner)+')</span>'):esc(i.owner));
-    h+='<tr style="border-bottom:1px solid var(--line);cursor:pointer" onclick="propddToggleExpand(\''+i.id+'\')">'
+    const _fr=_propddFresh(s); const _nf=((s.files||[]).length);
+    h+='<tr style="border-bottom:1px solid var(--line);cursor:pointer'+(_fr?';background:rgba(59,130,246,.07);box-shadow:inset 3px 0 0 #3b82f6':'')+'" onclick="propddToggleExpand(\''+i.id+'\')">'
       +'<td style="padding:8px">'+(exp?'▾':'▸')+'</td>'
-      +'<td style="padding:8px;font-weight:600">'+esc(i.t)+'</td>'
+      +'<td style="padding:8px;font-weight:600">'+esc(i.t)
+        +(_nf?(' <span title="'+_nf+' attachment'+(_nf===1?'':'s')+' on this item" style="color:var(--muted);font-size:11px">\uD83D\uDCCE'+_nf+'</span>'):'')
+        +(_fr?(' '+_propddUpdChip(s)):'')
+        +(s.notes?('<div style="font-weight:400;font-size:11.5px;color:var(--muted);margin-top:2px">\uD83D\uDCDD '+esc(String(s.notes).slice(0,110))+'</div>'):'')
+      +'</td>'
       +'<td style="padding:8px;color:var(--muted);font-size:12px;white-space:nowrap">'+meta.icon+' '+esc(meta.label)+'</td>'
       +'<td style="padding:8px;color:var(--muted);font-size:12px">'+ownerCell+'</td>'
-      +'<td style="padding:8px"><span class="badge '+propddStatusBadgeColor(status)+'">'+status+'</span></td>'
+      +'<td style="padding:8px"><span class="badge '+propddStatusBadgeColor(status)+'">'+propddStatusText(s)+'</span></td>'
       +'</tr>';
     if(exp) h+='<tr style="border-bottom:1px solid var(--line);background:var(--panel2)"><td></td><td colspan="4" style="padding:10px 8px 14px">'+_propddDetailHtml(i,s)+'</td></tr>'; });
   h+='</tbody></table></div>';
@@ -20143,10 +20272,10 @@ function _propddRenderB(stats){
     const st=_propddState();
     h+='<div style="font-weight:800;font-size:15px;margin-bottom:10px">'+meta.icon+' '+esc(meta.label)+'</div>';
     items.forEach(function(i){ const s=st[i.id]||{}; const status=s.status||'Open'; const exp=PROPDD_EXPANDED.has(i.id);
-      h+='<div style="border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;background:var(--panel)">'
+      h+='<div style="border:1px solid '+(_propddFresh(s)?'#3b82f6':'var(--line)')+';border-radius:10px;padding:10px 14px;margin-bottom:8px;background:var(--panel)">'
         +'<div style="display:flex;justify-content:space-between;gap:10px;cursor:pointer" onclick="propddToggleExpand(\''+i.id+'\')">'
-        +'<div style="font-weight:700">'+(exp?'▾':'▸')+' '+esc(i.t)+'</div>'
-        +'<span class="badge '+propddStatusBadgeColor(status)+'">'+status+'</span></div>'
+        +'<div style="font-weight:700">'+(exp?'▾':'▸')+' '+esc(i.t)+((s.files||[]).length?(' <span style="color:var(--muted);font-size:11px">\uD83D\uDCCE'+(s.files||[]).length+'</span>'):'')+'</div>'
+        +'<div style="display:flex;gap:6px;align-items:center">'+_propddUpdChip(s)+'<span class="badge '+propddStatusBadgeColor(status)+'">'+propddStatusText(s)+'</span></div></div>'
         +(exp?'<div style="margin-top:10px">'+_propddDetailHtml(i,s)+'</div>':'')
         +'</div>'; });
   } else {
