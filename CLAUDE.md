@@ -34,6 +34,20 @@ vanished from context once already on 9/10 and cost Rich a chunk of an evening r
   worked over + came in unscheduled on work the floor was never told about, then took the blame for it running late;
   **AWS Revamp J1217** — final layout never came, vendor arrived the day it was due to ship, shelving + fabrication
   added that was never in the plan. Planning is the #1 complaint from Al, Megan, Niko, Sal AND Doug independently.
+- **💵 THE COST NUMBERS (Rich assembled these verbally 9/10 — nowhere else in writing, don't lose them):**
+  **Oakland J1420** — 250 hrs electrician on the original scope miss + 24 hrs sent back to the field on bad info =
+  **274 electrician hrs ≈ $35,620 @ ~$130/hr** (that rate is Rich's "or whatever" figure — confirm before quoting it
+  again); plus **16 hrs OT** (Sal called in Saturday with his son) + **120–180 hrs** (Sal + crew, same Saturday) +
+  **10 hrs & $550** for a TV swap in the field today whose damage was the CUSTOMER's, absorbed by MRA. ⚠ Unverified
+  whether the 16 OT hrs are separate from or inside the 120–180 — flagged to Rich to resolve before a controller adds
+  them up. **AWS J1217** — ~**56 hrs** of unplanned fabrication + **2 extra days in the bay**, which pushed the next
+  job and moved its overtime onto a different P&L. Rich's own opening guess was "at least $25K" for Oakland — his
+  evidence actually supports $35K+ before a single shop hour is priced.
+  **⚠️ Rich can't price the shop hours — he has no burdened labor rates.** That gap IS decision 3; the standing
+  guidance given to him was to present HOURS and let finance price them live rather than guess a rate in the room.
+- **Meeting format changed** (9/10 late): Tony and John aren't coming in, so it's a **Teams screen-share**, not a
+  printed handout. The artifact was rebuilt for that — big type, four short sections, few words, detail below the
+  fold. Talking points were given in chat, not on the page (Rich's standing preference).
 - **⚠️ DELIBERATELY NOT IN THIS FILE:** Rich's candid read on ownership/leadership (and on Tony specifically). This
   repo is company-visible, so that stayed in chat and out of the artifact. If a future session needs to know why he's
   pushing this hard: ask him, don't assume, and don't write it here.
