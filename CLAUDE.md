@@ -1,5 +1,43 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## 📋 2026-09-11 — Rich's management meeting (Tony/John/Gino/Doug): 4 decisions, 2 of which are dashboard work
+
+Context a future session needs, because this thread lives in EMAIL + a separate claude.ai chat, not here — it
+vanished from context once already on 9/10 and cost Rich a chunk of an evening re-explaining it.
+
+- **The email thread** (Outlook, subject `Proposal: a real markup standard for subcontracted trades (electrical
+  & wrap)`): Rich → Tony Amato + John Renaud **8/28** (markup policy + the `MRA_Subcontracted_Trade_Markup_Policy.docx`
+  research brief); Rich's follow-up **9/10** (finance tab / per-project finance window / PM labor budgets / a real
+  process for contracts + vendor misses); **John's 9/10 reply** = the important one. Tony has never replied to any of it.
+- **John's stated position** (quote it, don't re-argue it): "totally agree there's value" in PM financial visibility;
+  constraints are QuickBooks **Enterprise is on-prem, not cloud**, and an **ERP review (Intuit Enterprise Suite /
+  Acumatica) is underway but slow**; project-level dashboard is "worth exploring, **if it is easy to integrate our
+  QuickBooks information into it**"; he asked for Rich's input on the ERP work. On process he already agreed and is
+  building one with Doug McLean: **Doug reviews contract language, John reviews $$ pricing, before anything goes to
+  a client to sign.**
+- **The one-pager built for the 9/11 meeting** (artifact, "The Planning Gap"):
+  `https://claude.ai/code/artifact/7c07b8e9-219f-4c26-9848-0a284c2700e2`. Thesis = *work gets committed to clients
+  before the people who build it are in the room*; the overruns, missed ship dates and morale hit are all downstream
+  of that. Four decisions: (1) a standing pre-commit planning handoff — sales/PM/design/floor agree scope + dates
+  before the date goes to the client; (2) change control once scope locks, and a straight yes/no on **bill late
+  scope back vs. absorb it**; (3) close-out review on every project + a weekly one-line financial per active project
+  from finance; (4) adopt the markup bands (electrical 35 floor / 40-45 std / 50+ esc · wrap 35 / 45 / 55+ · other
+  trades 30 / 35-40 / 45+ — labor and material alike, nothing below today's 30%).
+- **⚠️ THE DASHBOARD WORK THAT FALLS OUT OF THIS — don't start either until Rich says the decision landed:**
+  1. **Per-project finance window** (the real ask): each project gets its own view — cost to date, POs, orders, Amex,
+     labor — so PMs manage actuals live and a close-out has real numbers. Al + Megan already use the labor tab today.
+     ⚠️ Blocked on John approving the QuickBooks detail being shared; and QB Enterprise being **on-prem** is the real
+     integration problem, so don't design assuming a live cloud API. A **manual/periodic export** is the realistic v1.
+  2. **PM labor budget per project** + progress against it ("Sal, you have $30K on this one"), with recognition for
+     coming in under. Needs a budget field per project and a burn-down against actual tracked labor.
+- **Evidence Rich is using** (both real, both unbilled, both outside original scope): **Oakland J1420** — electricians
+  worked over + came in unscheduled on work the floor was never told about, then took the blame for it running late;
+  **AWS Revamp J1217** — final layout never came, vendor arrived the day it was due to ship, shelving + fabrication
+  added that was never in the plan. Planning is the #1 complaint from Al, Megan, Niko, Sal AND Doug independently.
+- **⚠️ DELIBERATELY NOT IN THIS FILE:** Rich's candid read on ownership/leadership (and on Tony specifically). This
+  repo is company-visible, so that stayed in chat and out of the artifact. If a future session needs to know why he's
+  pushing this hard: ask him, don't assume, and don't write it here.
+
 ## ✅ FIXED 2026-09-10 — Paylocity import: auto-split foreman ran in raw report order, not "crew hours first"
 
 Rich, mid-import, confused rather than angry (screenshot: "Couldn't auto-split 1 foreman day — no crew job
