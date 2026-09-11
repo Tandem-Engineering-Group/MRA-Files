@@ -56,3 +56,30 @@ jobs:
 
           Write-Host "`n=== Field names only (top level) ==="
           $obj.PSObject.Properties.Name | Sort-Object | ForEach-Object { Write-Host $_ }
+
+          # The issue itself carries NO "resolved by" field -- it resolves via a linked record
+          # (resolvable_type/resolvable_id, e.g. a ServiceEntry). Follow that link too so the real
+          # "who" field can be read directly instead of guessed a second time.
+          if ($obj.resolvable_type -and $obj.resolvable_id) {
+            $rtype = [string]$obj.resolvable_type
+            $rid = [string]$obj.resolvable_id
+            $endpoint = switch ($rtype) {
+              'ServiceEntry' { 'service_entries' }
+              'WorkOrder'    { 'work_orders' }
+              default        { $null }
+            }
+            if ($endpoint) {
+              Write-Host "`n=== Linked $rtype (id=$rid) raw JSON ==="
+              try {
+                $rdetail = Invoke-WebRequest -Uri "https://secure.fleetio.com/api/v1/$endpoint/$rid" -Headers $headers -UseBasicParsing -Method GET -TimeoutSec 30
+                $robj = $rdetail.Content | ConvertFrom-Json
+                $robj | ConvertTo-Json -Depth 8
+                Write-Host "`n=== Linked $rtype field names only (top level) ==="
+                $robj.PSObject.Properties.Name | Sort-Object | ForEach-Object { Write-Host $_ }
+              } catch { Write-Warning "Could not fetch linked $rtype ${rid}: $($_.Exception.Message)" }
+            } else {
+              Write-Host "`n(resolvable_type '$rtype' has no known endpoint mapping in this diagnostic -- add one if this recurs)"
+            }
+          } else {
+            Write-Host "`n(no resolvable_type/resolvable_id on this issue -- nothing to follow)"
+          }
