@@ -1,5 +1,38 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## 🚨 FOUND + FIXED 2026-09-11 — every NEW project task was being BORN ARCHIVED (Trumpf "went to archive")
+
+Rich, 1:24 PM: *"the trumpf project went to archive ????? not supposed to. need to fix asap."* Trumpf (236 tasks, live in
+Bay 4 Back) had vanished from the Projects tab. **Read the live data + the actual list rows before answering** — that's
+what found it in 10 minutes:
+- **Root cause = the SharePoint column default.** `Archived` on **MRA Project Tasks** is a **Yes/No (boolean)** column
+  Rich created 9/9 for the 📦 Archive feature. SharePoint's create-column dialog defaults a Yes/No column's *default
+  value* to **Yes**, and it was left there. So **every task row created after ~9/9 4 PM was born `Archived = true`**,
+  and under `build_from_lists.py`'s old rule (*project archived if ANY row is flagged*) one new task filed away the whole
+  project. Proof (from `list-columns.yml`, `only_true=yes`): exactly **28 rows** true — JFSD Stools 12/12 + JFSD Lighting
+  7/7 (Rich's real archives, all rows), plus **Trumpf 5/236** (IDs 1347–1351, the "Felt for Stair Base" chain, created
+  9/9 20:09Z with `Modified == Created` — never edited), **SMC [xHamilton] 1/40** (1352, 9/10), **SWC MMOT - Hawaii
+  3/90** (1353–1355, created 9/11 17:12–17:17Z — *while Rich was reporting it*). Row 1346 and everything older: no flag.
+  The dashboard's `addProjectTask` never writes `Archived` at all — the value can only have come from the column default.
+- **Fix 1 (Rich, SharePoint, 1 min — the actual root cause):** MRA Project Tasks → `Archived` column → Column settings →
+  Edit → **Default value: No** → Save. Until that's done, every new task anywhere is still born archived.
+- **Fix 2 (code, defense in depth, pushed to BOTH branches):** `build_from_lists.py` now decides `archived` by **strict
+  majority of the project's rows** (`archTrue*2 > archRows`), not any-row. The 📦 button writes EVERY row, so real
+  archives always pass (12/12, 7/7, 1/1); a stray born-archived row (5/236) never does; a task added to an already-
+  archived project (1 No among 11 Yes) leaves it archived. `Parked`/`NonOfficial` are TEXT `'Yes'` columns with no
+  default → still any-row, unchanged. Verified with a synthetic lists.json through the real script, 8/8 cases.
+  Net effect: the next export un-archives Trumpf, SMC [xHamilton] and SWC MMOT - Hawaii by itself; JFSD stays archived.
+- **The 9 stray `true` values are still on those rows** — harmless under the majority rule; the UI's un-archive (writes
+  every row `false`) clears them if Rich clicks it; not required.
+- **`list-columns.yml` gained `only_true`** (default yes): prints every truthy row's FULL record (incl. `Created`,
+  `Modified`, `Editor`). ⚠ `Editor` is always the flow's connection identity (Rich) — it does NOT tell you which human
+  acted; `Created`/`Modified` timestamps do. Also: the first attempt pushed an UNPARSEABLE workflow to both branches
+  (inserted lines under-indented inside `run: |`) — `set -e` in the tool shell did not stop the push after the YAML check
+  failed. **Validate YAML in a separate command before pushing a workflow**, don't chain it.
+- **Al's "DATA PIPELINE STALLED" while Rich's board was clean** (same message): board was 13 min fresh (alarm at 35).
+  The banner is computed on the viewer's device (`listsAsOf` vs `Date.now()`), so it's a stale tab (iPad Safari sleeps
+  background tabs → the 30 s poll stops) or a wrong device clock — reload; if it recurs on a fresh load, check his clock.
+
 ## ✅ SHIPPED 2026-09-11 — 🧑‍💼 AE on every unit list · 🔧 Fleetio auto-close now catches hand-typed issue #s (revs 37.93–37.95)
 
 - **Where the AE comes from:** Stephanie labelled every active Fleetio asset **`AE - <name>`** (Issues/Vehicles
