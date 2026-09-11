@@ -4108,6 +4108,9 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"37.98", date:"2026-09-11", title:"🔒 Due Diligence: attach a document that’s already on file, from a list", items:[
+    "Rich: “we can upload docs as we have 5 uploaded already — better to just put them here.” Right. The deal documents live on this site, so attaching one is now a <b>pick from a list</b> — expand any item and choose from <b>📁 Pick a document on file</b> (the listing flyer, the ALTA survey, both ESA reports, the C of O requirements). The label fills itself in, and anything already attached to that item drops out of its list so you can’t attach it twice.",
+    "<b>To add a new document</b> — a quote, a report, an inspection — send the file to Rich; it gets committed alongside the other five and then appears in the picker on every item. The <b>paste a link</b> box is still there next to it for anything that lives in SharePoint or OneDrive instead." ] },
   { rev:"37.97", date:"2026-09-11", title:"🔒 Due Diligence: 👤 pick an owner and see only their items", items:[
     "Rich: “maybe a sort by owner or select tool to see only owner’s items.” There’s now an <b>owner picker</b> in the toolbar listing everyone with items and how many they have — pick a name and the whole page narrows to just their list. <b>✕</b> puts everyone back, and your choice is remembered on your device.",
     "It filters <b>everything at once</b> — all three tabs, the category tiles, the printed copy, and the <b>% complete</b> bar (which then reads “— Doug McLean only”), so you can hand someone their own list or check how far along it is without counting rows by hand.",
@@ -19914,6 +19917,20 @@ function propddAllItems(){
   const custom=(st.__custom||[]).map(applyOverride);
   return seed.concat(custom);
 }
+// ---- 📎 Documents that live IN THIS REPO, served from the live site alongside the dashboard.
+// Rich 2026-09-11: "we can upload docs as we have 5 uploaded already. so better to just put them here."
+// Right — the deal documents are committed under duediligence/ and served from the same host, so a quote
+// belongs there too rather than behind a SharePoint link only some people can open.
+// ⚠️ TO ADD A DOCUMENT: commit the file to the repo's duediligence/ folder (deploy.yml already uploads
+// that whole folder) and add ONE line here. It then shows up in every item's attach picker and, once
+// attached, in the 📎 Documents list. Nothing else to wire.
+const PROPDD_REPO_FILES=[
+  {label:'37900 Mound Rd — Listing Flyer',            url:'duediligence/37900-Mound-Rd-Listing-Flyer.pdf'},
+  {label:'ALTA Survey (2024)',                        url:'duediligence/ALTA-Survey-2024.pdf'},
+  {label:'Phase I ESA — Cover Letter',                url:'duediligence/Phase-I-ESA-Cover-Letter.pdf'},
+  {label:'Phase II ESA (2024)',                       url:'duediligence/Phase-II-ESA-2024.pdf'},
+  {label:'Sterling Heights — C of O Requirements',    url:'duediligence/Sterling-Heights-CofO-Requirements.pdf'}
+];
 // ---- 👤 Owner filter (Rich 2026-09-11: "maybe a sort by owner or select tool to see only owners items")
 // "Owner" = whoever the item actually sits with: the typed Assigned-to if there is one, otherwise the
 // suggested owner -- exactly what the Owner column already displays, so the picker matches what you see.
@@ -19961,8 +19978,17 @@ function _propddDocsList(){
 // Attach a link (a quote, proposal, emailed PDF, SharePoint/OneDrive file) to one item. Stored in the
 // same synced per-item state as everything else, so it reaches everyone with access on the next sync.
 function propddAttach(id){
-  const u=document.getElementById('propddAtt_'+id), l=document.getElementById('propddAttL_'+id);
-  const url=((u&&u.value)||'').trim(); if(!url){ alert('Paste the link to the document first.'); if(u) u.focus(); return; }
+  const u=document.getElementById('propddAtt_'+id), l=document.getElementById('propddAttL_'+id),
+        sel=document.getElementById('propddAttS_'+id);
+  // The picker (a document already committed under duediligence/) wins when one is chosen; otherwise
+  // fall back to whatever link was typed/pasted.
+  let url=((sel&&sel.value)||'').trim();
+  if(url && !((l&&l.value)||'').trim()){
+    const hit=PROPDD_REPO_FILES.filter(function(f){ return f.url===url; })[0];
+    if(hit && l) l.value=hit.label;
+  }
+  if(!url) url=((u&&u.value)||'').trim();
+  if(!url){ alert('Pick a document from the list, or paste a link to one.'); if(sel) sel.focus(); return; }
   if(!/^https?:\/\//i.test(url) && !/^duediligence\//i.test(url)){ alert('That doesn\'t look like a link — paste the full https:// address of the file (SharePoint / OneDrive / a shared link).'); u.focus(); return; }
   const st=_propddState(); st[id]=st[id]||{}; st[id].files=(st[id].files||[]).slice();
   st[id].files.push({label:((l&&l.value)||'').trim()||url.split('/').pop().split('?')[0]||'Attachment', url:url, at:Date.now(), by:_propddWho()});
@@ -20097,8 +20123,16 @@ function _propddDetailHtml(i,s){
             +'<span onclick="event.stopPropagation();propddDetach(\''+i.id+'\','+n+')" title="Remove this link from the item (does not delete the file)" style="cursor:pointer;color:var(--muted);font-weight:700;padding:0 4px">\u2715</span>'
             +'</div>'; }).join('')
         : '<div style="font-size:11.5px;color:var(--faint);margin-bottom:5px">Nothing attached yet.</div>';
+      const already={}; files.forEach(function(f){ already[String(f.url).split('#')[0]]=1; });
+      const pickable=PROPDD_REPO_FILES.filter(function(f){ return !already[f.url]; });
       fh+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
-        +'<input id="propddAtt_'+i.id+'" onclick="event.stopPropagation()" placeholder="Paste a link to the quote / document…" style="flex:2;min-width:180px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
+        +'<select id="propddAttS_'+i.id+'" onclick="event.stopPropagation()" title="Documents already in the deal folder on this site. To add a new one (a quote, a report), send it to Rich to commit into the duediligence folder and it appears here." style="flex:2;min-width:200px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--txt)">'
+          +'<option value="">\uD83D\uDCC1 Pick a document on file…</option>'
+          +pickable.map(function(f){ return '<option value="'+esc(f.url)+'">'+esc(f.label)+'</option>'; }).join('')
+          +(pickable.length?'':'<option value="" disabled>(all of them are already attached here)</option>')
+        +'</select>'
+        +'<span style="align-self:center;font-size:11px;color:var(--faint)">or</span>'
+        +'<input id="propddAtt_'+i.id+'" onclick="event.stopPropagation()" placeholder="paste a link…" style="flex:1;min-width:140px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
         +'<input id="propddAttL_'+i.id+'" onclick="event.stopPropagation()" placeholder="Label (e.g. Roof quote — ABC Roofing)" style="flex:1;min-width:150px;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">'
         +'<button onclick="event.stopPropagation();propddAttach(\''+i.id+'\')" title="Attach this link to the item — it also appears under \uD83D\uDCCE Documents at the top" style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:6px;border:1px solid var(--brand);background:transparent;color:var(--brand);cursor:pointer">\uD83D\uDCCE Attach</button>'
         +'</div></div>';
@@ -20161,7 +20195,7 @@ function renderPropDD(){
       +'<b>Click any item</b> to expand it — edit its title/description right in place, set status/assignee/notes/resolution, or 🗑 delete it if it doesn\'t apply. Assignee remembers every name you\'ve typed so it\'s a pick-list after the first time.<br>'
       +'<b>➕ Add item</b> — for anything not already on the list. Pick a category, give it a title, and optionally a suggested owner/assignee up front.<br>'
       +'<b>📎 Documents</b> (top-right of the toolbar) — every reference PDF linked from any item below, all in one place. Items with a linked document also show a 🔗 link right in their own expanded detail.<br>'
-      +'<b>📎 Attach a quote or document</b> — expand any item and paste a link (SharePoint, OneDrive, or any shared link) with a label. It stays on that item AND appears in the 📎 Documents list up top, so it is filed once and findable in both places.<br>'
+      +'<b>📎 Attach a quote or document</b> — expand any item and either <b>pick a document that\'s already on file</b> here (the listing flyer, ALTA survey, the ESA reports, the C of O requirements — the label fills itself in) or paste a link (SharePoint, OneDrive, any shared link) with a label. To put a NEW document on file — a quote, a report — send the file to Rich and it joins the picker for every item. It stays on that item AND appears in the 📎 Documents list up top, so it is filed once and findable in both places.<br>'
       +'<b>✏️ What changed</b> — every edit stamps who made it and when. Anything touched in the last week is tinted blue with an ✏️ chip, and the count sits next to the progress bar up top, so you can see at a glance what moved since you last looked. The chip clears itself after a week.<br>'
       +'<b>👤 Owner picker</b> (in the toolbar) — pick a name to see <b>only that person\'s items</b>. It uses whoever the item actually sits with (the typed Assigned-to if there is one, otherwise the suggested owner), and it filters all three tabs, the print, and the % complete bar — so you can hand someone their own list, or check how far along it is. ✕ clears it.<br>'
       +'<b>% complete</b> — set a percentage on any In Progress item and its badge reads "In Progress · 50%". The bar at the top is the real roll-up: Done counts fully, In Progress counts whatever percentage you set on it.'
