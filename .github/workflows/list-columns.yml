@@ -18,6 +18,9 @@ on:
       filter:
         description: "Only show field names containing this text (blank = show all)"
         default: "arch"
+      only_true:
+        description: "yes = for the matched field(s), print EVERY row whose value is truthy (True/Yes/1) with the row's full record, instead of the first 12 values"
+        default: "yes"
         required: false
 
 jobs:
@@ -30,6 +33,7 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
           LIST_KEY: ${{ inputs.list_key }}
           FILTER: ${{ inputs.filter }}
+          ONLY_TRUE: ${{ inputs.only_true }}
         run: |
           set -e
           az storage blob download --account-name mrashopdash --account-key "$AZURE_STORAGE_KEY" \
@@ -65,6 +69,15 @@ jobs:
                   vals = [(r.get('ID') or r.get('Id'), r.get(n)) for r in rows
                           if isinstance(r, dict) and r.get(n) not in (None, '')]
                   print(f"  {n!r}: {len(vals)} rows non-empty -> {vals[:12]}")
+        if (os.environ.get('ONLY_TRUE') or '').lower() in ('yes','true','1'):
+            def truthy(v):
+                if v is True or v == 1: return True
+                return str(v).strip().lower() in ('yes','true','1')
+            hits = [r for r in rows if isinstance(r, dict) and truthy(r.get(n))]
+            print(f"  {n!r}: {len(hits)} rows TRUTHY — full records follow (one per line):")
+            for r in hits:
+                slim = {k: v for k, v in r.items() if v not in (None, '') and k not in ('@odata.etag',)}
+                print("    ", json.dumps(slim, default=str, ensure_ascii=False))
               # and confirm the known-good flags for comparison
               for n in ('Parked','NonOfficial'):
                   if n in names:
