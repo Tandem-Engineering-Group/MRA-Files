@@ -79,6 +79,24 @@ charts, and it must generalise.
   labor is the only cost you control after buyout** — which is why an 83%-pass-through job is a *procurement* problem.
 - Prototype-first discipline held: built standalone with real data, screenshotted, iterated, THEN ported. Caught
   `var(--purple)` — **this dashboard's palette has `--violet`, not `--purple`** (bars rendered black).
+- **⚠️ REFINED SAME DAY (38.01–38.02), and this is the shape to keep:** Rich, on seeing it — *"we also want to
+  probably include a date because I don't know if we're gonna update this weekly or what"* and *"he might not have
+  added our hours that are in the tracking sheet yet... but include my hours as well."*
+  1. **The headline is now the WHOLE job**, not the posted figure: `grand = posted + uncosted tracked hours + what-if
+     burden` → **$618,181.07** = $613,176.78 posted + $5,004.29 logged since the 8/28 pay run. The split is spelled
+     out under the number and **tile 1 became "Posted in QuickBooks"** so the tie-to-the-books figure keeps a home.
+     ⚠ Don't "simplify" by dropping either one — the complete number is what Rich manages by, the posted number is
+     what Tony ties to the P&L, and the whole design depends on both being visible and labelled.
+  2. **An `As of` strip** (`.qb-asof`), because the refresh cadence is a human habit not a schedule: when the export
+     was pulled + how long ago, then the three dates that are almost never equal — **bills through / payroll through /
+     shop hours through** — and that nothing after them is included. >14 days old turns it amber.
+  3. A green **✓ ties to QuickBooks** chip when the sum matches the export's own TOTAL (38.01) — the owner's first
+     question, answered before it's asked. The red mismatch banner was already there; the pass case was silent.
+  4. The labor panel now names **the date the two systems started agreeing** (7/27/26), matching Rich's own mental
+     model (*"at some point three, four, five weeks ago they should start ALIGNING"*).
+  5. **Three no-bridge cases are now distinguished**, not one message. The important one: board has hours but
+     QuickBooks carries **no payroll at all** on the job → warns that shop labor is excluded entirely and **refuses to
+     invent a rate**, because with no payroll on that job there is nothing honest to derive one from.
 
 ## 🚨 FOUND + FIXED 2026-09-11 — every NEW project task was being BORN ARCHIVED (Trumpf "went to archive")
 
