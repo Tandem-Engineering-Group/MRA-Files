@@ -97,6 +97,42 @@ charts, and it must generalise.
   5. **Three no-bridge cases are now distinguished**, not one message. The important one: board has hours but
      QuickBooks carries **no payroll at all** on the job → warns that shop labor is excluded entirely and **refuses to
      invent a rate**, because with no payroll on that job there is nothing honest to derive one from.
+- **🔧 CORRECTED SAME DAY (38.1) — an adversarial review of the shipped card found FOUR real defects. All verified
+  against the actual 76 rows before changing anything; don't reintroduce any of them:**
+  1. **The blended rate was 8.3% too high.** It divided ALL payroll dollars by only the hours that happen to be stated
+     in the memo — but **4 of 12 payroll rows carry a dollar figure and no `NN.NNhr` at all** ($1,401.85, all 2025).
+     Correct: matched rows only, **$16,848.32 / 560.10 = $30.08/hr**, not $32.58. Every accrued hour was over-valued
+     on top of it. ⚠ `rateBasis` now carries the hourless count/dollars and the card discloses them.
+  2. **The accrual cut was on the wrong date.** A pay run dated 8/28 pays for work that finished days earlier, so
+     cutting at the CHECK date treated **34.87h** as costed that payroll never saw. The **pay-period lag is now
+     DERIVED per project**: assume a 14-day period ending L days before the check date, keep only periods lying wholly
+     inside the board's tracking window, pick **most comparable periods FIRST, then lowest mean error**. ⚠ That
+     tiebreak order is load-bearing — a naive min-error rule picks L=6 or L=7 (both score a perfect 0.00 on a single
+     lucky period) over the correct **L=5** (2 periods, mean 1.12h). Cut becomes the paid-period end **8/23**;
+     uncosted 153.60 → **188.47h**; estimate → **$618,845.96**. Lag is derived not assumed because check dates move
+     (7/2/26 was a **Thursday** — July 4th week), so never hardcode a weekday.
+  3. **🔒 A real privacy hole.** `_qbScrub` gated the name-scrub on `financeRatesAllowed()`, which **includes both
+     PMs** — so Al and Megan could read `Record Payroll … (Surname) $865.39`. Now gated on its own
+     **`FINANCE_PAYROLL_DETAIL`** = Rich + Kim. ⚠ Deliberately NOT reusing `FINANCE_RATES_DIAG`: that is a
+     *debug-verbosity* list, and someone widening debug output later must not silently widen access to pay data.
+  4. Two of five tiles used `.kpi.done` / `.kpi.open` — **neither class has any CSS** (rails render blank). Valid
+     rail classes are only: `proj brand · sched blue · over red · active green · tasks amber · pipe violet ·
+     ship teal · hold grey`. And `_qbTrackedFor` with a digitless code gave `indexOf('')===0` → **matched every time
+     entry in the system**; guarded.
+- **📊 THE RECONCILIATION IS NOW PER PAY PERIOD, and that change matters more than it looks.** An aggregate window can
+  look excellent while being the sum of large offsetting errors — the original −0.4% was exactly that (+55.43h and
+  −22.31h under naive check-date alignment). Per period at L=5: **7/27→8/9 = 40.14 vs 42.39 (+2.25h)** and
+  **8/10→8/23 = 129.22 vs 129.22 (exact)**. ⚠ When you change the cut you MUST rebuild the summary buckets too — the
+  first attempt compared QB through 8/28 against board hours through 8/23 and printed a scary **−17.2%** that
+  contradicted the table directly beneath it. Both columns now reconcile exactly (QB 390.74+169.36=560.10; board
+  171.61+188.47=360.08). Wording is **"corroboration, not independent proof"** — both figures ultimately describe the
+  same timesheets, and this app has a Paylocity import path, so an exact tie is evidence, not proof.
+- **The what-if markup now defaults to 0%, not 35%** — the card is shown to the owner it is making a case to, and a
+  page that boots pre-set to the number being argued for reads as advocacy. It also states the figure is **prospective
+  policy value, not money recoverable on this job** (J1553 is under contract and largely spent).
+- ⚠ **There is NO VENDOR in this export.** All 76 `Name` values are `J1553 MedTronic (MRA#2323)` — the customer:job,
+  not a payee. The ledger column is **Scope**. Do not build a "by vendor" view or use the word; if Rich wants payee
+  detail the QuickBooks report needs a **Source Name** column added to the export first.
 
 ## 🚨 FOUND + FIXED 2026-09-11 — every NEW project task was being BORN ARCHIVED (Trumpf "went to archive")
 
