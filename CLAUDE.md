@@ -149,6 +149,50 @@ charts, and it must generalise.
   not a payee. The ledger column is **Scope**. Do not build a "by vendor" view or use the word; if Rich wants payee
   detail the QuickBooks report needs a **Source Name** column added to the export first.
 
+## ✅ SHIPPED 2026-09-12 — 🧾 Invoices linked to the cost line they paid for (rev 38.3)
+
+Rich, on the QuickBooks card: *"would be really cool if we had all the invoices and they were linked to each line so
+you can click and look."* He is right, and it is the missing half of the markup finding — the export says WHAT was
+bought but never WHO billed it, and never whether a markup was applied at bill entry, so **the original document is the
+only thing that answers either question.** Linking it is what turns "not recorded" into something checkable.
+
+- **Two new columns on every transaction table** (Biggest transactions · the small tail · the new full ledger):
+  **Ref #** — the bill/invoice number **QuickBooks already held and the card never showed** (`row.num`; it was in the
+  parsed data from day one) — and **Document**, which renders **🧾 open** when the original has been linked.
+- **NEW: `All N transactions`**, a collapsed `<details>` at the bottom of the card — every line, newest first, with
+  Ref # / Entered as / Category / Description / Amount / Document, footed by a total that ties to the card
+  ($613,176.78 on the pilot). Before this the card only ever showed the top 10 plus the OPS/ADJ tail, so most lines
+  were not reachable at all.
+- **Coverage is stated in MONEY, not just count:** "N of 76 transactions have the original document linked — $X, Y% of
+  the cost." Count alone is misleading here: **6 documents cover ~81% of this job**, so 6/76 is 8% of the rows and most
+  of the money. The print header carries the same figure.
+- **🔒 LINKS ONLY, AND THIS IS NOT A STYLE CHOICE.** `$web` is **public** — an anonymous GET of
+  `finance/projectcosts.json` returns 200 (that is how the payroll-surname leak was found the same day). A vendor
+  invoice uploaded there would be world-readable. So invoices live in **SharePoint** (identity-gated) and this
+  feature stores **nothing but a pointer**. ⚠ Never commit an invoice to this repo or add one to a deployed folder.
+- **No free-text label field, deliberately.** The link is shown against the row's **own Ref #**, which is already in
+  the public cost file. A typed label would carry vendor names into a public file one well-meaning entry at a time.
+- **KEY = `job|date|amount|ref`** (`_qbRowKey`, ref lowercased + non-alphanumerics stripped). **Verified unique across
+  all 76 rows.** It is content-based on purpose, so a link survives a fresh export of the same job. An **amended bill
+  changes its amount → changes its key → loses its link and must be re-attached** — which is correct, because the
+  document changed too.
+- **TWO PATHS, same rule as the cost file:** seed `finance/invoices.json` (committed + deployed) and the in-app write
+  at root `invoices.json`; the page prefers root. ⚠ One shared path would let a deploy clobber freshly added links.
+- **⏭ NO ATTACH BUTTON IS DRAWN YET, on purpose.** `QB_INV_WRITE_URL` is `''`, and rather than an alert-on-click
+  placeholder the Document cell simply reads `—`: *a button that looks like it saves and doesn't is worse than none*
+  (the Due-Diligence "no fake upload button" rule). `qbAttachDoc()` is fully built — the moment that URL is set,
+  every row grows a **📎 link** button for anyone in `FINANCE_EMAILS`. Same one-flow shape as everything else here:
+  HTTP trigger (**"Anyone"**) → Create blob (V2) writing `invoices.json` into `$web`, body parsed with
+  **`json(triggerBody())?['json']`** (NOT `triggerBody()?['json']` — that mistake has now cost two cycles).
+- **TO ADD A LINK TODAY: put the file in SharePoint, copy its link, add one entry to `finance/invoices.json`'s
+  `links` object keyed as above, deploy.** That is the whole procedure — the same shape as `PROPDD_REPO_FILES`.
+- Also cleaned up while in there: the rev 38.0 changelog entry still advertised the withdrawn markup picker and the
+  **$178,364** figure in "What's new". It now says the figures were withdrawn same-day and points at 38.2.
+- Verified headless against the LIVE data.js + the real 76-row export, with two links injected: 100 Document cells
+  (10 + 14 + 76), 96 `—`, 4 **open** anchors (the two linked rows appear in two tables each), coverage note reads
+  "2 of 76 … $251,970, 41.1% of the cost", the full-ledger total ties to $613,176.78, print header carries the
+  coverage, **0 page errors**; both cards screenshotted and eyeballed.
+
 ## 🚨 FOUND + FIXED 2026-09-11 — every NEW project task was being BORN ARCHIVED (Trumpf "went to archive")
 
 Rich, 1:24 PM: *"the trumpf project went to archive ????? not supposed to. need to fix asap."* Trumpf (236 tasks, live in
