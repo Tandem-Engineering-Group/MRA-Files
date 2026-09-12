@@ -17,12 +17,27 @@ charts, and it must generalise.
   **7 of 76 transactions carry 80% of the cost.** This is a *procurement* job, not a shop job — the card is built to
   make that impossible to miss, because giving a $272 fuel line the same weight as a $305,970 invoice trains people to
   manage 0.04% of the money.
-- **💸 THE PASS-THROUGH LEDGER IS THE POINT OF THE PAGE**, and it wires this dashboard straight into the markup
-  decision Rich just won: a **what-if markup picker (0–45%)** recomputes live. **One point on this job = $5,096**; five
-  points ($25,481) exceeds MRA's entire internal labor spend on it; at the proposed **35% band it is $178,364 ≈ 10× the
-  shop labor the job consumed.** At 0% the note flips to the cost-recovery framing ("MRA earns nothing on $509,612 it
-  sourced, scheduled, hosted and carried the risk on"). **"Markup on file" renders `not set`, never `0%`** — deliberate:
-  zero reads as a decision someone made, blank reads as a question someone must answer.
+- **🚫 THERE IS NO MARKUP MATH ON THIS CARD, AND THERE MUST NOT BE — Rich, 2026-09-12, and he is right:**
+  *"a lot of this was already marked up the original thirty percent, but it's not documented… the invoices he puts in
+  QuickBooks are already marked up by the nonstandard way, and it's hard to tell which one is which unless I go get
+  each invoice."* **A QuickBooks amount on a job is NOT reliably a cost.** Some lines are the vendor's raw invoice;
+  some already carry an undocumented ~30%; nothing in the export says which. So:
+  - Any *"at N% MRA would earn X"* computed off these amounts is **markup stacked on markup**, and it cannot be backed
+    out per line either. The what-if picker and the "MRA would earn" column **shipped in 38.0 and were removed in
+    38.2**. ⚠ **DO NOT REINTRODUCE THEM** until markup is recorded as its own field.
+  - The section is **"🏗 Work invoiced by outside firms"** (not "pass-through" — that is a *billing* word and this file
+    has only cost/charge data). The column reads **"Markup included? — not recorded"**.
+  - The caveat rides the **As of** strip too, because it governs every figure on the page: amounts are **as charged to
+    the job**, not clean vendor cost.
+  - **The gap IS the finding, and it is the stronger argument:** $509,612 (83.1%) went out through other firms and the
+    books cannot say what MRA earned on it, because markup is decided at bill entry and never written down. The fix to
+    ask for is **record markup as its own field**, which is what makes it measurable afterwards.
+  - ⚠ Also unresolved and Rich's to answer: **the $305,970 "Design/Build Services" line is 49.9% of the job and its
+    payee is unknown** — every one of the 76 `Name` values is `J1553 MedTronic (MRA#2323)`, the job, not a vendor. It
+    was classified as an outside firm **from the memo text alone**. If it is actually MRA's own fabrication billed
+    through, the whole picture inverts. Ask before relying on the 83.1%.
+  - Open question for Rich: whether markup applies only to subcontracted work ($509,611) or to **every re-billed cost
+    including materials MRA buys and installs** ($592,443 — his own $400 carpet-clean example suggests the latter).
 - **🧮 THE LABOR RECONCILIATION — the thing Rich specifically asked about** ("this file will have the older labor as
   well that's not included before I started tracking it"). QB payroll and the board's tracking cover **different,
   overlapping** periods and NEITHER is complete:

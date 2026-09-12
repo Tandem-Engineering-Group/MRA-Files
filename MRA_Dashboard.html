@@ -3934,8 +3934,8 @@ const GENERAL_HELP = `
     <ul>
       <li><b>The number at the top is the whole job</b> — what QuickBooks has posted <b>plus</b> the shop hours the board has logged that payroll hasn't reached yet, since QuickBooks is only updated now and then. The cut-off is the end of the last <b>paid period</b>, not the pay-run date — a run pays for work that finished days earlier, and the card works that lag out from the data rather than assuming it. Right under it you get the split (“$613,177 posted + $5,004 shop hours since the last payroll run”), and the first tile keeps the pure <b>Posted in QuickBooks</b> figure so it can always be tied back to the books.</li>
       <li><b>📅 The “As of” line says exactly how current everything is</b> — when the export was pulled and how long ago, plus the three dates that actually matter and are usually different: bills through one date, payroll through another, shop hours through a third. If an export goes over two weeks old the whole strip turns amber and says how old it is. There's no live feed to QuickBooks (it's on-prem), so the page only moves when a new export is loaded — it says so rather than looking fresh.</li>
-      <li><b>What it shows:</b> cost to date and how it splits (a pass-through ledger, every cost line largest-first, and <b>what the parts actually were</b> — AV, aluminium, computers, panel, hardware and so on, read from the purchase descriptions); a month-by-month spend chart with the cumulative line; the biggest transactions; and everything small folded away behind one line.</li>
-      <li><b>💸 The pass-through ledger</b> is the point of the page: the subcontract work MRA bills but doesn't perform. It carries a <b>what-if markup</b> picker — change it and the "MRA would earn" column and the note underneath re-figure live. "Markup on file" reads <b>not set</b> because QuickBooks holds no markup field on these bills; that's a question to answer, not a zero.</li>
+      <li><b>What it shows:</b> cost to date and how it splits (work billed by outside firms, every cost line largest-first, and <b>what the parts actually were</b> — AV, aluminium, computers, panel, hardware and so on, read from the purchase descriptions); a month-by-month spend chart with the cumulative line; the biggest transactions; and everything small folded away behind one line.</li>
+      <li><b>🏗 Work invoiced by outside firms</b> groups the scopes billed to the job by someone other than MRA's own shop. <b>There is deliberately no markup calculation anywhere on this page.</b> The amounts in QuickBooks are what was <i>charged to the job</i>, not clean vendor cost — some bills are entered at the vendor's invoice and others already carry a markup (historically around 30%) applied at entry and recorded nowhere, so the two can't be told apart without pulling each original invoice. Any "at N% MRA would earn X" figure built on them would be markup stacked on markup. The <b>Markup included?</b> column therefore reads <b>not recorded</b> — which is the honest answer, and the finding itself: the books can't say what MRA earned on that work. Recording markup as its own field is what would make it measurable.</li>
       <li><b>🧮 Labor — QuickBooks vs the shop board</b> reconciles the two places this company records hours. It is deliberately a <b>bridge, not a merge</b>: QuickBooks is the record up to the last payroll date, and the board adds hours only <i>after</i> it. <b>Never add the two hour totals together</b> — they overlap. The panel also reports how closely they agree over the weeks both can see, which is the evidence for whether the board's time tracking can be costed from at all.</li>
       <li><b>What it can't tell you:</b> no contract value or budget is stored, so there is <b>no margin, no percent spent, no cost remaining</b> — the page says so rather than implying otherwise. Labor is <b>wages only</b>, with no tax/insurance/benefit burden, because finance hasn't set a burden rate; there's a what-if picker for that too. And anything QuickBooks has not posted yet — open POs, unbilled subcontract work — simply isn't here.</li>
       <li><b>Keeping it current:</b> QuickBooks Enterprise is on-prem, so there's no live feed — it's a manual export. <span class="k">📤 Load export</span> reads the .xlsx in your browser and shares it with everyone. The card checks its own arithmetic against the export's own TOTAL row and <b>says so loudly if they disagree</b>, so a change in the QuickBooks report format shows up as a warning rather than as quietly wrong numbers. Anything it can't categorise from the memo text is counted and shown as <b>Uncategorised</b>, never dropped.</li>
@@ -4175,6 +4175,11 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"38.2", date:"2026-09-12", title:"🔧 Removed the markup maths — the QuickBooks amounts are not clean cost", items:[
+    "Rich: <i>“a lot of this was already marked up the original thirty percent, but it’s not documented… the invoices he puts in QuickBooks are already marked up by the nonstandard way, and it’s hard to tell which one is which unless I go get each invoice.”</i> He is right and it invalidated the headline feature. If a bill was entered at $46,192.50 with ~30% already inside it, treating that as cost and adding another 35% is <b>markup stacked on markup</b> — and since it was applied inconsistently and recorded nowhere, it cannot be backed out line by line either.",
+    "<b>So the markup calculator is gone</b> — the what-if picker, the “MRA would earn” column and every figure built on them. What replaces it is the honest version: the section is now <b>🏗 Work invoiced by outside firms</b>, the column reads <b>“Markup included? — not recorded”</b>, and the card states that these are amounts <b>charged to the job</b>, not clean vendor cost.",
+    "<b>The gap is the finding.</b> $509,612 — 83.1% of this job — went out through other firms and the books cannot say how much MRA earned on it, because markup is decided at bill entry and never written down. That is a stronger argument for a standard than any number the page could have invented, and it points at the fix: <b>record markup as its own field</b> so it becomes measurable afterwards.",
+    "The same caveat now rides the <b>As of</b> line, because it governs every figure on the page, not just that one card. The cost totals, the category split, the spend curve and the labour reconciliation are all unaffected — those are real dollars charged to the job either way." ] },
   { rev:"38.11", date:"2026-09-12", title:"👤 John Renaud added to Finance", items:[
     "Rich: <i>“the only other one with access should be John, the finance controller.”</i> <b>John Renaud</b> now has the Finance tab, so he can see the QuickBooks project-cost card. Like Tony, he does <b>not</b> get per-person wage rates — those stay with Rich, Kyle, Al and Megan.",
     "Also corrected a name in yesterday’s note: the second Finance account is <b>Kyle Maynard</b> (kmaynard@gomra.com), who has had access since the tab was built. It was written as “Kim”, which was wrong." ] },
@@ -7532,7 +7537,7 @@ function renderProjectCost(){
    --------------------------------------------------------------------------------------------
    WHY THIS EXISTS: the Finance tab could only ever show LABOR (tracked hours x pay rate). On a real
    MRA project that is a small slice — on the pilot job (J1553 Medtronic) MRA's own labor is 3.0% of
-   cost and subcontract pass-through is 83.1%. This card shows the whole job.
+   cost and work billed by outside firms is 83.1%. This card shows the whole job.
 
    DATA PATH: QuickBooks Enterprise is ON-PREM (no cloud API), so this rides a periodic manual
    export — Reports > Jobs > "cost by job", saved as .xlsx, loaded with the 📤 button. The parse
@@ -7724,11 +7729,15 @@ function _qbTrackedFor(code){
 function _qbMoney(n,d){ const v=Math.abs(n||0);
   return (n<0?'-$':'$')+v.toLocaleString('en-US',{minimumFractionDigits:d==null?0:d,maximumFractionDigits:d==null?0:d}); }
 
-// Opens at 0% deliberately: the card is shown to the owner it is making a case to, and a page that
-// boots already set to the number being argued for reads as advocacy. At 0% it states the plain fact
-// ("MRA earns nothing on $509,612") and the reader moves the picker themselves.
-let QB_MARKUP=0, QB_BURDEN=0;
-function qbSetMarkup(p){ QB_MARKUP=+p||0; renderQBCost(); }
+// ⚠ THERE IS NO MARKUP MATH ON THIS CARD, DELIBERATELY. Rich, 2026-09-12: "a lot of this was already
+// marked up the original thirty percent, but it's not documented... the invoices he puts in QuickBooks
+// are already marked up by the nonstandard way, and it's hard to tell which one is which unless I go
+// get each invoice." So a QuickBooks amount on this job is NOT reliably a cost — some lines are the
+// vendor's raw invoice, some already carry an undocumented ~30%, and nothing in the file says which.
+// Any "at N% MRA would earn X" figure computed off these amounts is markup stacked on markup, and it
+// cannot be backed out per line either. The what-if picker that used to live here was removed for
+// exactly that reason. DO NOT REINTRODUCE IT until markup is recorded as its own field.
+let QB_BURDEN=0;
 function qbSetBurden(p){ QB_BURDEN=+p||0; renderQBCost(); }
 
 function renderQBCost(){
@@ -7799,6 +7808,7 @@ function _qbHtml(P, code, o, doc){
     +(o.labor.lastPR?', payroll through <b>'+esc2(fmtMDY(o.labor.lastPR))+'</b>':'')
     +(lastTr?', and shop hours off the board through <b>'+esc2(fmtMDY(lastTr))+'</b>':'')
     +'. Anything invoiced or paid after those dates is not in here yet — this page only moves when a fresh QuickBooks export is loaded.'
+    +' <span class="qb-agodim">Figures are <b>as charged to the job</b> in QuickBooks; some bills already include a markup applied at entry, so treat them as charged amounts rather than clean vendor cost.</span>'
     +(staleD!=null&&staleD>14?' <b>This export is '+staleD+' days old.</b>':'')
     +'</div>';
 
@@ -7817,7 +7827,7 @@ function _qbHtml(P, code, o, doc){
   /* ---- tiles ---- */
   h+='<div class="kpis" style="grid-template-columns:repeat(5,1fr);margin:14px 0">'
     +_finTile2('proj', M(o.total), o.txns+' transactions · '+esc2(fmtMD(o.first))+' → '+esc2(fmtMD(o.last)), 'Posted in QuickBooks')
-    +_finTile2('over', subPct.toFixed(1)+'%', M(sub)+' · '+o.rows.filter(r=>r.grp==='SUB').length+' invoices', 'Subcontract pass-through')
+    +_finTile2('over', subPct.toFixed(1)+'%', M(sub)+' · '+o.rows.filter(r=>r.grp==='SUB').length+' invoices', 'Billed by outside firms')
     +_finTile2('sched', M(mra), o.labor.hours+'h @ '+M(o.labor.rate,2)+' wages', 'MRA shop labor · '+(o.total?(mra/o.total*100).toFixed(1):'0')+'%')
     +_finTile2('tasks', String(o.n80), 'of '+o.txns+' transactions', 'Make up 80% of cost')
     +_finTile2('hold', 'Not set', 'no contract value on file', 'Budget / margin')
@@ -7829,30 +7839,28 @@ function _qbHtml(P, code, o, doc){
   if(sub>0){
     const L={}; o.rows.filter(r=>r.grp==='SUB').forEach(r=>{ if(!L[r.catLabel]) L[r.catLabel]={v:0,n:0}; L[r.catLabel].v+=r.amt; L[r.catLabel].n++; });
     const led=Object.keys(L).map(k=>({k,v:_qbR2(L[k].v),n:L[k].n})).sort((a,b)=>b.v-a.v);
-    const mk=QB_MARKUP/100, earn=sub*mk;
-    h+='<div class="fin-card" style="border-color:var(--violet)"><div class="fin-card-head">'
-      +'<div><h3 style="margin:0">💸 Pass-through — the money MRA does not perform</h3>'
-      +'<div class="muted" style="font-size:11.5px;margin-top:4px">Subcontract invoices billed to this job. This is where a markup policy lands.</div></div>'
-      +'<label class="qb-ctl">What-if markup <select onchange="qbSetMarkup(this.value)">'
-      +[0,10,20,30,35,40,45].map(p=>'<option value="'+p+'"'+(p===QB_MARKUP?' selected':'')+'>'+p+'%</option>').join('')
-      +'</select></label></div>'
-      +'<table class="qb-tbl"><thead><tr><th>Scope</th><th class="r">Invoices</th><th class="r">Cost</th>'
-      +'<th class="r">% of job</th><th class="r">Markup on file</th><th class="r">MRA would earn @'+QB_MARKUP+'%</th></tr></thead><tbody>'
+
+    h+='<div class="fin-card" style="border-color:var(--violet)">'
+      +'<h3>🏗 Work invoiced by outside firms</h3>'
+      +'<div class="muted" style="font-size:11.5px;margin:-6px 0 10px">Scopes billed to this job by someone other than MRA’s own shop. '
+      +'Grouped from the bill descriptions — the export carries no payee, so these are scopes, not named vendors.</div>'
+      +'<table class="qb-tbl"><thead><tr><th>Scope</th><th class="r">Invoices</th><th class="r">Charged to the job</th>'
+      +'<th class="r">% of job</th><th class="r">Markup included?</th></tr></thead><tbody>'
       +led.map(x=>'<tr><td><span class="qb-pill g-SUB">SUB</span> '+esc2(x.k)+'</td><td class="r">'+x.n+'</td>'
         +'<td class="r">'+M(x.v,2)+'</td><td class="r">'+(x.v/o.total*100).toFixed(1)+'%</td>'
-        +'<td class="r" style="color:var(--amber)">not set</td><td class="r">'+M(x.v*mk)+'</td></tr>').join('')
-      +'<tr class="tot"><td>Total pass-through</td><td class="r">'+o.rows.filter(r=>r.grp==='SUB').length+'</td>'
-      +'<td class="r">'+M(sub,2)+'</td><td class="r">'+subPct.toFixed(1)+'%</td><td class="r">—</td><td class="r">'+M(earn)+'</td></tr>'
+        +'<td class="r" style="color:var(--amber)">not recorded</td></tr>').join('')
+      +'<tr class="tot"><td>Total</td><td class="r">'+o.rows.filter(r=>r.grp==='SUB').length+'</td>'
+      +'<td class="r">'+M(sub,2)+'</td><td class="r">'+subPct.toFixed(1)+'%</td><td class="r">—</td></tr>'
       +'</tbody></table>'
-      +'<div class="qb-note">'+(QB_MARKUP===0
-        ? '<b>At 0% markup MRA earns nothing on '+M(sub)+' of subcontract work</b> it sourced, scheduled, hosted and carried the risk on. Every point above zero is '+M(sub*0.01)+'.'
-        : '<b>One point of markup on this job = '+M(sub*0.01)+'.</b> At '+QB_MARKUP+'% MRA would earn <b>'+M(earn)+'</b> on this project’s pass-through — '
-          +(mra>0 ? (earn>=mra ? (earn/mra).toFixed(1)+'× the entire shop labor spend on the job ('+M(mra)+').'
-                               : (earn/mra*100).toFixed(0)+'% of the shop labor spend on the job ('+M(mra)+').') : ''))
-      +'</div>'
-      +'<div class="muted" style="font-size:11px">“Markup on file” reads <b>not set</b> because QuickBooks carries no markup field on these bills — '
-      +'that column is a question to answer, not a zero. <b>This is what a markup policy would be worth on a job shaped like this one, not money that can be recovered on this job</b> — '
-      +'J1553 is already under contract and '+(o.curve.length?'largely spent':'in flight')+'. The value is in what it changes for the next quote.</div></div>';
+      +'<div class="qb-warn"><b>These amounts are what was charged to the job, not clean vendor cost.</b> '
+      +'Some bills are entered at the vendor’s invoice; others already carry a markup — historically about 30%, applied '
+      +'inconsistently and <b>recorded nowhere</b>, so it cannot be told apart line by line without pulling each original invoice. '
+      +'That is why there is <b>no markup calculation on this page</b>: any “at N% MRA would earn X” built on these figures would be '
+      +'markup stacked on markup, and it would read as a real number.</div>'
+      +'<div class="qb-note"><b>The finding is the gap itself.</b> '+M(sub)+' — '+subPct.toFixed(1)+'% of this job — went out through other firms, '
+      +'and the books cannot say how much of it MRA earned on, because markup is decided at bill entry and never written down. '
+      +'A standard fixes the rate; recording markup as <b>its own field</b> is what makes it measurable afterwards. '
+      +'Until that exists, this column stays <b>not recorded</b> — which is the honest answer, and a more useful one than a number nobody can source.</div></div>';
   }
 
   /* ---- composition: where it went + what the parts were ---- */
@@ -8130,9 +8138,10 @@ function _qbPrintBody(P,code,o){
     +'<td style="border-top:2px solid '+T.INK+';text-align:right;font-weight:800;padding-top:7px">'+M(o.total,2)+'</td><td style="border-top:2px solid '+T.INK+'"></td></tr></tbody></table>'
     +'<h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:'+T.BRAND+';margin:18px 0 6px">Every cost line</h2>'
     +'<table><tbody>'+o.byCat.map(x=>'<tr><td>'+esc(x.k)+'</td><td style="text-align:right">'+M(x.v,2)+'</td><td style="text-align:right;color:'+T.MUT+'">'+(x.v/o.total*100).toFixed(1)+'%</td></tr>').join('')+'</tbody></table>'
-    +(sub>0?'<h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:'+T.BRAND+';margin:18px 0 6px">Pass-through</h2>'
-      +'<div style="font-size:12px">'+M(sub,2)+' of this job ('+(sub/o.total*100).toFixed(1)+'%) is subcontract work MRA did not perform. '
-      +'One point of markup on it is '+M(sub*0.01)+'; at 35% it is '+M(sub*0.35)+'.</div>':'')
+    +(sub>0?'<h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:'+T.BRAND+';margin:18px 0 6px">Work invoiced by outside firms</h2>'
+      +'<div style="font-size:12px">'+M(sub,2)+' of this job ('+(sub/o.total*100).toFixed(1)+'%) was billed by firms other than MRA\u2019s own shop. '
+      +'These are amounts <b>charged to the job</b>, not clean vendor cost \u2014 some bills already carry a markup applied at entry and '
+      +'recorded nowhere, so no markup figure can honestly be computed from them.</div>':'')
     +(o.recon?'<h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:'+T.BRAND+';margin:18px 0 6px">Labor reconciliation</h2>'
       +'<div style="font-size:12px">QuickBooks payroll on this job: '+o.labor.hours+'h / '+M(o.labor.dollars,2)+' through '+esc(fmtMDY(o.recon.lastPR))+'. '
       +'The shop board logged '+o.recon.trackedTotal+'h from '+esc(fmtMDY(o.recon.firstTr))+'. Over the weeks both systems can see, they agree to within '
