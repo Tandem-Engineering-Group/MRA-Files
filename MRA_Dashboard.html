@@ -3932,7 +3932,7 @@ const GENERAL_HELP = `
     <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart) — not a new report, the same trusted one, opened directly right here (no more switching to Time Tracking first). <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p>
     <p><b>🧾 Full project cost — from QuickBooks.</b> The rest of this tab is <b>shop labor only</b> (tracked hours × pay rate). This card is a project's <b>whole</b> cost as QuickBooks sees it — subcontract, materials, parts, technology, travel, fuel, postage, payroll — from a periodic <b>Cost by Job</b> export. Pick a project from the dropdown at the top of the card.</p>
     <ul>
-      <li><b>The number at the top is the whole job</b> — what QuickBooks has posted <b>plus</b> the shop hours the board has logged that payroll hasn't reached yet, since QuickBooks is only updated now and then. Right under it you get the split (“$613,177 posted + $5,004 shop hours since the last payroll run”), and the first tile keeps the pure <b>Posted in QuickBooks</b> figure so it can always be tied back to the books.</li>
+      <li><b>The number at the top is the whole job</b> — what QuickBooks has posted <b>plus</b> the shop hours the board has logged that payroll hasn't reached yet, since QuickBooks is only updated now and then. The cut-off is the end of the last <b>paid period</b>, not the pay-run date — a run pays for work that finished days earlier, and the card works that lag out from the data rather than assuming it. Right under it you get the split (“$613,177 posted + $5,004 shop hours since the last payroll run”), and the first tile keeps the pure <b>Posted in QuickBooks</b> figure so it can always be tied back to the books.</li>
       <li><b>📅 The “As of” line says exactly how current everything is</b> — when the export was pulled and how long ago, plus the three dates that actually matter and are usually different: bills through one date, payroll through another, shop hours through a third. If an export goes over two weeks old the whole strip turns amber and says how old it is. There's no live feed to QuickBooks (it's on-prem), so the page only moves when a new export is loaded — it says so rather than looking fresh.</li>
       <li><b>What it shows:</b> cost to date and how it splits (a pass-through ledger, every cost line largest-first, and <b>what the parts actually were</b> — AV, aluminium, computers, panel, hardware and so on, read from the purchase descriptions); a month-by-month spend chart with the cumulative line; the biggest transactions; and everything small folded away behind one line.</li>
       <li><b>💸 The pass-through ledger</b> is the point of the page: the subcontract work MRA bills but doesn't perform. It carries a <b>what-if markup</b> picker — change it and the "MRA would earn" column and the note underneath re-figure live. "Markup on file" reads <b>not set</b> because QuickBooks holds no markup field on these bills; that's a question to answer, not a zero.</li>
@@ -4175,6 +4175,12 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"38.1", date:"2026-09-12", title:"🔧 Project cost: corrected the labor rate, the cut-off date, and who can see a name next to a pay figure", items:[
+    "An adversarial review of yesterday’s card found real errors and they are fixed. <b>The blended labor rate was 8.3% too high</b> — it divided <i>all</i> payroll dollars by only the hours that happen to be written in the memo, but 4 of 12 payroll rows carry a dollar figure and no hours ($1,401.85, all 2025). The rate is now worked out from matching rows only: <b>$30.08/hr, not $32.58</b>. The card now says on screen which rows the rate is built from.",
+    "<b>The cut-off was on the wrong date.</b> A pay run dated 8/28 pays for work that finished days earlier, so cutting there treated 34.87 hours as already costed when payroll had never seen them. The card now works out the <b>pay-period lag from the data itself</b> (5 days on this job — not assumed, because check dates move around holidays: the 7/2 run was a Thursday) and cuts at the end of the last <b>paid period</b>, 8/23. Uncosted hours go 153.6 → <b>188.47h</b>, and the estimate to date $618,181 → <b>$618,846</b>.",
+    "<b>The reconciliation is now pay period by pay period</b>, which is the only comparison that means anything — an aggregate can look excellent while being the sum of large offsetting errors, and this one was. <b>8/10 → 8/23 matches to the hour: 129.22h on payroll, 129.22h on the board</b>, worst gap across both comparable periods 2.25h. Both columns of the summary now add up to their own totals exactly. It is also described as corroboration rather than proof — both figures ultimately describe the same timesheets.",
+    "<b>🔒 A privacy hole is closed.</b> The scrub that hides an individual’s name next to a pay figure was keyed to the pay-rates list, which includes both PMs — so Al and Megan could read a named colleague’s payroll amount. It now has its own list (<b>Rich and Kim only</b>); everyone else sees the pay-period total with the name removed.",
+    "Smaller: the what-if markup now opens at <b>0%</b> rather than 35% (a page arguing for a number should not boot already set to it) and states that the figure is what a policy would be worth on future jobs of this shape, not money recoverable on this one. Two of the five tiles were rendering with no colour rail. And a project whose job code has no digits no longer matches every time entry in the system." ] },
   { rev:"38.02", date:"2026-09-12", title:"📅 Project cost: your hours are in the headline now, and the page says exactly how current it is", items:[
     "Rich: <i>“I don’t know when he updates the QuickBooks, so he might not have added our hours that are in the tracking sheet yet — but we would like to include my hours as well.”</i> Done. <b>The big number at the top is now the whole job</b> — what QuickBooks has posted <b>plus</b> the shop hours the board has logged since the last payroll run (Medtronic: <b>$618,181</b> = $613,177 posted + $5,004 of logged hours). The split is spelled out right underneath, and the first tile keeps the pure <b>Posted in QuickBooks</b> figure so it can always be tied straight back to the books.",
     "<b>📅 And an “As of” line, because the refresh cadence is a habit rather than a schedule.</b> It names when the export was pulled and how long ago, then the three dates that are almost never the same: bills through one, payroll through another, shop hours through a third. It also states plainly that nothing invoiced or paid after those dates is in there yet. An export more than two weeks old turns the whole strip amber and says how old it is.",
@@ -7031,6 +7037,13 @@ const FINANCE_RATES_EMAILS = ['rmiller@gomra.com','kmaynard@gomra.com','akarloff
 // access error they can do nothing about reads as the tab being broken. This also means the dashboard
 // and the flow can be updated in either order without anyone seeing a scary intermediate state.
 const FINANCE_RATES_DIAG = ['rmiller@gomra.com','kmaynard@gomra.com'];
+// Who may see a payroll memo that NAMES AN INDIVIDUAL next to a dollar figure on the QuickBooks
+// project-cost card (a few memos read "Record Payroll 11/21/2025 (Surname)"). Deliberately its OWN
+// list and NOT FINANCE_RATES_EMAILS — that one includes both PMs, so gating on it meant Al and Megan
+// could read a named colleague's pay, which was never the intent. Also deliberately not reusing
+// FINANCE_RATES_DIAG: that is a debug-verbosity list, and someone widening debug output later must
+// not silently widen access to pay data. Everyone else sees the pay-period total with the name removed.
+const FINANCE_PAYROLL_DETAIL = ['rmiller@gomra.com','kmaynard@gomra.com'];
 function financeTabAllowed(){
   if(typeof SSO==='undefined' || !SSO.active() || !SSO.ready || SSO.failed || !SSO.user) return false;
   return FINANCE_EMAILS.indexOf(SSO.email())>=0;
@@ -7578,8 +7591,12 @@ function _qbHours(memo){ const m=String(memo||'').match(/([\d,]+\.?\d*)\s*hr\b/i
 // ("Record Payroll 11/21/2025- (Wasczenski)"). Per-person pay is owner-only everywhere else in this
 // app, and this card is visible to the finance list + the owner. Scrub the name for everyone except
 // the people who already see per-person dollars; the pay-period total is what matters here anyway.
+function _qbPayrollDetailAllowed(){
+  if(typeof SSO==='undefined' || !SSO.active() || !SSO.ready || SSO.failed || !SSO.user) return false;
+  return FINANCE_PAYROLL_DETAIL.indexOf(SSO.email())>=0;
+}
 function _qbScrub(memo, cat){
-  if(cat && cat.key==='labor' && !(typeof financeRatesAllowed==='function' && financeRatesAllowed()))
+  if(cat && cat.key==='labor' && !_qbPayrollDetailAllowed())
     return String(memo||'').replace(/\s*\([^)]*\)\s*/g,' ').trim();
   return memo;
 }
@@ -7607,26 +7624,72 @@ function qbCompute(rows, tracked){
   const pay=R.filter(r=>r.cat==='labor');
   const payD=_qbR2(pay.reduce((a,r)=>a+r.amt,0)), payH=_qbR2(pay.reduce((a,r)=>a+(r.hrs||0),0));
   const lastPR=pay.map(r=>r.d).filter(Boolean).sort().slice(-1)[0]||null;
-  const rate=payH?_qbR2(payD/payH):null;
+  // ⚠ The blended rate MUST divide only the dollars whose hours we actually know. Some payroll memos
+  // carry a dollar figure and no "NN.NNhr" (4 of 12 on the pilot job, $1,401.85 — all 2025). Dividing
+  // ALL dollars by only the STATED hours inflated the rate by 8.3% ($32.58 vs the true $30.08) and
+  // then over-valued every accrued hour built on it. Rate from matched rows; the rest is disclosed.
+  const payWith=pay.filter(r=>r.hrs), payNo=pay.filter(r=>!r.hrs);
+  const matchedD=_qbR2(payWith.reduce((a,r)=>a+r.amt,0));
+  const rate=payH?_qbR2(matchedD/payH):null;
+  const rateBasis={matchedD, hourlessN:payNo.length, hourlessD:_qbR2(payNo.reduce((a,r)=>a+r.amt,0))};
   // Two systems see this job's labor and NEITHER sees all of it. Build a bridge, never a merge.
+  //
+  // ⚠ THE CUT-OFF IS THE PAY PERIOD END, NOT THE CHECK DATE. A run dated 8/28 pays for work that
+  // finished days earlier, so cutting at the check date silently treats those last days as costed
+  // when payroll has not seen them (34.87h on the pilot job). The lag is DERIVED per project rather
+  // than assumed, because check dates move (07/02/2026 is a Thursday — July 4th week).
+  // Rule: assume a 14-day period ending L days before the check date; keep only periods lying wholly
+  // inside the board's tracking window; pick the L with the MOST comparable periods, then the lowest
+  // mean error. Most-periods-first matters — a single lucky period can score a perfect 0.00.
   let recon=null;
   if(tracked && tracked.length && lastPR){
     const ds=tracked.map(t=>t.d).filter(Boolean).sort();
     const firstTr=ds[0], lastTr=ds[ds.length-1];
     const sumT=f=>_qbR2(tracked.filter(f).reduce((a,t)=>a+t.h,0));
     const sumQ=f=>_qbR2(pay.filter(f).reduce((a,r)=>a+(r.hrs||0),0));
-    const afterT=sumT(t=>t.d>lastPR);
-    recon={firstTr,lastTr,lastPR,
-      ovT:sumT(t=>t.d>=firstTr&&t.d<=lastPR), ovQ:sumQ(r=>r.d>=firstTr&&r.d<=lastPR),
+    const dOf=iso=>new Date(iso+'T00:00:00').getTime(), DAY=86400000;
+    const shift=(iso,n)=>localISO(dOf(iso)+n*DAY);
+    let bestL=null, bestPer=[];
+    for(let L=0;L<=9;L++){
+      const per=[];
+      payWith.forEach(r=>{
+        const end=shift(r.d,-L), start=shift(end,-13);
+        if(start<firstTr) return;                       // board was blind for part of this period
+        per.push({run:r.d,start,end,q:r.hrs,b:sumT(t=>t.d>=start&&t.d<=end)});
+      });
+      if(!per.length) continue;
+      per.forEach(x=>{ x.delta=_qbR2(x.b-x.q); });
+      const mean=per.reduce((a,x)=>a+Math.abs(x.delta),0)/per.length;
+      if(!bestL || per.length>bestPer.length || (per.length===bestPer.length && mean<bestL.mean))
+        { bestL={L,mean:_qbR2(mean)}; bestPer=per; }
+    }
+    // cut at the derived period end; with no derivable lag fall back to the check date AND say so
+    const cut = bestL ? shift(lastPR,-bestL.L) : lastPR;
+    const afterT=sumT(t=>t.d>cut);
+    recon={firstTr,lastTr,lastPR,cut,lag:bestL?bestL.L:null,lagMean:bestL?bestL.mean:null,periods:bestPer,
+      ovT:sumT(t=>t.d>=firstTr&&t.d<=cut), ovQ:sumQ(r=>r.d>=firstTr&&r.d<=lastPR),
       beforeQ:sumQ(r=>r.d<firstTr), beforeD:_qbR2(pay.filter(r=>r.d<firstTr).reduce((a,r)=>a+r.amt,0)),
       afterT, afterEst: rate?_qbR2(afterT*rate):null, trackedTotal:sumT(()=>true)};
+    // The summary must reconcile: the comparable bucket compares LIKE WITH LIKE (the pay periods in the
+    // table below), and the other two buckets are the exact remainder of each column. Comparing QB's
+    // full window against board hours cut at a different date produces a scary number that contradicts
+    // the table underneath it — which is precisely the misleading-aggregate trap.
+    const compQ=_qbR2(bestPer.reduce((a,x)=>a+x.q,0)), compT=_qbR2(bestPer.reduce((a,x)=>a+x.b,0));
+    const compRuns=bestPer.map(x=>x.run);
+    recon.compQ=compQ; recon.compT=compT;
+    recon.compDelta=_qbR2(compT-compQ);
+    recon.compPct=compQ?_qbR2((compT/compQ-1)*100):null;
+    recon.compFrom=bestPer.length?bestPer[0].start:null;
+    recon.compTo=bestPer.length?bestPer[bestPer.length-1].end:null;
+    recon.oldQ=_qbR2(payH-compQ);                                        // payroll the board never saw
+    recon.oldD=_qbR2(pay.filter(r=>compRuns.indexOf(r.d)<0).reduce((a,x)=>a+x.amt,0));
     recon.ovDelta=_qbR2(recon.ovT-recon.ovQ);
     recon.ovPct=recon.ovQ?_qbR2((recon.ovT/recon.ovQ-1)*100):null;
   }
   const ds=R.map(r=>r.d).filter(Boolean).sort();
   return {total,rows:R,byCat,byGrp,byKind,curve,top:sorted.slice(0,12),n80,txns:R.length,
     first:ds[0],last:ds[ds.length-1],
-    labor:{dollars:payD,hours:payH,rate,runs:pay.length,lastPR},recon,
+    labor:{dollars:payD,hours:payH,rate,runs:pay.length,lastPR,basis:rateBasis},recon,
     uncat:R.filter(r=>r.grp==='OTHER')};
 }
 
@@ -7647,13 +7710,17 @@ function qbLoad(cb, force){
 function _qbTrackedFor(code){
   if(!Array.isArray(FIN_ENTRIES)) return [];
   const c=String(code||'').replace(/\D/g,'');
+  if(!c) return [];   // ⚠ without this an empty code makes indexOf('')===0 true for EVERY entry
   return FIN_ENTRIES.filter(e=>e.payType==='Work' && String(e.job||'').replace(/\D/g,'').indexOf(c)===0 && e.dateISO)
     .map(e=>({d:e.dateISO,h:+e.hours||0,who:e.who}));
 }
 function _qbMoney(n,d){ const v=Math.abs(n||0);
   return (n<0?'-$':'$')+v.toLocaleString('en-US',{minimumFractionDigits:d==null?0:d,maximumFractionDigits:d==null?0:d}); }
 
-let QB_MARKUP=35, QB_BURDEN=0;
+// Opens at 0% deliberately: the card is shown to the owner it is making a case to, and a page that
+// boots already set to the number being argued for reads as advocacy. At 0% it states the plain fact
+// ("MRA earns nothing on $509,612") and the reader moves the picker themselves.
+let QB_MARKUP=0, QB_BURDEN=0;
 function qbSetMarkup(p){ QB_MARKUP=+p||0; renderQBCost(); }
 function qbSetBurden(p){ QB_BURDEN=+p||0; renderQBCost(); }
 
@@ -7745,8 +7812,8 @@ function _qbHtml(P, code, o, doc){
     +_finTile2('proj', M(o.total), o.txns+' transactions · '+esc2(fmtMD(o.first))+' → '+esc2(fmtMD(o.last)), 'Posted in QuickBooks')
     +_finTile2('over', subPct.toFixed(1)+'%', M(sub)+' · '+o.rows.filter(r=>r.grp==='SUB').length+' invoices', 'Subcontract pass-through')
     +_finTile2('sched', M(mra), o.labor.hours+'h @ '+M(o.labor.rate,2)+' wages', 'MRA shop labor · '+(o.total?(mra/o.total*100).toFixed(1):'0')+'%')
-    +_finTile2('done', String(o.n80), 'of '+o.txns+' transactions', 'Make up 80% of cost')
-    +_finTile2('open', 'Not set', 'no contract value on file', 'Budget / margin')
+    +_finTile2('tasks', String(o.n80), 'of '+o.txns+' transactions', 'Make up 80% of cost')
+    +_finTile2('hold', 'Not set', 'no contract value on file', 'Budget / margin')
     +'</div>';
   h+='<div class="qb-warn"><b>No contract value or budget is recorded for this project</b>, so this page reports cost only — '
     +'it cannot show margin, percent spent, or cost remaining. Give me a contract value and those appear here automatically.</div>';
@@ -7777,7 +7844,8 @@ function _qbHtml(P, code, o, doc){
                                : (earn/mra*100).toFixed(0)+'% of the shop labor spend on the job ('+M(mra)+').') : ''))
       +'</div>'
       +'<div class="muted" style="font-size:11px">“Markup on file” reads <b>not set</b> because QuickBooks carries no markup field on these bills — '
-      +'that column is a question to answer, not a zero. The earn column is illustrative arithmetic on cost, not a quote.</div></div>';
+      +'that column is a question to answer, not a zero. <b>This is what a markup policy would be worth on a job shaped like this one, not money that can be recovered on this job</b> — '
+      +'J1553 is already under contract and '+(o.curve.length?'largely spent':'in flight')+'. The value is in what it changes for the next quote.</div></div>';
   }
 
   /* ---- composition: where it went + what the parts were ---- */
@@ -7841,31 +7909,59 @@ function _qbHtml(P, code, o, doc){
     h+='<div class="muted" style="font-size:11.5px;margin:-6px 0 10px">Two systems see this job’s labor. Neither sees all of it. This is a bridge, not a merge.</div>'
       +'<table class="qb-tbl"><tbody>'
       +'<tr><td style="width:60%">QuickBooks cost to date <span style="color:var(--faint)">(payroll posted thru '+esc2(fmtMDY(r.lastPR))+')</span></td><td class="r">'+M(o.total,2)+'</td></tr>'
-      +(r.afterEst? '<tr><td style="color:var(--green)">+ Shop hours logged since that payroll run <span style="color:var(--faint)">('+r.afterT+'h, '+esc2(fmtMDY(r.lastPR))+' → '+esc2(fmtMDY(r.lastTr))+', at the blended '+M(o.labor.rate,2)+'/hr)</span></td><td class="r" style="color:var(--green)">'+M(r.afterEst,2)+'</td></tr>':'')
+      +(r.afterEst? '<tr><td style="color:var(--green)">+ Shop hours worked after the last paid period <span style="color:var(--faint)">('+r.afterT+'h, '+esc2(fmtMDY(r.cut))+' → '+esc2(fmtMDY(r.lastTr))+', at the blended '+M(o.labor.rate,2)+'/hr)</span></td><td class="r" style="color:var(--green)">'+M(r.afterEst,2)+'</td></tr>':'')
       +(QB_BURDEN? '<tr><td style="color:var(--green)">+ Labor burden at '+QB_BURDEN+'% <span style="color:var(--faint)">(what-if — finance has set no rate)</span></td><td class="r" style="color:var(--green)">'+M(burdenAdd,2)+'</td></tr>':'')
       +'<tr class="tot"><td>Best current estimate of cost to date</td><td class="r">'+M(est+burdenAdd,2)+'</td></tr>'
       +'</tbody></table>'
-      +'<div class="qb-note"><b>The rule:</b> QuickBooks is the system of record up to the last payroll date ('+esc2(fmtMDY(r.lastPR))+'); '
-      +'the board contributes hours only <i>after</i> it. Never add the two hour totals together — they overlap by '+r.ovQ+'h.</div>'
+      +'<div class="qb-note"><b>The rule:</b> QuickBooks is the system of record up to the end of the last <i>paid period</i> ('
+      +esc2(fmtMDY(r.cut))+'); the board contributes hours only <i>after</i> it. Never add the two hour totals together — they overlap by '+r.ovQ+'h.'
+      +(r.lag!=null
+        ? ' <span style="color:var(--faint)">The '+esc2(fmtMDY(r.lastPR))+' pay run is dated '+r.lag+' day'+(r.lag===1?'':'s')+' after the work it pays for — derived from the data below, not assumed, because check dates move around holidays.</span>'
+        : ' <span style="color:var(--amber)">The pay-period lag could not be derived yet (not enough weeks where both systems overlap), so this cuts at the check date and may treat the last few days as costed when payroll has not seen them.</span>')
+      +'</div>'
       +'<table class="qb-tbl" style="margin-top:12px"><thead><tr><th>Period</th><th class="r">QuickBooks</th><th class="r">Shop board</th><th class="r">Agreement</th></tr></thead><tbody>'
-      +'<tr><td>Before tracking began <span style="color:var(--faint)">(thru '+esc2(fmtMDY(r.firstTr))+')</span></td>'
-        +'<td class="r">'+r.beforeQ+'h · '+M(r.beforeD,2)+'</td><td class="r" style="color:var(--faint)">not tracked</td><td class="r" style="color:var(--faint)">payroll only</td></tr>'
-      +'<tr><td><b>Both systems watching</b> <span style="color:var(--faint)">('+esc2(fmtMDY(r.firstTr))+' → '+esc2(fmtMDY(r.lastPR))+')</span></td>'
-        +'<td class="r">'+r.ovQ+'h</td><td class="r">'+r.ovT+'h</td>'
-        +'<td class="r" style="font-weight:800;color:'+(Math.abs(r.ovPct||0)<=5?'var(--green)':'var(--amber)')+'">'+(r.ovPct==null?'—':(r.ovPct>0?'+':'')+r.ovPct.toFixed(1)+'% · '+(r.ovDelta>0?'+':'')+r.ovDelta+'h')+'</td></tr>'
-      +'<tr><td>Since the last payroll run <span style="color:var(--faint)">(after '+esc2(fmtMDY(r.lastPR))+')</span></td>'
+      +'<tr><td>Pay periods that ended before the board was tracking'+(r.compFrom?' <span style="color:var(--faint)">(thru '+esc2(fmtMDY(r.compFrom))+')</span>':'')+'</td>'
+        +'<td class="r">'+r.oldQ+'h · '+M(r.oldD,2)+'</td><td class="r" style="color:var(--faint)">not tracked</td><td class="r" style="color:var(--faint)">payroll only</td></tr>'
+      +'<tr><td><b>Pay periods both systems can see</b>'+(r.compFrom?' <span style="color:var(--faint)">('+esc2(fmtMDY(r.compFrom))+' → '+esc2(fmtMDY(r.compTo))+')</span>':'')+'</td>'
+        +'<td class="r">'+r.compQ+'h</td><td class="r">'+r.compT+'h</td>'
+        +'<td class="r" style="font-weight:800;color:'+(Math.abs(r.compPct||0)<=5?'var(--green)':'var(--amber)')+'">'
+        +(r.compPct==null?'—':(r.compPct>0?'+':'')+r.compPct.toFixed(1)+'% · '+(r.compDelta>0?'+':'')+r.compDelta+'h')+'</td></tr>'
+      +'<tr><td>Worked since the last paid period <span style="color:var(--faint)">(after '+esc2(fmtMDY(r.cut))+')</span></td>'
         +'<td class="r" style="color:var(--faint)">not yet posted</td><td class="r">'+r.afterT+'h</td><td class="r" style="color:var(--amber)">board only</td></tr>'
       +'<tr class="tot"><td>Total labor on this job</td><td class="r">'+o.labor.hours+'h · '+M(o.labor.dollars,2)+'</td>'
-        +'<td class="r">'+r.trackedTotal+'h</td><td class="r">'+_qbR2(r.beforeQ+r.ovQ+r.afterT)+'h combined</td></tr>'
+        +'<td class="r">'+r.trackedTotal+'h</td><td class="r">'+_qbR2(r.oldQ+r.compQ+r.afterT)+'h combined</td></tr>'
       +'</tbody></table>';
-    if(r.ovQ>0 && r.ovPct!=null && Math.abs(r.ovPct)<=5)
-      h+='<div class="qb-note ok"><b>The two systems started agreeing on '+esc2(fmtMDY(r.firstTr))+'</b> — from there to '
-        +esc2(fmtMDY(r.lastPR))+', the weeks both can see, they are within <b>'+Math.abs(r.ovPct).toFixed(1)+'%</b> of each other '
-        +'('+r.ovQ+'h on payroll vs '+r.ovT+'h logged on the board — a '+Math.abs(r.ovDelta)+'h difference). '
-        +'That is the evidence the shop board’s time tracking is accurate enough to cost from.</div>';
-    else if(r.ovQ>0)
-      h+='<div class="qb-warn"><b>The two systems disagree by '+(r.ovPct>0?'+':'')+r.ovPct.toFixed(1)+'% over the weeks both can see</b> '
-        +'('+r.ovQ+'h payroll vs '+r.ovT+'h logged). Worth reconciling before trusting either as the labor number.</div>';
+    // PER PAY PERIOD, not one aggregate window. An aggregate can look excellent while being the sum of
+    // large offsetting errors — on the pilot job the naive check-date alignment nets to −0.4% out of
+    // +55.43h and −22.31h. The period table is the real evidence; the roll-up alone is not.
+    if(r.periods && r.periods.length){
+      const good=r.periods.filter(x=>Math.abs(x.delta)<=2).length;
+      h+='<div style="margin-top:14px"><div class="muted" style="font-size:11.5px;margin-bottom:6px">'
+        +'Pay period by pay period — the only comparison that means anything. '+r.periods.length+' period'+(r.periods.length===1?'':'s')
+        +' fall wholly inside the window both systems can see.</div>'
+        +'<table class="qb-tbl"><thead><tr><th>Pay period</th><th>Paid</th><th class="r">QuickBooks</th><th class="r">Shop board</th><th class="r">Difference</th></tr></thead><tbody>'
+        +r.periods.map(x=>'<tr><td>'+esc2(fmtMD(x.start))+' → '+esc2(fmtMD(x.end))+'</td>'
+          +'<td style="color:var(--faint)">'+esc2(fmtMD(x.run))+'</td>'
+          +'<td class="r">'+x.q+'h</td><td class="r">'+x.b+'h</td>'
+          +'<td class="r" style="font-weight:800;color:'+(Math.abs(x.delta)<=2?'var(--green)':'var(--amber)')+'">'
+          +(x.delta>0?'+':'')+x.delta+'h</td></tr>').join('')
+        +'</tbody></table></div>';
+      const exact=r.periods.filter(x=>x.delta===0);
+      const worst=r.periods.reduce((a,x)=>Math.max(a,Math.abs(x.delta)),0);
+      h+='<div class="qb-note'+(good===r.periods.length?' ok':'')+'">'
+        +(exact.length
+          ? '<b>'+esc2(fmtMD(exact[0].start))+' → '+esc2(fmtMD(exact[0].end))+' matches to the hour — '+exact[0].q+'h on payroll and '+exact[0].q+'h on the board.</b> '
+            +(r.periods.length>1 ? 'Across all '+r.periods.length+' comparable periods the worst gap is '+worst+'h. ' : '')
+          : (good===r.periods.length
+              ? '<b>Every comparable pay period agrees to within 2 hours</b> (worst gap '+worst+'h). '
+              : '<b>'+good+' of '+r.periods.length+' comparable pay periods agree to within 2 hours</b> (worst gap '+worst+'h). '))
+        +'That is consistent with the shop board’s time tracking being accurate enough to cost from. '
+        +'<span style="color:var(--faint)">Worth saying out loud: this is corroboration, not independent proof — the board’s hours and payroll’s hours both ultimately describe the same timesheets, and only '
+        +r.periods.length+' period'+(r.periods.length===1?'':'s')+' can be compared so far. It gets stronger every pay run.</span></div>';
+    } else if(r.ovQ>0){
+      h+='<div class="qb-note">No pay period yet falls wholly inside the window both systems can see, so the two cannot be compared period by period. '
+        +'Across the overlap as a whole: '+r.ovQ+'h on payroll vs '+r.ovT+'h logged. That will become a real comparison after the next pay run or two.</div>';
+    }
   } else {
     // No bridge is possible. Three reasons, and they are NOT the same thing — say which one it is.
     const tr=_qbTrackedFor(code), trH=_qbR2(tr.reduce((a,t)=>a+t.h,0));
@@ -7886,6 +7982,11 @@ function _qbHtml(P, code, o, doc){
         +'Every cost above is subcontract, materials or other direct spend.</div>';
     }
   }
+  if(o.labor.basis && o.labor.basis.hourlessN)
+    h+='<div class="qb-note" style="margin-top:10px">The blended <b>'+M(o.labor.rate,2)+'/hr</b> is worked out from the '
+      +(o.labor.runs-o.labor.basis.hourlessN)+' payroll rows that state their hours ('+M(o.labor.basis.matchedD,2)+' over '+o.labor.hours+'h). '
+      +'<b>'+o.labor.basis.hourlessN+' older payroll rows carry a dollar figure but no hours</b> ('+M(o.labor.basis.hourlessD,2)+') — those dollars are in the project total but cannot inform the rate, '
+      +'so any hour valued at this rate is an estimate built on the periods we can actually measure.</div>';
   h+='<div class="qb-warn" style="margin-top:10px">Labor here is <b>wages only</b> — no payroll tax, insurance or benefit burden, because finance has not set a burden rate. Industry runs 30–60%. '
     +'<label class="qb-ctl" style="margin-left:6px">Try a burden of <select onchange="qbSetBurden(this.value)">'
     +[0,30,40,45,60].map(x=>'<option value="'+x+'"'+(x===QB_BURDEN?' selected':'')+'>'+(x?x+'%':'none')+'</option>').join('')
