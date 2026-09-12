@@ -318,6 +318,27 @@ jobs:
           AZURE_STORAGE_ACCOUNT: mrashopdash
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
 
+      # Per-project cost data behind the Finance tab's QuickBooks card (rev 38.0).
+      # SEED ONLY, and deliberately at finance/projectcosts.json — NOT the root projectcosts.json the
+      # in-app upload flow writes. The page prefers the root (live) copy and falls back to this one, so
+      # a deploy can never clobber a fresh export somebody just uploaded.
+      - name: Upload the seed project-cost data (finance/)
+        if: ${{ hashFiles('finance/projectcosts.json') != '' }}
+        run: |
+            az storage blob upload \
+              --account-name mrashopdash \
+              --container-name '$web' \
+              --name 'finance/projectcosts.json' \
+              --file 'finance/projectcosts.json' \
+              --content-type 'application/json' \
+              --content-cache-control 'no-cache, must-revalidate' \
+              --overwrite \
+              --auth-mode key \
+              --only-show-errors
+        env:
+          AZURE_STORAGE_ACCOUNT: mrashopdash
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
       # Employee-of-the-Month photo (wall view). Swap monthly — replace eotm.png/.jpg.
       - name: Upload eotm.png
         if: ${{ hashFiles('eotm.png') != '' }}
