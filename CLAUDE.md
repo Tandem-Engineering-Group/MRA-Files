@@ -1,5 +1,85 @@
 # CLAUDE.md — MRA Shop Floor Dashboard
 
+## ✅ SHIPPED 2026-09-12 — 🧾 FINANCE: a project's WHOLE cost from QuickBooks (rev 38.0) — the pilot Rich promised Tony
+
+Rich, the morning after the 9/11 meeting: *"This is a finance export from QuickBooks... for Medtronic's only. The idea
+is we add this information to the finance tab so that myself, Tony, the PMs can see this. This is a result of the
+meeting today where Tony has finally agreed to do some of this stuff. So the test is for Medtronic's, and then we get
+the format down, and then I will add the other projects."* Explicit bar: **"extremely professional and useful"**, with
+charts, and it must generalise.
+
+- **WHERE IT LIVES:** Finance tab → new **🧾 Full project cost — from QuickBooks** card (`#qbCard`, `renderQBCost()`),
+  placed ABOVE the pre-existing "Cost by project" card. That older card is **labor only** (tracked hours × pay rate) and
+  is untouched — its sub-line now says so, because two cost cards on one tab is confusing otherwise.
+- **THE PILOT NUMBERS (J1553 Medtronic, 76 txns, ties exactly to the export's own TOTAL):** **$613,176.78.**
+  Subcontract **$509,611.50 = 83.1%** in 10 invoices · Materials $82,831.62 = 13.5% · **MRA's own labor $18,250.17 =
+  3.0%** (560.10h @ $32.58 blended, wages only) · other direct $2,504.87 (14 of the 76 rows = 0.4% of the money).
+  **7 of 76 transactions carry 80% of the cost.** This is a *procurement* job, not a shop job — the card is built to
+  make that impossible to miss, because giving a $272 fuel line the same weight as a $305,970 invoice trains people to
+  manage 0.04% of the money.
+- **💸 THE PASS-THROUGH LEDGER IS THE POINT OF THE PAGE**, and it wires this dashboard straight into the markup
+  decision Rich just won: a **what-if markup picker (0–45%)** recomputes live. **One point on this job = $5,096**; five
+  points ($25,481) exceeds MRA's entire internal labor spend on it; at the proposed **35% band it is $178,364 ≈ 10× the
+  shop labor the job consumed.** At 0% the note flips to the cost-recovery framing ("MRA earns nothing on $509,612 it
+  sourced, scheduled, hosted and carried the risk on"). **"Markup on file" renders `not set`, never `0%`** — deliberate:
+  zero reads as a decision someone made, blank reads as a question someone must answer.
+- **🧮 THE LABOR RECONCILIATION — the thing Rich specifically asked about** ("this file will have the older labor as
+  well that's not included before I started tracking it"). QB payroll and the board's tracking cover **different,
+  overlapping** periods and NEITHER is complete:
+  - QB payroll: **560.10h**, 2025-11-21 → **8/28/26** (the last posted pay run).
+  - Board tracking: **360.08h**, from **7/27/26** (when Rich started) → 9/10/26.
+  - Before tracking: **352.81h / $11,222.40** — payroll only, the board is blind to it.
+  - **Overlap 7/27→8/28: QB 207.29h vs board 206.48h = −0.81h, −0.4%.** ⭐ **This is the single most valuable number
+    on the page** — it is the evidence the board's time tracking is accurate enough to cost from, which is exactly
+    what a skeptical owner needs before trusting any of it.
+  - After the last pay run: **153.60h logged, ~$5,004, costed nowhere yet** → so QB's $613,176.78 *understates*.
+  - Presented as a **bridge, never a merge**, with the rule printed on the page: *QuickBooks is the record up to the
+    last payroll date; the board contributes hours only after it.* ⚠ **Never add the two hour totals** — they overlap
+    by 207h (~$7k of double-count). Anyone touching this must preserve that rule.
+- **CLASSIFICATION RUNS AT RENDER TIME, NOT UPLOAD TIME** (`QB_CAT` → category, `QB_KIND` → "what kind of part").
+  Only raw rows are stored, so improving the rules re-classifies every project instantly with no re-upload. **Do not
+  bake categories into the stored file.** The rules read the **memo prefix convention** whoever enters the bill already
+  types (`MRA#2323:` · `Build:` · `TECH:` · `Postage:` · `Record Payroll … NN.NNhr` · `MEDTRONICGEN:` …). ⚠ **That
+  convention is doing 100% of the categorising** — it is the fragile part of this whole feature. Anything matching
+  nothing lands in **Uncategorised**: counted in the total, shown, warned about, never dropped or guessed.
+  Sub-classification answers Rich's *"parts? What kind of parts?"*: AV/displays $35,121 · aluminium $15,692 ·
+  computers/network $12,168 · wood/panel $7,258 · furniture $5,829 … 98.6% of material spend resolved by keyword.
+- **HONESTY GUARDS — each one tested by deliberately breaking the data, not just written:**
+  1. **Checksum** — our sum vs the export's own TOTAL row; a mismatch warns loudly and says *don't use these figures*.
+     This is the tripwire for QuickBooks changing its report format, which is the most likely future breakage.
+  2. **No contract value is stored anywhere**, so the card states plainly it cannot show margin / % spent / cost
+     remaining. ⚠ **This is the biggest real gap** — cost with no denominator informs but doesn't change behaviour.
+     One manually-entered contract value + change orders per project unlocks margin, burn % and remaining. Offer it.
+  3. **Burden is NOT invented.** $32.58/hr is raw wages; industry burden is 30–60%. There's a what-if picker and an
+     explicit "finance has not set a burden rate". At 40% this job's labor is $25,550 not $18,250 (+1% of job total —
+     burden is a rounding error *here* precisely because labor is 3%).
+  4. Open POs / committed-but-unbilled work are absent from a QB posted-actuals report and are called out as absent.
+- **🔒 PRIVACY:** four payroll memos carry an individual's surname next to a dollar figure (`… (Wasczenski)`).
+  `_qbScrub()` strips `(…)` from payroll memos for anyone without per-person rate access — **verified the surname does
+  not appear in the rendered HTML**. **Tony added to `FINANCE_EMAILS` only, deliberately NOT `FINANCE_RATES_EMAILS`** —
+  he gets the whole QuickBooks picture (which needs no pay rates) while per-person wage rates stay where they were.
+  Those two lists doing different jobs is the point; don't "tidy" them into one.
+- **📥 INGESTION — QB Enterprise is ON-PREM, so this is a periodic manual export, by design.** `qbParseSheet()` locates
+  columns **BY NAME, never by position** (QuickBooks pads reports with blank spacer columns that move between exports —
+  the real file had data in columns 1,2,3,6,8,10,12,14,16,18,20). Sheet name → job code via `J?(\d{3,5})`, which is the
+  join key to the board job (`jobNum` "J1553") and to time entries (`JobCode` "1553"). ⚠ The *project* record's
+  `jobNum` is EMPTY — only the **board job** carries it; join on the numeric code.
+  **TWO PATHS ON PURPOSE:** seed at **`finance/projectcosts.json`** (committed + deployed) and the in-app upload writes
+  **root `projectcosts.json`**; the page prefers root and falls back to the seed. ⚠ If both used one path, a deploy
+  would silently clobber a freshly uploaded export. Keep them separate.
+- **⏭ THE ONE THING NOT BUILT: the upload flow.** `QB_WRITE_URL` is `''`, so **📤 Load export** explains itself
+  instead of failing silently. To switch it on Rich needs ONE Power Automate flow — HTTP trigger (**"Anyone"**, or the
+  URL has no `sig=`) → **Create blob (V2)** writing `projectcosts.json` into `$web` — same shape as the "MRA Due
+  Diligence Write" flow he already built. ⚠ Body arrives as **text/plain** (no-cors), so parse with
+  **`json(triggerBody())?['json']`**, NOT `triggerBody()?['json']` — that exact mistake cost a cycle on the Safety
+  upload. Until then Rich sends the .xlsx and it gets committed to `finance/`.
+- **How this was built:** a research + design workflow (4 research lenses incl. real job-costing/WIP practice, then
+  independent designs judged and synthesised). Two findings from it worth keeping: **projected final cost = actual +
+  open commitments + cost to complete** (we can only do the first term, and the card says so), and **self-performed
+  labor is the only cost you control after buyout** — which is why an 83%-pass-through job is a *procurement* problem.
+- Prototype-first discipline held: built standalone with real data, screenshotted, iterated, THEN ported. Caught
+  `var(--purple)` — **this dashboard's palette has `--violet`, not `--purple`** (bars rendered black).
+
 ## 🚨 FOUND + FIXED 2026-09-11 — every NEW project task was being BORN ARCHIVED (Trumpf "went to archive")
 
 Rich, 1:24 PM: *"the trumpf project went to archive ????? not supposed to. need to fix asap."* Trumpf (236 tasks, live in
