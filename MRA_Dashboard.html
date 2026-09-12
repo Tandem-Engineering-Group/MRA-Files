@@ -169,6 +169,11 @@
   .qb-lg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:8px}
   .qb-lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
   .qb-sm summary{cursor:pointer;color:var(--muted);font-size:12px;padding:4px 0}
+  .qb-asof{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 13px;
+    font-size:12px;color:var(--muted);margin:10px 0 2px;line-height:1.5}
+  .qb-asof b{color:var(--txt)} .qb-asof .qb-agodim{color:var(--faint)}
+  .qb-asof.stale{border-color:var(--amber);background:rgba(245,158,11,.08);color:#fcd34d}
+  .qb-asof.stale b{color:#fde68a}
   #qbCost .fin-card{margin-bottom:16px}
 
   /* ---------- Panels / layout ---------- */
@@ -3927,6 +3932,8 @@ const GENERAL_HELP = `
     <p>Two print buttons, for whatever date range is currently picked: <span class="k">🖨 Labor Cost Summary</span> opens the REAL, original Labor Cost Summary (the employee × job matrix with OT @ 1.5× rows, rates, and the Job Totals Over Time chart) — not a new report, the same trusted one, opened directly right here (no more switching to Time Tracking first). <span class="k">🖨 Overtime detail</span> is genuinely new: who's actually driving overtime cost, and which weeks.</p>
     <p><b>🧾 Full project cost — from QuickBooks.</b> The rest of this tab is <b>shop labor only</b> (tracked hours × pay rate). This card is a project's <b>whole</b> cost as QuickBooks sees it — subcontract, materials, parts, technology, travel, fuel, postage, payroll — from a periodic <b>Cost by Job</b> export. Pick a project from the dropdown at the top of the card.</p>
     <ul>
+      <li><b>The number at the top is the whole job</b> — what QuickBooks has posted <b>plus</b> the shop hours the board has logged that payroll hasn't reached yet, since QuickBooks is only updated now and then. Right under it you get the split (“$613,177 posted + $5,004 shop hours since the last payroll run”), and the first tile keeps the pure <b>Posted in QuickBooks</b> figure so it can always be tied back to the books.</li>
+      <li><b>📅 The “As of” line says exactly how current everything is</b> — when the export was pulled and how long ago, plus the three dates that actually matter and are usually different: bills through one date, payroll through another, shop hours through a third. If an export goes over two weeks old the whole strip turns amber and says how old it is. There's no live feed to QuickBooks (it's on-prem), so the page only moves when a new export is loaded — it says so rather than looking fresh.</li>
       <li><b>What it shows:</b> cost to date and how it splits (a pass-through ledger, every cost line largest-first, and <b>what the parts actually were</b> — AV, aluminium, computers, panel, hardware and so on, read from the purchase descriptions); a month-by-month spend chart with the cumulative line; the biggest transactions; and everything small folded away behind one line.</li>
       <li><b>💸 The pass-through ledger</b> is the point of the page: the subcontract work MRA bills but doesn't perform. It carries a <b>what-if markup</b> picker — change it and the "MRA would earn" column and the note underneath re-figure live. "Markup on file" reads <b>not set</b> because QuickBooks holds no markup field on these bills; that's a question to answer, not a zero.</li>
       <li><b>🧮 Labor — QuickBooks vs the shop board</b> reconciles the two places this company records hours. It is deliberately a <b>bridge, not a merge</b>: QuickBooks is the record up to the last payroll date, and the board adds hours only <i>after</i> it. <b>Never add the two hour totals together</b> — they overlap. The panel also reports how closely they agree over the weeks both can see, which is the evidence for whether the board's time tracking can be costed from at all.</li>
@@ -4168,6 +4175,10 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"38.02", date:"2026-09-12", title:"📅 Project cost: your hours are in the headline now, and the page says exactly how current it is", items:[
+    "Rich: <i>“I don’t know when he updates the QuickBooks, so he might not have added our hours that are in the tracking sheet yet — but we would like to include my hours as well.”</i> Done. <b>The big number at the top is now the whole job</b> — what QuickBooks has posted <b>plus</b> the shop hours the board has logged since the last payroll run (Medtronic: <b>$618,181</b> = $613,177 posted + $5,004 of logged hours). The split is spelled out right underneath, and the first tile keeps the pure <b>Posted in QuickBooks</b> figure so it can always be tied straight back to the books.",
+    "<b>📅 And an “As of” line, because the refresh cadence is a habit rather than a schedule.</b> It names when the export was pulled and how long ago, then the three dates that are almost never the same: bills through one, payroll through another, shop hours through a third. It also states plainly that nothing invoiced or paid after those dates is in there yet. An export more than two weeks old turns the whole strip amber and says how old it is.",
+    "The labor panel now names <b>the date the two systems started agreeing</b> (7/27/26 for Medtronic) rather than just quoting a percentage. And a job where the board has logged hours but QuickBooks carries <b>no</b> payroll at all now says so loudly — those hours are excluded from the cost and there is no rate on that job to value them at, so the card refuses to invent one." ] },
   { rev:"38.01", date:"2026-09-12", title:"🧾 A green ✓ when the cost card ties to QuickBooks", items:[
     "The project-cost card already shouted if its arithmetic disagreed with the QuickBooks export. Now it also says so quietly when it <b>agrees</b> — a green <b>✓ ties to QuickBooks</b> chip in the header whenever the transactions read from the export sum to exactly what QuickBooks printed on its own TOTAL row. First question anyone asks of a cost screen is whether it matches the books; this answers it before it is asked." ] },
     { rev:"38.0", date:"2026-09-12", title:"🧾 FINANCE: a project’s WHOLE cost, from QuickBooks — not just labor", items:[
@@ -7676,19 +7687,46 @@ function _qbHtml(P, code, o, doc){
   const asOf=P.exportedISO||doc.asOf||'';
   let staleD=null; if(asOf){ const t=new Date(asOf+'T00:00:00').getTime(); if(t) staleD=Math.floor((Date.now()-t)/86400000); }
 
-  /* ---- header ---- */
+  /* ---- header ------------------------------------------------------------------------------
+     Rich 2026-09-12: "we also want to probably include a date because I don't know if we're gonna
+     update this weekly or what" + "he might not have added our hours that are in the tracking sheet
+     yet... but include my hours as well". So: the HEADLINE is the complete cost of the job — posted
+     QuickBooks cost PLUS the shop hours the board has logged that payroll has not reached yet — and
+     the posted-to-QuickBooks figure sits directly under it so the tie-out is never lost. One number
+     nobody has to assemble in their head, and the other one still there to check against the books. */
+  const uncosted = (o.recon && o.recon.afterEst) ? o.recon.afterEst : 0;   // our hours, not yet in QB
+  const grand = o.total + uncosted + burdenAdd;
   let h='<div class="qb-hdr"><div>'
     +'<h4>'+esc2(P.job||('J'+code))+' · '+esc2(P.label||'')+'</h4>'
     +'<div class="qb-prov">'
       +(bj?('<span>'+esc2(bj.pm||'')+(bj.bay?' · '+esc2(bj.bay):'')+(bj.startISO?' · '+fmtMD(bj.startISO)+' → '+fmtMD(bj.completionISO):'')+'</span>'):'')
       +'<span class="qb-badge">QuickBooks cost-by-job</span>'
-      +(asOf?'<span class="qb-badge'+(staleD!=null&&staleD>21?' warn':'')+'">export '+esc2(fmtMDY(asOf))+(staleD!=null&&staleD>21?' · '+staleD+'d old':'')+'</span>':'')
-      +(o.labor.lastPR?'<span class="qb-badge warn">payroll posted thru '+esc2(fmtMDY(o.labor.lastPR))+'</span>':'')
       +(P.stated!=null && Math.abs(P.stated-o.total)<=0.01
         ? '<span class="qb-badge" style="border-color:var(--green);color:var(--green)" title="The '+o.txns+' transactions read from the export sum to exactly what QuickBooks itself printed on its TOTAL row.">✓ ties to QuickBooks</span>' : '')
     +'</div></div>'
-    +'<div style="text-align:right"><div class="qb-tot">'+M(o.total,2)+'</div>'
-    +'<div style="font-size:11px;color:var(--muted)">COST TO DATE · '+o.txns+' transactions · '+esc2(o.first)+' → '+esc2(o.last)+'</div></div></div>';
+    +'<div style="text-align:right"><div class="qb-tot">'+M(grand,2)+'</div>'
+    +'<div style="font-size:11px;color:var(--muted)">COST TO DATE'+(uncosted||burdenAdd?' · including hours not yet in QuickBooks':'')+'</div>'
+    +(uncosted||burdenAdd
+      ? '<div style="font-size:11px;color:var(--faint);margin-top:3px">'+M(o.total)+' posted'
+        +(uncosted?' + '+M(uncosted)+' shop hours since the last payroll run':'')
+        +(burdenAdd?' + '+M(burdenAdd)+' burden (what-if)':'')+'</div>'
+      : '')
+    +'</div></div>';
+
+  /* ---- AS OF: one plain sentence, because the refresh cadence is a human habit, not a schedule.
+     Every date that matters, in the order someone would ask for them. ---- */
+  const ago=d=>{ if(!d) return ''; const t=new Date(d+'T00:00:00').getTime(); if(!t) return '';
+    const n=Math.floor((Date.now()-t)/86400000);
+    return n<=0?'today':(n===1?'yesterday':n+' days ago'); };
+  const lastTr=(o.recon&&o.recon.lastTr)||null;
+  h+='<div class="qb-asof'+(staleD!=null&&staleD>14?' stale':'')+'">'
+    +'<b>As of '+esc2(fmtMDY(asOf||o.last))+'</b>'+(asOf?' <span class="qb-agodim">— the export was pulled '+esc2(ago(asOf))+'</span>':'')+'. '
+    +'Bills and credit-card charges are in through <b>'+esc2(fmtMDY(o.last))+'</b>'
+    +(o.labor.lastPR?', payroll through <b>'+esc2(fmtMDY(o.labor.lastPR))+'</b>':'')
+    +(lastTr?', and shop hours off the board through <b>'+esc2(fmtMDY(lastTr))+'</b>':'')
+    +'. Anything invoiced or paid after those dates is not in here yet — this page only moves when a fresh QuickBooks export is loaded.'
+    +(staleD!=null&&staleD>14?' <b>This export is '+staleD+' days old.</b>':'')
+    +'</div>';
 
   /* ---- checksum honesty: does our sum match what QuickBooks itself printed? ---- */
   if(P.stated!=null && Math.abs(P.stated-o.total)>0.01){
@@ -7704,7 +7742,7 @@ function _qbHtml(P, code, o, doc){
 
   /* ---- tiles ---- */
   h+='<div class="kpis" style="grid-template-columns:repeat(5,1fr);margin:14px 0">'
-    +_finTile2('proj', M(est+burdenAdd), (o.recon&&o.recon.afterEst? M(o.total)+' posted + '+M(o.recon.afterEst)+' logged':'posted cost')+(QB_BURDEN?' + '+M(burdenAdd)+' burden':''), 'Best estimate to date')
+    +_finTile2('proj', M(o.total), o.txns+' transactions · '+esc2(fmtMD(o.first))+' → '+esc2(fmtMD(o.last)), 'Posted in QuickBooks')
     +_finTile2('over', subPct.toFixed(1)+'%', M(sub)+' · '+o.rows.filter(r=>r.grp==='SUB').length+' invoices', 'Subcontract pass-through')
     +_finTile2('sched', M(mra), o.labor.hours+'h @ '+M(o.labor.rate,2)+' wages', 'MRA shop labor · '+(o.total?(mra/o.total*100).toFixed(1):'0')+'%')
     +_finTile2('done', String(o.n80), 'of '+o.txns+' transactions', 'Make up 80% of cost')
@@ -7821,15 +7859,32 @@ function _qbHtml(P, code, o, doc){
         +'<td class="r">'+r.trackedTotal+'h</td><td class="r">'+_qbR2(r.beforeQ+r.ovQ+r.afterT)+'h combined</td></tr>'
       +'</tbody></table>';
     if(r.ovQ>0 && r.ovPct!=null && Math.abs(r.ovPct)<=5)
-      h+='<div class="qb-note ok"><b>Where both systems can see the same weeks they agree to within '+Math.abs(r.ovPct).toFixed(1)+'%</b> '
+      h+='<div class="qb-note ok"><b>The two systems started agreeing on '+esc2(fmtMDY(r.firstTr))+'</b> — from there to '
+        +esc2(fmtMDY(r.lastPR))+', the weeks both can see, they are within <b>'+Math.abs(r.ovPct).toFixed(1)+'%</b> of each other '
         +'('+r.ovQ+'h on payroll vs '+r.ovT+'h logged on the board — a '+Math.abs(r.ovDelta)+'h difference). '
         +'That is the evidence the shop board’s time tracking is accurate enough to cost from.</div>';
     else if(r.ovQ>0)
       h+='<div class="qb-warn"><b>The two systems disagree by '+(r.ovPct>0?'+':'')+r.ovPct.toFixed(1)+'% over the weeks both can see</b> '
         +'('+r.ovQ+'h payroll vs '+r.ovT+'h logged). Worth reconciling before trusting either as the labor number.</div>';
   } else {
-    h+='<div class="muted" style="font-size:12px">'+o.labor.hours+'h of payroll ('+M(o.labor.dollars,2)+') is costed to this job in QuickBooks. '
-      +'No matching tracked hours were found on the board for job '+esc2(code)+', so there is nothing to reconcile against.</div>';
+    // No bridge is possible. Three reasons, and they are NOT the same thing — say which one it is.
+    const tr=_qbTrackedFor(code), trH=_qbR2(tr.reduce((a,t)=>a+t.h,0));
+    if(trH>0 && !o.labor.lastPR){
+      // The board has hours, QuickBooks carries no payroll on this job at all. Every one of those hours
+      // is uncosted — and with no payroll on the job there is no blended rate to honestly cost them at.
+      const ds=tr.map(t=>t.d).sort();
+      h+='<div class="qb-warn"><b>The board has logged '+trH+'h on this job that QuickBooks has not costed at all.</b> '
+        +'('+esc2(fmtMDY(ds[0]))+' → '+esc2(fmtMDY(ds[ds.length-1]))+'.) QuickBooks carries no payroll against job '+esc2(code)+', '
+        +'so there is no rate on this job to value them at and the cost above <b>excludes all shop labor</b>. '
+        +'It will correct itself the next time payroll posts to this job and a fresh export is loaded.</div>';
+    } else if(o.labor.hours>0){
+      h+='<div class="muted" style="font-size:12px">'+o.labor.hours+'h of payroll ('+M(o.labor.dollars,2)+') is costed to this job in QuickBooks, '
+        +'but no tracked hours were found on the board for job '+esc2(code)+' — so there is nothing to reconcile against. '
+        +'That is expected for work done before the shop board started tracking time.</div>';
+    } else {
+      h+='<div class="muted" style="font-size:12px">Neither QuickBooks nor the shop board carries any labor against job '+esc2(code)+'. '
+        +'Every cost above is subcontract, materials or other direct spend.</div>';
+    }
   }
   h+='<div class="qb-warn" style="margin-top:10px">Labor here is <b>wages only</b> — no payroll tax, insurance or benefit burden, because finance has not set a burden rate. Industry runs 30–60%. '
     +'<label class="qb-ctl" style="margin-left:6px">Try a burden of <select onchange="qbSetBurden(this.value)">'
