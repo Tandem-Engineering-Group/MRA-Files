@@ -8094,9 +8094,16 @@ function qbParseSheet(ws){
     if(t==null||String(t).trim()==='') continue;
     const n=typeof a==='number'?a:parseFloat(String(a==null?'':a).replace(/[$,]/g,''));
     if(!isFinite(n)) continue;
+    // ⚠ SCRUB THE NAME AT INGESTION, not just at render. The parsed file is published to the $web blob
+    // container, which is PUBLIC — the Finance tab's account gate is client-side and cannot protect it.
+    // Payroll memos like "Record Payroll 11/21/2025 (Surname)" put an individual's pay on an anonymous
+    // URL. Nothing on this dashboard needs the name (the pay-period total is the useful figure), so it
+    // is removed before it is ever stored. The render-time scrub stays as defence in depth.
+    let memo = iM>=0&&row[iM]!=null?String(row[iM]).trim():'';
+    if(/^\s*record payroll/i.test(memo)) memo = memo.replace(/\s*\([^)]*\)\s*/g,' ').trim();
     rows.push({d:_qbDate(iD>=0?row[iD]:null), t:String(t).trim(),
       num:iN>=0&&row[iN]!=null?String(row[iN]).trim():'', nm:iNm>=0&&row[iNm]!=null?String(row[iNm]).trim():'',
-      memo:iM>=0&&row[iM]!=null?String(row[iM]).trim():'', qty:iQ>=0&&typeof row[iQ]==='number'?row[iQ]:null,
+      memo, qty:iQ>=0&&typeof row[iQ]==='number'?row[iQ]:null,
       amt:Math.round(n*100)/100});
   }
   let stated=null;
