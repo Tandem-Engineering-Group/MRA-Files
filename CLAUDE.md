@@ -113,7 +113,7 @@ charts, and it must generalise.
      (7/2/26 was a **Thursday** — July 4th week), so never hardcode a weekday.
   3. **🔒 A real privacy hole.** `_qbScrub` gated the name-scrub on `financeRatesAllowed()`, which **includes both
      PMs** — so Al and Megan could read `Record Payroll … (Surname) $865.39`. Now gated on its own
-     **`FINANCE_PAYROLL_DETAIL`** = Rich + Kim. ⚠ Deliberately NOT reusing `FINANCE_RATES_DIAG`: that is a
+     **`FINANCE_PAYROLL_DETAIL`** = Rich + Kyle Maynard (`kmaynard@gomra.com` — ⚠ he is **Kyle**, not "Kim"; a prior note here said Kim and that was wrong). ⚠ Deliberately NOT reusing `FINANCE_RATES_DIAG`: that is a
      *debug-verbosity* list, and someone widening debug output later must not silently widen access to pay data.
   4. Two of five tiles used `.kpi.done` / `.kpi.open` — **neither class has any CSS** (rails render blank). Valid
      rail classes are only: `proj brand · sched blue · over red · active green · tasks amber · pipe violet ·
