@@ -145,9 +145,35 @@ charts, and it must generalise.
 - **The what-if markup now defaults to 0%, not 35%** — the card is shown to the owner it is making a case to, and a
   page that boots pre-set to the number being argued for reads as advocacy. It also states the figure is **prospective
   policy value, not money recoverable on this job** (J1553 is under contract and largely spent).
-- ⚠ **There is NO VENDOR in this export.** All 76 `Name` values are `J1553 MedTronic (MRA#2323)` — the customer:job,
-  not a payee. The ledger column is **Scope**. Do not build a "by vendor" view or use the word; if Rich wants payee
-  detail the QuickBooks report needs a **Source Name** column added to the export first.
+- ✅ **RESOLVED 2026-09-14 — the export HAS a payee now.** Kyle added the **Source Name** column (the ask above),
+  and `qbParseSheet` reads it into `row.src` (plus `Account` → `row.acct`). `_qbVendor(r)` returns the payee or `''`
+  — empty for payroll rows (MRA's own labor, correctly no vendor) and for rows where QuickBooks put the customer:job
+  into Source Name; **it never invents one**. The `Name` column is still the customer:job on all 76 rows, unchanged.
+  - **🏗 Work invoiced by outside firms is now grouped BY FIRM**, scope as a sub-line; it falls back to scope-grouping
+    (and says so on the card) when an export has no Source Name, so older files still load.
+  - **The $305,970 mystery is answered: `Two Sharp Stix, LLC`**, three design/build invoices. It had been classified
+    as an outside firm from the memo alone — that guess was right, and the 83.1% stands.
+  - **Three firms = 78.8% of the whole project in 6 invoices:** Two Sharp Stix $305,970 (49.9%) · Hamilton Exhibits
+    $131,242 (21.4%) · **Beyer Electric $46,193 (7.5%)** — that last one is Chris Beyer, the same electrician in the
+    daily-email routing table and one of the two trades in the proposed markup bands.
+  - ⚠ **THE COLUMN SHIFT IS THE LESSON.** Adding Source Name moved Memo from column 12→14 and Amount 18→20. The
+    by-name lookup is the ONLY reason the new file loaded at all. Never make this parser positional.
+  - The money did NOT change: same 76 rows, same **$613,176.78**, still ties to the export's own TOTAL row.
+
+## ✅ FIXED 2026-09-14 — 📎 Documents on Due Diligence hid every document nobody had attached yet (rev 38.5)
+
+Rich: *"I'm not seeing the new document you were supposed to add. You're missing a handful of them, like the two
+painting quotes."* He was right, and it was not the filing that was wrong — it was the list.
+- **`_propddDocsList()` only ever walked ITEMS** — each item's own `doc` field plus anything in `st[id].files`. A
+  document committed to `duediligence/` and registered in `PROPDD_REPO_FILES` is offered in **every item's picker**
+  but belongs to no item until someone attaches it, so it never reached the Documents dropdown. Five seeded deal PDFs
+  showed; the three added later (Accurate painting, TEG structural, SF Painting) did not. Count stuck at 5 of 8.
+- **The page's own help already promised the fixed behaviour** — *"To put a NEW document on file… send the file to
+  Rich and it joins the list."* Behaviour now matches: `_propddDocsList()` appends every `PROPDD_REPO_FILES` entry
+  not already seen. Attached ones additionally render **"attached to: &lt;item&gt;"** (`d.item` was captured all
+  along and never displayed), so attached-vs-on-file is still readable without a second list.
+- ⚠ **So the documented add-a-document procedure was only ever half true.** It is now genuinely: commit to
+  `duediligence/` + one line in `PROPDD_REPO_FILES` → it appears in the picker AND in 📎 Documents.
 
 ## ✅ SHIPPED 2026-09-12 — 🧾 Invoices linked to the cost line they paid for (rev 38.3)
 
