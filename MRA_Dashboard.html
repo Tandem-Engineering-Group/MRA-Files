@@ -3943,6 +3943,7 @@ const GENERAL_HELP = `
       <li><b>The number at the top is the whole job</b> — what QuickBooks has posted <b>plus</b> the shop hours the board has logged that payroll hasn't reached yet, since QuickBooks is only updated now and then. The cut-off is the end of the last <b>paid period</b>, not the pay-run date — a run pays for work that finished days earlier, and the card works that lag out from the data rather than assuming it. Right under it you get the split (“$613,177 posted + $5,004 shop hours since the last payroll run”), and the first tile keeps the pure <b>Posted in QuickBooks</b> figure so it can always be tied back to the books.</li>
       <li><b>📅 The “As of” line says exactly how current everything is</b> — when the export was pulled and how long ago, plus the three dates that actually matter and are usually different: bills through one date, payroll through another, shop hours through a third. If an export goes over two weeks old the whole strip turns amber and says how old it is. There's no live feed to QuickBooks (it's on-prem), so the page only moves when a new export is loaded — it says so rather than looking fresh.</li>
       <li><b>What it shows:</b> cost to date and how it splits (work billed by outside firms, every cost line largest-first, and <b>what the parts actually were</b> — AV, aluminium, computers, panel, hardware and so on, read from the purchase descriptions); a month-by-month spend chart with the cumulative line; the biggest transactions; and everything small folded away behind one line.</li>
+      <li><b>🏢 Who invoiced it.</b> When the export carries a <b>Source Name</b> column, the outside-firms table groups by the <b>firm</b> that sent each bill and the transaction lines name the payee. Without that column it falls back to grouping by scope read out of the memo, and says so. Payroll rows have no payee by design — that is MRA’s own labor.</li>
       <li><b>🧾 Ref # and Document.</b> Every transaction now shows the <b>reference number QuickBooks already held</b> — the bill or invoice number you search on to find the paper — and a <b>Document</b> column. Where the original invoice has been linked, <b>open</b> takes you straight to it; a note under the table says how many transactions are covered and <b>what share of the money</b> that is, because 6 documents cover most of a job like this one. Open <b>All N transactions</b> at the bottom of the card to see every line, newest first. <b>Links only, deliberately:</b> the documents stay in SharePoint and this page stores nothing but a pointer — the dashboard’s own host is public, so an invoice put there would be readable by anyone with the link. To add one, send it to Rich.</li>
       <li><b>🏗 Work invoiced by outside firms</b> groups the scopes billed to the job by someone other than MRA's own shop. <b>There is deliberately no markup calculation anywhere on this page.</b> The amounts in QuickBooks are what was <i>charged to the job</i>, not clean vendor cost — some bills are entered at the vendor's invoice and others already carry a markup (historically around 30%) applied at entry and recorded nowhere, so the two can't be told apart without pulling each original invoice. Any "at N% MRA would earn X" figure built on them would be markup stacked on markup. The <b>Markup included?</b> column therefore reads <b>not recorded</b> — which is the honest answer, and the finding itself: the books can't say what MRA earned on that work. Recording markup as its own field is what would make it measurable.</li>
       <li><b>🧮 Labor — QuickBooks vs the shop board</b> reconciles the two places this company records hours. It is deliberately a <b>bridge, not a merge</b>: QuickBooks is the record up to the last payroll date, and the board adds hours only <i>after</i> it. <b>Never add the two hour totals together</b> — they overlap. The panel also reports how closely they agree over the weeks both can see, which is the evidence for whether the board's time tracking can be costed from at all.</li>
@@ -4184,6 +4185,12 @@ const FLEETIO_HELP = `
    Shape: { rev:"3.1", date:"2026-06-16", title:"short headline", items:[ "...", "..." ] }
    The footer badge + What's-new modal read from here automatically.            */
 const CHANGELOG = [
+  { rev:"38.5", date:"2026-09-14", title:"🏢 The project-cost card now names the firms · 📎 Documents lists everything on file", items:[
+    "Kyle added a <b>Source Name</b> column to the QuickBooks export, so every bill now carries the firm that sent it. <b>🏗 Work invoiced by outside firms</b> is grouped by firm instead of by scope, and the biggest-transaction lines name the payee.",
+    "<b>The $305,970 line nobody could identify is Two Sharp Stix, LLC</b> — three design/build invoices. It was classified as outside work from the memo alone; that now checks out.",
+    "<b>Three firms carry 78.8% of the whole project</b> in six invoices — Two Sharp Stix ($305,970), Hamilton Exhibits ($131,242) and Beyer Electric ($46,193).",
+    "The money did not move: same 76 transactions, same $613,176.78, still tying to the export’s own TOTAL.",
+    "<b>📎 Documents</b> on the Due Diligence tab now lists every document on file, not only ones already attached to an item — both painting quotes and the structural proposal were on file and pickable but missing from that list. Attached ones now say which item they belong to." ] },
   { rev:"38.4", date:"2026-09-14", title:"📎 SF Painting estimate filed against 37900 Mound Rd", items:[
     "<b>Painting + epoxy estimate — SF Painting #120 (9/13/26)</b>, $193,720, is now in the Due Diligence document picker. Attach it to any item and it also lists under 📎 Documents.",
     "It sits alongside the Accurate Industrial painting proposal, so the two painting bids can be read side by side." ] },
@@ -7744,6 +7751,16 @@ function _qbTrackedFor(code){
   return FIN_ENTRIES.filter(e=>e.payType==='Work' && String(e.job||'').replace(/\D/g,'').indexOf(c)===0 && e.dateISO)
     .map(e=>({d:e.dateISO,h:+e.hours||0,who:e.who}));
 }
+// The payee on a row, or '' when there genuinely isn't one. Two cases return empty: payroll rows (no
+// vendor, correctly -- that is MRA's own labor), and rows where QuickBooks put the customer:job into
+// Source Name instead of a supplier, which is the same value already sitting in Name. Never invent one.
+function _qbVendor(r){
+  const v=String((r&&r.src)||'').trim();
+  if(!v) return '';
+  if(v===String((r&&r.nm)||'').trim()) return '';
+  if(/^J\s*\d{3,5}\b/i.test(v)) return '';
+  return v;
+}
 function _qbMoney(n,d){ const v=Math.abs(n||0);
   return (n<0?'-$':'$')+v.toLocaleString('en-US',{minimumFractionDigits:d==null?0:d,maximumFractionDigits:d==null?0:d}); }
 
@@ -7922,16 +7939,25 @@ function _qbHtml(P, code, o, doc){
 
   /* ---- pass-through ledger: the hero ---- */
   if(sub>0){
-    const L={}; o.rows.filter(r=>r.grp==='SUB').forEach(r=>{ if(!L[r.catLabel]) L[r.catLabel]={v:0,n:0}; L[r.catLabel].v+=r.amt; L[r.catLabel].n++; });
-    const led=Object.keys(L).map(k=>({k,v:_qbR2(L[k].v),n:L[k].n})).sort((a,b)=>b.v-a.v);
+    // Grouped BY FIRM since the export started carrying Source Name (Kyle, 2026-09-14). Before that this
+    // could only group by scope read out of the memo, and the card said so. A row with no payee still
+    // falls back to its scope rather than being dropped or guessed at.
+    const subRows=o.rows.filter(r=>r.grp==='SUB'), anyVend=subRows.some(r=>_qbVendor(r));
+    const L={};
+    subRows.forEach(r=>{ const key=(anyVend?(_qbVendor(r)||('Payee not on the row — '+r.catLabel)):r.catLabel);
+      if(!L[key]) L[key]={v:0,n:0,sc:{}}; L[key].v+=r.amt; L[key].n++; L[key].sc[r.catLabel]=1; });
+    const led=Object.keys(L).map(k=>({k,v:_qbR2(L[k].v),n:L[k].n,sc:Object.keys(L[k].sc)})).sort((a,b)=>b.v-a.v);
+    const top3=led.slice(0,3), top3v=_qbR2(top3.reduce((a,x)=>a+x.v,0)), top3n=top3.reduce((a,x)=>a+x.n,0);
 
     h+='<div class="fin-card" style="border-color:var(--violet)">'
       +'<h3>🏗 Work invoiced by outside firms</h3>'
-      +'<div class="muted" style="font-size:11.5px;margin:-6px 0 10px">Scopes billed to this job by someone other than MRA’s own shop. '
-      +'Grouped from the bill descriptions — the export carries no payee, so these are scopes, not named vendors.</div>'
-      +'<table class="qb-tbl"><thead><tr><th>Scope</th><th class="r">Invoices</th><th class="r">Charged to the job</th>'
+      +'<div class="muted" style="font-size:11.5px;margin:-6px 0 10px">Work billed to this job by someone other than MRA’s own shop'
+      +(anyVend?', by the firm that invoiced it.':' — grouped from the bill descriptions, because this export carries no payee column.')+'</div>'
+      +'<table class="qb-tbl"><thead><tr><th>'+(anyVend?'Firm':'Scope')+'</th><th class="r">Invoices</th><th class="r">Charged to the job</th>'
       +'<th class="r">% of job</th><th class="r">Markup included?</th></tr></thead><tbody>'
-      +led.map(x=>'<tr><td><span class="qb-pill g-SUB">SUB</span> '+esc2(x.k)+'</td><td class="r">'+x.n+'</td>'
+      +led.map(x=>'<tr><td><span class="qb-pill g-SUB">SUB</span> '+esc2(x.k)
+        +(anyVend?'<div class="muted" style="font-size:11px;margin-top:2px">'+esc2(x.sc.join(' · '))+'</div>':'')
+        +'</td><td class="r">'+x.n+'</td>'
         +'<td class="r">'+M(x.v,2)+'</td><td class="r">'+(x.v/o.total*100).toFixed(1)+'%</td>'
         +'<td class="r" style="color:var(--amber)">not recorded</td></tr>').join('')
       +'<tr class="tot"><td>Total</td><td class="r">'+o.rows.filter(r=>r.grp==='SUB').length+'</td>'
@@ -7942,6 +7968,10 @@ function _qbHtml(P, code, o, doc){
       +'inconsistently and <b>recorded nowhere</b>, so it cannot be told apart line by line without pulling each original invoice. '
       +'That is why there is <b>no markup calculation on this page</b>: any “at N% MRA would earn X” built on these figures would be '
       +'markup stacked on markup, and it would read as a real number.</div>'
+      +(anyVend&&led.length>=3?'<div class="qb-note" style="border-left-color:var(--violet)"><b>'+top3.length+' firms carry '
+        +(top3v/o.total*100).toFixed(1)+'% of this entire project</b> — '+M(top3v)+' across just '+top3n+' invoices ('
+        +esc2(top3.map(x=>x.k).join(', '))+'). Concentration like that is a negotiating position, not a filing problem: '
+        +'a point of margin on those three is worth more than anything the shop floor can save.</div>':'')
       +'<div class="qb-note"><b>The finding is the gap itself.</b> '+M(sub)+' — '+subPct.toFixed(1)+'% of this job — went out through other firms, '
       +'and the books cannot say how much of it MRA earned on, because markup is decided at bill entry and never written down. '
       +'A standard fixes the rate; recording markup as <b>its own field</b> is what makes it measurable afterwards. '
@@ -8115,7 +8145,7 @@ function _qbHtml(P, code, o, doc){
     h+='<tr><td style="white-space:nowrap">'+esc2(fmtMD(r.d))+'</td>'
       +'<td class="qb-ref">'+esc2(String(r.num||'\u2014').slice(0,22))+'</td>'
       +'<td><span class="qb-pill g-'+r.grp+'">'+esc2(r.catLabel)+'</span></td>'
-      +'<td>'+esc2(String(r.memoShown||'').slice(0,72))+'</td>'
+      +'<td>'+(_qbVendor(r)?'<b>'+esc2(_qbVendor(r))+'</b> · ':'')+esc2(String(r.memoShown||'').slice(0,64))+'</td>'
       +'<td class="r">'+M(r.amt,2)+'</td><td class="r">'+(cc/o.total*100).toFixed(1)+'%</td>'
       +'<td>'+_qbDocCell(code,r)+'</td></tr>'; });
   h+='</tbody></table>'+docNote+'</div>';
@@ -8142,7 +8172,7 @@ function _qbHtml(P, code, o, doc){
       +'<td class="qb-ref">'+esc2(String(r.num||'\u2014').slice(0,22))+'</td>'
       +'<td style="color:var(--muted);font-size:11.5px;white-space:nowrap">'+esc2(r.t||'')+'</td>'
       +'<td><span class="qb-pill g-'+r.grp+'">'+esc2(r.catLabel)+'</span></td>'
-      +'<td>'+esc2(String(r.memoShown||'').slice(0,90))+'</td>'
+      +'<td>'+(_qbVendor(r)?'<b>'+esc2(_qbVendor(r))+'</b> · ':'')+esc2(String(r.memoShown||'').slice(0,80))+'</td>'
       +'<td class="r">'+M(r.amt,2)+'</td>'
       +'<td>'+_qbDocCell(code,r)+'</td></tr>').join('')
     +'<tr class="tot"><td colspan="5">Total \u2014 '+o.txns+' transactions</td><td class="r">'+M(o.total,2)+'</td><td></td></tr>'
@@ -8202,6 +8232,11 @@ function qbParseSheet(ws){
   if(hdr<0) return {error:'no QuickBooks header row (needs Type, Date, Amount columns)'};
   const ix=n=>col[n]==null?-1:col[n];
   const iT=ix('type'),iD=ix('date'),iN=ix('num'),iM=ix('memo'),iA=ix('amount'),iQ=ix('qty'),iNm=ix('name');
+  // Source Name is the PAYEE and Account is QuickBooks' own classification. Neither was in the first
+  // export; Kyle added Source Name on 2026-09-14 after it was asked for, which shifted Memo from column
+  // 12 to 14 and Amount from 18 to 20 -- a position-based reader would have broken outright. This one
+  // finds columns by name, which is exactly why. Both are optional: an export without them still loads.
+  const iSrc=ix('source name'), iAcct=ix('account');
   const rows=[];
   for(let r=hdr+1;r<g.length;r++){
     const row=g[r]||[]; const t=iT>=0?row[iT]:null, a=iA>=0?row[iA]:null;
@@ -8217,6 +8252,8 @@ function qbParseSheet(ws){
     if(/^\s*record payroll/i.test(memo)) memo = memo.replace(/\s*\([^)]*\)\s*/g,' ').trim();
     rows.push({d:_qbDate(iD>=0?row[iD]:null), t:String(t).trim(),
       num:iN>=0&&row[iN]!=null?String(row[iN]).trim():'', nm:iNm>=0&&row[iNm]!=null?String(row[iNm]).trim():'',
+      src:iSrc>=0&&row[iSrc]!=null?String(row[iSrc]).trim():'',
+      acct:iAcct>=0&&row[iAcct]!=null?String(row[iAcct]).trim():'',
       memo, qty:iQ>=0&&typeof row[iQ]==='number'?row[iQ]:null,
       amt:Math.round(n*100)/100});
   }
@@ -20902,6 +20939,15 @@ function _propddDocsList(){
       out.push({label:(f.label||f.url), url:f.url, item:i.t});
     });
   });
+  // ⚠ AND everything committed under duediligence/, attached or not. The help on this page promises a
+  // document "joins the list" once it is put on file, but this list only ever showed documents reachable
+  // FROM an item -- so three real documents (both painting quotes and the TEG structural proposal) sat on
+  // file, offered in every item's picker, and were invisible here. Rich reasonably read that as "you
+  // never added them". The picker and this list now read from the same place.
+  PROPDD_REPO_FILES.forEach(function(f){
+    const base=String((f&&f.url)||'').split('#')[0]; if(!base||seen[base]) return;
+    seen[base]=1; out.push({label:f.label||base, url:f.url});
+  });
   return out;
 }
 // Attach a link (a quote, proposal, emailed PDF, SharePoint/OneDrive file) to one item. Stored in the
@@ -21168,7 +21214,8 @@ function renderPropDD(){
     +'<details class="tbmenu" style="margin-left:auto"><summary style="padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-weight:700;font-size:12.5px" title="Every reference document linked from any item below, in one place">📎 Documents'+(function(){ const n=_propddDocsList().length; return n?(' ('+n+')'):''; })()+'</summary>'
     +'<div class="tbpanel r0">'
     +(function(){ const docs=_propddDocsList(); return docs.length
-      ? docs.map(function(d){ return '<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="display:block;padding:7px 8px;border-radius:6px;color:var(--txt);text-decoration:none;font-size:13px;font-weight:600" onmouseover="this.style.background=\'var(--panel)\'" onmouseout="this.style.background=\'\'">🔗 '+esc(d.label)+'</a>'; }).join('')
+      ? docs.map(function(d){ return '<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="display:block;padding:7px 8px;border-radius:6px;color:var(--txt);text-decoration:none;font-size:13px;font-weight:600" onmouseover="this.style.background=\'var(--panel)\'" onmouseout="this.style.background=\'\'">🔗 '+esc(d.label)
+          +(d.item?'<div class="muted" style="font-weight:400;font-size:11px;margin-top:1px">attached to: '+esc(d.item)+'</div>':'')+'</a>'; }).join('')
       : '<div class="muted" style="font-size:12px;padding:4px">No reference documents linked yet.</div>'; })()
     +'</div></details>'
     +(function(){
